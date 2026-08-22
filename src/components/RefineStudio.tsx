@@ -14,6 +14,10 @@ import { SheetVersionSelect } from "@/components/SheetVersionSelect";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 import { resolveRefineLikes } from "@/lib/session/planPoints";
 import { buildGeneratePrompt, isScenePlanPoint } from "@/lib/ai/prompts";
+import {
+  isInitialWelcomeOnly,
+  WELCOME_RIPPLE_MS,
+} from "@/lib/session/onboarding";
 import { loadLocalSession, saveLocalSession } from "@/lib/session/local";
 import type {
   ChatMessage,
@@ -116,6 +120,7 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
   const [baselineMessageIds, setBaselineMessageIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [welcomeRevealed, setWelcomeRevealed] = useState(false);
   const { listening, error: speechError, supported: speechSupported, toggle, stop: stopSpeech } =
     useSpeechToText();
 
@@ -138,6 +143,30 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
       setBaselineMessageIds(new Set(next.messages.map((m) => m.id)));
     });
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    if (!isInitialWelcomeOnly(session.messages)) {
+      setWelcomeRevealed(true);
+      return;
+    }
+
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reducedMotion) {
+      setWelcomeRevealed(true);
+      return;
+    }
+
+    setWelcomeRevealed(false);
+    const timer = window.setTimeout(
+      () => setWelcomeRevealed(true),
+      WELCOME_RIPPLE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [session?.id, session?.messages]);
 
   useEffect(() => {
     const node = threadRef.current;
@@ -452,6 +481,8 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
   }
 
   const hasIdea = Boolean(session.idea.trim());
+  const showWelcomeRipple =
+    isInitialWelcomeOnly(session.messages) && !welcomeRevealed;
   const hasUserMessage = session.messages.some(
     (message) => message.role === "user",
   );
@@ -497,7 +528,32 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
               ref={threadRef}
               className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-1 pb-2 lg:gap-5 lg:px-2"
             >
+              {showWelcomeRipple ? (
+                <div
+                  className="flex max-w-[min(36rem,90%)] flex-col gap-1.5 self-start"
+                  aria-live="polite"
+                  aria-label="Smarty is getting ready"
+                >
+                  <div className="flex items-center gap-2">
+                    <SmartyAvatar variant="chat" />
+                    <p className="font-display text-sm font-semibold text-smarty-label">
+                      Smarty
+                    </p>
+                  </div>
+                  <CrayonRippleDots
+                    size="sm"
+                    className="px-1"
+                    label="Smarty is getting ready"
+                  />
+                </div>
+              ) : null}
               {session.messages.map((message, index) => {
+                const isInitialWelcome =
+                  index === 0 &&
+                  message.role === "smarty" &&
+                  isInitialWelcomeOnly(session.messages);
+                if (isInitialWelcome && !welcomeRevealed) return null;
+
                 const showEditDivider =
                   session.editAfterMessageCount != null &&
                   index === session.editAfterMessageCount - 1;
@@ -508,7 +564,8 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                       message={message}
                       animateEnter={
                         message.role === "smarty" &&
-                        !baselineMessageIds.has(message.id)
+                        (!baselineMessageIds.has(message.id) ||
+                          (isInitialWelcome && welcomeRevealed))
                       }
                     />
                     {showEditDivider ? (
