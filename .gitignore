@@ -38,3 +38,7 @@ next-env.d.ts
 # supabase
 supabase/.temp
 supabase/.branches
+
+# Local IDE / agent instruction files (not part of the app)
+AGENTS.md
+CLAUDE.md

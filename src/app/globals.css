@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #1a2340;
+  --color-ink-soft: #3a4663;
+  --color-cream: #fff8ef;
+  --color-sky: #e7f3ff;
+  --color-lilac: #eee8ff;
+  --color-mint: #e4f6ea;
+  --color-paper: #fffdf9;
+  --color-paper-sky: #f3f8ff;
+  --color-smarty: #c7efe9;
+  --color-user: #ffdcc8;
+  --color-smarty-label: #085e58;
+  --color-user-label: #9a3412;
+  --color-crayon-yellow: #f5b942;
+  --color-crayon-coral: #c23b32;
+  --color-crayon-teal: #0a5c56;
+  --color-crayon-purple: #5b4fd6;
+  --color-crayon-lime: #2f8f3a;
+  --color-crayon-orange: #c05612;
+  --color-like: #0b6b38;
+  --font-display: var(--font-fredoka);
+  --font-body: var(--font-comic);
+  --font-brand: var(--font-luckiest);
+  --shadow-crayon: 0 4px 0 0 #1a2340;
+  --shadow-crayon-lg: 0 8px 0 0 #1a2340;
+  --radius-card: 1.75rem;
+  --radius-pill: 999px;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-body), "Comic Neue", ui-rounded, sans-serif;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-crayon-teal);
+  outline-offset: 3px;
+}
+
+.chat-composer-input,
+.chat-composer-input:focus,
+.chat-composer-input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+@layer components {
+  .crayon-border {
+    border: 3px solid var(--color-ink);
+  }
+
+  .voice-pulse {
+    animation: voice-pulse 1.1s ease-in-out infinite;
+  }
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 0 0 #1a2340;
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 6px 0 0 #1a2340;
+  }
+}
+
+@keyframes smarty-bubble-enter {
+  from {
+    opacity: 0;
+    transform: translateY(1.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-bubble-smarty-enter {
+  animation: smarty-bubble-enter 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble-smarty-enter {
+    animation: none;
+  }
+}
+
+@keyframes crayon-ripple {
+  0%,
+  60%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.55);
+  }
+}
+
+.crayon-ripple-dot {
+  animation: crayon-ripple 1.05s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+
+  .print-sheet {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    box-shadow: none;
+    border: none;
+  }
+}

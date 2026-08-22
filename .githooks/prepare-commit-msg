@@ -1,0 +1,6 @@
+#!/bin/sh
+# Remove agent co-author trailers so they never appear in git history.
+MSG_FILE=$1
+tmp="${MSG_FILE}.scrubbed"
+grep -viE '^Co-authored-by: (Cursor |.*cursoragent@cursor\.com|GitHub Copilot|.*\[bot\])' "$MSG_FILE" > "$tmp" || true
+mv "$tmp" "$MSG_FILE"
