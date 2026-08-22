@@ -13,6 +13,7 @@ export type PrintPrefs = {
   showTitle: boolean;
   funBorder: boolean;
   nameLine: boolean;
+  enableDebug: boolean;
 };
 
 export const defaultPrintPrefs: PrintPrefs = {
@@ -22,6 +23,7 @@ export const defaultPrintPrefs: PrintPrefs = {
   showTitle: false,
   funBorder: false,
   nameLine: false,
+  enableDebug: false,
 };
 
 export function describePrintPrefs(prefs: PrintPrefs) {

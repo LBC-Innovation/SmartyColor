@@ -41,6 +41,7 @@ export function normalizeSession(session: ColoringSession): ColoringSession {
 
   return {
     ...session,
+    printPrefs: { ...defaultPrintPrefs, ...session.printPrefs },
     sheets,
     editAfterMessageCount: session.editAfterMessageCount ?? null,
     editingPreviousSheet: Boolean(session.editingPreviousSheet),

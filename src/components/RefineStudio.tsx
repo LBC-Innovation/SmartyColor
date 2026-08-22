@@ -447,6 +447,13 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
 
   const blocked = session.lastFeedback?.kind === "blocked";
   const hasIdea = Boolean(session.idea.trim());
+  const hasUserMessage = session.messages.some(
+    (message) => message.role === "user",
+  );
+  const isEngagingWithChat = draft.trim().length > 0;
+  const hasEngagedWithChat =
+    hasUserMessage || isEngagingWithChat;
+  const showPlanOnboarding = !hasEngagedWithChat;
   const activeSheet =
     curtain.open && curtain.sheet ? curtain.sheet : null;
 
@@ -545,6 +552,9 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                   layout="inline"
                   items={session.likes}
                   generatePromptPreview={generatePromptPreview}
+                  showDebug={session.printPrefs.enableDebug}
+                  showOnboarding={showPlanOnboarding}
+                  hasEngagedWithChat={hasEngagedWithChat}
                   onMakeIt={makeSheet}
                   makeItDisabled={
                     busy || making || blocked || session.likes.length === 0
@@ -622,6 +632,9 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
               <RequirementsList
                 items={session.likes}
                 generatePromptPreview={generatePromptPreview}
+                showDebug={session.printPrefs.enableDebug}
+                showOnboarding={showPlanOnboarding}
+                hasEngagedWithChat={hasEngagedWithChat}
                 onMakeIt={makeSheet}
                 makeItDisabled={
                   busy || making || blocked || session.likes.length === 0
