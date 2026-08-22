@@ -141,7 +141,7 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
     const node = threadRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-  }, [session?.messages, busy]);
+  }, [session?.messages, session?.likes, busy]);
 
   function update(next: ColoringSession) {
     setSession(next);
@@ -467,7 +467,7 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-cream">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1120px] flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8 sm:py-8">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1120px] flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         <div className="shrink-0">
           <AppHeader
             printPrefs={session.printPrefs}
@@ -476,14 +476,14 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
             }
           />
         </div>
-        <div className="mt-6 grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(13rem,36%)] gap-6 overflow-hidden pb-3 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-none lg:gap-10">
+        <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden lg:mt-8 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-10">
           <section
-            className="flex min-h-0 flex-col overflow-hidden"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             aria-label="Chat with Smarty"
           >
             <div
               ref={threadRef}
-              className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-2"
+              className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-1 pb-2 lg:gap-5 lg:px-2"
             >
               {session.messages.map((message, index) => {
                 const showEditDivider =
@@ -491,7 +491,7 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                   index === session.editAfterMessageCount - 1;
 
                 return (
-                  <div key={message.id} className="flex flex-col gap-5">
+                  <div key={message.id} className="flex flex-col gap-4 lg:gap-5">
                     <ChatBubble
                       message={message}
                       animateEnter={
@@ -522,8 +522,38 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                   label="Smarty is thinking"
                 />
               ) : null}
+
+              <div className="flex flex-col gap-4 pt-2 lg:hidden">
+                <SheetVersionSelect
+                  versions={session.sheets}
+                  onSelect={openVersion}
+                />
+                <RequirementsList
+                  layout="inline"
+                  items={session.likes}
+                  generatePromptPreview={generatePromptPreview}
+                  onMakeIt={makeSheet}
+                  makeItDisabled={
+                    busy || making || blocked || session.likes.length === 0
+                  }
+                  onChange={(id, text) =>
+                    update({
+                      ...session,
+                      likes: session.likes.map((item) =>
+                        item.id === id ? { ...item, text } : item,
+                      ),
+                    })
+                  }
+                  onRemove={(id) =>
+                    update({
+                      ...session,
+                      likes: session.likes.filter((item) => item.id !== id),
+                    })
+                  }
+                />
+              </div>
             </div>
-            <div className="shrink-0 pt-4">
+            <div className="shrink-0 border-t border-ink/10 bg-cream px-0 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:border-0 lg:pt-4 lg:pb-0">
               <ChatComposer
                 value={draft}
                 onChange={setDraft}
@@ -568,7 +598,7 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
               />
             </div>
           </section>
-          <div className="flex min-h-0 flex-col gap-4 lg:gap-5">
+          <div className="hidden min-h-0 flex-col gap-4 lg:flex lg:gap-5">
             <div className="shrink-0">
               <SheetVersionSelect
                 versions={session.sheets}
@@ -579,6 +609,10 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
               <RequirementsList
                 items={session.likes}
                 generatePromptPreview={generatePromptPreview}
+                onMakeIt={makeSheet}
+                makeItDisabled={
+                  busy || making || blocked || session.likes.length === 0
+                }
                 onChange={(id, text) =>
                   update({
                     ...session,
@@ -594,18 +628,6 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                   })
                 }
               />
-            </div>
-            <div className="shrink-0 pb-1">
-              <KidButton
-                variant="makeIt"
-                className="w-full"
-                disabled={
-                  busy || making || blocked || session.likes.length === 0
-                }
-                onClick={makeSheet}
-              >
-                Make It!
-              </KidButton>
             </div>
           </div>
         </div>

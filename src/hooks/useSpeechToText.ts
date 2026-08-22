@@ -48,13 +48,17 @@ function describeSpeechError(code: string): string {
 }
 
 export function useSpeechToText() {
-  const [supported] = useState(() => Boolean(getSpeechRecognition()));
+  const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const onTranscriptRef = useRef<
     ((text: string, isFinal: boolean) => void) | null
   >(null);
+
+  useEffect(() => {
+    setSupported(Boolean(getSpeechRecognition()));
+  }, []);
 
   const stop = useCallback(() => {
     recognitionRef.current?.stop();

@@ -12,6 +12,10 @@ type RequirementsListProps = {
   onRemove: (id: string) => void;
   /** Debug: full generate prompt that Make It would send. */
   generatePromptPreview?: string;
+  /** Sidebar panel (default) or inline in a shared scroll area (mobile). */
+  layout?: "sidebar" | "inline";
+  onMakeIt?: () => void;
+  makeItDisabled?: boolean;
 };
 
 function IconButton({
@@ -32,7 +36,7 @@ function IconButton({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-full border-2 border-ink bg-transparent text-ink hover:bg-sky",
+        "grid size-8 shrink-0 place-items-center rounded-full border-2 border-ink bg-transparent text-ink hover:bg-sky lg:size-9",
         pressed && "bg-sky text-crayon-teal",
       )}
     >
@@ -46,7 +50,11 @@ export function RequirementsList({
   onChange,
   onRemove,
   generatePromptPreview,
+  layout = "sidebar",
+  onMakeIt,
+  makeItDisabled = false,
 }: RequirementsListProps) {
+  const inline = layout === "inline";
   const [editingId, setEditingId] = useState<string | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const titleId = useId();
@@ -73,14 +81,26 @@ export function RequirementsList({
 
   return (
     <>
-      <aside className="flex h-full min-h-0 flex-col gap-4 overflow-hidden rounded-card border-[3px] border-ink bg-paper-sky p-6">
+      <aside
+        className={cn(
+          "flex flex-col gap-3 rounded-card border-[3px] border-ink bg-paper-sky p-4 lg:gap-4 lg:p-6",
+          inline ? "shrink-0" : "h-full min-h-0 overflow-hidden",
+        )}
+      >
         <div className="shrink-0">
-          <h2 className="font-display text-xl font-bold text-ink">The plan</h2>
-          <p className="mt-1 font-body text-sm text-ink-soft">
+          <h2 className="font-display text-lg font-bold text-ink lg:text-xl">
+            The plan
+          </h2>
+          <p className="mt-1 font-body text-xs text-ink-soft lg:text-sm">
             Things Smarty will draw. Edit or delete any item.
           </p>
         </div>
-        <ul className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <ul
+          className={cn(
+            "flex flex-col",
+            inline ? "shrink-0" : "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+          )}
+        >
           {items.length === 0 ? (
             <li className="py-4 font-body text-sm text-ink-soft">
               As you chat, the important pieces show up here.
@@ -163,6 +183,17 @@ export function RequirementsList({
           >
             Debug: view generate prompt
           </button>
+        ) : null}
+
+        {onMakeIt ? (
+          <KidButton
+            variant="makeIt"
+            className="w-full shrink-0"
+            disabled={makeItDisabled}
+            onClick={onMakeIt}
+          >
+            Make It!
+          </KidButton>
         ) : null}
       </aside>
 

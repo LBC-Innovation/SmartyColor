@@ -35,8 +35,14 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${fredoka.variable} ${comic.variable} ${luckiest.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full bg-cream font-body text-ink">{children}</body>
+      <body
+        className="min-h-full bg-cream font-body text-ink"
+        suppressHydrationWarning
+      >
+        {children}
+      </body>
     </html>
   );
 }

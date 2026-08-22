@@ -49,7 +49,7 @@ export function ChatComposer({
 
   return (
     <div>
-      <div className="flex min-h-12 items-center rounded-2xl border-2 border-ink bg-paper p-1">
+      <div className="flex min-h-10 items-center rounded-2xl border-2 border-ink bg-paper p-1 lg:min-h-12">
         {onSpeak ? (
           <>
             <button
@@ -59,16 +59,16 @@ export function ChatComposer({
               onClick={onSpeak}
               disabled={busy}
               className={cn(
-                "grid size-10 shrink-0 cursor-pointer place-items-center rounded-xl border-0 text-ink shadow-none transition disabled:cursor-not-allowed disabled:opacity-40",
+                "grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border-0 text-ink shadow-none transition disabled:cursor-not-allowed disabled:opacity-40 lg:size-10",
                 speaking
                   ? "bg-crayon-coral/25 text-crayon-coral"
                   : "bg-transparent",
               )}
             >
               {speaking ? (
-                <Mic aria-hidden className="size-5" strokeWidth={2.25} />
+                <Mic aria-hidden className="size-4 lg:size-5" strokeWidth={2.25} />
               ) : (
-                <MicOff aria-hidden className="size-5" strokeWidth={2.25} />
+                <MicOff aria-hidden className="size-4 lg:size-5" strokeWidth={2.25} />
               )}
             </button>
             <span
@@ -88,16 +88,16 @@ export function ChatComposer({
           rows={1}
           disabled={busy}
           placeholder={placeholder}
-          className="chat-composer-input min-h-0 min-w-0 flex-1 resize-none overflow-hidden bg-transparent px-3 py-2 font-body text-lg leading-7 text-ink placeholder:text-ink-soft disabled:opacity-60"
+          className="chat-composer-input min-h-0 min-w-0 flex-1 resize-none overflow-hidden bg-transparent px-2 py-1.5 font-body text-base leading-6 text-ink placeholder:text-ink-soft disabled:opacity-60 lg:px-3 lg:py-2 lg:text-lg lg:leading-7"
         />
         <button
           type="button"
           onClick={onSend}
           disabled={!canSend}
           aria-label={busy ? "Sending" : "Send"}
-          className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-2 font-display text-sm font-semibold text-ink shadow-none disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 border-0 bg-transparent px-2 py-1.5 font-display text-xs font-semibold text-ink shadow-none disabled:cursor-not-allowed disabled:opacity-40 lg:gap-1.5 lg:px-3 lg:py-2 lg:text-sm"
         >
-          <Send aria-hidden className="size-4 shrink-0" strokeWidth={2.5} />
+          <Send aria-hidden className="size-3.5 shrink-0 lg:size-4" strokeWidth={2.5} />
           {busy ? "sending" : "Send"}
         </button>
       </div>

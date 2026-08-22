@@ -19,24 +19,24 @@ export function AppHeader({
   const showNewIdea = pathname !== "/";
 
   return (
-    <header className="flex flex-wrap items-center gap-3">
-      <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-2xl">
+    <header className="flex flex-wrap items-center gap-2 lg:gap-3">
+      <Link href="/" className="flex shrink-0 items-center gap-2 rounded-2xl lg:gap-2.5">
         <span
-          className="grid size-10 place-items-center rounded-2xl border-[3px] border-ink bg-crayon-coral font-display text-lg font-bold text-white"
+          className="grid size-8 place-items-center rounded-xl border-[3px] border-ink bg-crayon-coral font-display text-base font-bold text-white lg:size-10 lg:rounded-2xl lg:text-lg"
           aria-hidden
         >
           S
         </span>
-        <span className="font-brand text-2xl tracking-wide text-ink sm:text-[1.75rem]">
+        <span className="font-brand text-xl tracking-wide text-ink lg:text-[1.75rem]">
           SmartyColor
         </span>
       </Link>
 
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5 lg:gap-2">
         {showNewIdea ? (
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-paper px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
+            className="inline-flex min-h-9 items-center rounded-full border-2 border-ink bg-paper px-3 font-display text-xs font-semibold text-ink hover:bg-sky lg:min-h-11 lg:px-4 lg:text-sm"
           >
             New idea
           </Link>
