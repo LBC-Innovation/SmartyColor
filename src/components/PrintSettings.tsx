@@ -144,6 +144,11 @@ export function PrintSettings({
                 checked={value.nameLine}
                 onChange={(nameLine) => onChange({ ...value, nameLine })}
               />
+              <ToggleSwitch
+                label="Enable Debug"
+                checked={value.enableDebug}
+                onChange={(enableDebug) => onChange({ ...value, enableDebug })}
+              />
             </div>
 
             <div className="flex justify-end">
