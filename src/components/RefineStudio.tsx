@@ -12,7 +12,8 @@ import { MakingCurtain } from "@/components/MakingCurtain";
 import { RequirementsList } from "@/components/RequirementsList";
 import { SheetVersionSelect } from "@/components/SheetVersionSelect";
 import { useSpeechToText } from "@/hooks/useSpeechToText";
-import { isScenePlanPoint, buildGeneratePrompt } from "@/lib/ai/prompts";
+import { resolveRefineLikes } from "@/lib/session/planPoints";
+import { buildGeneratePrompt, isScenePlanPoint } from "@/lib/ai/prompts";
 import { loadLocalSession, saveLocalSession } from "@/lib/session/local";
 import type {
   ChatMessage,
@@ -140,9 +141,19 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
 
   useEffect(() => {
     const node = threadRef.current;
-    if (!node) return;
+    if (!node || !session) return;
+
+    const hasUserMessage = session.messages.some(
+      (message) => message.role === "user",
+    );
+
+    if (!hasUserMessage && !busy) {
+      node.scrollTop = 0;
+      return;
+    }
+
     node.scrollTop = node.scrollHeight;
-  }, [session?.messages, session?.likes, busy]);
+  }, [session?.messages, session?.likes, busy, session]);
 
   function update(next: ColoringSession) {
     setSession(next);
@@ -209,22 +220,17 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
         .filter(Boolean)
         .join(" ");
 
-      const extracted = payload.feedback.points
-        .filter((point) => isScenePlanPoint(point.text))
-        .map((point) => ({
-          id: point.id,
-          text: point.text,
-        }));
-
-      const nextLikes = isFirstIdea
-        ? extracted
-        : pending.editingPreviousSheet
-          ? applyPlanEdits(
-              pending.likes,
-              extracted,
-              payload.feedback.removeFromPlan ?? [],
-            )
-          : mergeRequirements(pending.likes, extracted);
+      const nextLikes = resolveRefineLikes({
+        feedback: payload.feedback,
+        existingLikes: pending.likes,
+        idea: pending.idea,
+        detail: pending.printPrefs.detail,
+        isFirstIdea,
+        editingPreviousSheet: Boolean(pending.editingPreviousSheet),
+        newId,
+        mergeRequirements,
+        applyPlanEdits,
+      });
 
       update({
         ...pending,
@@ -445,7 +451,6 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
     );
   }
 
-  const blocked = session.lastFeedback?.kind === "blocked";
   const hasIdea = Boolean(session.idea.trim());
   const hasUserMessage = session.messages.some(
     (message) => message.role === "user",
@@ -453,7 +458,6 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
   const isEngagingWithChat = draft.trim().length > 0;
   const hasEngagedWithChat =
     hasUserMessage || isEngagingWithChat;
-  const showPlanOnboarding = !hasEngagedWithChat;
   const activeSheet =
     curtain.open && curtain.sheet ? curtain.sheet : null;
 
@@ -553,12 +557,9 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                   items={session.likes}
                   generatePromptPreview={generatePromptPreview}
                   showDebug={session.printPrefs.enableDebug}
-                  showOnboarding={showPlanOnboarding}
                   hasEngagedWithChat={hasEngagedWithChat}
                   onMakeIt={makeSheet}
-                  makeItDisabled={
-                    busy || making || blocked || session.likes.length === 0
-                  }
+                  makeItDisabled={busy || making || session.likes.length === 0}
                   onChange={(id, text) =>
                     update({
                       ...session,
@@ -633,12 +634,9 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                 items={session.likes}
                 generatePromptPreview={generatePromptPreview}
                 showDebug={session.printPrefs.enableDebug}
-                showOnboarding={showPlanOnboarding}
                 hasEngagedWithChat={hasEngagedWithChat}
                 onMakeIt={makeSheet}
-                makeItDisabled={
-                  busy || making || blocked || session.likes.length === 0
-                }
+                makeItDisabled={busy || making || session.likes.length === 0}
                 onChange={(id, text) =>
                   update({
                     ...session,
