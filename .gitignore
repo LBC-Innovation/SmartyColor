@@ -39,6 +39,10 @@ next-env.d.ts
 supabase/.temp
 supabase/.branches
 
+# Serwist
+public/sw.js
+public/swe-worker-*.js
+
 # Local IDE / agent instruction files (not part of the app)
 AGENTS.md
 CLAUDE.md

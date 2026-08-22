@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "pwa:icons": "node scripts/generate-pwa-icons.mjs",
+    "prebuild": "npm run pwa:icons"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.47",
+    "@serwist/next": "^9.5.12",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "ai": "^7.0.70",
@@ -30,6 +33,7 @@
     "@types/sharp": "^0.31.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "serwist": "^9.5.12",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
