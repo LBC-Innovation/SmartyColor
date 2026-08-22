@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { SmartyAvatar } from "@/components/SmartyAvatar";
 import type { ChatMessage } from "@/lib/session/types";
 
 type ChatBubbleProps = {
@@ -25,13 +26,14 @@ export function ChatBubble({ message, animateEnter = false }: ChatBubbleProps) {
           isSmarty ? "flex-row" : "flex-row-reverse",
         )}
       >
-        <span
-          className={cn(
-            "size-7 rounded-full border-2 border-ink",
-            isSmarty ? "bg-smarty-label" : "bg-user-label",
-          )}
-          aria-hidden
-        />
+        {isSmarty ? (
+          <SmartyAvatar variant="chat" />
+        ) : (
+          <span
+            className="size-7 shrink-0 rounded-full border-2 border-ink bg-user-label"
+            aria-hidden
+          />
+        )}
         <p
           className={cn(
             "font-display text-sm font-semibold",
