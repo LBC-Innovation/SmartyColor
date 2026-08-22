@@ -3,6 +3,17 @@
 export const SMARTY_GREETING =
   "What do you want to color today? Tell me your idea!";
 
+/** Brief pause before the static first welcome bubble appears. */
+export const WELCOME_RIPPLE_MS = 900;
+
+export function isInitialWelcomeOnly(
+  messages: { role: string; text: string }[],
+): boolean {
+  if (messages.length !== 1) return false;
+  const [only] = messages;
+  return only.role === "smarty" && only.text.startsWith(SMARTY_GREETING);
+}
+
 export const HOW_TO_USE_SECTIONS = [
   "Describe it",
   "Review it",
