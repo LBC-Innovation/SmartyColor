@@ -12,7 +12,7 @@ export function PwaSplashDismissScript() {
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `(function(){function hide(){var splash=document.getElementById("pwa-splash");if(splash){splash.classList.add("pwa-splash--hide");}window.setTimeout(function(){document.documentElement.classList.add("pwa-splash-done");},220);}if(document.readyState==="complete"){hide();}else{window.addEventListener("load",hide,{once:true});}})();`,
+        __html: `(function(){function hide(){document.documentElement.classList.add("pwa-splash-hiding");window.setTimeout(function(){document.documentElement.classList.add("pwa-splash-done");},220);}if(document.readyState==="complete"){hide();}else{window.addEventListener("load",hide,{once:true});}})();`,
       }}
     />
   );

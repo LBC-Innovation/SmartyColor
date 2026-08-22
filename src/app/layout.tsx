@@ -69,7 +69,7 @@ export default function RootLayout({
         className="min-h-full bg-cream font-body text-ink"
         suppressHydrationWarning
       >
-        <div id="pwa-splash" aria-hidden="true">
+        <div id="pwa-splash" aria-hidden="true" suppressHydrationWarning>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="pwa-splash-icon"

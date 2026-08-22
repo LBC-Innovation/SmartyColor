@@ -47,7 +47,7 @@ body {
   transition: opacity 0.2s ease;
 }
 
-#pwa-splash.pwa-splash--hide {
+html.pwa-splash-hiding #pwa-splash {
   opacity: 0;
   pointer-events: none;
 }

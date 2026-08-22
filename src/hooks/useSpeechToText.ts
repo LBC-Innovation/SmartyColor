@@ -57,7 +57,9 @@ export function useSpeechToText() {
   >(null);
 
   useEffect(() => {
-    setSupported(Boolean(getSpeechRecognition()));
+    queueMicrotask(() => {
+      setSupported(Boolean(getSpeechRecognition()));
+    });
   }, []);
 
   const stop = useCallback(() => {
