@@ -61,7 +61,7 @@ export function SheetVersionSelect({
         aria-controls={listId}
         onClick={() => setOpen((current) => !current)}
         className={cn(
-          "flex min-h-11 w-full items-center justify-between gap-3 rounded-card border-[3px] border-ink bg-paper pl-4 pr-5 text-left font-body text-base text-ink transition",
+          "flex min-h-9 w-full items-center justify-between gap-2 rounded-card border-[3px] border-ink bg-paper pl-3 pr-4 text-left font-body text-sm text-ink transition lg:min-h-11 lg:gap-3 lg:pl-4 lg:pr-5 lg:text-base",
           "hover:bg-sky/60",
           open && "bg-sky/40",
         )}

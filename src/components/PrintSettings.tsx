@@ -52,7 +52,7 @@ export function PrintSettings({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-paper px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
+          className="inline-flex min-h-9 items-center rounded-full border-2 border-ink bg-paper px-3 font-display text-xs font-semibold text-ink hover:bg-sky lg:min-h-11 lg:px-4 lg:text-sm"
         >
           Printer Settings
         </button>
