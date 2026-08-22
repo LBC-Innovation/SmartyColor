@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
 import { ChatComposer } from "@/components/ChatComposer";
 import { CrayonRippleDots } from "@/components/CrayonRippleDots";
+import { SmartyAvatar } from "@/components/SmartyAvatar";
 import { KidButton } from "@/components/KidButton";
 import { MakingCurtain } from "@/components/MakingCurtain";
 import { RequirementsList } from "@/components/RequirementsList";
@@ -516,11 +517,23 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
                 );
               })}
               {busy ? (
-                <CrayonRippleDots
-                  size="sm"
-                  className="self-start"
-                  label="Smarty is thinking"
-                />
+                <div
+                  className="flex max-w-[min(36rem,90%)] flex-col gap-1.5 self-start"
+                  aria-live="polite"
+                  aria-label="Smarty is thinking"
+                >
+                  <div className="flex items-center gap-2">
+                    <SmartyAvatar variant="chat" />
+                    <p className="font-display text-sm font-semibold text-smarty-label">
+                      Smarty
+                    </p>
+                  </div>
+                  <CrayonRippleDots
+                    size="sm"
+                    className="px-1"
+                    label="Smarty is thinking"
+                  />
+                </div>
               ) : null}
 
               <div className="flex flex-col gap-4 pt-2 lg:hidden">
