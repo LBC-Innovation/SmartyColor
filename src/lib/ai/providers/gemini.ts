@@ -13,6 +13,7 @@ import {
   REFINE_SYSTEM_PROMPT,
 } from "@/lib/ai/prompts";
 import type { ColoringAI, GenerateOptions } from "@/lib/ai/types";
+import { ensureFeedbackPlanPoints } from "@/lib/session/planPoints";
 import type { FeedbackPoint, FeedbackTurn, GeneratedSheet } from "@/lib/session/types";
 import { sanitizeSecretText } from "@/lib/security/publicError";
 
@@ -148,18 +149,18 @@ export function createGeminiProvider(): ColoringAI {
       );
 
       if (!editingPreviousSheet) {
-        if (points.length === 0) {
-          points.push({
-            id: newId(),
-            text: input.idea.trim() || "A fun scene to color",
-          });
-        }
-        if (points.length === 1) {
-          points.push({
-            id: newId(),
-            text: `Keep the page ${input.printPrefs.detail} — not too crowded`,
-          });
-        }
+        const ensured = ensureFeedbackPlanPoints(points, {
+          kind: output.kind,
+          idea: input.idea,
+          kidMessage: output.kidMessage,
+          detail: input.printPrefs.detail,
+          saferIdea: output.saferIdea,
+          workaroundSuggestion: output.workaroundSuggestion,
+          editingPreviousSheet,
+          newId,
+        });
+        points.length = 0;
+        points.push(...ensured);
       }
 
       const turn: FeedbackTurn = {

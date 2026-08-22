@@ -18,8 +18,6 @@ type RequirementsListProps = {
   layout?: "sidebar" | "inline";
   onMakeIt?: () => void;
   makeItDisabled?: boolean;
-  /** Brief getting-started copy before the user sends their first chat message. */
-  showOnboarding?: boolean;
   /** User has typed in or sent a chat message. */
   hasEngagedWithChat?: boolean;
 };
@@ -60,7 +58,6 @@ export function RequirementsList({
   layout = "sidebar",
   onMakeIt,
   makeItDisabled = false,
-  showOnboarding = false,
   hasEngagedWithChat = false,
 }: RequirementsListProps) {
   const inline = layout === "inline";
@@ -96,68 +93,26 @@ export function RequirementsList({
           inline ? "shrink-0" : "h-full min-h-0 overflow-hidden",
         )}
       >
-        {showOnboarding ?
-          <>
-            <h2 className="shrink-0 font-display text-lg font-bold text-ink lg:text-xl">
-              How To Use It!
-            </h2>
-            <section className="shrink-0 font-body text-sm leading-relaxed text-ink-soft lg:text-base">
-              <p className="font-semibold text-ink">Describe it</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                <li>
-                  Type or speak in the chat — tell Smarty what you want to
-                  color, like a dinosaur, a castle, or your favorite hero.
-                </li>
-              </ul>
-            </section>
-            <section className="shrink-0 font-body text-sm leading-relaxed text-ink-soft lg:text-base">
-              <p className="font-semibold text-ink">Review it</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                <li>
-                  Smarty turns your chat into drawing requirements listed here.
-                  Tap the pencil to edit any line, or the trash can to remove
-                  it.
-                </li>
-              </ul>
-            </section>
-            <section className="shrink-0 font-body text-sm leading-relaxed text-ink-soft lg:text-base">
-              <p className="font-semibold text-ink">Make it</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                <li>
-                  When the plan looks right, press{" "}
-                  <span className="font-semibold text-ink">Make It!</span> below
-                  to create your printable coloring sheet.
-                </li>
-              </ul>
-            </section>
-            <section className="shrink-0 font-body text-sm leading-relaxed text-ink-soft lg:text-base">
-              <p className="font-semibold text-ink">Replace it</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                <li>
-                  Not happy with the drawing? Keep chatting — Smarty will update
-                  these requirements from your feedback and try again. For
-                  famous characters, Smarty does its best to match what you
-                  asked for, but may swap in a close look-alike when needed.
-                </li>
-              </ul>
-            </section>
-          </>
-        : null}
-
-        {showOnboarding && items.length === 0 ? null : (
-          <ul
-            className={cn(
-              "flex flex-col",
-              inline ? "shrink-0" : (
-                "min-h-0 flex-1 overflow-y-auto overscroll-contain"
-              ),
-            )}
-          >
-            {items.length === 0 ?
-              <li className="py-4 font-body text-sm text-ink-soft">
-                As you chat, the important pieces show up here.
-              </li>
-            : items.map((item, index) => {
+        <ul
+          className={cn(
+            "flex flex-col",
+            inline ? "shrink-0" : (
+              "min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            ),
+          )}
+        >
+          {items.length === 0 ?
+            <li
+              className={cn(
+                "py-4 font-body text-sm",
+                hasEngagedWithChat ? "text-ink-soft" : "text-center text-ink-soft/60",
+              )}
+            >
+              {hasEngagedWithChat ?
+                "As you chat, the important pieces show up here."
+              : "Waiting for your ideas!"}
+            </li>
+          : items.map((item, index) => {
                 const editing = editingId === item.id;
                 return (
                   <li key={item.id}>
@@ -222,9 +177,8 @@ export function RequirementsList({
                   </li>
                 );
               })
-            }
-          </ul>
-        )}
+          }
+        </ul>
 
         {showDebug && generatePromptPreview != null ?
           <button
