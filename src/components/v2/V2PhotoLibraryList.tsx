@@ -121,8 +121,8 @@ export function V2PhotoLibraryList({
               "cursor-pointer",
               "rounded-xl border bg-white p-2 transition-shadow",
               isSelected
-                ? "border-v2-primary ring-2 ring-v2-primary/30"
-                : "border-slate-200/90 hover:border-slate-300",
+                ? "border-2 border-v2-primary"
+                : "border border-slate-200/90 hover:border-slate-300",
               isDragging && "opacity-50",
               isDropTarget && "border-v2-primary shadow-md shadow-indigo-200/50",
             )}
