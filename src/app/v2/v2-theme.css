@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-v2-bg: #eef2f7;
+  --color-v2-surface: #ffffff;
+  --color-v2-ink: #1e293b;
+  --color-v2-muted: #64748b;
+  --color-v2-primary: #6366f1;
+  --color-v2-primary-dark: #4f46e5;
+  --color-v2-accent: #7c3aed;
+  --color-v2-success-bg: #ecfdf5;
+  --color-v2-success-border: #a7f3d0;
+  --color-v2-success-text: #047857;
+  --font-v2: var(--font-inter);
+}
+
+.v2-shell {
+  font-family: var(--font-v2), ui-sans-serif, system-ui, sans-serif;
+  color: var(--color-v2-ink);
+}
+
+@keyframes v2-dropzone-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(99, 102, 241, 0.45),
+      inset 0 0 0 0 rgba(139, 92, 246, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(99, 102, 241, 0),
+      inset 0 0 0 4px rgba(139, 92, 246, 0.25);
+  }
+}
+
+@keyframes v2-dropzone-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.v2-dropzone-active {
+  animation: v2-dropzone-ring 1.15s ease-in-out infinite;
+}
+
+.v2-dropzone-active .v2-dropzone-icon {
+  animation: v2-dropzone-bob 0.9s ease-in-out infinite;
+}

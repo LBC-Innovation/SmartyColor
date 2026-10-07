@@ -1,0 +1,25 @@
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { Inter } from "next/font/google";
+import "./v2-theme.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+export const metadata: Metadata = {
+  title: "ColorfulMoments",
+  description:
+    "Turn your family photos into coloring memories with a clean, modern studio.",
+};
+
+export default function V2Layout({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className={`v2-shell min-h-dvh bg-v2-bg text-v2-ink ${inter.variable}`}
+    >
+      {children}
+    </div>
+  );
+}
