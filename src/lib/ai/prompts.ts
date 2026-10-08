@@ -227,7 +227,8 @@ You receive:
 2) The PREVIOUS coloring attempt (what to improve).
 
 Fix ONLY the issues listed below. Keep everything else the same as the previous attempt unless a fix requires a small adjustment nearby.
-Do NOT redesign the whole page. Do NOT add fictional elements. Stay faithful to the photograph.
+Treat each issue as a surgical edit: change only what that note describes; preserve all other lines, shapes, and composition from the PREVIOUS coloring attempt.
+Do NOT redesign the whole page. Do NOT regenerate from a blank page. Do NOT add fictional elements. Stay faithful to the photograph.
 
 Issues to fix:
 ${list}

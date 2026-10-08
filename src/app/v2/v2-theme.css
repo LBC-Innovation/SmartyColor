@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-v2-bg: #eef2f7;
+  --color-v2-bg: #e9eef5;
+  --color-v2-bg-subtle: #f4f6fa;
   --color-v2-surface: #ffffff;
   --color-v2-ink: #1e293b;
   --color-v2-muted: #64748b;
@@ -17,6 +18,52 @@
 .v2-shell {
   font-family: var(--font-v2), ui-sans-serif, system-ui, sans-serif;
   color: var(--color-v2-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html:has(.v2-shell),
+body:has(.v2-shell) {
+  overflow: hidden;
+  height: 100%;
+}
+
+@layer components {
+  .v2-panel {
+    border: 1px solid rgb(226 232 240 / 0.9);
+    border-radius: 1rem;
+    background-color: var(--color-v2-surface);
+    box-shadow:
+      0 1px 2px rgb(15 23 42 / 0.04),
+      0 12px 32px rgb(15 23 42 / 0.06);
+  }
+
+  @media (min-width: 1024px) {
+    .v2-panel {
+      border-radius: 1.25rem;
+    }
+  }
+
+  .v2-photo-list-scroll {
+    scrollbar-gutter: stable;
+  }
+
+  .v2-photo-list-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .v2-photo-list-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .v2-photo-list-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgb(148 163 184 / 0.45);
+  }
+
+  .v2-photo-list-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(100 116 139 / 0.55);
+  }
 }
 
 @keyframes v2-dropzone-ring {

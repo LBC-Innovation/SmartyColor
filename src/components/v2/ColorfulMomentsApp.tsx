@@ -12,13 +12,20 @@ import {
   Sparkles,
 } from "lucide-react";
 import { V2BottomNav, V2Sidebar, V2TopBar } from "@/components/v2/V2Chrome";
+import { V2ProgressStepper } from "@/components/v2/V2ProgressStepper";
 import {
   V2AssetLightbox,
   type LightboxFocus,
 } from "@/components/v2/V2AssetLightbox";
 import { V2PhotoLibraryList } from "@/components/v2/V2PhotoLibraryList";
+import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
+import {
+  V2SheetEditChat,
+  type SheetEditMessage,
+} from "@/components/v2/V2SheetEditChat";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { cn } from "@/lib/cn";
+import { compressImageDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
 import { isAllowedPhotoFile } from "@/lib/photo/heicFile";
 import { inferPhotoLayout } from "@/lib/photo/orientation";
 import { readBlobImageSize } from "@/lib/photo/readImageSize";
@@ -27,8 +34,11 @@ import {
   defaultPrintPrefs,
   type PrintPrefs,
 } from "@/lib/print/settings";
-import { PHOTO_UPLOAD_MAX_BYTES } from "@/lib/session/photoTypes";
-import type { GeneratedSheet } from "@/lib/session/types";
+import {
+  PHOTO_MAX_CORRECTION_CHARS,
+  PHOTO_UPLOAD_MAX_BYTES,
+} from "@/lib/session/photoTypes";
+import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 
 type PhotoEntry = {
   id: string;
@@ -36,81 +46,38 @@ type PhotoEntry = {
   photoDataUrl: string;
   printPrefs: PrintPrefs;
   sheet: GeneratedSheet | null;
+  sheetRevisions?: SheetVersion[];
+  activeRevisionId?: string | null;
   generating: boolean;
+  correcting?: boolean;
 };
 
 function newId() {
   return crypto.randomUUID();
 }
 
-function ProgressStepper({
-  photosCount,
-  hasSheet,
-}: {
-  photosCount: number;
-  hasSheet: boolean;
-}) {
-  const step1 = photosCount > 0;
-  const step2 = hasSheet;
+function createSheetRevision(sheet: GeneratedSheet): SheetVersion {
+  return {
+    id: newId(),
+    createdAt: new Date().toISOString(),
+    sheet,
+  };
+}
 
-  return (
-    <ol className="flex flex-col gap-3">
-      <li className="flex items-center gap-3">
-        <span
-          className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white",
-            step1 ? "bg-rose-400" : "bg-slate-200 text-slate-500",
-          )}
-        >
-          {step1 ? <Check className="h-4 w-4" strokeWidth={3} /> : "1"}
-        </span>
-        <span
-          className={cn(
-            "text-sm font-medium",
-            step1 ? "text-slate-800" : "text-slate-400",
-          )}
-        >
-          Photos Uploaded
-        </span>
-      </li>
-      <li className="flex items-center gap-3">
-        <span
-          className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white",
-            step2 ? "bg-emerald-500" : step1 ? "bg-v2-primary" : "bg-slate-200 text-slate-500",
-          )}
-        >
-          {step2 ? <Check className="h-4 w-4" strokeWidth={3} /> : "2"}
-        </span>
-        <span
-          className={cn(
-            "text-sm font-medium",
-            step2 ? "text-slate-800" : "text-slate-400",
-          )}
-        >
-          Sheets Generated
-        </span>
-      </li>
-      <li className="flex items-center gap-3">
-        <span
-          className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold",
-            step2 ? "bg-v2-primary text-white" : "bg-slate-200 text-slate-500",
-          )}
-        >
-          3
-        </span>
-        <span
-          className={cn(
-            "text-sm font-medium",
-            step2 ? "text-slate-800" : "text-slate-400",
-          )}
-        >
-          Download &amp; Print
-        </span>
-      </li>
-    </ol>
-  );
+function normalizeSheetRevisions(photo: PhotoEntry): SheetVersion[] {
+  if (photo.sheetRevisions && photo.sheetRevisions.length > 0) {
+    return photo.sheetRevisions;
+  }
+  if (photo.sheet) {
+    return [
+      {
+        id: `${photo.id}-rev-1`,
+        createdAt: "",
+        sheet: photo.sheet,
+      },
+    ];
+  }
+  return [];
 }
 
 type PendingUpload = { id: string };
@@ -132,6 +99,8 @@ export function ColorfulMomentsApp() {
     null,
   );
   const [lightboxCompare, setLightboxCompare] = useState(false);
+  const [editChatOpen, setEditChatOpen] = useState(false);
+  const [editMessages, setEditMessages] = useState<SheetEditMessage[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const previewUrlsRef = useRef<Set<string>>(new Set());
 
@@ -157,6 +126,8 @@ export function ColorfulMomentsApp() {
   useEffect(() => {
     setLightboxFocus(null);
     setLightboxCompare(false);
+    setEditChatOpen(false);
+    setEditMessages([]);
   }, [selectedId]);
 
   function openLightbox(focus: LightboxFocus) {
@@ -217,6 +188,7 @@ export function ColorfulMomentsApp() {
           printPrefs,
           sheet: null,
           generating: false,
+          correcting: false,
         };
 
         firstAddedId ??= entry.id;
@@ -299,8 +271,11 @@ export function ColorfulMomentsApp() {
       if (!payload.sheet) {
         throw new Error("No coloring sheet came back.");
       }
+      const revision = createSheetRevision(payload.sheet);
       updatePhoto(photoId, {
         sheet: payload.sheet,
+        sheetRevisions: [revision],
+        activeRevisionId: revision.id,
         generating: false,
       });
       if (!options?.batch) setError(null);
@@ -317,7 +292,9 @@ export function ColorfulMomentsApp() {
   function clearAllGeneratingFlags() {
     setPhotos((prev) => {
       const next = prev.map((entry) =>
-        entry.generating ? { ...entry, generating: false } : entry,
+        entry.generating || entry.correcting
+          ? { ...entry, generating: false, correcting: false }
+          : entry,
       );
       photosRef.current = next;
       return next;
@@ -330,6 +307,144 @@ export function ColorfulMomentsApp() {
       return;
     }
     await generateForPhoto(selected.id);
+  }
+
+  function openSheetEditChat() {
+    if (!selected?.sheet) {
+      setError("Generate a coloring sheet before making edits.");
+      return;
+    }
+    setEditMessages((current) =>
+      current.length > 0
+        ? current
+        : [
+            {
+              id: newId(),
+              role: "assistant",
+              text: "Tell me what to adjust on this sheet. I'll change only what you describe.",
+            },
+          ],
+    );
+    setEditChatOpen(true);
+  }
+
+  async function applySheetEdit(note: string) {
+    const photo = selected;
+    if (!photo?.sheet) return;
+
+    const trimmed = note.trim();
+    if (!trimmed) return;
+    if (trimmed.length > PHOTO_MAX_CORRECTION_CHARS) {
+      setError(`Keep each edit note under ${PHOTO_MAX_CORRECTION_CHARS} characters.`);
+      return;
+    }
+    if (coloringApiLockRef.current || photo.generating || photo.correcting) {
+      return;
+    }
+
+    const userMessageId = newId();
+    const pendingId = newId();
+
+    setEditMessages((prev) => [
+      ...prev,
+      { id: userMessageId, role: "user", text: trimmed },
+      {
+        id: pendingId,
+        role: "assistant",
+        text: "Applying your change to the sheet…",
+        pending: true,
+      },
+    ]);
+    setError(null);
+    coloringApiLockRef.current = true;
+    updatePhoto(photo.id, { correcting: true });
+
+    try {
+      const sheetDataUrl = await compressImageDataUrlForApi(
+        photo.sheet.imageDataUrl,
+        2,
+      );
+      const response = await fetch("/api/photo-coloring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "correct",
+          photoDataUrl: photo.photoDataUrl,
+          sheetDataUrl,
+          corrections: [trimmed],
+          printPrefs: photo.printPrefs,
+        }),
+      });
+      const payload = (await response.json()) as {
+        sheet?: GeneratedSheet;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not apply that edit.");
+      }
+      if (!payload.sheet) {
+        throw new Error("No updated sheet came back.");
+      }
+
+      const prior = photosRef.current.find((entry) => entry.id === photo.id);
+      const revisions = prior ? [...normalizeSheetRevisions(prior)] : [];
+      const revision = createSheetRevision(payload.sheet);
+      revisions.push(revision);
+      updatePhoto(photo.id, {
+        sheet: payload.sheet,
+        sheetRevisions: revisions,
+        activeRevisionId: revision.id,
+        correcting: false,
+      });
+      setEditMessages((prev) =>
+        prev.map((message) =>
+          message.id === pendingId
+            ? {
+                ...message,
+                pending: false,
+                text: "Updated! Check the coloring sheet preview for your change.",
+              }
+            : message,
+        ),
+      );
+    } catch (err) {
+      updatePhoto(photo.id, { correcting: false });
+      const message =
+        err instanceof Error ? err.message : "Could not apply that edit.";
+      setError(message);
+      setEditMessages((prev) =>
+        prev.map((entry) =>
+          entry.id === pendingId
+            ? {
+                ...entry,
+                pending: false,
+                text: message,
+              }
+            : entry,
+        ),
+      );
+    } finally {
+      coloringApiLockRef.current = false;
+    }
+  }
+
+  function selectSheetRevision(photoId: string, revisionId: string) {
+    setPhotos((prev) => {
+      const next = prev.map((entry) => {
+        if (entry.id !== photoId) return entry;
+        const revisions = normalizeSheetRevisions(entry);
+        const picked = revisions.find((item) => item.id === revisionId);
+        if (!picked) return entry;
+        return {
+          ...entry,
+          sheetRevisions: revisions,
+          activeRevisionId: revisionId,
+          sheet: picked.sheet,
+        };
+      });
+      photosRef.current = next;
+      return next;
+    });
   }
 
   async function generateAllSheets() {
@@ -439,8 +554,15 @@ export function ColorfulMomentsApp() {
     }
   }
 
-  const anyGenerating = photos.some((entry) => entry.generating);
-  const busy = (selected?.generating ?? false) || generatingAll;
+  const anyGenerating = photos.some(
+    (entry) => entry.generating || entry.correcting,
+  );
+  const busy =
+    (selected?.generating ?? false) ||
+    (selected?.correcting ?? false) ||
+    generatingAll;
+  const sheetBusy = (selected?.generating ?? false) && !selected?.sheet;
+  const sheetCorrecting = selected?.correcting ?? false;
   const sheetReady = Boolean(selected?.sheet);
   const hasAnySheet = photos.some((entry) => entry.sheet);
   const needsSheetCount = photos.filter((entry) => !entry.sheet).length;
@@ -448,46 +570,39 @@ export function ColorfulMomentsApp() {
   const libraryPhotoCount = photos.length + pendingUploads.length;
   const canGenerateAll =
     needsSheetCount > 0 && !uploading && !generatingAll && !anyGenerating;
+  const studioPreviewStacked =
+    selected?.printPrefs.orientation === "landscape";
+  const selectedRevisions = selected ? normalizeSheetRevisions(selected) : [];
+  const activeRevisionId =
+    selected?.activeRevisionId ??
+    selectedRevisions[selectedRevisions.length - 1]?.id ??
+    null;
 
   return (
-    <div className="flex min-h-dvh flex-col pb-20 lg:pb-0">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <V2TopBar />
 
-      <div className="flex flex-1">
-        <V2Sidebar />
+      <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+        <V2Sidebar
+          photosCount={photos.length}
+          hasSheet={hasAnySheet}
+          onDownloadPrint={() => void downloadPrintBook()}
+          downloadPrintDisabled={
+            !hasAnySheet || printingBook || anyGenerating
+          }
+          downloadingPrint={printingBook}
+        />
 
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*,.heic,.heif"
-            multiple
-            className="sr-only"
-            onChange={(event) => {
-              const list = event.target.files;
-              if (list?.length) void ingestFiles(list);
-              event.target.value = "";
-            }}
-          />
-
-          {error ? (
-            <div className="mb-6 mt-2">
-              <p
-                className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-relaxed text-rose-800"
-                role="alert"
-              >
-                {error}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 lg:grid-cols-12 lg:items-start lg:gap-6">
-            {/* Photo library column */}
-            <div className="flex flex-col gap-4 lg:col-span-4 xl:col-span-3">
-            <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-base font-semibold text-slate-900">
-                  Your Photos ({libraryPhotoCount})
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          {/* Photo library — full-height column beside side nav */}
+          <div className="flex max-h-[min(52dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-slate-200/80 lg:bg-white/95 xl:w-80">
+            <section className="v2-panel flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none lg:ring-0">
+              <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                  Your Photos
+                  <span className="ml-1.5 text-base font-medium text-v2-muted">
+                    ({libraryPhotoCount})
+                  </span>
                 </h2>
                 {libraryPhotoCount > 0 ? (
                   <div className="flex items-center gap-2">
@@ -559,7 +674,7 @@ export function ColorfulMomentsApp() {
                   type="button"
                   disabled={!canGenerateAll}
                   onClick={() => void generateAllSheets()}
-                  className="mb-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-4 py-2.5 text-sm font-semibold text-v2-primary transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mb-2 inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50/50 px-4 py-2.5 text-sm font-semibold text-v2-primary transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {generatingAll ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -576,58 +691,128 @@ export function ColorfulMomentsApp() {
               ) : null}
 
               {libraryPhotoCount > 0 ? (
-                <V2PhotoLibraryList
-                  photos={photos}
-                  pendingUploads={pendingUploads}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                  onReorder={replacePhotos}
-                  onGenerateSheet={(id) => {
-                    if (generatingAll || coloringApiLockRef.current) return;
-                    void generateForPhoto(id);
-                  }}
-                  generateDisabled={generatingAll || anyGenerating}
-                />
+                <div
+                  className="v2-photo-list-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+                  aria-label="Uploaded photos"
+                >
+                  <V2PhotoLibraryList
+                    photos={photos}
+                    pendingUploads={pendingUploads}
+                    selectedId={selectedId}
+                    onSelect={setSelectedId}
+                    onReorder={replacePhotos}
+                    onGenerateSheet={(id) => {
+                      if (generatingAll || coloringApiLockRef.current) return;
+                      void generateForPhoto(id);
+                    }}
+                    generateDisabled={generatingAll || anyGenerating}
+                  />
+                </div>
               ) : null}
             </section>
 
             <section
-              className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5"
+              className="v2-panel shrink-0 p-5 sm:p-6 lg:hidden"
               aria-label="Progress"
             >
-              <ProgressStepper
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-v2-muted">
+                Your progress
+              </p>
+              <V2ProgressStepper
                 photosCount={photos.length}
                 hasSheet={hasAnySheet}
+                onDownloadPrint={() => void downloadPrintBook()}
+                downloadPrintDisabled={
+                  !hasAnySheet || printingBook || anyGenerating
+                }
+                downloadingPrint={printingBook}
               />
             </section>
-            </div>
+          </div>
 
-            {/* Preview & actions — wider column on desktop for larger previews */}
-            <section className="flex flex-col gap-4 lg:col-span-8 xl:col-span-9">
-              <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-                <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:gap-6">
-                  <div className="flex min-w-0 flex-col">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-slate-900">
-                        Original
-                      </h3>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600"
-                        aria-label="Edit photo (coming soon)"
-                      >
-                        <Crop className="h-3.5 w-3.5" />
-                        Edit
-                      </button>
-                    </div>
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-5 py-4 pb-20 sm:px-6 sm:py-5 lg:overflow-hidden lg:pb-5 lg:pl-6 lg:pr-8 xl:pl-8 xl:pr-10">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,.heic,.heif"
+              multiple
+              className="sr-only"
+              onChange={(event) => {
+                const list = event.target.files;
+                if (list?.length) void ingestFiles(list);
+                event.target.value = "";
+              }}
+            />
+
+            {error ? (
+              <div className="mb-4 mt-1 shrink-0">
+                <p
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-relaxed text-rose-800"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              </div>
+            ) : null}
+
+            {/* Studio preview & actions */}
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+              <div className="v2-panel grid shrink-0 grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                <button
+                  type="button"
+                  disabled={!sheetReady || downloading || busy}
+                  onClick={() => void downloadSelected()}
+                  className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-white px-4 py-3 text-sm font-semibold text-v2-primary transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4 shrink-0" />
+                  <span className="truncate">Download</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasAnySheet || printingBook || busy || anyGenerating}
+                  onClick={() => void downloadPrintBook()}
+                  className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-white px-4 py-3 text-sm font-semibold text-v2-primary transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {printingBook ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4 shrink-0" />
+                  )}
+                  <span className="truncate">Print book</span>
+                </button>
+              </div>
+
+              <div className="v2-panel flex min-h-0 flex-1 flex-col overflow-hidden p-5 sm:p-6 xl:p-8">
+                <div className="mb-4 flex shrink-0 items-end justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                      Studio preview
+                    </h2>
+                    <p className="mt-1 text-sm text-v2-muted">
+                      Compare your photo and coloring sheet at full size.
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    "grid min-h-0 flex-1 gap-4 overflow-hidden sm:gap-4 lg:gap-5 xl:gap-6",
+                    studioPreviewStacked
+                      ? "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
+                      : "grid-cols-1 sm:grid-cols-2",
+                  )}
+                >
+                  <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+                      Original
+                    </h3>
                     <button
                       type="button"
                       disabled={!selected}
                       onClick={() => selected && openLightbox("original")}
                       className={cn(
-                        "flex min-h-[220px] w-full flex-1 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:min-h-[280px] lg:min-h-[min(420px,52vh)] xl:min-h-[min(480px,58vh)]",
+                        "flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl bg-slate-100/90",
                         selected &&
-                          "cursor-zoom-in transition hover:ring-2 hover:ring-v2-primary/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
+                          "cursor-zoom-in transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
                         !selected && "cursor-default",
                       )}
                       aria-label={
@@ -641,63 +826,103 @@ export function ColorfulMomentsApp() {
                         <img
                           src={selected.previewUrl}
                           alt="Selected photo"
-                          className="pointer-events-none max-h-[min(480px,58vh)] w-full object-contain"
+                          className="pointer-events-none max-h-full max-w-full object-contain"
                         />
                       ) : (
-                        <span className="p-4 text-center text-sm text-v2-muted">
+                        <span className="p-6 text-center text-sm text-v2-muted">
                           Select a photo to preview
                         </span>
                       )}
                     </button>
                   </div>
-                  <div className="flex min-w-0 flex-col">
-                    <h3 className="mb-2 text-sm font-semibold text-slate-900">
-                      Coloring Sheet
-                    </h3>
-                    <button
-                      type="button"
-                      disabled={!selected?.sheet || busy}
-                      onClick={() =>
-                        selected?.sheet && openLightbox("sheet")
-                      }
-                      className={cn(
-                        "relative flex min-h-[220px] w-full flex-1 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white sm:min-h-[280px] lg:min-h-[min(420px,52vh)] xl:min-h-[min(480px,58vh)]",
-                        selected?.sheet &&
-                          !busy &&
-                          "cursor-zoom-in transition hover:ring-2 hover:ring-v2-primary/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
-                        (!selected?.sheet || busy) && "cursor-default",
-                      )}
-                      aria-label={
-                        selected?.sheet
-                          ? "View coloring sheet full screen"
-                          : undefined
-                      }
-                    >
-                      {busy ? (
-                        <span className="flex flex-col items-center justify-center gap-2 p-4 text-center">
-                          <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
-                          <span className="text-sm text-v2-muted">
-                            Tracing your photo into line art…
-                          </span>
+                  <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                        Coloring sheet
+                      </h3>
+                      <button
+                        type="button"
+                        disabled={!sheetReady || busy}
+                        onClick={openSheetEditChat}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-v2-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label="Edit coloring sheet"
+                      >
+                        <Crop className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                    </div>
+                    {sheetBusy ? (
+                      <div
+                        className="relative flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-6 text-center"
+                        aria-busy="true"
+                      >
+                        <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
+                        <span className="text-sm text-v2-muted">
+                          Tracing your photo into line art…
                         </span>
-                      ) : selected?.sheet ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={selected.sheet.imageDataUrl}
-                          alt="Generated coloring sheet"
-                          className="pointer-events-none max-h-[min(480px,58vh)] w-full object-contain"
+                      </div>
+                    ) : selected?.sheet ? (
+                      <div className="flex min-h-0 w-full flex-1 gap-2 overflow-hidden">
+                        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200/80 bg-white">
+                          <button
+                            type="button"
+                            disabled={sheetCorrecting}
+                            onClick={() => openLightbox("sheet")}
+                            className="relative flex h-full min-h-0 w-full flex-1 cursor-zoom-in items-center justify-center transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary disabled:cursor-wait"
+                            aria-label="View coloring sheet full screen"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={selected.sheet.imageDataUrl}
+                              alt="Generated coloring sheet"
+                              className="pointer-events-none max-h-full max-w-full object-contain"
+                            />
+                          </button>
+                          {sheetCorrecting ? (
+                            <div
+                              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/75 p-4 text-center backdrop-blur-[1px]"
+                              aria-busy="true"
+                            >
+                              <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
+                              <span className="text-sm font-medium text-slate-700">
+                                Applying your edits…
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                        <V2SheetRevisionStrip
+                          revisions={selectedRevisions}
+                          activeRevisionId={activeRevisionId}
+                          onSelect={(revisionId) =>
+                            selectSheetRevision(selected.id, revisionId)
+                          }
+                          disabled={sheetCorrecting}
+                          className="w-[3.25rem] sm:w-14"
                         />
-                      ) : (
-                        <span className="p-4 text-center text-sm text-v2-muted">
-                          Generate a sheet to see line art here
-                        </span>
-                      )}
-                    </button>
+                      </div>
+                    ) : (
+                      <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/20 p-6 text-center">
+                        <p className="max-w-xs text-sm text-v2-muted">
+                          {selected
+                            ? "This photo doesn’t have a coloring sheet yet."
+                            : "Select a photo from your library to get started."}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={!selected || generatingAll}
+                          onClick={() => void generateForSelected()}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-500/25 transition hover:from-indigo-600 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+                        >
+                          <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+                          Generate coloring sheet
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {sheetReady && !busy ? (
-                  <div className="mt-4 flex gap-3 rounded-xl border border-v2-success-border bg-v2-success-bg px-4 py-3">
+                {sheetReady && !sheetBusy && !sheetCorrecting ? (
+                  <div className="mt-4 flex shrink-0 gap-3 rounded-xl border border-v2-success-border bg-v2-success-bg px-5 py-3">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
                       <Check className="h-3.5 w-3.5" strokeWidth={3} />
                     </span>
@@ -713,48 +938,21 @@ export function ColorfulMomentsApp() {
                   </div>
                 ) : null}
               </div>
-
-              <div className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  disabled={!selected || busy || generatingAll}
-                  onClick={() => void generateForSelected()}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-md shadow-indigo-500/20 transition hover:from-indigo-600 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Sparkles className="h-4 w-4" aria-hidden />
-                  Generate Sheets
-                </button>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    disabled={!sheetReady || downloading || busy}
-                    onClick={() => void downloadSelected()}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-white px-4 py-3 text-sm font-semibold text-v2-primary transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!hasAnySheet || printingBook || busy || anyGenerating}
-                    onClick={() => void downloadPrintBook()}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-white px-4 py-3 text-sm font-semibold text-v2-primary transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {printingBook ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Printer className="h-4 w-4" />
-                    )}
-                    Print Book
-                  </button>
-                </div>
-              </div>
             </section>
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
 
       <V2BottomNav />
+
+      <V2SheetEditChat
+        open={editChatOpen}
+        onClose={() => setEditChatOpen(false)}
+        messages={editMessages}
+        onSend={(text) => void applySheetEdit(text)}
+        busy={sheetCorrecting}
+        disabled={!sheetReady}
+      />
 
       {lightboxFocus && selected ? (
         <V2AssetLightbox

@@ -17,9 +17,9 @@ export const metadata: Metadata = {
 export default function V2Layout({ children }: { children: ReactNode }) {
   return (
     <div
-      className={`v2-shell min-h-dvh bg-v2-bg text-v2-ink ${inter.variable}`}
+      className={`v2-shell flex h-dvh flex-col overflow-hidden bg-v2-bg text-v2-ink ${inter.variable}`}
     >
-      {children}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }

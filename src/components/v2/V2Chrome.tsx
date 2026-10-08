@@ -8,6 +8,7 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { V2ProgressStepper } from "@/components/v2/V2ProgressStepper";
 import { v2BottomNav, v2SideNav, v2TopNav } from "@/components/v2/nav-config";
 
 function BrandBlock({ compact }: { compact?: boolean }) {
@@ -79,8 +80,8 @@ function UserAvatar() {
 
 export function V2TopBar() {
   return (
-    <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+    <header className="shrink-0 border-b border-slate-200/80 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      <div className="flex w-full items-center justify-between gap-4 px-5 py-3.5 sm:px-8 xl:px-10 2xl:px-12">
         <BrandBlock />
 
         <nav
@@ -124,26 +125,60 @@ export function V2TopBar() {
   );
 }
 
-export function V2Sidebar() {
+type V2SidebarProps = {
+  photosCount: number;
+  hasSheet: boolean;
+  onDownloadPrint: () => void;
+  downloadPrintDisabled?: boolean;
+  downloadingPrint?: boolean;
+};
+
+export function V2Sidebar({
+  photosCount,
+  hasSheet,
+  onDownloadPrint,
+  downloadPrintDisabled,
+  downloadingPrint,
+}: V2SidebarProps) {
   return (
-    <aside className="hidden w-56 shrink-0 border-r border-slate-200/80 bg-white lg:block">
-      <nav className="flex flex-col gap-1 p-4" aria-label="Studio">
+    <aside className="hidden h-full min-h-0 w-48 shrink-0 flex-col border-r border-slate-200/80 bg-white/90 lg:flex">
+      <nav
+        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3"
+        aria-label="Studio"
+      >
         {v2SideNav.map((item) => (
           <button
             key={item.id}
             type="button"
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors",
+              "flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-medium leading-snug transition-colors",
               item.active
                 ? "bg-indigo-50 text-v2-primary"
                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
             )}
           >
-            <item.icon className="h-5 w-5 shrink-0" aria-hidden />
-            {item.label}
+            <item.icon className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="min-w-0 truncate">{item.label}</span>
           </button>
         ))}
       </nav>
+
+      <div
+        className="shrink-0 border-t border-slate-200/80 bg-slate-50/50 px-2 py-3"
+        aria-label="Progress"
+      >
+        <p className="mb-2.5 px-1 text-[10px] font-semibold uppercase tracking-wider text-v2-muted">
+          Your progress
+        </p>
+        <V2ProgressStepper
+          compact
+          photosCount={photosCount}
+          hasSheet={hasSheet}
+          onDownloadPrint={onDownloadPrint}
+          downloadPrintDisabled={downloadPrintDisabled}
+          downloadingPrint={downloadingPrint}
+        />
+      </div>
     </aside>
   );
 }
