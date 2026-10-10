@@ -1,5 +1,4 @@
 import { defaultPrintPrefs } from "@/lib/print/settings";
-import { buildFirstSmartyMessage, SMARTY_GREETING } from "@/lib/session/onboarding";
 import type { ColoringSession, SheetVersion } from "@/lib/session/types";
 
 const KEY = "smartycolor:session:";
@@ -14,15 +13,13 @@ export function createBlankSession(id = crypto.randomUUID()): ColoringSession {
       {
         id: crypto.randomUUID(),
         role: "smarty",
-        text: buildFirstSmartyMessage(),
+        text: "What do you want to color today? Tell me your idea!",
       },
     ],
     lastFeedback: null,
     revisionNote: "",
     status: "describe",
     sheets: [],
-    editAfterMessageCount: null,
-    editingPreviousSheet: false,
   };
 }
 
@@ -40,24 +37,7 @@ export function normalizeSession(session: ColoringSession): ColoringSession {
     });
   }
 
-  return {
-    ...session,
-    printPrefs: { ...defaultPrintPrefs, ...session.printPrefs },
-    messages: upgradeLegacyFirstSmartyMessage(session.messages),
-    sheets,
-    editAfterMessageCount: session.editAfterMessageCount ?? null,
-    editingPreviousSheet: Boolean(session.editingPreviousSheet),
-  };
-}
-
-function upgradeLegacyFirstSmartyMessage(
-  messages: ColoringSession["messages"],
-): ColoringSession["messages"] {
-  if (!messages.length || messages[0].role !== "smarty") return messages;
-  if (messages.some((message) => message.role === "user")) return messages;
-  if (!messages[0].text.startsWith(SMARTY_GREETING)) return messages;
-
-  return [{ ...messages[0], text: buildFirstSmartyMessage() }, ...messages.slice(1)];
+  return { ...session, sheets };
 }
 
 export function saveLocalSession(session: ColoringSession) {

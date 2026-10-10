@@ -16,7 +16,7 @@ export function AuthStatus() {
     if (!supabaseEnabled) return;
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
-      queueMicrotask(() => setReady(true));
+      setReady(true);
       return;
     }
 
@@ -35,7 +35,7 @@ export function AuthStatus() {
   if (!supabaseEnabled || !ready) return null;
 
   const buttonClass =
-    "inline-flex min-h-9 items-center rounded-full border-2 border-ink px-3 font-display text-xs font-semibold lg:min-h-11 lg:px-4 lg:text-sm";
+    "inline-flex min-h-11 items-center rounded-full border-2 border-ink px-4 font-display text-sm font-semibold";
 
   if (email) {
     return (

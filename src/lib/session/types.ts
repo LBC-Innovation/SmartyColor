@@ -23,8 +23,6 @@ export type FeedbackTurn = {
   kind: "ok" | "workaround" | "blocked";
   kidMessage: string;
   points: FeedbackPoint[];
-  /** Plan lines to drop when applying an edit on top of the existing plan. */
-  removeFromPlan?: string[];
   workaround?: {
     originalIntent: string;
     suggestion: string;
@@ -56,10 +54,6 @@ export type ColoringSession = {
   /** @deprecated prefer sheets; kept for older saved sessions */
   sheet?: GeneratedSheet;
   sheets: SheetVersion[];
-  /** Show a dashed edit divider after this many existing messages. */
-  editAfterMessageCount?: number | null;
-  /** Kid is revising after seeing a rendered sheet. */
-  editingPreviousSheet?: boolean;
 };
 
 export type RefineRequest = {
@@ -69,7 +63,6 @@ export type RefineRequest = {
   likes: LikedTrait[];
   revisionNote?: string;
   nahPointIds?: string[];
-  editingPreviousSheet?: boolean;
 };
 
 export type GenerateRequest = {

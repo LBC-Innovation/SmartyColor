@@ -1,6 +1,5 @@
 import { sheetToPdf } from "@/lib/print/pdf";
 import type { PrintPrefs } from "@/lib/print/settings";
-import { toPublicErrorMessage } from "@/lib/security/publicError";
 
 export async function POST(request: Request) {
   try {
@@ -16,11 +15,8 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    return Response.json(
-      {
-        error: toPublicErrorMessage(error, "Could not make a PDF."),
-      },
-      { status: 400 },
-    );
+    const message =
+      error instanceof Error ? error.message : "Could not make a PDF.";
+    return Response.json({ error: message }, { status: 400 });
   }
 }

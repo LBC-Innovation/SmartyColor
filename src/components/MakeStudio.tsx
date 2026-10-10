@@ -14,7 +14,7 @@ export function MakeStudio({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     const session = loadLocalSession(sessionId);
     if (!session) {
-      queueMicrotask(() => setError("missing"));
+      setError("missing");
       return;
     }
 

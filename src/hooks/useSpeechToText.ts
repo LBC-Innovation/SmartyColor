@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
@@ -29,96 +29,58 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-function describeSpeechError(code: string): string {
-  switch (code) {
-    case "not-allowed":
-    case "service-not-allowed":
-      return "Microphone access was blocked. Allow the mic in your browser settings and try again.";
-    case "audio-capture":
-      return "We could not find a microphone on this device.";
-    case "network":
-      return "Voice needs an internet connection in this browser.";
-    case "no-speech":
-      return "We did not hear anything. Tap the mic and try again.";
-    case "aborted":
-      return "";
-    default:
-      return "We could not hear that. Try again?";
-  }
-}
-
 export function useSpeechToText() {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const onTranscriptRef = useRef<
-    ((text: string, isFinal: boolean) => void) | null
-  >(null);
 
   useEffect(() => {
-    queueMicrotask(() => {
-      setSupported(Boolean(getSpeechRecognition()));
-    });
+    setSupported(Boolean(getSpeechRecognition()));
   }, []);
 
-  const stop = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setListening(false);
-  }, []);
+  function toggle(onTranscript: (text: string, isFinal: boolean) => void) {
+    const Ctor = getSpeechRecognition();
+    if (!Ctor) {
+      setError("Voice works in Chrome or Edge on this computer.");
+      return;
+    }
 
-  useEffect(() => () => stop(), [stop]);
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
 
-  const toggle = useCallback(
-    (onTranscript: (text: string, isFinal: boolean) => void) => {
-      const Ctor = getSpeechRecognition();
-      if (!Ctor) return;
-
-      if (listening && recognitionRef.current) {
-        stop();
-        return;
+    setError(null);
+    const recognition = new Ctor();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let finalChunk = "";
+      let interimChunk = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const piece = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalChunk += piece;
+        else interimChunk += piece;
       }
-
-      setError(null);
-      onTranscriptRef.current = onTranscript;
-
-      const recognition = new Ctor();
-      recognition.lang = "en-US";
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.onresult = (event) => {
-        let finalChunk = "";
-        let interimChunk = "";
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const piece = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalChunk += piece;
-          else interimChunk += piece;
-        }
-        if (finalChunk) onTranscriptRef.current?.(finalChunk, true);
-        else if (interimChunk) onTranscriptRef.current?.(interimChunk, false);
-      };
-      recognition.onerror = (event) => {
-        const message = describeSpeechError(event.error);
-        if (message) setError(message);
-        stop();
-      };
-      recognition.onend = () => {
-        setListening(false);
-        recognitionRef.current = null;
-      };
-
-      recognitionRef.current = recognition;
-      try {
-        recognition.start();
-        setListening(true);
-      } catch {
-        setError("Could not start the microphone. Try again?");
-        stop();
+      if (finalChunk) onTranscript(finalChunk, true);
+      else if (interimChunk) onTranscript(interimChunk, false);
+    };
+    recognition.onerror = (event) => {
+      if (event.error !== "no-speech") {
+        setError("We could not hear that. Try again?");
       }
-    },
-    [listening, stop],
-  );
+      setListening(false);
+    };
+    recognition.onend = () => {
+      setListening(false);
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+    setListening(true);
+  }
 
-  return { supported, listening, error, toggle, stop };
+  return { supported, listening, error, toggle };
 }

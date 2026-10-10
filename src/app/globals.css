@@ -34,42 +34,6 @@ body {
   min-height: 100%;
 }
 
-#pwa-splash {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  background-color: var(--color-cream);
-  transition: opacity 0.2s ease;
-}
-
-html.pwa-splash-hiding #pwa-splash {
-  opacity: 0;
-  pointer-events: none;
-}
-
-html.pwa-splash-done #pwa-splash {
-  display: none;
-}
-
-.pwa-splash-icon {
-  width: min(42vw, 168px);
-  height: min(42vw, 168px);
-  object-fit: contain;
-}
-
-.pwa-splash-title {
-  font-family: var(--font-luckiest), "Luckiest Guy", ui-rounded, sans-serif;
-  font-size: clamp(2rem, 8vw, 2.75rem);
-  line-height: 1;
-  letter-spacing: 0.04em;
-  color: var(--color-ink);
-}
-
 body {
   background-color: var(--color-cream);
   color: var(--color-ink);
@@ -111,27 +75,6 @@ body {
   }
 }
 
-@keyframes smarty-bubble-enter {
-  from {
-    opacity: 0;
-    transform: translateY(1.75rem);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.chat-bubble-smarty-enter {
-  animation: smarty-bubble-enter 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-bubble-smarty-enter {
-    animation: none;
-  }
-}
-
 @keyframes crayon-ripple {
   0%,
   60%,
@@ -146,6 +89,42 @@ body {
 .crayon-ripple-dot {
   animation: crayon-ripple 1.05s ease-in-out infinite;
   transform-origin: center;
+}
+
+#pwa-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  background-color: var(--color-cream);
+  transition: opacity 0.2s ease;
+}
+
+html.pwa-splash-hiding #pwa-splash {
+  opacity: 0;
+  pointer-events: none;
+}
+
+html.pwa-splash-done #pwa-splash {
+  display: none;
+}
+
+.pwa-splash-icon {
+  width: min(42vw, 168px);
+  height: min(42vw, 168px);
+  object-fit: contain;
+}
+
+.pwa-splash-title {
+  font-family: var(--font-luckiest), "Luckiest Guy", ui-rounded, sans-serif;
+  font-size: clamp(2rem, 8vw, 2.75rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--color-ink);
 }
 
 @media print {

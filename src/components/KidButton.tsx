@@ -10,12 +10,12 @@ type KidButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variants = {
   primary:
-    "bg-crayon-teal px-5 py-2.5 text-base text-white shadow-crayon hover:-translate-y-0.5 lg:px-7 lg:py-3.5 lg:text-xl",
+    "bg-crayon-teal px-7 py-3.5 text-xl text-white shadow-crayon hover:-translate-y-0.5",
   secondary:
-    "bg-paper px-5 py-2.5 text-base text-ink shadow-crayon hover:-translate-y-0.5 lg:px-7 lg:py-3.5 lg:text-xl",
+    "bg-paper px-7 py-3.5 text-xl text-ink shadow-crayon hover:-translate-y-0.5",
   makeIt:
-    "bg-crayon-teal px-8 py-3.5 text-xl text-white shadow-crayon-lg hover:-translate-y-0.5 lg:px-12 lg:py-5 lg:text-2xl",
-  ghost: "bg-transparent px-3 py-1.5 text-sm text-ink shadow-none lg:px-4 lg:py-2 lg:text-base",
+    "bg-crayon-teal px-12 py-5 text-2xl text-white shadow-crayon-lg hover:-translate-y-0.5",
+  ghost: "bg-transparent px-4 py-2 text-base text-ink shadow-none",
 };
 
 export const KidButton = forwardRef<HTMLButtonElement, KidButtonProps>(

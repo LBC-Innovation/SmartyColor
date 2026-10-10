@@ -1,6 +1,9 @@
-import "server-only";
-
-import type { ColoringAI, GenerateOptions } from "@/lib/ai/types";
+import type { ColoringAI } from "@/lib/ai/types";
+import { parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
+import type {
+  PhotoColoringCorrectRequest,
+  PhotoColoringGenerateRequest,
+} from "@/lib/session/photoTypes";
 import type { FeedbackTurn, GeneratedSheet } from "@/lib/session/types";
 
 function newId() {
@@ -39,12 +42,47 @@ function escapeXml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+function stubPhotoSheet(
+  label: string,
+  landscape: boolean,
+  extraLine?: string,
+): GeneratedSheet {
+  return {
+    title: "Photo coloring sheet (sample)",
+    mimeType: "image/svg+xml",
+    imageDataUrl: svgDataUrl(
+      "From your photo",
+      [label, extraLine ?? "Add a Gemini key for real photo tracing"].filter(
+        Boolean,
+      ) as string[],
+      landscape,
+    ),
+  };
+}
+
 export function createStubProvider(): ColoringAI {
   return {
-    async refine(input) {
-      const editing = Boolean(
-        input.editingPreviousSheet ?? input.session?.editingPreviousSheet,
+    async photoToColoring(input: PhotoColoringGenerateRequest) {
+      parsePhotoDataUrl(input.photoDataUrl);
+      return stubPhotoSheet(
+        "Sample outline from your upload",
+        input.printPrefs.orientation === "landscape",
       );
+    },
+
+    async correctPhotoColoring(input: PhotoColoringCorrectRequest) {
+      parsePhotoDataUrl(input.photoDataUrl);
+      parsePhotoDataUrl(input.sheetDataUrl);
+      const note =
+        input.corrections[0]?.slice(0, 60) ?? "Thanks for the notes";
+      return stubPhotoSheet(
+        "Sample fixed outline",
+        input.printPrefs.orientation === "landscape",
+        `Fix note: ${note}`,
+      );
+    },
+
+    async refine(input) {
       const owned = /spider-?man|batman|disney|pokemon|mario|elsa|frozen|star wars|minecraft|skibidi/i.test(
         input.idea,
       );
@@ -96,32 +134,18 @@ export function createStubProvider(): ColoringAI {
 
       return {
         kind: "ok",
-        kidMessage: editing
-          ? "Got it — I kept your plan and applied that change!"
-          : "Here's what I heard. Tap Yay if you like it!",
-        points: editing
-          ? input.revisionNote?.trim()
-            ? [{ id: newId(), text: input.revisionNote.trim() }]
-            : []
-          : [
-              { id: newId(), text: input.idea },
-              {
-                id: newId(),
-                text: `Drawn with ${input.printPrefs.detail} details`,
-              },
-            ],
-        removeFromPlan: [],
+        kidMessage: "Here's what I heard. Tap Yay if you like it!",
+        points: [
+          { id: newId(), text: input.idea },
+          {
+            id: newId(),
+            text: `Drawn with ${input.printPrefs.detail} details`,
+          },
+        ],
       };
     },
 
-    async generate(input, options?: GenerateOptions) {
-      options?.onProgress?.({
-        stage: "drawing",
-        title: "Making your coloring sheet…",
-        detail:
-          "Sharpening crayons. Drawing big shapes. Saving the tiny details for last.",
-      });
-      await new Promise((resolve) => setTimeout(resolve, 400));
+    async generate(input) {
       const title = input.session.idea.slice(0, 42) || "My coloring sheet";
       const sheet: GeneratedSheet = {
         title,

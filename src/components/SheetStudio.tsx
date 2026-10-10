@@ -13,7 +13,7 @@ export function SheetStudio({ sessionId }: { sessionId: string }) {
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
-    queueMicrotask(() => setSession(loadLocalSession(sessionId)));
+    setSession(loadLocalSession(sessionId));
   }, [sessionId]);
 
   async function downloadPdf() {

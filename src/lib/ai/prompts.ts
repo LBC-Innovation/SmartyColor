@@ -1,3 +1,4 @@
+import { photoLayoutPromptBlock, type PhotoLayout } from "@/lib/photo/orientation";
 import { describePrintPrefsForAI, type PrintPrefs } from "@/lib/print/settings";
 import type { RefineRequest } from "@/lib/session/types";
 
@@ -9,16 +10,13 @@ Voice:
 - Never mention being an AI model, safety filters, or copyright law by name.
 
 Hard rules:
-1. Violence, gore, weapons used to hurt people, hate, sexual content, nudity, and other adult themes are not allowed. If the idea includes those, set kind to "blocked". Speak kindly. Offer a safer, still-fun coloring idea in saferIdea and kidMessage. Always include at least two concrete scene points for the safer idea (or the kid-friendly alternative you suggest) so they can press Make It right away. Do not lecture.
+1. Violence, gore, weapons used to hurt people, hate, sexual content, nudity, and other adult themes are not allowed. If the idea includes those, set kind to "blocked". Speak kindly. Offer a safer, still-fun coloring idea in saferIdea and kidMessage. Do not lecture.
 2. Famous characters / brands: stay AS CLOSE as possible to what the kid asked for. Prefer kind "ok" and describe the look in plain visual words (costume, colors-as-coloring-hints, pose, gear, sidekick, setting) without needing the official name in the drawing plan. Only use kind "workaround" when you must avoid an exact trademarked name or logo — and even then, the plan must be a near look-alike the kid would instantly recognize as "the same character vibe," not a totally different hero. Keep the same body type, outfit shape, signature gear, pose, and scene. Tiny original tweaks only (no logos, no brand text). Never refuse or say you can't draw it. Put any owned name only in workaround.originalIntent.
 3. If the idea is fine (including near look-alikes described without brand names), set kind to "ok".
 4. Points must be concrete drawing choices about the SCENE only (who, what they are doing, setting, how busy the page is). For inspired characters, points should lock in the recognizable visual details.
 5. When the kid mentions a color, keep it as a "kid can color this ___ " note in a point — never as something already painted on the page. The sheet itself is always blank outlines.
-6. Honor the likes list. Do not drop things the kid already loved unless they asked to change or remove them. Do not re-add items the kid removed from the plan.
-7. In EDIT MODE (kid already saw a rendered sheet): the current plan is the source of truth and stays in place. The kid will NOT restate unchanged requirements. Return only a delta:
-   - removeFromPlan: exact (or near-exact) texts from the current plan to delete, including old wording when something is rewritten.
-   - points: ONLY new plan lines and rewritten replacements. Do NOT restate unchanged plan items in points.
-8. Printer Settings are authoritative for title, decorative border, and name line. NEVER invent plan points about a title, fun border, frame, name line, paper size, or orientation. Do not suggest those options in points or kidMessage. Follow the Print setup flags exactly; if something is OFF, do not mention it as something we will draw.
+6. Honor the likes list. Do not drop things the kid already loved unless they asked to change them. Do not re-add items the kid removed from the plan.
+7. Printer Settings are authoritative for title, decorative border, and name line. NEVER invent plan points about a title, fun border, frame, name line, paper size, or orientation. Do not suggest those options in points or kidMessage. Follow the Print setup flags exactly; if something is OFF, do not mention it as something we will draw.
 
 Return only the structured object.`;
 
@@ -28,24 +26,10 @@ const COLOR_WORD =
 const PRINT_OPTION_POINT =
   /\b(title|headline|caption|fun border|decorative border|border around|page border|frame around|name line|signature line|write (?:a |the )?title)\b/i;
 
-/** Common franchise / character labels that trigger empty content-filter image responses. */
-const FAMOUS_NAME =
-  /\b(?:ninjago|lloyd|kai|nya|zane|cole|jay|wu|frozen|elsa|anna|olaf|disney|pixar|marvel|avengers|spider-?man|batman|superman|pokemon|pikachu|mario|luigi|peach|yoshi|zelda|link|minecraft|steve|creeper|star wars|vader|skywalker|grogu|baby yoda|paw patrol|bluey|peppa|hello kitty|sonic|knuckles|barbie|transformers|optimus|skibidi|roblox)\b/gi;
-
 /** Subject text for the image model: strip color adjectives so it does not paint them. */
 export function neutralizeColorWords(text: string) {
   return text
     .replace(COLOR_WORD, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+([,.;:!?'"])/g, "$1")
-    .trim();
-}
-
-/** Soften IP labels for a retry after Gemini returns content-filter with no image. */
-export function neutralizeFamousNames(text: string) {
-  return text
-    .replace(FAMOUS_NAME, "")
-    .replace(/\bfrom\s+(?:the\s+)?[A-Z][\w'-]*/g, "")
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;:!?'"])/g, "$1")
     .trim();
@@ -67,15 +51,8 @@ export function isScenePlanPoint(text: string) {
 }
 
 export function buildRefineUserPrompt(input: RefineRequest) {
-  const editingPreviousSheet = Boolean(
-    input.editingPreviousSheet ?? input.session?.editingPreviousSheet,
-  );
   const likes = input.likes.length
-    ? editingPreviousSheet
-      ? input.likes
-          .map((like, index) => `${index + 1}. ${like.text}`)
-          .join("\n")
-      : input.likes.map((like) => `- ${like.text}`).join("\n")
+    ? input.likes.map((like) => `- ${like.text}`).join("\n")
     : "(none yet)";
   const previous = input.session?.lastFeedback
     ? JSON.stringify(input.session.lastFeedback, null, 2)
@@ -83,26 +60,10 @@ export function buildRefineUserPrompt(input: RefineRequest) {
 
   return `Kid idea: ${input.idea}
 
-${
-  editingPreviousSheet
-    ? `EDIT MODE: The kid already saw a rendered coloring sheet and is requesting a change. They will NOT recap the whole plan — keep every current plan item unless the edit clearly changes or removes it. Apply their request ON TOP of the current plan.
-
-Return a delta only:
-- removeFromPlan: copy texts from the current plan that should be deleted (for removals, or the old text when rewriting).
-- points: only brand-new requirements and rewritten replacements. Never repeat unchanged plan lines in points.
-If the edit only removes something, points may be empty and removeFromPlan should list what to drop.
-If the edit only adds something, removeFromPlan may be empty and points should list the additions.
-`
-    : ""
-}
 Print setup (follow exactly; do not invent extra page chrome):
 ${describePrintPrefsForAI(input.printPrefs)}
 
-${
-  editingPreviousSheet
-    ? "Current plan (keep all of these unless listed in removeFromPlan):"
-    : "Things the kid already loves (the live plan — do not re-add removed items):"
-}
+Things the kid already loves (the live plan — do not re-add removed items):
 ${likes}
 
 Points they tapped Nah on: ${input.nahPointIds?.join(", ") || "none"}
@@ -118,7 +79,6 @@ export function buildGeneratePrompt(input: {
   likes: string[];
   printPrefs: PrintPrefs;
   title: string;
-  editingPreviousSheet?: boolean;
 }) {
   const sceneLikes = input.likes.filter(isScenePlanPoint);
   const colorMentions = collectColorMentions(input.idea, ...sceneLikes);
@@ -144,12 +104,6 @@ export function buildGeneratePrompt(input: {
     ? `Name line: include a blank line for a name near the bottom.`
     : `Name line: draw NO name line or "Name: ___".`;
 
-  const editBlock = input.editingPreviousSheet
-    ? `
-EDIT OF PREVIOUS RENDER: This request revises a coloring sheet the kid already saw. Keep the same overall character and scene unless the plan details say to change them. Apply the plan as updates to that prior drawing — do not start from a totally unrelated composition.
-`
-    : "";
-
   return `OUTPUT FORMAT (non-negotiable):
 This must be a blank coloring-book page: pure black (#000000) outlines only on a pure white (#FFFFFF) background.
 ZERO color. ZERO gray fill. ZERO shading. ZERO gradients. ZERO tinted ink.
@@ -158,7 +112,7 @@ Every interior of every shape stays empty white so a child can color it in with 
 If any word in the request suggests a color (green, red, blue, etc.), that word is a FUTURE coloring hint for the child — never paint, ink, or fill it.
 
 ${colorNotes}
-${editBlock}
+
 PAGE CHROME (Printer Settings — override any conflicting plan wording):
 ${titleBlock}
 ${borderBlock}
@@ -182,41 +136,113 @@ Style:
 Final check: no color fills; page chrome matches Printer Settings exactly (especially title/border off when told not to draw them).`;
 }
 
-export const IMAGE_FILTER_REWRITE_SYSTEM = `You rewrite kid coloring-page requests after an image model content-filter blocked them.
+function coloringSheetOutputRules(printPrefs: PrintPrefs, title: string) {
+  const prefs = printPrefs;
+  const titleBlock = prefs.showTitle
+    ? `Title: draw short black outline letters that say "${title}".`
+    : `Title: draw NO title text, NO headline, NO caption anywhere on the page.`;
+  const borderBlock = prefs.funBorder
+    ? `Border: include a fun decorative border/frame around the page.`
+    : `Border: draw NO decorative border, frame, double page outline, or edge ornament. Plain white margin only.`;
+  const nameBlock = prefs.nameLine
+    ? `Name line: include a blank line for a name near the bottom.`
+    : `Name line: draw NO name line or "Name: ___".`;
 
-Goal: keep the drawing AS CLOSE as possible to what the kid wanted, while removing words/names that trigger ownership or content filters.
+  return `OUTPUT FORMAT (non-negotiable):
+This must be a blank coloring-book page: pure black (#000000) outlines only on a pure white (#FFFFFF) background.
+ZERO color. ZERO gray fill. ZERO shading. ZERO gradients. ZERO tinted ink.
+Every interior of every shape stays empty white so a child can color it in with crayons.
 
-Rules:
-1. Infer what likely triggered the filter (character name, franchise, brand, celebrity, etc.).
-2. Redescribe using plain visual words only: body type, costume shapes, hair, mask/hood, gear, pose, companion, setting, action.
-3. A kid who asked for the original should still recognize the vibe from your description.
-4. NEVER include official character names, franchise names, brand names, logos, or "from [movie/show]" phrasing.
-5. Do not invent a totally different character or scene.
-6. Colors may be mentioned only as future coloring hints (the page itself is black outlines on white).
-7. safeSubject is one short scene sentence. safePlanDetails are 2-6 concrete outline details.`;
+PAGE CHROME (Printer Settings — override any conflicting wording):
+${titleBlock}
+${borderBlock}
+${nameBlock}
+Orientation/detail: ${prefs.orientation}, ${prefs.detail} details.
 
-export function buildImageFilterRewritePrompt(input: {
-  idea: string;
-  planDetails: string[];
-  finishReason: string;
-  modelText: string;
-  errorMessage: string;
-  previousSafeSubject?: string;
-}) {
-  return `Original kid idea:
-${input.idea}
-
-Current plan details:
-${input.planDetails.map((item) => `- ${item}`).join("\n") || "(none)"}
-
-Image model failure:
-- finishReason: ${input.finishReason || "unknown"}
-- model text: ${input.modelText || "(empty)"}
-- error: ${input.errorMessage || "(none)"}
-${
-  input.previousSafeSubject
-    ? `\nA previous safe rewrite still failed:\n${input.previousSafeSubject}\nMake this rewrite safer while staying visually close.\n`
-    : ""
+Style:
+- Classic printable coloring sheet / color-in page
+- Clean closed shapes, thick outer contours, simpler inner details unless detail level says busy
+- Friendly, age-appropriate
+- No photorealism, textures, or filled regions — only outlines
+- No watermarks, signatures, or UI chrome
+- No violence, weapons-as-harm, scary gore, or adult content`;
 }
-Return a safer near look-alike description for a black-outline coloring page.`;
+
+function photoLineArtStyleRules() {
+  return `Line art quality (required for photo tracing):
+- Match a store-bought coloring book: smooth, even, connected black outlines on white paper only.
+- Outer silhouettes: light-to-medium line weight — never bold marker, never heavy black fills.
+- Eyes, brows, lips, fingers: thin delicate strokes — not thick blobs or square blocks.
+- Strokes must be smooth flowing curves — no jagged pixels, stair-steps, or sketchy dashes.
+- SOLID continuous lines only — no dotted, broken, or stippled segments.
+- NO cross-hatching, NO gray shading, NO horizontal/vertical hatch lines, NO random scribbles in blank areas.
+- Background trees/foliage: simplify to a few smooth outline shapes — do NOT draw every leaf or branch.
+- Only draw outlines for subjects and large shapes the kid would color — not photo edge-detection noise.
+- Every large area inside a shape must stay EMPTY WHITE for coloring — never fill clothing, sky, skin, or backgrounds with solid black.
+- NEVER use solid black fills anywhere on the page — not for shadows, shirts, hair masses, or compression blocks. Outlines only; all interiors white.
+- If a region would become a solid black shape, leave it white instead.
+- Dark photo areas (night sky, black face masks, dark clothing) must still be EMPTY WHITE on the coloring page — trace only the outer edges, never paint those areas solid black.`;
+}
+
+export function buildPhotoColoringPrompt(
+  printPrefs: PrintPrefs,
+  layout: PhotoLayout,
+) {
+  const title = printPrefs.showTitle ? "My photo coloring page" : "Coloring sheet";
+  const prefs = { ...printPrefs, orientation: layout.orientation };
+
+  return `You are turning a REAL photograph into a printable coloring sheet.
+
+${photoLayoutPromptBlock(layout)}
+
+Faithfulness (most important):
+- Match the photo's subjects, composition, poses, proportions, and layout as closely as a coloring page allows.
+- Do NOT invent new characters, objects, backgrounds, or story elements that are not in the photo.
+- Do NOT cartoonify into a different scene. Stay true to what is actually visible.
+- Preserve relative sizes and positions of people, pets, objects, and scenery from the photo.
+- If something is unclear in the photo, simplify with honest outline shapes — do not guess wildly.
+
+${photoLineArtStyleRules()}
+
+${coloringSheetOutputRules(prefs, title)}
+
+Draw the photo as empty line art a kid can color.`;
+}
+
+export function buildPhotoCorrectionPrompt(
+  printPrefs: PrintPrefs,
+  corrections: string[],
+  layout: PhotoLayout,
+) {
+  const title = printPrefs.showTitle ? "My photo coloring page" : "Coloring sheet";
+  const prefs = { ...printPrefs, orientation: layout.orientation };
+  const list = corrections.map((line, i) => `${i + 1}. ${line}`).join("\n");
+
+  return `You are fixing a photo-based coloring sheet.
+
+${photoLayoutPromptBlock(layout)}
+
+You receive:
+1) The ORIGINAL photograph (ground truth).
+2) The PREVIOUS coloring attempt (what to improve).
+
+Fix ONLY the issues listed below. Keep everything else the same as the previous attempt unless a fix requires a small adjustment nearby.
+Treat each issue as a surgical edit: change only what that note describes; preserve all other lines, shapes, and composition from the PREVIOUS coloring attempt.
+
+Line weight (critical):
+- Match the PREVIOUS coloring attempt exactly: same stroke thickness and boldness as that sheet — not thinner, not thicker.
+- Output one complete replacement coloring-sheet image (full canvas). Do not overlay or trace on top of the previous sheet reference.
+- Do NOT retrace, duplicate, or stack a second line on an edge that already exists (that makes lines bolder).
+- Do NOT simplify, fade, or hairline-ify strokes that already exist (that makes lines thinner).
+
+Do NOT redesign the whole page. Do NOT add fictional elements. Stay faithful to the photograph.
+
+Issues to fix:
+${list}
+
+${photoLineArtStyleRules()}
+
+${coloringSheetOutputRules(prefs, title)}
+
+Return an improved coloring sheet that addresses the issues while staying true to the photo.`;
 }

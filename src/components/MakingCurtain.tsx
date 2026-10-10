@@ -11,8 +11,6 @@ type MakingCurtainProps = {
   sheet?: GeneratedSheet | null;
   printPrefs: PrintPrefs;
   error?: string | null;
-  statusTitle?: string;
-  statusDetail?: string;
   onDownload: () => void;
   onContinueEditing: () => void;
   onRetry?: () => void;
@@ -25,8 +23,6 @@ export function MakingCurtain({
   sheet,
   printPrefs,
   error,
-  statusTitle = "Making your coloring sheet…",
-  statusDetail = "Sharpening crayons. Drawing big shapes. Saving the tiny details for last.",
   onDownload,
   onContinueEditing,
   onRetry,
@@ -42,7 +38,7 @@ export function MakingCurtain({
       aria-modal="true"
       aria-label={
         mode === "loading"
-          ? statusTitle
+          ? "Making your coloring sheet"
           : mode === "error"
             ? "Something went wrong"
             : "Your coloring sheet"
@@ -51,12 +47,13 @@ export function MakingCurtain({
       <div className="flex max-h-[min(92vh,56rem)] w-full max-w-3xl flex-col items-center gap-5 overflow-y-auto rounded-(--radius-card) border-[3px] border-ink bg-paper/95 p-6 shadow-crayon-lg sm:p-8">
         {mode === "loading" ? (
           <div className="flex flex-col items-center gap-6 py-10 text-center">
-            <CrayonRippleDots label={statusTitle} />
+            <CrayonRippleDots label="Making your coloring sheet" />
             <h2 className="font-display text-3xl font-bold text-balance text-ink sm:text-4xl">
-              {statusTitle}
+              Making your coloring sheet…
             </h2>
             <p className="max-w-md font-body text-lg text-ink-soft">
-              {statusDetail}
+              Sharpening crayons. Drawing big shapes. Saving the tiny details
+              for last.
             </p>
           </div>
         ) : null}

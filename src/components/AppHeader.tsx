@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthStatus } from "@/components/AuthStatus";
 import { PrintSettings } from "@/components/PrintSettings";
-import { SmartyAvatar } from "@/components/SmartyAvatar";
 import type { PrintPrefs } from "@/lib/print/settings";
 
 type AppHeaderProps = {
@@ -12,38 +11,60 @@ type AppHeaderProps = {
   onPrintPrefsChange?: (next: PrintPrefs) => void;
 };
 
-export function AppHeader({ printPrefs, onPrintPrefsChange }: AppHeaderProps) {
+export function AppHeader({
+  printPrefs,
+  onPrintPrefsChange,
+}: AppHeaderProps) {
   const pathname = usePathname();
   const showNewIdea = pathname !== "/";
+  const onPhotoFlow = pathname.startsWith("/photo");
 
   return (
-    <header className="flex flex-wrap items-center gap-2 lg:gap-3">
-      <Link
-        href="/"
-        className="inline-flex shrink-0 items-center gap-2 rounded-2xl lg:gap-2.5"
-      >
-        <SmartyAvatar variant="header" priority />
-        <span className="flex h-8 items-center font-brand text-xl leading-none tracking-wide text-ink lg:h-10 lg:text-[1.75rem]">
+    <header className="flex flex-wrap items-center gap-3">
+      <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-2xl">
+        <span
+          className="grid size-10 place-items-center rounded-2xl border-[3px] border-ink bg-crayon-coral font-display text-lg font-bold text-white"
+          aria-hidden
+        >
+          S
+        </span>
+        <span className="font-brand text-2xl tracking-wide text-ink sm:text-[1.75rem]">
           SmartyColor
         </span>
       </Link>
 
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5 lg:gap-2">
-        {showNewIdea ?
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {!onPhotoFlow && !showNewIdea ? (
+          <Link
+            href="/photo"
+            className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-lilac px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
+          >
+            From a photo
+          </Link>
+        ) : null}
+        {showNewIdea || onPhotoFlow ? (
           <Link
             href="/"
-            className="inline-flex min-h-9 items-center rounded-full border-2 border-ink bg-paper px-3 font-display text-xs font-semibold text-ink hover:bg-sky lg:min-h-11 lg:px-4 lg:text-sm"
+            className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-paper px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
           >
             New idea
           </Link>
-        : null}
-        {printPrefs && onPrintPrefsChange ?
+        ) : null}
+        {showNewIdea && !onPhotoFlow ? (
+          <Link
+            href="/photo"
+            className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-lilac px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
+          >
+            From a photo
+          </Link>
+        ) : null}
+        {printPrefs && onPrintPrefsChange ? (
           <PrintSettings
             value={printPrefs}
             onChange={onPrintPrefsChange}
             variant="header"
           />
-        : null}
+        ) : null}
         <AuthStatus />
       </div>
     </header>

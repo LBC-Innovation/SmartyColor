@@ -3,25 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "pwa:icons": "node scripts/generate-pwa-icons.mjs",
-    "prebuild": "npm run pwa:icons"
+    "lint": "eslint"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.47",
-    "@serwist/next": "^9.5.12",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "ai": "^7.0.70",
+    "heic-to": "^1.6.5",
+    "heic2any": "^0.0.4",
     "lucide-react": "^1.33.0",
     "next": "16.3.1",
     "pdf-lib": "^1.17.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1",
     "sharp": "^0.35.3",
     "zod": "^4.4.3"
   },
@@ -33,7 +34,6 @@
     "@types/sharp": "^0.31.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
-    "serwist": "^9.5.12",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

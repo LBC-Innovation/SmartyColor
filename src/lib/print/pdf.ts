@@ -11,7 +11,11 @@ function pageSize(prefs: PrintPrefs): [number, number] {
   return size;
 }
 
-export async function sheetToPdf(imageDataUrl: string, prefs: PrintPrefs) {
+async function drawSheetOnPdf(
+  pdf: PDFDocument,
+  imageDataUrl: string,
+  prefs: PrintPrefs,
+) {
   const match = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
   const svgMatch = imageDataUrl.match(/^data:image\/svg\+xml/);
   if (svgMatch && !match) {
@@ -23,7 +27,6 @@ export async function sheetToPdf(imageDataUrl: string, prefs: PrintPrefs) {
 
   const mime = match[1];
   const bytes = Buffer.from(match[2], "base64");
-  const pdf = await PDFDocument.create();
   const [width, height] = pageSize(prefs);
   const page = pdf.addPage([width, height]);
   const image =
@@ -43,6 +46,26 @@ export async function sheetToPdf(imageDataUrl: string, prefs: PrintPrefs) {
     width: drawW,
     height: drawH,
   });
+}
 
+export async function sheetToPdf(imageDataUrl: string, prefs: PrintPrefs) {
+  const pdf = await PDFDocument.create();
+  await drawSheetOnPdf(pdf, imageDataUrl, prefs);
+  return pdf.save();
+}
+
+export type PdfSheetPage = {
+  imageDataUrl: string;
+  printPrefs: PrintPrefs;
+};
+
+export async function sheetsToPdf(pages: PdfSheetPage[]) {
+  if (pages.length === 0) {
+    throw new Error("Add at least one coloring sheet to the book.");
+  }
+  const pdf = await PDFDocument.create();
+  for (const page of pages) {
+    await drawSheetOnPdf(pdf, page.imageDataUrl, page.printPrefs);
+  }
   return pdf.save();
 }

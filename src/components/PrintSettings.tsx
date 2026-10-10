@@ -52,7 +52,7 @@ export function PrintSettings({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex min-h-9 items-center rounded-full border-2 border-ink bg-paper px-3 font-display text-xs font-semibold text-ink hover:bg-sky lg:min-h-11 lg:px-4 lg:text-sm"
+          className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-paper px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
         >
           Printer Settings
         </button>
@@ -143,11 +143,6 @@ export function PrintSettings({
                 label="Leave room for the kid's name"
                 checked={value.nameLine}
                 onChange={(nameLine) => onChange({ ...value, nameLine })}
-              />
-              <ToggleSwitch
-                label="Enable Debug"
-                checked={value.enableDebug}
-                onChange={(enableDebug) => onChange({ ...value, enableDebug })}
               />
             </div>
 

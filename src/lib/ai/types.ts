@@ -1,29 +1,13 @@
 import type {
-  FeedbackTurn,
-  GenerateRequest,
-  RefineRequest,
-} from "@/lib/session/types";
+  PhotoColoringCorrectRequest,
+  PhotoColoringGenerateRequest,
+} from "@/lib/session/photoTypes";
+import type { FeedbackTurn, GenerateRequest, RefineRequest } from "@/lib/session/types";
 import type { GeneratedSheet } from "@/lib/session/types";
-
-export type GenerateProgress = {
-  stage:
-    | "drawing"
-    | "filtered"
-    | "rewriting"
-    | "retrying"
-    | "finishing";
-  title: string;
-  detail: string;
-};
-
-export type GenerateOptions = {
-  onProgress?: (progress: GenerateProgress) => void;
-};
 
 export interface ColoringAI {
   refine(input: RefineRequest): Promise<FeedbackTurn>;
-  generate(
-    input: GenerateRequest,
-    options?: GenerateOptions,
-  ): Promise<GeneratedSheet>;
+  generate(input: GenerateRequest): Promise<GeneratedSheet>;
+  photoToColoring(input: PhotoColoringGenerateRequest): Promise<GeneratedSheet>;
+  correctPhotoColoring(input: PhotoColoringCorrectRequest): Promise<GeneratedSheet>;
 }

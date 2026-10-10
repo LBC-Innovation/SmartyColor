@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createGeminiProvider } from "@/lib/ai/providers/gemini";
 import { createStubProvider } from "@/lib/ai/providers/stub";
 import type { ColoringAI } from "@/lib/ai/types";
