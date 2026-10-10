@@ -208,7 +208,6 @@ export async function toPhotoLineArtPng(base64: string): Promise<string> {
 
   const { data, info } = await sharp(input)
     .greyscale()
-    .normalize()
     .blur(0.45)
     .threshold(242)
     .raw()

@@ -38,7 +38,7 @@ export function V2ProgressStepper({
         <span
           className={cn(
             stepBadge,
-            step1 ? "bg-rose-400" : "bg-slate-200 text-slate-500",
+            step1 ? "bg-v2-primary" : "bg-gray-200 text-v2-muted",
           )}
         >
           {step1 ? (
@@ -50,7 +50,7 @@ export function V2ProgressStepper({
         <span
           className={cn(
             labelText,
-            step1 ? "text-slate-800" : "text-slate-400",
+            step1 ? "text-v2-ink" : "text-v2-muted",
           )}
         >
           Photos uploaded
@@ -64,7 +64,7 @@ export function V2ProgressStepper({
               ? "bg-emerald-500"
               : step1
                 ? "bg-v2-primary"
-                : "bg-slate-200 text-slate-500",
+                : "bg-gray-200 text-v2-muted",
           )}
         >
           {step2 ? (
@@ -76,7 +76,7 @@ export function V2ProgressStepper({
         <span
           className={cn(
             labelText,
-            step2 ? "text-slate-800" : "text-slate-400",
+            step2 ? "text-v2-ink" : "text-v2-muted",
           )}
         >
           Sheets generated
@@ -93,8 +93,8 @@ export function V2ProgressStepper({
               rowGap,
               compact ? "px-2 py-2" : "gap-3 rounded-xl px-3 py-2.5",
               downloadPrintDisabled
-                ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60"
-                : "border-indigo-200 bg-indigo-50/80 text-v2-primary hover:border-indigo-300 hover:bg-indigo-50",
+                ? "cursor-not-allowed border-gray-200 bg-v2-bg-subtle opacity-60"
+                : "border-v2-primary/30 bg-v2-primary-light text-v2-link hover:border-v2-primary/50 hover:bg-v2-primary-light",
             )}
           >
             <span
@@ -118,12 +118,12 @@ export function V2ProgressStepper({
             <span
               className={cn(
                 stepBadge,
-                "bg-slate-200 text-slate-500",
+                "bg-gray-200 text-v2-muted",
               )}
             >
               3
             </span>
-            <span className={cn(labelText, "text-slate-400")}>
+            <span className={cn(labelText, "text-v2-muted")}>
               Download &amp; print
             </span>
           </div>

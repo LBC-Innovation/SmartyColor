@@ -25,6 +25,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Loader2, Sparkles } from "lucide-react";
+import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { cn } from "@/lib/cn";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { PrintPrefs } from "@/lib/print/settings";
@@ -46,13 +47,16 @@ type V2PhotoLibraryListProps = {
   onReorder: (photos: V2LibraryPhoto[]) => void;
   onGenerateSheet: (id: string) => void;
   generateDisabled?: boolean;
+  deleteMode?: boolean;
+  deleteSelectedIds?: ReadonlySet<string>;
+  onToggleDeleteSelect?: (id: string) => void;
   className?: string;
 };
 
 function PendingLibraryRow({ label }: { label: string }) {
   return (
     <div
-      className="flex items-center gap-2 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/30 p-2"
+      className="flex items-center gap-2 rounded-xl border border-dashed border-v2-primary/30 bg-v2-primary-light/80 p-2"
       aria-busy="true"
       aria-label={label}
     >
@@ -60,11 +64,11 @@ function PendingLibraryRow({ label }: { label: string }) {
         <GripVertical className="h-4 w-4" aria-hidden />
       </div>
       <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-        <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-slate-100">
+        <div className="flex aspect-[4/3] items-center justify-center rounded-lg bg-v2-bg-subtle">
           <Loader2 className="h-6 w-6 animate-spin text-v2-primary" />
         </div>
-        <div className="flex aspect-[4/3] items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50">
-          <span className="text-[10px] font-medium text-slate-400">Sheet</span>
+        <div className="flex aspect-[4/3] items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-v2-bg-subtle">
+          <span className="text-[10px] font-medium text-v2-muted">Sheet</span>
         </div>
       </div>
     </div>
@@ -78,6 +82,10 @@ type PhotoRowProps = {
   onSelect: () => void;
   onGenerateSheet: () => void;
   dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
+  deleteMode?: boolean;
+  deleteChecked?: boolean;
+  onToggleDeleteSelect?: () => void;
+  deleteSelectDisabled?: boolean;
   isOverlay?: boolean;
 };
 
@@ -88,33 +96,61 @@ function PhotoLibraryRow({
   onSelect,
   onGenerateSheet,
   dragHandleProps,
+  deleteMode,
+  deleteChecked,
+  onToggleDeleteSelect,
+  deleteSelectDisabled,
   isOverlay,
 }: PhotoRowProps) {
+  const rowSelect =
+    deleteMode && !deleteSelectDisabled ? onToggleDeleteSelect : onSelect;
+
   return (
     <div
-      onClick={onSelect}
+      onClick={rowSelect}
       className={cn(
-        "cursor-pointer rounded-xl border bg-v2-bg-subtle/40 p-2.5",
-        isSelected
-          ? "border-2 border-v2-primary"
-          : "border border-slate-200/90 hover:border-slate-300",
+        "rounded-xl border bg-v2-bg-subtle/40 p-2.5",
+        deleteMode && deleteSelectDisabled
+          ? "cursor-not-allowed opacity-70"
+          : "cursor-pointer",
+        deleteMode && deleteChecked
+          ? "border-2 border-rose-400 bg-rose-50/30"
+          : isSelected && !deleteMode
+            ? "border-2 border-v2-primary"
+            : "border border-gray-200 hover:border-slate-300",
         isOverlay &&
-          "cursor-grabbing border-v2-primary bg-white shadow-lg shadow-indigo-300/30 ring-2 ring-v2-primary/20",
+          "cursor-grabbing border-v2-primary bg-white shadow-lg shadow-v2-primary/25 ring-2 ring-v2-primary/20",
       )}
     >
       <div className="flex items-stretch gap-2">
-        <button
-          type="button"
-          {...dragHandleProps}
-          onClick={(event) => event.stopPropagation()}
-          className="flex w-6 shrink-0 cursor-grab items-center justify-center rounded text-slate-400 hover:bg-slate-50 hover:text-slate-600 active:cursor-grabbing"
-          aria-label="Drag to reorder"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
+        {deleteMode ? (
+          <div
+            className="flex w-6 shrink-0 items-center justify-center"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(deleteChecked)}
+              disabled={deleteSelectDisabled}
+              onChange={() => onToggleDeleteSelect?.()}
+              aria-label={`Select page for deletion`}
+              className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            {...dragHandleProps}
+            onClick={(event) => event.stopPropagation()}
+            className="flex w-6 shrink-0 cursor-grab items-center justify-center rounded text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-muted active:cursor-grabbing"
+            aria-label="Drag to reorder"
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
 
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-          <div className="relative overflow-hidden rounded-lg bg-slate-100">
+          <div className="relative overflow-hidden rounded-lg bg-v2-bg-subtle">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={photo.previewUrl}
@@ -124,7 +160,7 @@ function PhotoLibraryRow({
           </div>
 
           {photo.sheet ? (
-            <div className="relative overflow-hidden rounded-lg border border-slate-100 bg-white">
+            <div className="relative overflow-hidden rounded-lg border border-gray-100 bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={photo.sheet.imageDataUrl}
@@ -132,36 +168,35 @@ function PhotoLibraryRow({
                 className="aspect-[4/3] h-full w-full object-contain"
               />
               {photo.generating ? (
-                <span className="absolute inset-0 flex items-center justify-center bg-white/70">
-                  <Loader2 className="h-6 w-6 animate-spin text-v2-primary" />
-                </span>
+                <V2SheetGeneratingPlaceholder
+                  imageSrc={photo.previewUrl}
+                  className="absolute inset-0 rounded-lg"
+                  imageFit="contain"
+                  compact
+                />
               ) : null}
             </div>
+          ) : photo.generating ? (
+            <V2SheetGeneratingPlaceholder
+              imageSrc={photo.previewUrl}
+              className="aspect-[4/3] rounded-lg border border-gray-200"
+              imageFit="cover"
+              compact
+            />
           ) : (
             <button
               type="button"
-              disabled={photo.generating || generateDisabled}
+              disabled={generateDisabled}
               onClick={(event) => {
                 event.stopPropagation();
                 onGenerateSheet();
               }}
-              className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-indigo-200 bg-indigo-50/20 px-2 text-center transition hover:bg-indigo-50/60 disabled:cursor-wait focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+              className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-v2-primary/30 bg-v2-primary-light/60 px-2 text-center transition hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
             >
-              {photo.generating ? (
-                <>
-                  <Loader2 className="h-6 w-6 animate-spin text-v2-primary" />
-                  <span className="text-[10px] font-medium text-v2-muted sm:text-xs">
-                    Generating…
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-5 w-5 text-v2-primary" />
-                  <span className="text-[10px] font-semibold text-v2-primary sm:text-xs">
-                    Generate sheet
-                  </span>
-                </>
-              )}
+              <Sparkles className="h-5 w-5 text-v2-primary" />
+              <span className="text-[10px] font-semibold text-v2-primary sm:text-xs">
+                Generate sheet
+              </span>
             </button>
           )}
         </div>
@@ -170,13 +205,22 @@ function PhotoLibraryRow({
   );
 }
 
+function StaticPhotoRow(
+  props: Omit<PhotoRowProps, "dragHandleProps" | "isOverlay">,
+) {
+  return <PhotoLibraryRow {...props} />;
+}
+
 function SortablePhotoRow({
   photo,
   isSelected,
   generateDisabled,
   onSelect,
   onGenerateSheet,
-}: Omit<PhotoRowProps, "dragHandleProps" | "isOverlay">) {
+}: Omit<
+  PhotoRowProps,
+  "dragHandleProps" | "isOverlay" | "deleteMode" | "deleteChecked" | "onToggleDeleteSelect" | "deleteSelectDisabled"
+>) {
   const {
     attributes,
     listeners,
@@ -218,6 +262,9 @@ export function V2PhotoLibraryList({
   onReorder,
   onGenerateSheet,
   generateDisabled,
+  deleteMode,
+  deleteSelectedIds,
+  onToggleDeleteSelect,
   className,
 }: V2PhotoLibraryListProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -255,6 +302,35 @@ export function V2PhotoLibraryList({
     setActiveId(null);
   }
 
+  const pendingRows = pendingUploads.map((pending, index) => (
+    <PendingLibraryRow
+      key={pending.id}
+      label={`Uploading photo ${index + 1} of ${pendingUploads.length}`}
+    />
+  ));
+
+  if (deleteMode) {
+    return (
+      <div className={cn("flex flex-col gap-2.5 pr-0.5", className)}>
+        {pendingRows}
+        {photos.map((photo) => (
+          <StaticPhotoRow
+            key={photo.id}
+            photo={photo}
+            isSelected={photo.id === selectedId}
+            generateDisabled={generateDisabled}
+            deleteMode
+            deleteChecked={deleteSelectedIds?.has(photo.id)}
+            deleteSelectDisabled={photo.generating}
+            onSelect={() => onSelect(photo.id)}
+            onToggleDeleteSelect={() => onToggleDeleteSelect?.(photo.id)}
+            onGenerateSheet={() => onGenerateSheet(photo.id)}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -264,12 +340,7 @@ export function V2PhotoLibraryList({
       onDragCancel={handleDragCancel}
     >
       <div className={cn("flex flex-col gap-2.5 pr-0.5", className)}>
-        {pendingUploads.map((pending, index) => (
-          <PendingLibraryRow
-            key={pending.id}
-            label={`Uploading photo ${index + 1} of ${pendingUploads.length}`}
-          />
-        ))}
+        {pendingRows}
 
         <SortableContext
           items={photos.map((photo) => photo.id)}

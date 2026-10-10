@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { trackVisionGenerateText } from "@/lib/visionCost/trackGenerateText";
 import { google } from "@ai-sdk/google";
 import sharp from "sharp";
 import {
@@ -6,7 +6,7 @@ import {
   buildPhotoCorrectionPrompt,
 } from "@/lib/ai/prompts";
 import { parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
-import { inferPhotoLayout } from "@/lib/photo/orientation";
+import { inferPhotoLayout, type PhotoLayout } from "@/lib/photo/orientation";
 import type { ColoringAI } from "@/lib/ai/types";
 import { toPhotoLineArtPng } from "@/lib/print/lineArt";
 import type { PrintPrefs } from "@/lib/print/settings";
@@ -15,6 +15,8 @@ import type {
   PhotoColoringGenerateRequest,
 } from "@/lib/session/photoTypes";
 import type { GeneratedSheet } from "@/lib/session/types";
+import type { VisionCostOperation } from "@/lib/visionCost/types";
+import { generateGeminiImageViaRest } from "@/lib/ai/geminiImageGenerateRest";
 
 const googleSafety = {
   google: {
@@ -40,8 +42,7 @@ const googleSafety = {
 };
 
 const imageModel =
-  process.env.GEMINI_IMAGE_MODEL?.trim() ||
-  "gemini-3.1-flash-image-preview";
+  process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image";
 
 async function layoutForPhotoBytes(bytes: Buffer, printPrefs: PrintPrefs) {
   try {
@@ -76,7 +77,121 @@ type ReferenceImage = {
   caption: string;
 };
 
+type MessageContent = Array<
+  | { type: "text"; text: string }
+  | { type: "file"; data: string; mediaType: string }
+>;
+
+function isRetryableGeminiError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /invalid json response|unable to process input image|invalid argument|internal error|resource exhausted|fetch failed|ECONNRESET|503|429|502|504/i.test(
+    message,
+  );
+}
+
+function buildImageProviderOptions(
+  layout: PhotoLayout,
+  options: {
+    imageSize?: "1K" | "2K";
+    responseModalities?: Array<"TEXT" | "IMAGE">;
+  } = {},
+) {
+  const imageConfig: { aspectRatio: PhotoLayout["aspectRatio"]; imageSize?: string } =
+    {
+      aspectRatio: layout.aspectRatio,
+    };
+  if (options.imageSize) {
+    imageConfig.imageSize = options.imageSize;
+  }
+
+  return {
+    ...googleSafety,
+    google: {
+      ...googleSafety.google,
+      responseModalities: options.responseModalities ?? ["TEXT", "IMAGE"],
+      imageConfig,
+    },
+  };
+}
+
+function pickImageFile(
+  files: Array<{ base64: string; mediaType: string }>,
+) {
+  const imageFiles = files.filter((item) => item.mediaType.startsWith("image/"));
+  return imageFiles.length > 0 ? imageFiles[imageFiles.length - 1] : undefined;
+}
+
+function messageContentToRestParts(content: MessageContent) {
+  return content.map((part) =>
+    part.type === "text"
+      ? { text: part.text }
+      : {
+          inlineData: {
+            mimeType: part.mediaType,
+            data: part.data,
+          },
+        },
+  );
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function generateImageFileFromReferences(
+  operation: VisionCostOperation,
+  content: MessageContent,
+  layout: PhotoLayout,
+): Promise<{ base64: string; mediaType: string }> {
+  const attempts: Array<{
+    imageSize?: "1K" | "2K";
+    responseModalities?: Array<"TEXT" | "IMAGE">;
+  }> = [
+    { imageSize: "1K" },
+    { imageSize: "1K", responseModalities: ["IMAGE"] },
+    {},
+    { imageSize: "2K" },
+  ];
+
+  let lastError: unknown;
+  for (let index = 0; index < attempts.length; index++) {
+    const attempt = attempts[index];
+    if (index > 0) {
+      await sleep(350);
+    }
+    try {
+      const result = await trackVisionGenerateText(operation, {
+        model: google(imageModel),
+        messages: [{ role: "user", content }],
+        providerOptions: buildImageProviderOptions(layout, attempt),
+        maxRetries: 2,
+      });
+      const file = pickImageFile(result.files);
+      if (file) return file;
+      throw new Error("No image file in model response.");
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableGeminiError(error)) {
+        break;
+      }
+    }
+  }
+
+  try {
+    return await generateGeminiImageViaRest(
+      messageContentToRestParts(content),
+      layout,
+    );
+  } catch (restError) {
+    if (lastError instanceof Error && isRetryableGeminiError(lastError)) {
+      throw restError;
+    }
+    throw lastError instanceof Error ? lastError : restError;
+  }
+}
+
 async function drawFromReferences(
+  operation: VisionCostOperation,
   prompt: string,
   references: ReferenceImage[],
   photoBytes: Buffer,
@@ -84,22 +199,7 @@ async function drawFromReferences(
 ): Promise<GeneratedSheet> {
   const layout = await layoutForPhotoBytes(photoBytes, printPrefs);
 
-  const imageOptions = {
-    ...googleSafety,
-    google: {
-      ...googleSafety.google,
-      responseModalities: ["TEXT", "IMAGE"],
-      imageConfig: {
-        aspectRatio: layout.aspectRatio,
-        imageSize: "2K",
-      },
-    },
-  };
-
-  const content: Array<
-    | { type: "text"; text: string }
-    | { type: "file"; data: string; mediaType: string }
-  > = [];
+  const content: MessageContent = [];
 
   for (const ref of references) {
     content.push({ type: "text", text: ref.caption });
@@ -111,16 +211,7 @@ async function drawFromReferences(
   }
   content.push({ type: "text", text: prompt });
 
-  const result = await generateText({
-    model: google(imageModel),
-    messages: [{ role: "user", content }],
-    providerOptions: imageOptions,
-  });
-
-  const file = result.files.find((item) => item.mediaType.startsWith("image/"));
-  if (!file) {
-    throw new Error("No coloring sheet came back from the photo.");
-  }
+  const file = await generateImageFileFromReferences(operation, content, layout);
 
   return toSheet(file, printPrefs.showTitle);
 }
@@ -136,6 +227,7 @@ export function createPhotoGeminiHandlers(): Pick<
       const prompt = buildPhotoColoringPrompt(input.printPrefs, layout);
 
       return drawFromReferences(
+        "photoToColoring",
         prompt,
         [
           {
@@ -161,6 +253,7 @@ export function createPhotoGeminiHandlers(): Pick<
       );
 
       return drawFromReferences(
+        "correctPhotoColoring",
         prompt,
         [
           {
@@ -172,7 +265,7 @@ export function createPhotoGeminiHandlers(): Pick<
             base64: sheet.base64,
             mediaType: sheet.mediaType,
             caption:
-              "PREVIOUS COLORING ATTEMPT — improve it using the fix list; do not restart from scratch.",
+              "PREVIOUS COLORING ATTEMPT — match its line weight and layout exactly for unchanged areas. Output one full replacement sheet; do not draw on top of this image or retrace existing lines.",
           },
         ],
         photo.bytes,

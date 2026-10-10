@@ -4,13 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { CrayonRippleDots } from "@/components/CrayonRippleDots";
 import { KidButton } from "@/components/KidButton";
-import { compressImageDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
+import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
 import { isAllowedPhotoFile } from "@/lib/photo/heicFile";
 import { inferPhotoLayout } from "@/lib/photo/orientation";
 import { readBlobImageSize } from "@/lib/photo/readImageSize";
 import { preparePhotoFileForApi } from "@/lib/photo/preparePhotoUpload";
 import {
+  formatPhotoSizeLimit,
   PHOTO_UPLOAD_MAX_BYTES,
+} from "@/lib/photo/payloadBudget";
+import {
   PHOTO_MAX_CORRECTIONS,
   PHOTO_MAX_CORRECTION_CHARS,
 } from "@/lib/session/photoTypes";
@@ -61,7 +64,9 @@ export function PhotoColoringStudio() {
       return;
     }
     if (file.size > PHOTO_UPLOAD_MAX_BYTES) {
-      setError("That photo is a bit too big. Try one under 8 MB.");
+      setError(
+        `That photo is a bit too big. Try one under ${formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES)}.`,
+      );
       return;
     }
 
@@ -137,7 +142,7 @@ export function PhotoColoringStudio() {
     setPhase("correcting");
 
     try {
-      const sheetDataUrl = await compressImageDataUrlForApi(
+      const sheetDataUrl = await prepareSheetDataUrlForApi(
         sheet.imageDataUrl,
         2,
       );

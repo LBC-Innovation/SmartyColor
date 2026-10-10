@@ -1,5 +1,20 @@
-/** Max size of the original file the user may pick. */
-export const PHOTO_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
+/**
+ * Max size of the original file the user may pick in the browser.
+ * HEIC containers are often smaller than the decoded JPEG we generate client-side.
+ */
+export const PHOTO_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Max raw file size for multipart POST to /api/photo-prepare (HEIC fallback).
+ * Vercel function request bodies are capped at ~4.5 MB (leave room for multipart framing).
+ */
+export const PHOTO_SERVER_UPLOAD_MAX_BYTES =
+  Math.floor(4.5 * 1024 * 1024) - 192 * 1024;
+
+export function formatPhotoSizeLimit(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return Number.isInteger(mb) ? `${mb} MB` : `${mb.toFixed(1)} MB`;
+}
 
 /** Stay under Vercel's ~4.5 MB function body limit (base64 + JSON overhead). */
 export const VERCEL_JSON_BODY_BUDGET_BYTES = 4 * 1024 * 1024;

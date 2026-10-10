@@ -1,42 +1,51 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
+  CircleDollarSign,
   ClipboardList,
-  Heart,
   Home,
-  ImagePlus,
-  Images,
-  LayoutGrid,
   Lightbulb,
-  MoreHorizontal,
 } from "lucide-react";
 
 export type V2NavItem = {
   id: string;
   label: string;
   icon: LucideIcon;
-  active?: boolean;
+  /** When set, the item navigates to this route. */
+  href?: string;
 };
 
 export const v2TopNav: V2NavItem[] = [
-  { id: "home", label: "Home", icon: Home, active: true },
-  { id: "projects", label: "My Projects", icon: ClipboardList },
+  { id: "projects", label: "My Projects", icon: ClipboardList, href: "/v2" },
+  { id: "storybook", label: "Story book", icon: BookOpen, href: "/v2/storybook" },
   { id: "books", label: "Print Books", icon: BookOpen },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
-];
-
-export const v2SideNav: V2NavItem[] = [
-  { id: "create", label: "Create", icon: ImagePlus, active: true },
-  { id: "photos", label: "My Photos", icon: Images },
-  { id: "print-books", label: "Print Books", icon: BookOpen },
-  { id: "templates", label: "Templates", icon: LayoutGrid },
-  { id: "favorites", label: "Favorites", icon: Heart },
+  {
+    id: "vision-costs",
+    label: "Vision costs",
+    icon: CircleDollarSign,
+    href: "/v2/vision-costs",
+  },
 ];
 
 export const v2BottomNav: V2NavItem[] = [
-  { id: "home", label: "Home", icon: Home, active: true },
+  { id: "home", label: "Create", icon: Home, href: "/v2" },
   { id: "projects", label: "My Projects", icon: ClipboardList },
+  {
+    id: "vision-costs",
+    label: "Vision costs",
+    icon: CircleDollarSign,
+    href: "/v2/vision-costs",
+  },
+  { id: "storybook", label: "Story book", icon: BookOpen, href: "/v2/storybook" },
   { id: "books", label: "Print Books", icon: BookOpen },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
-  { id: "more", label: "More", icon: MoreHorizontal },
 ];
+
+export function isV2NavItemActive(pathname: string, item: V2NavItem): boolean {
+  if (!item.href) return false;
+  if (item.href === "/v2") {
+    return pathname === "/v2" || pathname === "/v2/";
+  }
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+}

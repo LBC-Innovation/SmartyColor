@@ -1,4 +1,5 @@
 import { generateText, Output } from "ai";
+import { trackVisionGenerateText } from "@/lib/visionCost/trackGenerateText";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { toLineArtPng } from "@/lib/print/lineArt";
@@ -165,7 +166,7 @@ export function createGeminiProvider(): ColoringAI {
       };
 
       try {
-        const result = await generateText({
+        const result = await trackVisionGenerateText("generateImage", {
           model: google(imageModel),
           prompt,
           providerOptions: imageOptions,
@@ -188,7 +189,7 @@ export function createGeminiProvider(): ColoringAI {
           throw error;
         }
 
-        const retry = await generateText({
+        const retry = await trackVisionGenerateText("generateImage", {
           model: google(imageModel),
           prompt: `${prompt}
 

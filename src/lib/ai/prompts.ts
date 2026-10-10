@@ -228,7 +228,14 @@ You receive:
 
 Fix ONLY the issues listed below. Keep everything else the same as the previous attempt unless a fix requires a small adjustment nearby.
 Treat each issue as a surgical edit: change only what that note describes; preserve all other lines, shapes, and composition from the PREVIOUS coloring attempt.
-Do NOT redesign the whole page. Do NOT regenerate from a blank page. Do NOT add fictional elements. Stay faithful to the photograph.
+
+Line weight (critical):
+- Match the PREVIOUS coloring attempt exactly: same stroke thickness and boldness as that sheet — not thinner, not thicker.
+- Output one complete replacement coloring-sheet image (full canvas). Do not overlay or trace on top of the previous sheet reference.
+- Do NOT retrace, duplicate, or stack a second line on an edge that already exists (that makes lines bolder).
+- Do NOT simplify, fade, or hairline-ify strokes that already exist (that makes lines thinner).
+
+Do NOT redesign the whole page. Do NOT add fictional elements. Stay faithful to the photograph.
 
 Issues to fix:
 ${list}

@@ -1,4 +1,7 @@
-import { maxRawBytesPerImageInRequest } from "@/lib/photo/payloadBudget";
+import {
+  estimateDataUrlRawBytes,
+  maxRawBytesPerImageInRequest,
+} from "@/lib/photo/payloadBudget";
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -21,6 +24,18 @@ function canvasToJpegBlob(
       },
       "image/jpeg",
       quality,
+    );
+  });
+}
+
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Could not compress that image."));
+      },
+      "image/png",
     );
   });
 }
@@ -59,10 +74,14 @@ function drawScaled(
  * Shrink a photo (or sheet preview) so its decoded size fits API limits.
  * Used in the browser before POSTing JSON to Vercel.
  */
+type CompressFormat = "jpeg" | "png";
+
 export async function compressImageDataUrlForApi(
   dataUrl: string,
   imageCount: 1 | 2,
+  options?: { format?: CompressFormat },
 ): Promise<string> {
+  const format = options?.format ?? "jpeg";
   const maxRawBytes = maxRawBytesPerImageInRequest(imageCount);
   const img = await loadImage(dataUrl);
 
@@ -71,11 +90,16 @@ export async function compressImageDataUrlForApi(
 
   for (let attempt = 0; attempt < 16; attempt++) {
     const canvas = drawScaled(img, maxDimension);
-    const blob = await canvasToJpegBlob(canvas, quality);
+    const blob =
+      format === "png"
+        ? await canvasToPngBlob(canvas)
+        : await canvasToJpegBlob(canvas, quality);
     if (blob.size <= maxRawBytes) {
       return blobToDataUrl(blob);
     }
-    if (quality > 0.5) {
+    if (format === "png") {
+      maxDimension = Math.floor(maxDimension * 0.82);
+    } else if (quality > 0.5) {
       quality -= 0.08;
     } else {
       maxDimension = Math.floor(maxDimension * 0.82);
@@ -89,4 +113,19 @@ export async function compressImageDataUrlForApi(
   }
 
   throw new Error("Could not shrink that photo enough. Try a smaller file.");
+}
+
+/**
+ * Coloring sheets are black-on-white line art. Keep them lossless (PNG) so
+ * repeated edit rounds do not accumulate JPEG halos that thicken strokes.
+ */
+export async function prepareSheetDataUrlForApi(
+  dataUrl: string,
+  imageCount: 1 | 2,
+): Promise<string> {
+  const maxRawBytes = maxRawBytesPerImageInRequest(imageCount);
+  if (estimateDataUrlRawBytes(dataUrl) <= maxRawBytes) {
+    return dataUrl;
+  }
+  return compressImageDataUrlForApi(dataUrl, imageCount, { format: "png" });
 }

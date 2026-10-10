@@ -1,14 +1,11 @@
+import { convertHeicFileToJpegBlob } from "@/lib/photo/convertHeic";
 import { compressImageDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
+import { dataUrlToBlob } from "@/lib/photo/dataUrlBlob";
 import { isHeicFile } from "@/lib/photo/heicFile";
-
-function dataUrlToBlob(dataUrl: string): Blob {
-  const [meta, base64] = dataUrl.split(",");
-  const mime = meta.match(/data:([^;]+)/)?.[1] ?? "image/jpeg";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
-}
+import {
+  formatPhotoSizeLimit,
+  PHOTO_SERVER_UPLOAD_MAX_BYTES,
+} from "@/lib/photo/payloadBudget";
 
 function readBlobAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,20 +19,6 @@ function readBlobAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-async function convertHeicInBrowser(file: File): Promise<Blob> {
-  const heic2any = (await import("heic2any")).default;
-  const result = await heic2any({
-    blob: file,
-    toType: "image/jpeg",
-    quality: 0.92,
-  });
-  const blob = Array.isArray(result) ? result[0] : result;
-  if (!(blob instanceof Blob)) {
-    throw new Error("Could not convert that HEIC photo.");
-  }
-  return blob;
-}
-
 async function prepareViaServer(file: File, imageCount: 1 | 2): Promise<string> {
   const form = new FormData();
   form.append("photo", file, file.name || "photo.heic");
@@ -45,11 +28,26 @@ async function prepareViaServer(file: File, imageCount: 1 | 2): Promise<string> 
     method: "POST",
     body: form,
   });
-  const payload = (await response.json()) as { photoDataUrl?: string; error?: string };
+  const payload = (await response.json()) as {
+    photoDataUrl?: string;
+    error?: string;
+  };
   if (!response.ok || !payload.photoDataUrl) {
     throw new Error(payload.error ?? "Could not prepare that photo.");
   }
   return payload.photoDataUrl;
+}
+
+function heicServerFallbackError(file: File, cause?: string): Error {
+  const limit = formatPhotoSizeLimit(PHOTO_SERVER_UPLOAD_MAX_BYTES);
+  const base =
+    file.size > PHOTO_SERVER_UPLOAD_MAX_BYTES
+      ? `This HEIC is over ${limit}, so we cannot convert it on the server.`
+      : "Browser conversion failed and server conversion did not succeed.";
+  const hint =
+    " Try opening the photo in Photos and using Share → Save to Files or Duplicate as JPG, then upload the JPG.";
+  const detail = cause ? ` (${cause})` : "";
+  return new Error(`${base}${detail}${hint}`);
 }
 
 /**
@@ -60,15 +58,32 @@ export async function preparePhotoFileForApi(
   imageCount: 1 | 2,
 ): Promise<{ previewBlob: Blob; photoDataUrl: string }> {
   if (isHeicFile(file)) {
+    let browserError: string | undefined;
     try {
-      const jpegBlob = await convertHeicInBrowser(file);
+      const jpegBlob = await convertHeicFileToJpegBlob(file);
       const rawDataUrl = await readBlobAsDataUrl(jpegBlob);
-      const photoDataUrl = await compressImageDataUrlForApi(rawDataUrl, imageCount);
+      const photoDataUrl = await compressImageDataUrlForApi(
+        rawDataUrl,
+        imageCount,
+      );
       return { previewBlob: jpegBlob, photoDataUrl };
-    } catch {
-      const photoDataUrl = await prepareViaServer(file, imageCount);
-      return { previewBlob: dataUrlToBlob(photoDataUrl), photoDataUrl };
+    } catch (error) {
+      browserError =
+        error instanceof Error ? error.message : "Browser conversion failed.";
     }
+
+    if (file.size <= PHOTO_SERVER_UPLOAD_MAX_BYTES) {
+      try {
+        const photoDataUrl = await prepareViaServer(file, imageCount);
+        return { previewBlob: dataUrlToBlob(photoDataUrl), photoDataUrl };
+      } catch (error) {
+        const serverMsg =
+          error instanceof Error ? error.message : "Server conversion failed.";
+        throw heicServerFallbackError(file, serverMsg);
+      }
+    }
+
+    throw heicServerFallbackError(file, browserError);
   }
 
   const rawDataUrl = await readBlobAsDataUrl(file);

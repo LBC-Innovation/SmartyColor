@@ -69,8 +69,8 @@ export function V2UploadDropzone({
       className={cn(
         "relative min-w-0 flex-1 overflow-hidden rounded-2xl border-2 border-dashed transition-[border-color,background-color,transform,box-shadow] duration-200 ease-out",
         isDragOver
-          ? "v2-dropzone-active scale-[1.01] border-violet-500 bg-gradient-to-br from-indigo-100/90 via-violet-50 to-indigo-100/80 shadow-lg shadow-indigo-300/30"
-          : "border-indigo-200 bg-indigo-50/20",
+          ? "v2-dropzone-active scale-[1.01] border-v2-primary bg-gradient-to-br from-v2-primary-light via-white to-v2-primary-light shadow-lg shadow-v2-primary/25"
+          : "border-v2-primary/30 bg-v2-primary-light/60",
         className,
       )}
       onDragEnter={onDragEnter}
@@ -80,7 +80,7 @@ export function V2UploadDropzone({
     >
       <div
         className={cn(
-          "pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-indigo-500/10 px-6 transition-opacity duration-200",
+          "pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-v2-primary/10 px-6 transition-opacity duration-200",
           isDragOver ? "opacity-100" : "opacity-0",
         )}
         aria-hidden={!isDragOver}
@@ -101,10 +101,10 @@ export function V2UploadDropzone({
             />
           </svg>
         </span>
-        <p className="text-center text-base font-semibold text-indigo-900">
+        <p className="text-center text-base font-semibold text-v2-ink">
           Drop photos to upload
         </p>
-        <p className="text-center text-sm text-indigo-700/80">
+        <p className="text-center text-sm text-v2-muted">
           Release to add them to your library
         </p>
       </div>

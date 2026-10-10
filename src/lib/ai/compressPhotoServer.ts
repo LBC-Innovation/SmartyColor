@@ -69,6 +69,32 @@ export async function decodePhotoToJpegExport(bytes: Buffer): Promise<Buffer> {
   }
 }
 
+async function normalizePhotoBytesForModel(input: Buffer): Promise<Buffer> {
+  try {
+    const meta = await sharp(input).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    let pipeline = sharp(input).rotate();
+
+    const minSide = Math.min(width, height);
+    if (minSide > 0 && minSide < 512) {
+      const scale = 512 / minSide;
+      pipeline = pipeline.resize({
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale)),
+        fit: "inside",
+        withoutEnlargement: false,
+      });
+    }
+
+    return pipeline.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+  } catch {
+    throw new Error(
+      "That photo could not be read. Try re-uploading it as JPG or PNG.",
+    );
+  }
+}
+
 export async function ensurePhotoDataUrlForRequest(
   dataUrl: string,
   imageCount: 1 | 2,
@@ -80,10 +106,11 @@ export async function ensurePhotoDataUrlForRequest(
 
   if (isHeicMedia(mediaType, bytes)) {
     bytes = Buffer.from(await decodePhotoToJpegExport(bytes));
-    mediaType = "image/jpeg";
-    base64 = bytes.toString("base64");
-    dataUrl = `data:${mediaType};base64,${base64}`;
   }
+  bytes = Buffer.from(await normalizePhotoBytesForModel(bytes));
+  mediaType = "image/jpeg";
+  base64 = bytes.toString("base64");
+  dataUrl = `data:${mediaType};base64,${base64}`;
 
   const maxRaw = maxRawBytesPerImageInRequest(imageCount);
   if (bytes.length > maxRaw) {

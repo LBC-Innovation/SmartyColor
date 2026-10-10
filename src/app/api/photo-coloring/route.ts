@@ -109,8 +109,12 @@ export async function POST(request: Request) {
 
     return Response.json({ error: "Unknown mode." }, { status: 400 });
   } catch (error) {
-    const message =
+    const raw =
       error instanceof Error ? error.message : "The crayons jammed on that photo.";
+    const message = /invalid json response/i.test(raw)
+      ? "The image model had a temporary hiccup. Please try generating again."
+      : raw;
+    console.error("[photo-coloring]", raw, error);
     return Response.json({ error: message }, { status: 500 });
   }
 }

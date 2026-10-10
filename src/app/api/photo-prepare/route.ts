@@ -3,8 +3,11 @@ import {
   decodePhotoToJpegExport,
 } from "@/lib/ai/compressPhotoServer";
 import { sniffHeicBytes } from "@/lib/ai/photoDataUrl";
-import { maxRawBytesPerImageInRequest } from "@/lib/photo/payloadBudget";
-import { PHOTO_UPLOAD_MAX_BYTES } from "@/lib/session/photoTypes";
+import {
+  formatPhotoSizeLimit,
+  maxRawBytesPerImageInRequest,
+  PHOTO_SERVER_UPLOAD_MAX_BYTES,
+} from "@/lib/photo/payloadBudget";
 
 export const maxDuration = 60;
 
@@ -16,9 +19,12 @@ export async function POST(request: Request) {
       return Response.json({ error: "Pick a photo first." }, { status: 400 });
     }
 
-    if (photo.size > PHOTO_UPLOAD_MAX_BYTES) {
+    if (photo.size > PHOTO_SERVER_UPLOAD_MAX_BYTES) {
+      const limit = formatPhotoSizeLimit(PHOTO_SERVER_UPLOAD_MAX_BYTES);
       return Response.json(
-        { error: "That photo is a bit too big. Try one under 8 MB." },
+        {
+          error: `That file is too large for server conversion (max ${limit}). Convert it to JPG on your device, or use a smaller HEIC.`,
+        },
         { status: 400 },
       );
     }
