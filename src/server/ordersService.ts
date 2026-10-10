@@ -15,7 +15,9 @@ import type {
 } from "@/lib/orders/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { luluConfigured } from "@/server/lulu/config";
+import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import {
+  cancelLuluPrintJob,
   extractTrackingFromPrintJob,
   fetchLuluPrintJob,
 } from "@/server/lulu/printJobs";
@@ -141,6 +143,170 @@ async function appendOrderEvent(
   });
 }
 
+export async function createDraftBookOrder(input: {
+  userId: string;
+  contactEmail: string;
+  productId: string;
+  pageCount: number;
+  projectTitle: string;
+  luluCostCents: number | null;
+  totalCents: number | null;
+  shippingPostcode?: string | null;
+}): Promise<ApiResult<{ orderId: string }>> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .insert({
+      user_id: input.userId,
+      product_id: input.productId,
+      project_title: input.projectTitle,
+      page_count: input.pageCount,
+      status: "draft",
+      contact_email: input.contactEmail,
+      lulu_cost_cents: input.luluCostCents,
+      total_cents: input.totalCents,
+      shipping_address: shippingAddressFromQuotePostcode(input.shippingPostcode),
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+
+  await appendOrderEvent(data.id as string, {
+    kind: "draft_created",
+    title: "Book draft saved",
+    detail: `${input.pageCount} pages configured — checkout coming soon.`,
+  });
+
+  return { data: { orderId: data.id as string }, error: null };
+}
+
+function shippingAddressFromQuotePostcode(postcode: string | null | undefined): ShippingAddress {
+  const trimmed = postcode?.trim();
+  if (!trimmed) return {} as ShippingAddress;
+  return {
+    name: "",
+    street1: "",
+    city: "",
+    postcode: trimmed.replace(/\D/g, "").slice(0, 5) || trimmed,
+    country_code: "US",
+    phone_number: "",
+  };
+}
+
+async function getOwnedDraftOrder(
+  userId: string,
+  orderId: string,
+): Promise<ApiResult<OrderRow>> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("*")
+    .eq("id", orderId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+  if (!data) {
+    return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  }
+  const row = data as OrderRow;
+  if (row.status !== "draft") {
+    return {
+      data: null,
+      error: { message: "Only draft orders can be edited here", code: "INVALID_STATE" },
+    };
+  }
+  return { data: row, error: null };
+}
+
+export async function updateDraftBookOrder(input: {
+  userId: string;
+  orderId: string;
+  productId: string;
+  pageCount: number;
+  projectTitle: string;
+  luluCostCents: number | null;
+  totalCents: number | null;
+  shippingPostcode?: string | null;
+}): Promise<ApiResult<{ orderId: string }>> {
+  const owned = await getOwnedDraftOrder(input.userId, input.orderId);
+  if (owned.error) return { data: null, error: owned.error };
+
+  const quoteAddress = shippingAddressFromQuotePostcode(input.shippingPostcode);
+  const mergedAddress: ShippingAddress = {
+    ...((owned.data!.shipping_address ?? {}) as ShippingAddress),
+    ...quoteAddress,
+  };
+
+  const { error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .update({
+      product_id: input.productId,
+      project_title: input.projectTitle,
+      page_count: input.pageCount,
+      lulu_cost_cents: input.luluCostCents,
+      total_cents: input.totalCents,
+      shipping_address: mergedAddress,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.orderId)
+    .eq("user_id", input.userId)
+    .eq("status", "draft");
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+
+  await appendOrderEvent(input.orderId, {
+    kind: "draft_updated",
+    title: "Book draft updated",
+    detail: `${input.pageCount} pages — ready when you confirm.`,
+  });
+
+  return { data: { orderId: input.orderId }, error: null };
+}
+
+export async function confirmDraftBookOrder(input: {
+  userId: string;
+  orderId: string;
+}): Promise<ApiResult<{ orderId: string; status: BookOrderStatus }>> {
+  const owned = await getOwnedDraftOrder(input.userId, input.orderId);
+  if (owned.error) return { data: null, error: owned.error };
+
+  const { error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .update({
+      status: "awaiting_payment",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.orderId)
+    .eq("user_id", input.userId)
+    .eq("status", "draft");
+
+  if (error) {
+    return { data: null, error: { message: error.message } };
+  }
+
+  await appendOrderEvent(input.orderId, {
+    kind: "checkout_confirmed",
+    title: "Ready for checkout",
+    detail: "You confirmed this book — complete payment when checkout is available.",
+  });
+
+  return { data: { orderId: input.orderId, status: "awaiting_payment" }, error: null };
+}
+
+const TERMINAL_STATUSES: BookOrderStatus[] = [
+  "shipped",
+  "delivered",
+  "canceled",
+  "refunded",
+];
+
 export async function listOrdersForUser(userId: string): Promise<ApiResult<BookOrderSummary[]>> {
   const { data, error } = await getSupabaseAdmin()
     .from("book_orders")
@@ -153,6 +319,7 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
     `,
     )
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -192,6 +359,7 @@ export async function getOrderForUser(
     )
     .eq("id", orderId)
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (error) {
@@ -234,6 +402,9 @@ export async function syncOrderFromLulu(
 
   if (error) return { data: null, error: { message: error.message } };
   if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  if (order.deleted_at) {
+    return { data: { status: order.status as BookOrderStatus }, error: null };
+  }
   if (!order.lulu_print_job_id) {
     return { data: { status: order.status as BookOrderStatus }, error: null };
   }
@@ -291,13 +462,16 @@ export async function applyLuluWebhookPrintJob(
 ): Promise<ApiResult<{ orderId: string }>> {
   const { data: order, error } = await getSupabaseAdmin()
     .from("book_orders")
-    .select("id")
+    .select("id, deleted_at")
     .eq("lulu_print_job_id", printJobId)
     .maybeSingle();
 
   if (error) return { data: null, error: { message: error.message } };
   if (!order) {
     return { data: null, error: { message: "No order for print job", code: "NOT_FOUND" } };
+  }
+  if (order.deleted_at) {
+    return { data: { orderId: order.id as string }, error: null };
   }
 
   const sync = await syncOrderFromLulu(order.id);
@@ -312,4 +486,158 @@ export async function recordOrderPlacedEvent(orderId: string): Promise<void> {
     title: "Order placed",
     detail: "Your payment was confirmed.",
   });
+}
+
+type AdminOrderRow = OrderRow & {
+  canceled_at: string | null;
+  deleted_at: string | null;
+  lulu_print_job_id: number | null;
+};
+
+function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
+  return {
+    id: row.id,
+    projectTitle: row.project_title,
+    productName: productName(row),
+    pageCount: row.page_count,
+    status: row.status,
+    totalCents: row.total_cents,
+    createdAt: row.created_at,
+    canceledAt: row.canceled_at,
+    deletedAt: row.deleted_at,
+    luluPrintJobId: row.lulu_print_job_id,
+  };
+}
+
+export async function listOrdersForAdmin(
+  userId: string,
+  options?: { includeHidden?: boolean },
+): Promise<ApiResult<AdminUserOrderSummary[]>> {
+  let query = getSupabaseAdmin()
+    .from("book_orders")
+    .select(
+      `
+      id, project_title, page_count, status, total_cents, created_at,
+      canceled_at, deleted_at, lulu_print_job_id,
+      print_products ( name )
+    `,
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (!options?.includeHidden) {
+    query = query.is("deleted_at", null);
+  }
+
+  const { data, error } = await query;
+  if (error) return { data: null, error: { message: error.message } };
+
+  return {
+    data: (data as AdminOrderRow[]).map(mapAdminOrder),
+    error: null,
+  };
+}
+
+export async function cancelOrderAsAdmin(input: {
+  userId: string;
+  orderId: string;
+  adminId: string;
+}): Promise<ApiResult<{ status: BookOrderStatus }>> {
+  const { data: order, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("*")
+    .eq("id", input.orderId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (error) return { data: null, error: { message: error.message } };
+  if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  if (order.deleted_at) {
+    return { data: null, error: { message: "Order is hidden" } };
+  }
+  if (order.status === "canceled" || order.canceled_at) {
+    return { data: { status: "canceled" }, error: null };
+  }
+  if (TERMINAL_STATUSES.includes(order.status as BookOrderStatus)) {
+    return {
+      data: null,
+      error: { message: `Cannot cancel an order with status “${order.status}”` },
+    };
+  }
+
+  if (order.lulu_print_job_id && luluConfigured()) {
+    try {
+      await cancelLuluPrintJob(order.lulu_print_job_id);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Lulu cancel failed";
+      return { data: null, error: { message } };
+    }
+  }
+
+  const now = new Date().toISOString();
+  const { error: updateError } = await getSupabaseAdmin()
+    .from("book_orders")
+    .update({
+      status: "canceled",
+      canceled_at: now,
+      canceled_by: input.adminId,
+      lulu_status_name: "CANCELED",
+      lulu_status_message: "Canceled by admin",
+    })
+    .eq("id", input.orderId);
+
+  if (updateError) return { data: null, error: { message: updateError.message } };
+
+  await appendOrderEvent(input.orderId, {
+    kind: "admin_cancel",
+    title: "Order canceled",
+    detail: "Canceled by an administrator.",
+    metadata: { adminId: input.adminId },
+  });
+
+  return { data: { status: "canceled" }, error: null };
+}
+
+export async function softDeleteOrderAsAdmin(input: {
+  userId: string;
+  orderId: string;
+  adminId: string;
+}): Promise<ApiResult<{ success: boolean }>> {
+  const { data: order, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("*")
+    .eq("id", input.orderId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  if (error) return { data: null, error: { message: error.message } };
+  if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  if (order.deleted_at) {
+    return { data: { success: true }, error: null };
+  }
+
+  if (order.status !== "canceled" && !order.canceled_at) {
+    await cancelOrderAsAdmin(input);
+  }
+
+  const now = new Date().toISOString();
+  const { error: updateError } = await getSupabaseAdmin()
+    .from("book_orders")
+    .update({
+      deleted_at: now,
+      deleted_by: input.adminId,
+      quote_expires_at: null,
+    })
+    .eq("id", input.orderId);
+
+  if (updateError) return { data: null, error: { message: updateError.message } };
+
+  await appendOrderEvent(input.orderId, {
+    kind: "admin_hide",
+    title: "Order hidden",
+    detail: "Removed from view; fulfillment sync and estimates stopped.",
+    metadata: { adminId: input.adminId },
+  });
+
+  return { data: { success: true }, error: null };
 }

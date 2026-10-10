@@ -691,7 +691,7 @@ export function ColorfulMomentsApp() {
       window.open(storeUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    window.location.href = "/orders";
+    window.location.href = "/studio/order";
   }
 
   const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];

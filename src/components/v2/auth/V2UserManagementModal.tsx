@@ -18,6 +18,8 @@ import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/cn";
 import type { CreditLedgerEntry } from "@/lib/credits/types";
+import { formatCredits } from "@/lib/credits/money";
+import { V2AdminUserOrdersSection } from "@/components/v2/auth/V2AdminUserOrdersSection";
 
 function StatusBadge({ status }: { status: string }) {
   return (
@@ -48,7 +50,7 @@ export function V2UserManagementModal({
   const [displayName, setDisplayName] = useState(user.displayName ?? "");
   const [email, setEmail] = useState(user.email ?? "");
   const [password, setPassword] = useState("");
-  const [creditDelta, setCreditDelta] = useState("1");
+  const [creditAmount, setCreditAmount] = useState("10.00");
   const [creditNote, setCreditNote] = useState("");
   const [creditLedger, setCreditLedger] = useState<CreditLedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -59,6 +61,8 @@ export function V2UserManagementModal({
 
   const canAdjustCredits =
     me?.role === "admin" || (me?.permissions.includes("usermanage:adjustcredits") ?? false);
+  const canManageOrders =
+    me?.role === "admin" || (me?.permissions.includes("usermanage:manageorders") ?? false);
 
   useEffect(() => {
     setLocalUser(user);
@@ -349,9 +353,13 @@ export function V2UserManagementModal({
           </div>
         </section>
 
+        {canManageOrders ? (
+          <V2AdminUserOrdersSection userId={localUser.id} />
+        ) : null}
+
         {canAdjustCredits ? (
           <section>
-            <p className="v2-section-title mb-3">Promo book credits</p>
+            <p className="v2-section-title mb-3">Promo wallet</p>
             <div className="v2-panel space-y-4 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -360,37 +368,38 @@ export function V2UserManagementModal({
                     Current balance
                   </p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-v2-ink">
-                    {localUser.creditsBalance}{" "}
-                    <span className="text-sm font-semibold text-v2-muted">
-                      {localUser.creditsBalance === 1 ? "book credit" : "book credits"}
-                    </span>
+                    {formatCredits(localUser.creditsBalanceCents)}
                   </p>
                   <p className="mt-1 text-xs text-v2-muted">
-                    One credit covers one standard coloring book order (when checkout is enabled).
+                    Applied toward print purchases at checkout (USD). Stored in cents on the server.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {[1, 3, 5].map((amount) => (
+                  {[
+                    { label: "+$5", cents: 500 },
+                    { label: "+$10", cents: 1000 },
+                    { label: "+$25", cents: 2500 },
+                  ].map(({ label, cents }) => (
                     <button
-                      key={amount}
+                      key={label}
                       type="button"
                       className="v2-btn-sm v2-btn-sm-primary"
                       disabled={busy === "credits"}
                       onClick={() =>
                         run("credits", async () => {
                           const r = await api.adminAdjustUserCredits(localUser.id, {
-                            delta: amount,
-                            note: creditNote.trim() || `Granted ${amount} book credit(s)`,
+                            deltaCents: cents,
+                            note: creditNote.trim() || `Granted ${label}`,
                           });
                           if (api.isError(r)) return { ok: false };
-                          patch({ creditsBalance: r.data.creditsBalance });
+                          patch({ creditsBalanceCents: r.data.creditsBalanceCents });
                           const ledger = await api.adminListUserCredits(localUser.id);
                           if (!api.isError(ledger)) setCreditLedger(ledger.data);
                           return { ok: true };
                         })
                       }
                     >
-                      +{amount}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -400,36 +409,34 @@ export function V2UserManagementModal({
                 className="space-y-3 border-t border-gray-100 pt-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const delta = Number.parseInt(creditDelta, 10);
-                  if (!Number.isInteger(delta) || delta === 0) return;
+                  const trimmed = creditAmount.trim();
+                  if (!trimmed) return;
                   void run("credits", async () => {
                     const r = await api.adminAdjustUserCredits(localUser.id, {
-                      delta,
+                      amountDollars: trimmed,
                       note: creditNote.trim() || undefined,
                     });
                     if (api.isError(r)) return { ok: false };
-                    patch({ creditsBalance: r.data.creditsBalance });
+                    patch({ creditsBalanceCents: r.data.creditsBalanceCents });
                     const ledger = await api.adminListUserCredits(localUser.id);
                     if (!api.isError(ledger)) setCreditLedger(ledger.data);
-                    setCreditDelta(delta > 0 ? "1" : "-1");
                     return { ok: true };
                   });
                 }}
               >
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="v2-label" htmlFor="credit-delta">
-                      Adjust by (+ grant / − revoke)
+                    <label className="v2-label" htmlFor="credit-amount">
+                      Adjust by (USD, + grant / − revoke)
                     </label>
                     <input
-                      id="credit-delta"
-                      type="number"
+                      id="credit-amount"
+                      type="text"
+                      inputMode="decimal"
                       className="v2-input"
-                      value={creditDelta}
-                      onChange={(e) => setCreditDelta(e.target.value)}
-                      step={1}
-                      min={-1000}
-                      max={1000}
+                      placeholder="10.00 or -5.00"
+                      value={creditAmount}
+                      onChange={(e) => setCreditAmount(e.target.value)}
                       required
                     />
                   </div>
@@ -478,10 +485,11 @@ export function V2UserManagementModal({
                         className="flex items-start justify-between gap-2 text-sm"
                       >
                         <span className="text-v2-ink">
-                          {entry.delta > 0 ? "+" : ""}
-                          {entry.delta}{" "}
+                          {formatCredits(entry.delta, {
+                            compact: false,
+                          })}{" "}
                           <span className="text-v2-muted">
-                            → balance {entry.balanceAfter}
+                            → {formatCredits(entry.balanceAfter)}
                           </span>
                           {entry.note ? (
                             <span className="block text-xs text-v2-muted">{entry.note}</span>

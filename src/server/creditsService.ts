@@ -1,6 +1,9 @@
 import type { ApiResult } from "@/lib/api/types";
 import type { CreditLedgerEntry } from "@/lib/credits/types";
+import { parseDollarsToCents } from "@/lib/credits/money";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
+
+const MAX_ABS_DELTA_CENTS = 500_00; // $500 per adjustment
 
 export type { CreditLedgerEntry } from "@/lib/credits/types";
 
@@ -14,12 +17,15 @@ export async function adjustUserCredits(input: {
   adminId: string;
   note?: string;
   reason?: string;
-}): Promise<ApiResult<{ creditsBalance: number }>> {
+}): Promise<ApiResult<{ creditsBalanceCents: number }>> {
   if (!Number.isInteger(input.delta) || input.delta === 0) {
-    return { data: null, error: { message: "delta must be a non-zero integer" } };
+    return { data: null, error: { message: "deltaCents must be a non-zero integer" } };
   }
-  if (input.delta > 1000 || input.delta < -1000) {
-    return { data: null, error: { message: "delta must be between -1000 and 1000" } };
+  if (Math.abs(input.delta) > MAX_ABS_DELTA_CENTS) {
+    return {
+      data: null,
+      error: { message: `adjustment must be between -$${MAX_ABS_DELTA_CENTS / 100} and $${MAX_ABS_DELTA_CENTS / 100}` },
+    };
   }
 
   const { data, error } = await getSupabaseAdmin().rpc("admin_adjust_user_credits", {
@@ -32,22 +38,54 @@ export async function adjustUserCredits(input: {
 
   if (error) {
     const message = error.message.includes("insufficient credits")
-      ? "User does not have enough credits for that adjustment"
+      ? "User does not have enough wallet balance for that adjustment"
       : error.message.includes("profile not found")
         ? "User profile not found"
         : error.message;
     return { data: null, error: { message } };
   }
 
-  const creditsBalance = typeof data === "number" ? data : Number(data);
-  log("info", "Admin adjusted user credits", {
+  const creditsBalanceCents = typeof data === "number" ? data : Number(data);
+  log("info", "Admin adjusted promo wallet", {
     adminId: input.adminId,
     targetId: input.userId,
-    delta: input.delta,
-    creditsBalance,
+    deltaCents: input.delta,
+    creditsBalanceCents,
   });
 
-  return { data: { creditsBalance }, error: null };
+  return { data: { creditsBalanceCents }, error: null };
+}
+
+export function resolveCreditDeltaCents(body: {
+  deltaCents?: unknown;
+  delta?: unknown;
+  amountDollars?: unknown;
+}): number | { error: string } {
+  if (body.deltaCents !== undefined) {
+    if (typeof body.deltaCents !== "number" || !Number.isInteger(body.deltaCents)) {
+      return { error: "deltaCents must be an integer" };
+    }
+    return body.deltaCents;
+  }
+  if (body.delta !== undefined) {
+    if (typeof body.delta !== "number" || !Number.isInteger(body.delta)) {
+      return { error: "deltaCents must be an integer" };
+    }
+    return body.delta;
+  }
+  if (body.amountDollars !== undefined) {
+    if (typeof body.amountDollars === "number") {
+      if (!Number.isFinite(body.amountDollars)) return { error: "amountDollars must be a finite number" };
+      return Math.round(body.amountDollars * 100);
+    }
+    if (typeof body.amountDollars === "string") {
+      const cents = parseDollarsToCents(body.amountDollars);
+      if (cents === null) return { error: "amountDollars must be a valid dollar amount" };
+      return cents;
+    }
+    return { error: "amountDollars must be a string or number" };
+  }
+  return { error: "deltaCents or amountDollars is required" };
 }
 
 export async function listCreditLedgerForUser(

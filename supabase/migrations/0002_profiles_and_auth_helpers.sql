@@ -8,7 +8,7 @@ create table public.profiles (
   avatar_url   text,
   status       user_status not null default 'active',
   plan_tier    text not null default 'free',
-  credits_balance integer not null default 0 check (credits_balance >= 0),
+  credits_balance integer not null default 0 check (credits_balance >= 0), -- USD cents promo wallet
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );

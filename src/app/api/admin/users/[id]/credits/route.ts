@@ -29,15 +29,21 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const { id } = await params;
-  const body = (await request.json()) as { delta?: unknown; note?: unknown };
-  if (typeof body.delta !== "number" || !Number.isInteger(body.delta)) {
-    return jsonError("delta must be an integer", 400);
+  const body = (await request.json()) as {
+    deltaCents?: unknown;
+    delta?: unknown;
+    amountDollars?: unknown;
+    note?: unknown;
+  };
+  const resolved = credits.resolveCreditDeltaCents(body);
+  if (typeof resolved === "object" && "error" in resolved) {
+    return jsonError(resolved.error, 400);
   }
   const note = typeof body.note === "string" ? body.note : undefined;
 
   const result = await credits.adjustUserCredits({
     userId: id,
-    delta: body.delta,
+    delta: resolved,
     adminId: auth.user.id,
     note,
   });

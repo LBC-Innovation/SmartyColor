@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { V2Sidebar, V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
+import { formatCredits } from "@/lib/credits/money";
 import type { BookOrderDetail } from "@/lib/orders/types";
 
 function formatAddress(order: BookOrderDetail): string {
@@ -24,9 +26,12 @@ function formatAddress(order: BookOrderDetail): string {
 
 export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   const { user, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const justConfirmed = searchParams.get("confirmed") === "1";
   const [order, setOrder] = useState<BookOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingCheckout, setConfirmingCheckout] = useState(false);
 
   const load = useCallback(
     async (sync = true) => {
@@ -51,6 +56,18 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   useEffect(() => {
     void load(true);
   }, [load, user?.id]);
+
+  async function confirmDraftFromDetail() {
+    setConfirmingCheckout(true);
+    setError(null);
+    const result = await api.confirmDraftBookOrder(orderId);
+    setConfirmingCheckout(false);
+    if (api.isError(result)) {
+      setError(result.error.message);
+      return;
+    }
+    await load(false);
+  }
 
   return (
     <V2StudioFrame sidebar={<V2Sidebar showProgress={false} />}>
@@ -109,6 +126,69 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   </button>
                 </div>
               </header>
+
+              {justConfirmed && order.status === "awaiting_payment" ? (
+                <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
+                  Your book is saved and confirmed. Complete payment here when checkout is available.
+                </div>
+              ) : null}
+
+              {order.status === "draft" ? (
+                <section className="v2-panel mb-4 border-v2-primary/25 bg-v2-primary-light/30 p-4 sm:p-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                    Draft saved
+                  </h2>
+                  <p className="mt-2 text-sm text-v2-ink">
+                    Review the details below, then confirm when you&apos;re ready to order.
+                    {order.totalCents != null ? (
+                      <>
+                        {" "}
+                        Estimated total:{" "}
+                        <span className="font-semibold tabular-nums">
+                          {formatCredits(order.totalCents)}
+                        </span>
+                        .
+                      </>
+                    ) : null}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={confirmingCheckout}
+                    onClick={() => void confirmDraftFromDetail()}
+                    className="v2-btn-primary mt-4 text-sm"
+                  >
+                    {confirmingCheckout ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : null}
+                    Confirm &amp; proceed to checkout
+                  </button>
+                </section>
+              ) : null}
+
+              {order.status === "awaiting_payment" ? (
+                <section className="v2-panel mb-4 border-v2-primary/25 p-4 sm:p-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                    Checkout
+                  </h2>
+                  <p className="mt-2 text-sm text-v2-muted">
+                    Payment integration is coming soon. Your order is confirmed and queued for
+                    checkout
+                    {order.totalCents != null ? (
+                      <>
+                        {" "}
+                        at{" "}
+                        <span className="font-semibold tabular-nums text-v2-ink">
+                          {formatCredits(order.totalCents)}
+                        </span>
+                      </>
+                    ) : null}
+                    .
+                  </p>
+                  <button type="button" className="v2-btn-primary mt-4 text-sm" disabled>
+                    Pay now (coming soon)
+                  </button>
+                </section>
+              ) : null}
 
               {order.deliveryExpectation ? (
                 <section className="v2-panel mb-4 border-v2-primary/20 bg-v2-primary-light/40 p-4 sm:p-5">

@@ -10,15 +10,21 @@ export function luluConfigured(): boolean {
 }
 
 export function luluBasicAuthHeader(): string {
-  const encoded = process.env.LULU_BASIC_AUTH?.trim();
-  if (encoded) return `Basic ${encoded}`;
-  const key = process.env.LULU_CLIENT_KEY;
-  const secret = process.env.LULU_CLIENT_SECRET;
-  if (!key || !secret) {
+  const key = process.env.LULU_CLIENT_KEY?.trim();
+  const secret = process.env.LULU_CLIENT_SECRET?.trim();
+  if (key && secret) {
+    const token = Buffer.from(`${key}:${secret}`, "utf8").toString("base64");
+    return `Basic ${token}`;
+  }
+
+  const raw = process.env.LULU_BASIC_AUTH?.trim();
+  if (!raw) {
     throw new Error("Lulu API credentials are not configured");
   }
-  const token = Buffer.from(`${key}:${secret}`, "utf8").toString("base64");
-  return `Basic ${token}`;
+  if (/^basic\s+/i.test(raw)) {
+    return raw.replace(/^basic\s+/i, "Basic ");
+  }
+  return `Basic ${raw}`;
 }
 
 export function luluWebhookSecret(): string | null {

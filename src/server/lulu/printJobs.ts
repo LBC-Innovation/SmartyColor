@@ -29,6 +29,14 @@ export async function fetchLuluPrintJob(printJobId: number): Promise<LuluPrintJo
   return luluFetch<LuluPrintJob>(`/print-jobs/${printJobId}/`);
 }
 
+/** Cancel an unpaid (or cancel-eligible) Lulu print job. */
+export async function cancelLuluPrintJob(printJobId: number): Promise<void> {
+  await luluFetch(`/print-jobs/${printJobId}/status/`, {
+    method: "PUT",
+    body: JSON.stringify({ name: "CANCELED" }),
+  });
+}
+
 export function extractTrackingFromPrintJob(job: LuluPrintJob): {
   trackingNumber: string | null;
   trackingUrls: string[];

@@ -51,7 +51,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       permissions: (u.app_metadata?.permissions as string[] | undefined) ?? [],
       emailConfirmed: !!u.email_confirmed_at,
       createdAt: u.created_at,
-      creditsBalance:
+      creditsBalanceCents:
         (profile as { credits_balance?: number }).credits_balance ?? 0,
     };
   });

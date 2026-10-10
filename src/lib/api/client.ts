@@ -1,4 +1,6 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
+import type { BookBindingId } from "@/lib/print/bookBindings";
+import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary } from "@/lib/orders/types";
 import type { CreditLedgerEntry } from "@/lib/credits/types";
 
@@ -222,15 +224,101 @@ export function fetchOrder(id: string, sync = true): Promise<ApiResult<BookOrder
   return request<BookOrderDetail>(`/orders/${id}${qs}`);
 }
 
+export type OrderQuoteData = {
+  estimatedTotalCents: number | null;
+  printCents: number | null;
+  shippingCents: number | null;
+  currency: string;
+  source: string;
+  shippingPostcode?: string | null;
+  shippingLevel?: string;
+  quoteError?: string | null;
+};
+
+export function fetchOrderQuote(input: {
+  bindingId: BookBindingId;
+  pageCount: number;
+  shippingPostcode?: string;
+  shippingLevel?: string;
+}): Promise<ApiResult<OrderQuoteData>> {
+  return request("/orders/quote", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export type BookDraftPayload = {
+  bindingId: BookBindingId;
+  pageCount: number;
+  photoCount: number;
+  blankCount: number;
+  projectTitle: string;
+  estimatedTotalCents: number | null;
+  shippingPostcode?: string | null;
+};
+
+export function createDraftBookOrder(
+  input: BookDraftPayload,
+): Promise<ApiResult<{ orderId: string }>> {
+  return request("/orders/draft", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateDraftBookOrder(
+  orderId: string,
+  input: Omit<BookDraftPayload, "photoCount" | "blankCount">,
+): Promise<ApiResult<{ orderId: string }>> {
+  return request(`/orders/${orderId}/draft`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function confirmDraftBookOrder(
+  orderId: string,
+): Promise<ApiResult<{ orderId: string; status: string }>> {
+  return request(`/orders/${orderId}/confirm`, {
+    method: "POST",
+  });
+}
+
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
   return request<CreditLedgerEntry[]>(`/admin/users/${userId}/credits`);
 }
 
+export function adminListUserOrders(
+  userId: string,
+  includeHidden = true,
+): Promise<ApiResult<AdminUserOrderSummary[]>> {
+  const qs = includeHidden ? "?includeHidden=1" : "";
+  return request<AdminUserOrderSummary[]>(`/admin/users/${userId}/orders${qs}`);
+}
+
+export function adminCancelUserOrder(
+  userId: string,
+  orderId: string,
+): Promise<ApiResult<{ status: string }>> {
+  return request<{ status: string }>(`/admin/users/${userId}/orders/${orderId}/cancel`, {
+    method: "POST",
+  });
+}
+
+export function adminHideUserOrder(
+  userId: string,
+  orderId: string,
+): Promise<ApiResult<{ success: boolean }>> {
+  return request<{ success: boolean }>(`/admin/users/${userId}/orders/${orderId}/hide`, {
+    method: "POST",
+  });
+}
+
 export function adminAdjustUserCredits(
   userId: string,
-  input: { delta: number; note?: string },
-): Promise<ApiResult<{ creditsBalance: number }>> {
-  return request<{ creditsBalance: number }>(`/admin/users/${userId}/credits`, {
+  input: { deltaCents: number; note?: string } | { amountDollars: string; note?: string },
+): Promise<ApiResult<{ creditsBalanceCents: number }>> {
+  return request<{ creditsBalanceCents: number }>(`/admin/users/${userId}/credits`, {
     method: "POST",
     body: JSON.stringify(input),
   });

@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
 import { V2CreateUserModal } from "@/components/v2/auth/V2CreateUserModal";
 import { V2UserManagementModal } from "@/components/v2/auth/V2UserManagementModal";
+import { formatCredits } from "@/lib/credits/money";
 import { cn } from "@/lib/cn";
 
 export function V2AdminUsersStudio() {
@@ -70,7 +71,7 @@ export function V2AdminUsersStudio() {
             <div className="v2-panel overflow-hidden">
               <div className="hidden border-b border-gray-200 bg-v2-bg-subtle/80 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-v2-muted sm:grid sm:grid-cols-[1fr_72px_100px_120px_100px_88px] sm:gap-3">
                 <span>User</span>
-                <span>Credits</span>
+                <span>Promo $</span>
                 <span>Status</span>
                 <span>Permissions</span>
                 <span>Joined</span>
@@ -103,7 +104,7 @@ export function V2AdminUsersStudio() {
                             </div>
                           </div>
                           <span className="text-sm font-semibold tabular-nums text-v2-ink">
-                            {user.creditsBalance}
+                            {formatCredits(user.creditsBalanceCents)}
                           </span>
                           <span
                             className={cn(
