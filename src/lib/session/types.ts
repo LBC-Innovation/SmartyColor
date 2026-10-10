@@ -23,6 +23,8 @@ export type FeedbackTurn = {
   kind: "ok" | "workaround" | "blocked";
   kidMessage: string;
   points: FeedbackPoint[];
+  /** Plan trait ids to drop when editing an existing sheet. */
+  removeFromPlan?: string[];
   workaround?: {
     originalIntent: string;
     suggestion: string;
