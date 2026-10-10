@@ -27,6 +27,24 @@ export type VisionUsageEvent = {
   hasImageOutput: boolean;
 };
 
+export type VisionErrorKind =
+  | "billing"
+  | "quota"
+  | "auth"
+  | "safety"
+  | "other";
+
+/** A failed vision API call (billing, quota, auth, safety block, …). */
+export type VisionErrorEvent = {
+  id: string;
+  at: string;
+  operation: VisionCostOperation;
+  modelId: string;
+  kind: VisionErrorKind;
+  httpStatus: number | null;
+  message: string;
+};
+
 export type VisionCostSessionSnapshot = {
   sessionId: string;
   startedAt: string;
@@ -34,6 +52,7 @@ export type VisionCostSessionSnapshot = {
   ratesSource: string | null;
   modelRates: ModelRateSnapshot[];
   events: VisionUsageEvent[];
+  errors: VisionErrorEvent[];
   totals: {
     inputTokens: number;
     outputTokens: number;
@@ -41,6 +60,7 @@ export type VisionCostSessionSnapshot = {
     outputCostUsd: number;
     totalCostUsd: number;
     callCount: number;
+    errorCount: number;
   };
   logFilePath: string;
 };

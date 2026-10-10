@@ -1,18 +1,21 @@
-import { AppHeader } from "@/components/AppHeader";
+import Link from "next/link";
+import { V2BrandMark } from "@/components/v2/ui/V2BrandLogo";
 
 export default function OfflinePage() {
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[1120px] flex-col px-6 py-6 sm:px-8 sm:py-8">
-      <AppHeader />
-      <main className="mt-16 flex flex-1 flex-col items-center gap-4 text-center">
-        <h1 className="font-display text-3xl font-bold text-ink">
-          You&apos;re offline
-        </h1>
-        <p className="max-w-md font-body text-lg text-ink-soft">
-          SmartyColor needs the internet to chat and make new sheets. Your saved
-          idea on this device is still here when you reconnect.
-        </p>
-      </main>
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#fbfbfc] px-6 text-center text-[#0a101a]">
+      <V2BrandMark size={72} />
+      <h1 className="mt-6 text-2xl font-semibold tracking-tight">You&apos;re offline</h1>
+      <p className="mt-2 max-w-sm text-base leading-relaxed text-[#5c6478]">
+        ColorfulMoments needs an internet connection to make new coloring pages. Projects saved on
+        this device will be here when you reconnect.
+      </p>
+      <Link
+        href="/studio"
+        className="mt-6 inline-flex h-11 items-center justify-center rounded-full bg-[#564fd0] px-6 text-sm font-bold text-white"
+      >
+        Try again
+      </Link>
     </div>
   );
 }

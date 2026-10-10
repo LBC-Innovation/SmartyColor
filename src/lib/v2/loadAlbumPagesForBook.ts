@@ -1,7 +1,7 @@
 import { loadV2ProjectSession, loadV2ProjectsMeta } from "@/lib/v2/studioSessionDb";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
-import { normalizeV2SheetRevisions } from "@/lib/v2/studioTypes";
+import { normalizeV2SheetRevisions, photoOrientation } from "@/lib/v2/studioTypes";
 
 export async function loadProjectsCatalog(): Promise<V2ProjectMeta[]> {
   const meta = await loadV2ProjectsMeta();
@@ -37,11 +37,22 @@ export async function collectPhotoPagesFromProjects(input: {
         photoId: photo.id,
         title: active.title,
         imageDataUrl: active.imageDataUrl,
-        sheetOrientation: photo.printPrefs.orientation,
+        sheetOrientation: photoOrientation(photo),
         rotation: 0,
       });
     }
   }
 
   return { pages, skippedWithoutSheet };
+}
+
+/** How many photos in a project have a coloring sheet (i.e. would become book pages). */
+export async function countProjectSheets(projectId: string): Promise<number> {
+  const session = await loadV2ProjectSession(projectId);
+  let count = 0;
+  for (const photo of session.photos) {
+    const revisions = normalizeV2SheetRevisions(photo);
+    if (photo.sheet || revisions.length > 0) count += 1;
+  }
+  return count;
 }

@@ -99,8 +99,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.25rem;
-  background-color: var(--color-cream);
+  gap: 1rem;
+  background-color: #fbfbfc;
   transition: opacity 0.2s ease;
 }
 
@@ -114,17 +114,26 @@ html.pwa-splash-done #pwa-splash {
 }
 
 .pwa-splash-icon {
-  width: min(42vw, 168px);
-  height: min(42vw, 168px);
-  object-fit: contain;
+  width: min(24vw, 96px);
+  height: min(24vw, 96px);
+  border-radius: 22%;
+  box-shadow: 0 12px 32px rgb(86 79 208 / 0.28);
 }
 
 .pwa-splash-title {
-  font-family: var(--font-luckiest), "Luckiest Guy", ui-rounded, sans-serif;
-  font-size: clamp(2rem, 8vw, 2.75rem);
+  font-family: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: clamp(1.5rem, 6.5vw, 2rem);
   line-height: 1;
-  letter-spacing: 0.04em;
-  color: var(--color-ink);
+  letter-spacing: -0.02em;
+  color: #0a101a;
+}
+
+.pwa-splash-title-accent {
+  background: linear-gradient(90deg, #564fd0, #7c3aed, #ec4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 @media print {

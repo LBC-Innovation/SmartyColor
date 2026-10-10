@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
-  Gift,
+  CircleDollarSign,
   Loader2,
   Lock,
   Mail,
@@ -364,7 +364,7 @@ export function V2UserManagementModal({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="flex items-center gap-2 text-sm font-semibold text-v2-ink">
-                    <Gift className="h-4 w-4 text-v2-primary" aria-hidden />
+                    <CircleDollarSign className="h-4 w-4 text-v2-success-text" aria-hidden />
                     Current balance
                   </p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-v2-ink">

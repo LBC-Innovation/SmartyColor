@@ -95,7 +95,7 @@ export function V2ToastProvider({ children }: { children: ReactNode }) {
     <V2ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-0 top-[4.25rem] z-[60] flex flex-col items-center gap-2 px-4 sm:items-end sm:px-6 lg:top-4 lg:right-8 lg:left-auto xl:right-10"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] z-[60] flex flex-col items-center gap-2 px-4 lg:inset-x-auto lg:bottom-6 lg:right-8 lg:items-end lg:px-0 xl:right-10"
         aria-live="polite"
         aria-relevant="additions"
       >

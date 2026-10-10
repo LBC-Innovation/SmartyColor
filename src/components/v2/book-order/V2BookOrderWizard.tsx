@@ -1,143 +1,153 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronRight, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Loader2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
-import {
-  BookOrderWizardSidebar,
-  BookOrderWizardSidebarMobile,
-} from "@/components/v2/book-order/BookOrderWizardSidebar";
+import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
+import { BookBindingPicker } from "@/components/v2/book-order/BookBindingPicker";
 import { BookFlipThroughModal } from "@/components/v2/book-order/BookFlipThroughModal";
 import { BookOrderConfirmModal } from "@/components/v2/book-order/BookOrderConfirmModal";
-import { BookOrderReviewPanel } from "@/components/v2/book-order/BookOrderReviewPanel";
+import { BookOrderPriceBar } from "@/components/v2/book-order/BookOrderPriceBar";
+import { BookOrderStepper, type BookOrderStep } from "@/components/v2/book-order/BookOrderStepper";
 import { BookPageThumbnailGrid } from "@/components/v2/book-order/BookPageThumbnailGrid";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
-import {
-  BOOK_BINDINGS,
-  getBookBinding,
-  type BookBindingId,
-} from "@/lib/print/bookBindings";
-import { computeBookPagePlan, nextRotation } from "@/lib/print/bookPagePlan";
-import type { BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import { formatCredits } from "@/lib/credits/money";
+import { getBookBinding, recommendBinding, type BookBindingId } from "@/lib/print/bookBindings";
+import { computeBookPagePlan, explainBookPagePadding, nextRotation } from "@/lib/print/bookPagePlan";
+import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import { readStoredQuoteShippingZip, storeQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import {
   collectPhotoPagesFromProjects,
+  countProjectSheets,
   loadProjectsCatalog,
 } from "@/lib/v2/loadAlbumPagesForBook";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
-import { cn } from "@/lib/cn";
-import { BOOK_PAGE_COUNT_HINT } from "@/lib/print/bookPageCountCopy";
-import {
-  readStoredQuoteShippingZip,
-  storeQuoteShippingZip,
-} from "@/lib/print/quoteShippingZip";
 
-type WizardStep = "binding" | "albums" | "layout" | "review";
+const STEPS: BookOrderStep[] = ["pages", "book", "review"];
 
 export function V2BookOrderWizard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
-  const [step, setStep] = useState<WizardStep>("binding");
-  const [bindingId, setBindingId] = useState<BookBindingId>("perfect_bound");
+
+  const [step, setStep] = useState<BookOrderStep>("pages");
   const [projects, setProjects] = useState<V2ProjectMeta[]>([]);
-  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
-  const [pages, setPages] = useState<BookWizardPage[]>([]);
-  const [skippedWithoutSheet, setSkippedWithoutSheet] = useState(0);
+  const [sheetCounts, setSheetCounts] = useState<Record<string, number>>({});
   const [loadingAlbums, setLoadingAlbums] = useState(true);
-  const [loadingPages, setLoadingPages] = useState(false);
-  const [flipOpen, setFlipOpen] = useState(false);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [photoPages, setPhotoPages] = useState<BookWizardPhotoPage[]>([]);
+  /** Album selection the current photoPages were collected for. */
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const removedIdsRef = useRef<Set<string>>(new Set());
+
+  const [bindingId, setBindingId] = useState<BookBindingId>("saddle_stitch");
+  const [bindingTouched, setBindingTouched] = useState(false);
+
+  // Only rendered on the review step, so reading storage up front can't mismatch SSR.
+  const [shippingZip, setShippingZip] = useState(() => readStoredQuoteShippingZip());
   const [quoteCents, setQuoteCents] = useState<number | null>(null);
   const [printCents, setPrintCents] = useState<number | null>(null);
   const [shippingCents, setShippingCents] = useState<number | null>(null);
-  const [shippingZip, setShippingZip] = useState("");
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
-  const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
-  const [savedDraftFingerprint, setSavedDraftFingerprint] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [reviewConfirmed, setReviewConfirmed] = useState(false);
+
+  const [flipOpen, setFlipOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [savingDraft, setSavingDraft] = useState(false);
-  const [confirmingOrder, setConfirmingOrder] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const savedDraftIdRef = useRef<string | null>(null);
 
   const binding = getBookBinding(bindingId);
+  const plan = useMemo(() => computeBookPagePlan(photoPages, binding), [photoPages, binding]);
+  const paddingNote = explainBookPagePadding(plan.photoCount, binding, plan);
 
-  const plan = useMemo(
-    () => computeBookPagePlan(
-      pages.filter((p): p is BookWizardPhotoPage => p.kind === "photo"),
-      binding,
-    ),
-    [pages, binding],
-  );
-
-  const displayPages = plan.allPages;
-
-  const projectTitle = useMemo(() => {
-    if (selectedProjectIds.length === 1) {
-      return projects.find((p) => p.id === selectedProjectIds[0])?.name ?? "My coloring book";
-    }
-    return "My coloring book";
-  }, [projects, selectedProjectIds]);
-
-  const albumNames = useMemo(
-    () =>
-      projects
-        .filter((p) => selectedProjectIds.includes(p.id))
-        .map((p) => p.name),
+  const selectedProjects = useMemo(
+    () => projects.filter((p) => selectedProjectIds.includes(p.id)),
     [projects, selectedProjectIds],
   );
+  const projectTitle =
+    selectedProjects.length === 1 ? selectedProjects[0].name : "My coloring book";
 
-  const draftFingerprint = useMemo(() => {
-    const photos = pages.filter((p): p is BookWizardPhotoPage => p.kind === "photo");
-    return JSON.stringify({
-      bindingId,
-      projectIds: [...selectedProjectIds].sort(),
-      pages: photos.map((p) => ({ id: p.id, rotation: p.rotation })),
-      totalPages: plan.totalPages,
-      zip: shippingZip.trim(),
-    });
-  }, [bindingId, selectedProjectIds, pages, plan.totalPages, shippingZip]);
+  // ---- albums ------------------------------------------------------------
 
-  const draftStale = Boolean(
-    savedDraftId && savedDraftFingerprint && savedDraftFingerprint !== draftFingerprint,
-  );
-
-  const quoteStepActive =
-    (step === "layout" || step === "review") && plan.totalPages >= 1;
+  const preselectId = searchParams.get("project");
 
   useEffect(() => {
-    void loadProjectsCatalog().then((list) => {
+    let cancelled = false;
+    void (async () => {
+      const list = await loadProjectsCatalog();
+      if (cancelled) return;
       setProjects(list);
       setLoadingAlbums(false);
-    });
-  }, []);
+      // Start with the project the user came from, or the only one they have.
+      const initial =
+        (preselectId && list.some((p) => p.id === preselectId) && preselectId) ||
+        (list.length === 1 ? list[0].id : null);
+      if (initial) setSelectedProjectIds([initial]);
+
+      const counts: Record<string, number> = {};
+      for (const p of list) {
+        counts[p.id] = await countProjectSheets(p.id);
+      }
+      if (!cancelled) setSheetCounts(counts);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [preselectId]);
+
+  // Re-collect pages whenever the album selection changes, keeping the
+  // order, rotations and removals the user already made.
+  const selectionKey = selectedProjectIds.join("|");
+  const loadingPages = projects.length > 0 && loadedKey !== selectionKey;
 
   useEffect(() => {
-    setShippingZip(readStoredQuoteShippingZip());
-  }, []);
+    if (projects.length === 0) return;
+    let cancelled = false;
+    void collectPhotoPagesFromProjects({ projectIds: selectedProjectIds, projects }).then(
+      ({ pages: collected }) => {
+        if (cancelled) return;
+        setPhotoPages((prev) => {
+          const byId = new Map(collected.map((p) => [p.id, p]));
+          const kept = prev.filter((p) => byId.has(p.id));
+          const keptIds = new Set(kept.map((p) => p.id));
+          const added = collected.filter(
+            (p) => !keptIds.has(p.id) && !removedIdsRef.current.has(p.id),
+          );
+          return [...kept, ...added];
+        });
+        setLoadedKey(selectionKey);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProjectIds, selectionKey, projects]);
 
-  function updateShippingZip(next: string) {
-    setShippingZip(next);
-    storeQuoteShippingZip(next);
+  function toggleProject(id: string) {
+    setSelectedProjectIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   }
 
+  // ---- quote -------------------------------------------------------------
+
+  const quoteActive = step !== "pages" && plan.totalPages >= 1;
+
   useEffect(() => {
-    if (!quoteStepActive) {
-      setQuoteCents(null);
-      setPrintCents(null);
-      setShippingCents(null);
-      return;
-    }
+    if (!quoteActive) return;
     const t = window.setTimeout(() => {
       void (async () => {
         setQuoteLoading(true);
         setQuoteError(null);
-        const trimmedZip = shippingZip.trim();
+        const zip = shippingZip.trim();
         const result = await api.fetchOrderQuote({
           bindingId,
           pageCount: plan.totalPages,
-          ...(trimmedZip ? { shippingPostcode: trimmedZip } : {}),
+          ...(zip ? { shippingPostcode: zip } : {}),
         });
         setQuoteLoading(false);
         if (api.isError(result)) {
@@ -154,432 +164,345 @@ export function V2BookOrderWizard() {
       })();
     }, 350);
     return () => window.clearTimeout(t);
-  }, [bindingId, plan.totalPages, step, shippingZip]);
+  }, [quoteActive, bindingId, plan.totalPages, shippingZip]);
 
-  const syncPagesFromPhotos = useCallback(
-    (photos: BookWizardPhotoPage[]) => {
-      const nextPlan = computeBookPagePlan(photos, binding);
-      setPages(nextPlan.allPages);
-    },
-    [binding],
-  );
-
-  async function goToLayout() {
-    if (selectedProjectIds.length === 0) {
-      setError("Select at least one album.");
-      return;
-    }
-    setError(null);
-    setLoadingPages(true);
-    const { pages: collected, skippedWithoutSheet: skipped } =
-      await collectPhotoPagesFromProjects({
-        projectIds: selectedProjectIds,
-        projects,
-      });
-    setSkippedWithoutSheet(skipped);
-    setLoadingPages(false);
-    if (collected.length === 0) {
-      setError(
-        "No coloring pages found. Generate sheets in the studio before ordering.",
-      );
-      return;
-    }
-    syncPagesFromPhotos(collected);
-    setStep("layout");
+  function updateShippingZip(next: string) {
+    setShippingZip(next);
+    storeQuoteShippingZip(next);
   }
 
-  async function persistDraft(): Promise<string | null> {
+  // ---- navigation ----------------------------------------------------------
+
+  const goNext = useCallback(() => {
+    setError(null);
+    if (step === "pages") {
+      if (plan.photoCount === 0) {
+        setError("Pick at least one album with a generated coloring sheet.");
+        return;
+      }
+      if (!bindingTouched) setBindingId(recommendBinding(plan.photoCount));
+      setStep("book");
+    } else if (step === "book") {
+      setStep("review");
+    } else {
+      setConfirmOpen(true);
+    }
+  }, [step, plan.photoCount, bindingTouched]);
+
+  function goBack() {
+    setError(null);
+    if (step === "review") setStep("book");
+    else if (step === "book") setStep("pages");
+    else router.push("/studio");
+  }
+
+  async function placeOrder() {
+    setPlacing(true);
     setError(null);
     const shippingPostcode = shippingZip.trim() || null;
-    const draftBody = {
-      bindingId,
-      pageCount: plan.totalPages,
-      photoCount: plan.photoCount,
-      blankCount: plan.blankCount,
-      projectTitle,
-      estimatedTotalCents: quoteCents,
-      shippingPostcode,
-    };
+    let orderId = savedDraftIdRef.current;
 
-    if (savedDraftId) {
-      const result = await api.updateDraftBookOrder(savedDraftId, {
+    if (orderId) {
+      const updated = await api.updateDraftBookOrder(orderId, {
         bindingId,
         pageCount: plan.totalPages,
         projectTitle,
         estimatedTotalCents: quoteCents,
         shippingPostcode,
       });
-      if (api.isError(result)) {
-        setError(result.error.message);
-        return null;
+      if (api.isError(updated)) {
+        setError(updated.error.message);
+        setPlacing(false);
+        return;
       }
-      setSavedDraftFingerprint(draftFingerprint);
-      return savedDraftId;
+    } else {
+      const created = await api.createDraftBookOrder({
+        bindingId,
+        pageCount: plan.totalPages,
+        photoCount: plan.photoCount,
+        blankCount: plan.blankCount,
+        projectTitle,
+        estimatedTotalCents: quoteCents,
+        shippingPostcode,
+      });
+      if (api.isError(created)) {
+        setError(created.error.message);
+        setPlacing(false);
+        return;
+      }
+      orderId = created.data.orderId;
+      savedDraftIdRef.current = orderId;
     }
 
-    const result = await api.createDraftBookOrder(draftBody);
-    if (api.isError(result)) {
-      setError(result.error.message);
-      return null;
-    }
-    setSavedDraftId(result.data.orderId);
-    setSavedDraftFingerprint(draftFingerprint);
-    return result.data.orderId;
-  }
-
-  async function handleSaveDraft() {
-    setSavingDraft(true);
-    setSaveMessage(null);
-    const orderId = await persistDraft();
-    setSavingDraft(false);
-    if (orderId) {
-      setSaveMessage("Draft saved. Confirm when you're ready to proceed to checkout.");
-    }
-  }
-
-  async function handleConfirmOrder() {
-    setConfirmingOrder(true);
-    setError(null);
-    const orderId = await persistDraft();
-    if (!orderId) {
-      setConfirmingOrder(false);
-      return;
-    }
-    const result = await api.confirmDraftBookOrder(orderId);
-    setConfirmingOrder(false);
-    if (api.isError(result)) {
-      setError(result.error.message);
+    const confirmed = await api.confirmDraftBookOrder(orderId);
+    setPlacing(false);
+    if (api.isError(confirmed)) {
+      setError(confirmed.error.message);
       return;
     }
     setConfirmOpen(false);
-    window.location.href = `/orders/${orderId}?confirmed=1`;
+    router.push(`/orders/${orderId}?confirmed=1`);
   }
 
-  const sidebarCalculatorProps = {
-    plan,
-    binding,
-    estimatedTotalCents: quoteCents,
-    printCents,
-    shippingCents,
-    shippingZip,
-    onShippingZipChange: updateShippingZip,
-    quoteLoading,
-    quoteError,
-    quoteEnabled: quoteStepActive,
-  };
+  // ---- render --------------------------------------------------------------
+
+  const nextLabel =
+    step === "pages" ? "Choose binding" : step === "book" ? "Review order" : "Place order";
+  const nextDisabled =
+    (step === "pages" && (plan.photoCount === 0 || loadingPages)) ||
+    (step === "review" && placing);
 
   return (
-    <V2StudioFrame
-      sidebar={user ? <BookOrderWizardSidebar {...sidebarCalculatorProps} /> : null}
-    >
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 sm:px-8 sm:py-6">
-          <header className="mb-4 shrink-0 sm:mb-5">
-            <h1 className="v2-brand-title text-2xl tracking-tight text-v2-ink sm:text-3xl">
+    <V2StudioFrame hideBottomNav>
+      <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="shrink-0 border-b border-gray-200 bg-white">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-4">
+            <h1 className="v2-brand-title text-xl tracking-tight text-v2-ink sm:text-2xl">
               Order a coloring book
             </h1>
-            <p className="mt-2 text-sm text-v2-muted">
-              {step === "binding"
-                ? "Choose binding"
-                : step === "albums"
-                  ? "Choose albums"
-                  : step === "layout"
-                    ? "Arrange pages"
-                    : "Review & confirm"}
-            </p>
-          </header>
+            <BookOrderStepper steps={STEPS} current={step} />
+          </div>
+        </header>
 
-          {authLoading ? (
-            <p className="text-sm text-v2-muted">Loading…</p>
-          ) : !user ? (
-            <div className="v2-panel p-6 text-center">
-              <p className="text-sm text-v2-muted">Sign in to order a printed book.</p>
-              <Link href="/sign-in?next=/studio/order" className="mt-4 inline-flex v2-btn-primary">
-                Sign in
-              </Link>
-            </div>
-          ) : (
-            <>
-              {user ? <BookOrderWizardSidebarMobile {...sidebarCalculatorProps} /> : null}
-
-              {error ? (
-                <div className="mb-4 shrink-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  {error}
-                </div>
-              ) : null}
-
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {step === "binding" ? (
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain p-2 sm:p-4">
-                <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center py-4">
-                <div className="grid w-full gap-4 sm:grid-cols-2">
-                  {(Object.keys(BOOK_BINDINGS) as BookBindingId[]).map((id) => {
-                    const spec = BOOK_BINDINGS[id];
-                    const selected = bindingId === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setBindingId(id)}
-                        className={cn(
-                          "v2-panel rounded-xl border-2 p-5 text-left transition",
-                          selected
-                            ? "border-v2-primary"
-                            : "border-transparent hover:border-v2-primary/25",
-                          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-v2-primary",
-                        )}
-                      >
-                        <p className="text-lg font-bold text-v2-ink">{spec.label}</p>
-                        <p className="mt-2 text-sm text-v2-muted">{spec.description}</p>
-                        <p className="mt-3 text-xs text-v2-muted">
-                          {spec.minPages}–{spec.maxPages} pages
-                          {spec.pageMultiple > 1
-                            ? ` · multiples of ${spec.pageMultiple}`
-                            : ""}{" "}
-                          · portrait · 8.5×11″ B&amp;W
-                        </p>
-                        <p className="mt-2 text-[11px] leading-snug text-v2-muted">
-                          {BOOK_PAGE_COUNT_HINT}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-                </div>
-                </div>
-              ) : null}
-
-              {step === "albums" ? (
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1">
-                <div className="max-w-2xl space-y-4">
-                  {loadingAlbums ? (
-                    <p className="text-sm text-v2-muted">Loading albums…</p>
-                  ) : projects.length === 0 ? (
-                    <p className="text-sm text-v2-muted">
-                      Create a project in the studio and generate coloring sheets first.
-                    </p>
-                  ) : (
-                    <ul className="v2-panel divide-y divide-gray-100">
-                      {projects.map((project) => {
-                        const checked = selectedProjectIds.includes(project.id);
-                        return (
-                          <li key={project.id}>
-                            <label className="flex cursor-pointer items-center gap-3 px-4 py-3">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 accent-v2-primary"
-                                checked={checked}
-                                onChange={() => {
-                                  setSelectedProjectIds((prev) =>
-                                    checked
-                                      ? prev.filter((id) => id !== project.id)
-                                      : [...prev, project.id],
-                                  );
-                                }}
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-semibold text-v2-ink">
-                                  {project.name}
-                                </span>
-                                <span className="text-xs text-v2-muted">
-                                  {project.photoCount} photos
-                                </span>
-                              </span>
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-                </div>
-              ) : null}
-
-              {step === "layout" ? (
-                <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-                  {skippedWithoutSheet > 0 ? (
-                    <p className="shrink-0 text-sm text-amber-800">
-                      Skipped {skippedWithoutSheet} photo
-                      {skippedWithoutSheet === 1 ? "" : "s"} without a generated coloring sheet.
-                    </p>
-                  ) : null}
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="v2-btn-sm v2-btn-sm-primary"
-                      onClick={() => setFlipOpen(true)}
-                      disabled={displayPages.length === 0}
-                    >
-                      <BookOpen className="h-4 w-4" aria-hidden />
-                      Flip through
-                    </button>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          <div className="mx-auto w-full max-w-5xl px-4 py-4 sm:px-8 sm:py-6">
+            {authLoading ? (
+              <p className="text-sm text-v2-muted">Loading…</p>
+            ) : !user ? (
+              <div className="v2-panel p-6 text-center">
+                <p className="text-sm text-v2-muted">Sign in to order a printed book.</p>
+                <Link href="/sign-in?next=/studio/order" className="v2-btn-primary mt-4">
+                  Sign in
+                </Link>
+              </div>
+            ) : (
+              <>
+                {error ? (
+                  <div
+                    className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+                    role="alert"
+                  >
+                    {error}
                   </div>
-                  {loadingPages ? (
-                    <div className="flex items-center gap-2 text-sm text-v2-muted">
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      Loading pages…
+                ) : null}
+
+                {step === "pages" ? (
+                  <section className="space-y-4" aria-label="Choose pages">
+                    <div>
+                      <h2 className="text-base font-semibold text-v2-ink">
+                        Which albums go in the book?
+                      </h2>
+                      <p className="mt-0.5 text-sm text-v2-muted">
+                        Toggle albums on or off. Only photos with a coloring sheet become pages.
+                      </p>
                     </div>
-                  ) : (
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1">
+
+                    {!loadingAlbums && projects.length === 0 ? (
+                      <div className="v2-panel p-5 text-sm text-v2-muted">
+                        Create a project in the studio and generate coloring sheets first.
+                      </div>
+                    ) : (
+                      <BookAlbumSelect
+                        className="sm:max-w-md"
+                        projects={projects}
+                        sheetCounts={sheetCounts}
+                        selectedIds={selectedProjectIds}
+                        onToggle={toggleProject}
+                        loading={loadingAlbums}
+                      />
+                    )}
+
+                    {loadingPages ? (
+                      <p className="flex items-center gap-2 text-sm text-v2-muted">
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        Loading pages…
+                      </p>
+                    ) : photoPages.length > 0 ? (
                       <BookPageThumbnailGrid
                         binding={binding}
-                        pages={displayPages}
+                        pages={photoPages}
                         onReorder={(next) => {
-                          const photos = next.filter(
-                            (p): p is BookWizardPhotoPage => p.kind === "photo",
+                          setPhotoPages(
+                            next.filter((p): p is BookWizardPhotoPage => p.kind === "photo"),
                           );
-                          syncPagesFromPhotos(photos);
                         }}
-                        onFlipPhoto={(pageId) => {
-                          setPages((prev) =>
+                        onFlipPhoto={(id) =>
+                          setPhotoPages((prev) =>
                             prev.map((p) =>
-                              p.kind === "photo" && p.id === pageId
-                                ? { ...p, rotation: nextRotation(p.rotation) }
-                                : p,
+                              p.id === id ? { ...p, rotation: nextRotation(p.rotation) } : p,
                             ),
-                          );
-                        }}
-                        onRemovePhoto={(pageId) => {
-                          const photos = pages.filter(
-                            (p): p is BookWizardPhotoPage =>
-                              p.kind === "photo" && p.id !== pageId,
-                          );
-                          syncPagesFromPhotos(photos);
+                          )
+                        }
+                        onRemovePhoto={(id) => {
+                          removedIdsRef.current.add(id);
+                          setPhotoPages((prev) => prev.filter((p) => p.id !== id));
                         }}
                       />
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {step === "review" ? (
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1">
-                  <BookOrderReviewPanel
-                    projectTitle={projectTitle}
-                    albumNames={albumNames}
-                    reviewConfirmed={reviewConfirmed}
-                    onReviewConfirmedChange={setReviewConfirmed}
-                    savedDraftId={savedDraftId}
-                    saveMessage={saveMessage}
-                    draftStale={draftStale}
-                  />
-                  <button
-                    type="button"
-                    className="v2-btn-sm v2-btn-sm-primary"
-                    onClick={() => setFlipOpen(true)}
-                    disabled={displayPages.length === 0}
-                  >
-                    <BookOpen className="h-4 w-4" aria-hidden />
-                    Flip through preview
-                  </button>
-                </div>
-              ) : null}
-
-              </div>
-
-              <div className="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 sm:mt-6 sm:pt-6">
-                <button
-                  type="button"
-                  className="v2-btn-outline text-sm"
-                  onClick={() => {
-                    if (step === "review") setStep("layout");
-                    else if (step === "layout") setStep("albums");
-                    else if (step === "albums") setStep("binding");
-                    else window.location.href = "/studio";
-                  }}
-                >
-                  {step === "binding" ? "Back to studio" : "Back"}
-                </button>
-                {step === "binding" ? (
-                  <button
-                    type="button"
-                    className="v2-btn-primary"
-                    onClick={() => setStep("albums")}
-                  >
-                    Next: Albums
-                    <ChevronRight className="h-4 w-4" aria-hidden />
-                  </button>
-                ) : step === "albums" ? (
-                  <button
-                    type="button"
-                    className="v2-btn-primary"
-                    disabled={loadingPages}
-                    onClick={() => void goToLayout()}
-                  >
-                    {loadingPages ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : selectedProjectIds.length > 0 ? (
+                      <div className="v2-panel p-5 text-sm text-v2-muted">
+                        None of these photos has a coloring sheet yet. Go back to the studio and
+                        tap <span className="font-semibold text-v2-ink">Generate</span> first.
+                      </div>
                     ) : null}
-                    Next: Arrange pages
-                    <ChevronRight className="h-4 w-4" aria-hidden />
-                  </button>
-                ) : step === "layout" ? (
-                  <button
-                    type="button"
-                    className="v2-btn-primary"
-                    disabled={plan.photoCount === 0}
-                    onClick={() => {
-                      setReviewConfirmed(false);
-                      setSaveMessage(null);
-                      setStep("review");
-                    }}
-                  >
-                    Next: Review
-                    <ChevronRight className="h-4 w-4" aria-hidden />
-                  </button>
-                ) : (
-                  <div className="flex flex-wrap items-center justify-end gap-2">
+                  </section>
+                ) : null}
+
+                {step === "book" ? (
+                  <section className="space-y-5" aria-label="Choose binding">
+                    <div>
+                      <h2 className="text-base font-semibold text-v2-ink">How should it be bound?</h2>
+                      <p className="mt-0.5 text-sm text-v2-muted">
+                        8.5 × 11″ · black &amp; white interior · portrait. Each printed side counts
+                        as one page.
+                      </p>
+                    </div>
+                    <BookBindingPicker
+                      photoCount={plan.photoCount}
+                      value={bindingId}
+                      onChange={(id) => {
+                        setBindingTouched(true);
+                        setBindingId(id);
+                      }}
+                    />
                     <button
                       type="button"
-                      className="v2-btn-outline text-sm"
-                      disabled={savingDraft || confirmingOrder || plan.photoCount === 0}
-                      onClick={() => void handleSaveDraft()}
+                      className="v2-btn-outline w-full sm:w-auto"
+                      onClick={() => setFlipOpen(true)}
+                      disabled={plan.allPages.length === 0}
                     >
-                      {savingDraft ? (
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      <BookOpen className="h-4 w-4" aria-hidden />
+                      Preview the book
+                    </button>
+                  </section>
+                ) : null}
+
+                {step === "review" ? (
+                  <section className="grid gap-4 lg:grid-cols-[1fr_20rem]" aria-label="Review order">
+                    <div className="v2-panel p-5 sm:p-6">
+                      <h2 className="text-base font-semibold text-v2-ink">Your book</h2>
+                      <dl className="mt-4 divide-y divide-gray-100 text-sm">
+                        <Row label="Title" value={projectTitle} />
+                        <Row label="Binding" value={binding.shortLabel} />
+                        <Row
+                          label="Pages"
+                          value={`${plan.totalPages} (${plan.photoCount} coloring${
+                            plan.blankCount > 0 ? `, ${plan.blankCount} blank` : ""
+                          })`}
+                        />
+                        {selectedProjects.length > 1 ? (
+                          <Row label="Albums" value={selectedProjects.map((p) => p.name).join(", ")} />
+                        ) : null}
+                      </dl>
+                      {paddingNote ? (
+                        <p className="mt-3 text-xs leading-snug text-amber-800">{paddingNote}.</p>
                       ) : null}
-                      Save draft
-                    </button>
-                    <button
-                      type="button"
-                      className="v2-btn-primary text-sm"
-                      disabled={
-                        !reviewConfirmed ||
-                        savingDraft ||
-                        confirmingOrder ||
-                        plan.photoCount === 0
-                      }
-                      onClick={() => setConfirmOpen(true)}
-                    >
-                      Confirm &amp; order
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                      <button
+                        type="button"
+                        className="v2-btn-outline mt-5 w-full sm:w-auto"
+                        onClick={() => setFlipOpen(true)}
+                      >
+                        <BookOpen className="h-4 w-4" aria-hidden />
+                        Preview the book
+                      </button>
+                    </div>
+
+                    <div className="v2-panel p-5 sm:p-6">
+                      <h2 className="text-base font-semibold text-v2-ink">Shipping &amp; price</h2>
+                      <label htmlFor="ship-zip" className="v2-label mt-4">
+                        Ship to ZIP (US)
+                      </label>
+                      <input
+                        id="ship-zip"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="postal-code"
+                        placeholder="e.g. 90210"
+                        maxLength={10}
+                        value={shippingZip}
+                        onChange={(e) => updateShippingZip(e.target.value)}
+                        className="v2-input tabular-nums"
+                      />
+                      <p className="mt-1.5 text-xs text-v2-muted">
+                        Standard mail from the printer. Enter your ZIP for an exact shipping charge.
+                      </p>
+
+                      <dl className="mt-4 space-y-1.5 text-sm">
+                        <Money label="Printing" cents={printCents} loading={quoteLoading} />
+                        <Money label="Shipping" cents={shippingCents} loading={quoteLoading} />
+                        <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
+                          <dt className="font-semibold text-v2-ink">Total</dt>
+                          <dd className="text-lg font-bold tabular-nums text-v2-ink">
+                            {quoteLoading ? "…" : quoteCents != null ? formatCredits(quoteCents) : "—"}
+                          </dd>
+                        </div>
+                      </dl>
+                      {quoteError ? (
+                        <p className="mt-2 text-xs leading-snug text-amber-800">{quoteError}</p>
+                      ) : null}
+                      <p className="mt-3 text-xs text-v2-muted">
+                        You&apos;ll pay from your credits on the next screen.
+                      </p>
+                    </div>
+                  </section>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
+
+        {user ? (
+          <BookOrderPriceBar
+            step={step}
+            totalCents={quoteCents}
+            quoteLoading={quoteLoading}
+            pageCount={plan.totalPages}
+            photoCount={plan.photoCount}
+            backLabel={step === "pages" ? "Studio" : "Back"}
+            nextLabel={nextLabel}
+            nextDisabled={nextDisabled}
+            busy={placing || (step === "pages" && loadingPages)}
+            onBack={goBack}
+            onNext={goNext}
+          />
+        ) : null}
       </main>
 
       {flipOpen ? (
-        <BookFlipThroughModal
-          pages={displayPages}
-          binding={binding}
-          onClose={() => setFlipOpen(false)}
-        />
+        <BookFlipThroughModal pages={plan.allPages} binding={binding} onClose={() => setFlipOpen(false)} />
       ) : null}
 
       <BookOrderConfirmModal
         open={confirmOpen}
-        busy={confirmingOrder || savingDraft}
+        busy={placing}
         projectTitle={projectTitle}
         binding={binding}
         pageCount={plan.totalPages}
         photoCount={plan.photoCount}
         totalCents={quoteCents}
         shippingZip={shippingZip}
-        onCancel={() => !confirmingOrder && setConfirmOpen(false)}
-        onConfirm={() => void handleConfirmOrder()}
+        onCancel={() => !placing && setConfirmOpen(false)}
+        onConfirm={() => void placeOrder()}
       />
     </V2StudioFrame>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2 first:pt-0 last:pb-0">
+      <dt className="shrink-0 text-v2-muted">{label}</dt>
+      <dd className="min-w-0 text-right font-semibold text-v2-ink">{value}</dd>
+    </div>
+  );
+}
+
+function Money({ label, cents, loading }: { label: string; cents: number | null; loading: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between">
+      <dt className="text-v2-muted">{label}</dt>
+      <dd className="font-semibold tabular-nums text-v2-ink">
+        {loading ? "…" : cents != null ? formatCredits(cents) : "—"}
+      </dd>
+    </div>
   );
 }

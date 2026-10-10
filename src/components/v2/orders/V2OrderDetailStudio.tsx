@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { V2Sidebar, V2StudioFrame } from "@/components/v2/V2Chrome";
+import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
 import { BookOrderCheckoutPanel } from "@/components/v2/orders/BookOrderCheckoutPanel";
@@ -78,7 +78,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   }
 
   return (
-    <V2StudioFrame sidebar={<V2Sidebar showProgress={false} />}>
+    <V2StudioFrame>
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
         <div className="mx-auto w-full max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
           <Link

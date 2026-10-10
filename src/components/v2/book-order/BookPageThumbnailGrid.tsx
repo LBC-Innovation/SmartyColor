@@ -5,7 +5,8 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   type DragEndEvent,
   type DragStartEvent,
@@ -20,7 +21,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FlipHorizontal2, GripVertical, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical, RotateCw, Trash2 } from "lucide-react";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import type { BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import { BookPageImageFill } from "@/components/v2/book-order/BookPageImageFill";
@@ -35,18 +36,25 @@ type Props = {
   onRemovePhoto: (pageId: string) => void;
 };
 
+const ICON_BTN =
+  "inline-flex h-9 w-9 items-center justify-center rounded-lg transition disabled:opacity-30 disabled:cursor-not-allowed";
+
 function SortablePhotoTile({
   page,
   index,
+  count,
   binding,
   onFlip,
   onRemove,
+  onMove,
 }: {
   page: BookWizardPhotoPage;
   index: number;
+  count: number;
   binding: BookBindingSpec;
   onFlip: () => void;
   onRemove: () => void;
+  onMove: (delta: -1 | 1) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id,
@@ -61,51 +69,67 @@ function SortablePhotoTile({
         transition,
       }}
       className={cn(
-        "relative flex flex-col rounded-xl border bg-white p-2 shadow-sm",
+        "relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm",
         isDragging && "opacity-40",
         portraitOk ? "border-gray-200" : "border-amber-400 ring-1 ring-amber-200",
       )}
     >
-      <div className="mb-1 flex items-center justify-between gap-1">
+      <div className="relative aspect-[8.5/11] w-full bg-v2-bg-subtle">
+        <BookPageImageFill page={page} binding={binding} />
+        <span className="absolute left-1.5 top-1.5 rounded-md bg-slate-900/70 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white">
+          {index + 1}
+        </span>
         <button
           type="button"
-          className="cursor-grab rounded p-0.5 text-v2-muted hover:bg-v2-bg-subtle active:cursor-grabbing"
+          className="absolute right-1 top-1 inline-flex h-9 w-9 cursor-grab touch-none items-center justify-center rounded-lg bg-white/85 text-v2-muted shadow-sm backdrop-blur active:cursor-grabbing"
           {...attributes}
           {...listeners}
           aria-label={`Drag page ${index + 1}`}
         >
           <GripVertical className="h-4 w-4" aria-hidden />
         </button>
-        <span className="text-[10px] font-bold tabular-nums text-v2-muted">{index + 1}</span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            className="rounded p-0.5 text-v2-link hover:bg-v2-primary-light"
-            onClick={onFlip}
-            title={`Flip page ${index + 1}`}
-            aria-label={`Flip page ${index + 1}`}
-          >
-            <FlipHorizontal2 className="h-4 w-4" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="rounded p-0.5 text-red-600 hover:bg-red-50"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            aria-label={`Remove page ${index + 1} from book`}
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-          </button>
-        </div>
+        {!portraitOk ? (
+          <span className="absolute inset-x-1.5 bottom-1.5 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">
+            Rotate to portrait
+          </span>
+        ) : null}
       </div>
-      <div className="relative aspect-[8.5/11] w-full overflow-hidden rounded-lg bg-v2-bg-subtle">
-        <BookPageImageFill page={page} binding={binding} className="rounded-lg" />
+      <div className="flex items-center justify-between border-t border-gray-100 px-1 py-0.5">
+        <button
+          type="button"
+          className={cn(ICON_BTN, "text-v2-navy hover:bg-v2-bg-subtle")}
+          disabled={index === 0}
+          onClick={() => onMove(-1)}
+          aria-label={`Move page ${index + 1} earlier`}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={cn(ICON_BTN, "text-v2-link hover:bg-v2-primary-light")}
+          onClick={onFlip}
+          aria-label={`Rotate page ${index + 1}`}
+        >
+          <RotateCw className="h-4 w-4" aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={cn(ICON_BTN, "text-red-600 hover:bg-red-50")}
+          onClick={onRemove}
+          aria-label={`Remove page ${index + 1} from book`}
+        >
+          <Trash2 className="h-4 w-4" aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={cn(ICON_BTN, "text-v2-navy hover:bg-v2-bg-subtle")}
+          disabled={index === count - 1}
+          onClick={() => onMove(1)}
+          aria-label={`Move page ${index + 1} later`}
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden />
+        </button>
       </div>
-      {!portraitOk ? (
-        <p className="mt-1 text-center text-[10px] font-semibold text-amber-800">Flip for portrait</p>
-      ) : null}
     </div>
   );
 }
@@ -133,10 +157,19 @@ export function BookPageThumbnailGrid({
   const blankPages = pages.filter((p) => p.kind === "blank");
   const sortableIds = photoPages.map((p) => p.id);
 
+  // Touch waits briefly so the grid still scrolls; mouse starts after a small move.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  function movePhoto(id: string, delta: -1 | 1) {
+    const from = photoPages.findIndex((p) => p.id === id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= photoPages.length) return;
+    onReorder([...arrayMove(photoPages, from, to), ...blankPages]);
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveId(null);
@@ -159,16 +192,18 @@ export function BookPageThumbnailGrid({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {pages.map((page, index) =>
             page.kind === "photo" ? (
               <SortablePhotoTile
                 key={page.id}
                 page={page}
                 index={index}
+                count={photoPages.length}
                 binding={binding}
                 onFlip={() => onFlipPhoto(page.id)}
                 onRemove={() => onRemovePhoto(page.id)}
+                onMove={(delta) => movePhoto(page.id, delta)}
               />
             ) : (
               <BlankTile key={page.id} index={index} />

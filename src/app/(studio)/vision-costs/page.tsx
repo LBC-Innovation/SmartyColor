@@ -1,7 +1,6 @@
-import { V2VisionCostsStudio } from "@/components/v2/V2VisionCostsStudio";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
+/** Vision costs moved under the admin area. */
 export default function V2VisionCostsPage() {
-  return <V2VisionCostsStudio />;
+  redirect("/admin/vision-costs");
 }

@@ -40,6 +40,14 @@ body:has(.v2-shell) {
     letter-spacing: -0.02em;
   }
 
+  /* Logo wordmark: round, heavy, tight — playful but confident */
+  .v2-wordmark {
+    font-family: var(--font-fredoka), ui-rounded, "Nunito", system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
   /* Shared horizontal inset — header logo and left sidebar share one gutter */
   .v2-gutter-x {
     padding-inline: 1.25rem;
@@ -190,8 +198,16 @@ body:has(.v2-shell) {
     padding: 0.375rem 0.75rem;
   }
 
+  /* Studio actions live in the mobile studio view's footer; the zone only renders on desktop. */
   .v2-studio-toolbar-zone--studio {
+    display: none;
     flex: 1;
+  }
+
+  @media (min-width: 1024px) {
+    .v2-studio-toolbar-zone--studio {
+      display: flex;
+    }
   }
 
   @media (min-width: 640px) {
@@ -202,7 +218,8 @@ body:has(.v2-shell) {
   }
 
   .v2-studio-toolbar-zone--library {
-    border-bottom: 1px solid rgb(229 231 235 / 0.95);
+    flex-wrap: nowrap;
+    gap: 0.25rem;
   }
 
   @media (min-width: 1024px) {
@@ -215,14 +232,15 @@ body:has(.v2-shell) {
   .v2-studio-toolbar-btn {
     display: inline-flex;
     min-width: 0;
+    min-height: 2.25rem;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
     border: none;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
     background: transparent;
-    padding: 0.25rem 0.125rem;
+    padding: 0.25rem 0.5rem;
     font-size: 0.8125rem;
     font-weight: 600;
     line-height: 1.25;
@@ -230,6 +248,11 @@ body:has(.v2-shell) {
     transition:
       color 0.15s ease,
       background-color 0.15s ease;
+  }
+
+  .v2-studio-toolbar-btn--icon {
+    width: 2.25rem;
+    padding: 0;
   }
 
   .v2-studio-toolbar-btn:hover:not(:disabled) {
@@ -317,7 +340,8 @@ body:has(.v2-shell) {
   .v2-photo-list-dock-cta {
     pointer-events: auto;
     display: inline-flex;
-    width: 100%;
+    flex: 1 1 0%;
+    min-width: 0;
     align-items: center;
     justify-content: center;
     gap: 0.625rem;
@@ -353,6 +377,58 @@ body:has(.v2-shell) {
     cursor: not-allowed;
     opacity: 0.55;
     box-shadow: none;
+  }
+
+  .v2-photo-list-dock-cta--secondary {
+    flex: 0 0 auto;
+    padding-inline: 1rem;
+    background: var(--color-v2-surface);
+    color: var(--color-v2-link);
+    border: 1px solid rgb(86 79 208 / 0.3);
+    box-shadow: 0 1px 2px rgb(10 16 26 / 0.06);
+  }
+
+  .v2-photo-list-dock-cta--secondary:hover:not(:disabled) {
+    background: var(--color-v2-primary-light);
+    box-shadow: 0 1px 2px rgb(10 16 26 / 0.06);
+  }
+
+  /* Phone studio view footer actions */
+  .v2-studio-action {
+    display: inline-flex;
+    min-height: 3.25rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    border-radius: 0.75rem;
+    background: var(--color-v2-bg-subtle);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--color-v2-navy);
+    transition: background-color 0.15s ease;
+  }
+
+  .v2-studio-action:active:not(:disabled) {
+    background: rgb(229 231 235);
+  }
+
+  .v2-studio-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  .v2-studio-action--primary {
+    background: var(--color-v2-primary);
+    color: white;
+  }
+
+  .v2-studio-action--primary:active:not(:disabled) {
+    background: var(--color-v2-primary-dark);
+  }
+
+  .v2-studio-action--danger {
+    color: rgb(190 18 60);
   }
 
   .v2-photo-list-dock-cta-badge {
@@ -618,4 +694,38 @@ body:has(.v2-shell) {
 .v2-shell :focus-visible {
   outline: 2px solid var(--color-v2-primary);
   outline-offset: 2px;
+}
+
+/* Empty library: the primary upload button gently breathes to invite the first tap. */
+@keyframes v2-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 4px 12px rgb(86 79 208 / 0.25),
+      0 0 0 0 rgb(86 79 208 / 0.45);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow:
+      0 14px 30px rgb(86 79 208 / 0.4),
+      0 0 0 10px rgb(86 79 208 / 0);
+  }
+}
+
+.v2-breathe {
+  animation: v2-breathe 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform, box-shadow;
+}
+
+.v2-breathe:hover,
+.v2-breathe:focus-visible,
+.v2-breathe:disabled {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-breathe {
+    animation: none;
+  }
 }

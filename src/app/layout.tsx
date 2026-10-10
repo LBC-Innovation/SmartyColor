@@ -24,10 +24,10 @@ const luckiest = Luckiest_Guy({
   variable: "--font-luckiest",
 });
 
-const APP_NAME = "SmartyColor";
+const APP_NAME = "ColorfulMoments";
 const APP_DESCRIPTION =
-  "Kids describe something they want to color. We turn it into a printable coloring sheet.";
-const THEME_COLOR = "#fff8ef";
+  "Turn family photos into coloring pages and printed coloring books.";
+const THEME_COLOR = "#564fd0";
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
@@ -42,6 +42,10 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
+    icon: [
+      { url: "/pwa/icon.svg", type: "image/svg+xml" },
+      { url: "/pwa/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
     apple: [{ url: "/pwa/apple-touch-icon.png", sizes: "180x180" }],
   },
 };
@@ -73,13 +77,15 @@ export default function RootLayout({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="pwa-splash-icon"
-            src="/smarty.png"
+            src="/pwa/icon-192.png"
             alt=""
-            width={168}
-            height={168}
+            width={96}
+            height={96}
             decoding="sync"
           />
-          <span className="pwa-splash-title">SmartyColor</span>
+          <span className="pwa-splash-title">
+            <span className="pwa-splash-title-accent">Colorful</span>Moments
+          </span>
         </div>
         {children}
         <PwaSplashDismissScript />

@@ -13,6 +13,7 @@ import type { PrintPrefs } from "@/lib/print/settings";
 import type {
   PhotoColoringCorrectRequest,
   PhotoColoringGenerateRequest,
+  PhotoImageSizeHint,
 } from "@/lib/session/photoTypes";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
@@ -44,7 +45,11 @@ const googleSafety = {
 const imageModel =
   process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image";
 
-async function layoutForPhotoBytes(bytes: Buffer, printPrefs: PrintPrefs) {
+async function layoutForPhotoBytes(
+  bytes: Buffer,
+  printPrefs: PrintPrefs,
+  hint?: PhotoImageSizeHint,
+) {
   try {
     const meta = await sharp(bytes).metadata();
     if (meta.width && meta.height) {
@@ -53,6 +58,8 @@ async function layoutForPhotoBytes(bytes: Buffer, printPrefs: PrintPrefs) {
   } catch {
     /* fall through */
   }
+  // The client measured the original at upload; trust that before guessing.
+  if (hint) return inferPhotoLayout(hint.width, hint.height);
   return inferPhotoLayout(
     printPrefs.orientation === "landscape" ? 1600 : 1200,
     printPrefs.orientation === "landscape" ? 900 : 1600,
@@ -181,6 +188,7 @@ async function generateImageFileFromReferences(
     return await generateGeminiImageViaRest(
       messageContentToRestParts(content),
       layout,
+      operation,
     );
   } catch (restError) {
     if (lastError instanceof Error && isRetryableGeminiError(lastError)) {
@@ -196,8 +204,9 @@ async function drawFromReferences(
   references: ReferenceImage[],
   photoBytes: Buffer,
   printPrefs: PrintPrefs,
+  hint?: PhotoImageSizeHint,
 ): Promise<GeneratedSheet> {
-  const layout = await layoutForPhotoBytes(photoBytes, printPrefs);
+  const layout = await layoutForPhotoBytes(photoBytes, printPrefs, hint);
 
   const content: MessageContent = [];
 
@@ -223,7 +232,7 @@ export function createPhotoGeminiHandlers(): Pick<
   return {
     async photoToColoring(input: PhotoColoringGenerateRequest) {
       const photo = parsePhotoDataUrl(input.photoDataUrl);
-      const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs);
+      const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const prompt = buildPhotoColoringPrompt(input.printPrefs, layout);
 
       return drawFromReferences(
@@ -239,13 +248,14 @@ export function createPhotoGeminiHandlers(): Pick<
         ],
         photo.bytes,
         input.printPrefs,
+        input.image,
       );
     },
 
     async correctPhotoColoring(input: PhotoColoringCorrectRequest) {
       const photo = parsePhotoDataUrl(input.photoDataUrl);
       const sheet = parsePhotoDataUrl(input.sheetDataUrl);
-      const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs);
+      const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const prompt = buildPhotoCorrectionPrompt(
         input.printPrefs,
         input.corrections,
@@ -270,6 +280,7 @@ export function createPhotoGeminiHandlers(): Pick<
         ],
         photo.bytes,
         input.printPrefs,
+        input.image,
       );
     },
   };

@@ -36,7 +36,7 @@ export function V2SheetRevisionStrip({
         "flex shrink-0 flex-col",
         isSidebar
           ? "h-full min-h-0 w-[5.75rem] border-l border-gray-200 bg-v2-bg-subtle sm:w-[6.75rem] lg:w-28"
-          : "gap-2",
+          : "flex-row items-center gap-2",
         className,
       )}
       aria-label="Coloring sheet revisions"
@@ -46,7 +46,7 @@ export function V2SheetRevisionStrip({
           "shrink-0 font-semibold uppercase tracking-wide text-v2-muted",
           isSidebar
             ? "border-b border-gray-200 px-2 py-2 text-center text-[10px] leading-tight"
-            : "text-center text-[10px] text-v2-muted",
+            : "text-[10px] text-v2-muted",
         )}
       >
         Revisions
@@ -71,10 +71,10 @@ export function V2SheetRevisionStrip({
         role="listbox"
         aria-label="Revision thumbnails"
         className={cn(
-          "flex min-h-0 flex-1 gap-2 overflow-y-auto overscroll-y-contain",
+          "flex min-h-0 flex-1 gap-2 overscroll-contain",
           isSidebar
-            ? "flex-col px-2 py-2"
-            : "flex-col py-0.5",
+            ? "flex-col overflow-y-auto px-2 py-2"
+            : "flex-row overflow-x-auto py-0.5",
         )}
       >
         {revisions.map((revision, index) => {
