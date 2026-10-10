@@ -49,7 +49,7 @@ export function SheetStudio({ sessionId }: { sessionId: string }) {
       <div className="mx-auto max-w-lg px-6 py-16 text-center">
         <AppHeader />
         <p className="mt-10 font-display text-2xl">No sheet yet.</p>
-        <KidButton className="mt-6" onClick={() => router.push("/")}>
+        <KidButton className="mt-6" onClick={() => router.push("/legacy")}>
           Start over
         </KidButton>
       </div>
@@ -96,7 +96,7 @@ export function SheetStudio({ sessionId }: { sessionId: string }) {
               Print
             </KidButton>
             <KidButton onClick={downloadPdf}>Download PDF</KidButton>
-            <KidButton variant="secondary" onClick={() => router.push("/")}>
+            <KidButton variant="secondary" onClick={() => router.push("/legacy")}>
               Make another
             </KidButton>
             {pdfError ? (

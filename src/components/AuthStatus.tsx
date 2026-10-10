@@ -40,9 +40,9 @@ export function AuthStatus() {
   if (email) {
     return (
       <div className="flex items-center gap-2">
-        {pathname !== "/library" ? (
+        {pathname !== "/legacy/library" ? (
           <Link
-            href="/library"
+            href="/legacy/library"
             className={`${buttonClass} bg-sky text-ink hover:bg-smarty`}
           >
             My pictures

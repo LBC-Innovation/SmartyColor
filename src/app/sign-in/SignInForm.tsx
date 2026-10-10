@@ -34,7 +34,7 @@ export function SignInForm() {
           password,
         });
         if (error) throw error;
-        router.push("/library");
+        router.push("/legacy/library");
         router.refresh();
       }
     } catch (err) {

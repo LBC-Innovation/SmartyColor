@@ -358,7 +358,7 @@ export function RefineStudio({ sessionId }: RefineStudioProps) {
           We lost that idea. Start a new one?
         </p>
         <div className="mt-6">
-          <KidButton onClick={() => router.push("/")}>Start over</KidButton>
+          <KidButton onClick={() => router.push("/legacy")}>Start over</KidButton>
         </div>
       </div>
     );
