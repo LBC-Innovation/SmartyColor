@@ -15,8 +15,10 @@ export type V2NavItem = {
   href?: string;
 };
 
+export const STUDIO_HOME = "/studio";
+
 export const v2TopNav: V2NavItem[] = [
-  { id: "projects", label: "My Projects", icon: ClipboardList, href: "/" },
+  { id: "projects", label: "My Projects", icon: ClipboardList, href: STUDIO_HOME },
   { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook" },
   { id: "books", label: "Print Books", icon: BookOpen },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
@@ -29,7 +31,7 @@ export const v2TopNav: V2NavItem[] = [
 ];
 
 export const v2BottomNav: V2NavItem[] = [
-  { id: "home", label: "Create", icon: Home, href: "/" },
+  { id: "home", label: "Create", icon: Home, href: STUDIO_HOME },
   { id: "projects", label: "My Projects", icon: ClipboardList },
   {
     id: "vision-costs",
@@ -44,8 +46,8 @@ export const v2BottomNav: V2NavItem[] = [
 
 export function isV2NavItemActive(pathname: string, item: V2NavItem): boolean {
   if (!item.href) return false;
-  if (item.href === "/") {
-    return pathname === "/" || pathname === "";
+  if (item.href === STUDIO_HOME) {
+    return pathname === STUDIO_HOME || pathname.startsWith(`${STUDIO_HOME}/`);
   }
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }

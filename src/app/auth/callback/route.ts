@@ -8,5 +8,5 @@ export async function GET(request: Request) {
   if (code && supabase) {
     await supabase.auth.exchangeCodeForSession(code);
   }
-  return NextResponse.redirect(new URL("/", requestUrl.origin));
+  return NextResponse.redirect(new URL("/studio", requestUrl.origin));
 }
