@@ -34,10 +34,7 @@ async function drawSheetOnPdf(
       ? await pdf.embedPng(bytes)
       : await pdf.embedJpg(bytes);
 
-  const margin = 36;
-  const maxW = width - margin * 2;
-  const maxH = height - margin * 2;
-  const scale = Math.min(maxW / image.width, maxH / image.height);
+  const scale = Math.min(width / image.width, height / image.height);
   const drawW = image.width * scale;
   const drawH = image.height * scale;
   page.drawImage(image, {

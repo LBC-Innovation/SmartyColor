@@ -7,11 +7,12 @@ import {
   Bell,
   BookOpen,
   ChevronDown,
-  Search,
+  Gift,
   Shield,
   User,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { formatCredits } from "@/lib/credits/money";
 import { cn } from "@/lib/cn";
 import { V2ProgressStepper } from "@/components/v2/V2ProgressStepper";
 import { V2ProjectsPanel } from "@/components/v2/V2ProjectsPanel";
@@ -142,6 +143,24 @@ function UserAccountMenu() {
   );
 }
 
+function CreditsChip() {
+  const { user, loading } = useAuth();
+  if (loading || !user) return null;
+
+  const label = formatCredits(user.creditsBalanceCents, { compact: true });
+
+  return (
+    <Link
+      href="/orders"
+      className="inline-flex max-w-[9rem] items-center gap-1.5 rounded-full border border-v2-primary/25 bg-v2-primary-light px-2 py-0.5 text-xs font-semibold text-v2-link transition hover:border-v2-primary/40 sm:px-2.5 sm:py-1"
+      title={`Promo balance ${formatCredits(user.creditsBalanceCents)} — applies toward purchases`}
+    >
+      <Gift className="h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
+      <span className="truncate tabular-nums">{label}</span>
+    </Link>
+  );
+}
+
 export function V2TopBar() {
   const pathname = usePathname();
 
@@ -175,13 +194,7 @@ export function V2TopBar() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            className="hidden rounded-full p-2 text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-ink sm:inline-flex"
-            aria-label="Search (coming soon)"
-          >
-            <Search className="h-5 w-5" />
-          </button>
+          <CreditsChip />
           <button
             type="button"
             className="relative hidden rounded-full p-2 text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-ink sm:inline-flex"

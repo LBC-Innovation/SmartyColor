@@ -26,7 +26,7 @@ function profileToUser(
     role: authUser.role,
     permissions: authUser.permissions,
     planTier: profile.plan_tier,
-    creditsBalance: profile.credits_balance,
+    creditsBalanceCents: profile.credits_balance,
   };
 }
 

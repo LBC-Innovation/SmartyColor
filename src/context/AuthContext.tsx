@@ -34,7 +34,7 @@ function userFromHint(hint: api.SessionHint): User {
     role: "user",
     permissions: [],
     planTier: "free",
-    creditsBalance: 0,
+    creditsBalanceCents: 0,
   };
 }
 

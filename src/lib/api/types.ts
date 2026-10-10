@@ -16,7 +16,8 @@ export interface User {
   role: string;
   permissions: string[];
   planTier: string;
-  creditsBalance: number;
+  /** Promo wallet balance in USD cents. */
+  creditsBalanceCents: number;
 }
 
 export interface AdminUser {
@@ -28,6 +29,8 @@ export interface AdminUser {
   permissions: string[];
   emailConfirmed: boolean;
   createdAt: string;
+  /** Promo wallet balance in USD cents. */
+  creditsBalanceCents: number;
 }
 
 export const USERMANAGE_PERMISSIONS = [
@@ -37,5 +40,7 @@ export const USERMANAGE_PERMISSIONS = [
   "usermanage:listusers",
   "usermanage:deleteusers",
   "usermanage:editpermissions",
+  "usermanage:adjustcredits",
+  "usermanage:manageorders",
   "usermanage:selfmanage",
 ] as const;

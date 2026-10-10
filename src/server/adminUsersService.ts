@@ -31,7 +31,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
 
   const { data: profiles } = await getSupabaseAdmin()
     .from("profiles")
-    .select("id, display_name, avatar_url, status");
+    .select("id, display_name, avatar_url, status, credits_balance");
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, p]));
 
   const list = users.map((u) => {
@@ -51,6 +51,8 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       permissions: (u.app_metadata?.permissions as string[] | undefined) ?? [],
       emailConfirmed: !!u.email_confirmed_at,
       createdAt: u.created_at,
+      creditsBalanceCents:
+        (profile as { credits_balance?: number }).credits_balance ?? 0,
     };
   });
 

@@ -294,6 +294,13 @@ async function ensureProjectsMeta(): Promise<V2ProjectsMeta> {
   return meta;
 }
 
+export async function loadV2ProjectsMeta(): Promise<V2ProjectsMeta> {
+  if (typeof indexedDB === "undefined") {
+    return { activeProjectId: "", projects: [] };
+  }
+  return ensureProjectsMeta();
+}
+
 export async function loadV2StudioBootstrap(): Promise<V2StudioBootstrap | null> {
   if (typeof indexedDB === "undefined") return null;
 

@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Home,
   Lightbulb,
+  Package,
 } from "lucide-react";
 
 export type V2NavItem = {
@@ -20,7 +21,7 @@ export const STUDIO_HOME = "/studio";
 export const v2TopNav: V2NavItem[] = [
   { id: "projects", label: "My Projects", icon: ClipboardList, href: STUDIO_HOME },
   { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook" },
-  { id: "books", label: "Print Books", icon: BookOpen },
+  { id: "orders", label: "My orders", icon: Package, href: "/orders" },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
   {
     id: "vision-costs",
@@ -40,7 +41,7 @@ export const v2BottomNav: V2NavItem[] = [
     href: "/vision-costs",
   },
   { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook" },
-  { id: "books", label: "Print Books", icon: BookOpen },
+  { id: "orders", label: "My orders", icon: Package, href: "/orders" },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
 ];
 
