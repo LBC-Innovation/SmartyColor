@@ -8,7 +8,10 @@ import {
   BookOpen,
   ChevronDown,
   Search,
+  Shield,
+  User,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/cn";
 import { V2ProgressStepper } from "@/components/v2/V2ProgressStepper";
 import { V2ProjectsPanel } from "@/components/v2/V2ProjectsPanel";
@@ -84,23 +87,58 @@ function NavButton({
   );
 }
 
-function UserAvatar() {
-  return (
-    <button
-      type="button"
-      className="flex items-center gap-1.5 rounded-full p-0.5 transition hover:bg-v2-bg-subtle"
-      aria-label="Account menu (coming soon)"
-    >
-      <span className="relative h-9 w-9 overflow-hidden rounded-full bg-gradient-to-br from-v2-primary-light to-v2-primary/30 ring-2 ring-white">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%23c4b5fd'/%3E%3Cstop offset='1' stop-color='%2399f6e4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect fill='url(%23g)' width='80' height='80'/%3E%3Ccircle cx='40' cy='32' r='14' fill='%23fff' fill-opacity='.85'/%3E%3Cellipse cx='40' cy='68' rx='22' ry='16' fill='%23fff' fill-opacity='.85'/%3E%3C/svg%3E"
-          alt=""
-          className="h-full w-full object-cover"
-        />
+function UserAccountMenu() {
+  const { user, loading, signOut } = useAuth();
+  const canManageUsers =
+    user &&
+    (user.role === "admin" || user.permissions.includes("usermanage:listusers"));
+
+  if (loading) {
+    return (
+      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-v2-bg-subtle text-v2-muted">
+        <User className="h-5 w-5" aria-hidden />
       </span>
-      <ChevronDown className="hidden h-4 w-4 text-v2-muted sm:block" aria-hidden />
-    </button>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Link
+        href="/sign-in"
+        className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
+      >
+        <User className="h-4 w-4" aria-hidden />
+        <span className="hidden sm:inline">Sign in</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      {canManageUsers ? (
+        <Link
+          href="/admin/users"
+          className="hidden rounded-full p-2 text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-link sm:inline-flex"
+          title="User management"
+        >
+          <Shield className="h-5 w-5" aria-hidden />
+        </Link>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        className="flex max-w-[10rem] items-center gap-1.5 rounded-full py-1 pl-1 pr-2 transition hover:bg-v2-bg-subtle sm:max-w-[12rem]"
+        title={`Signed in as ${user.email}`}
+      >
+        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-v2-primary-light to-v2-primary/30 text-sm font-bold text-v2-primary ring-2 ring-white">
+          {(user.displayName ?? user.email).charAt(0).toUpperCase()}
+        </span>
+        <span className="hidden truncate text-xs font-semibold text-v2-navy sm:block">
+          {user.displayName ?? user.email.split("@")[0]}
+        </span>
+        <ChevronDown className="hidden h-4 w-4 shrink-0 text-v2-muted sm:block" aria-hidden />
+      </button>
+    </div>
   );
 }
 
@@ -110,7 +148,7 @@ export function V2TopBar() {
   return (
     <header className="shrink-0 border-b border-gray-200 bg-white">
       <div className="v2-gutter-x flex w-full items-center justify-between gap-4 py-3.5">
-        <Link href="/" className="min-w-0 rounded-lg outline-offset-2">
+        <Link href="/studio" className="min-w-0 rounded-lg outline-offset-2">
           <BrandBlock />
         </Link>
 
@@ -152,7 +190,7 @@ export function V2TopBar() {
             <Bell className="h-5 w-5" />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-v2-primary ring-2 ring-white" />
           </button>
-          <UserAvatar />
+          <UserAccountMenu />
         </div>
       </div>
     </header>

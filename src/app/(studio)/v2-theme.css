@@ -384,6 +384,118 @@ body:has(.v2-shell) {
   .v2-photo-list-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(48 58 77 / 0.45);
   }
+
+  .v2-label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-v2-navy);
+  }
+
+  .v2-input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(229 231 235);
+    background-color: var(--color-v2-surface);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9375rem;
+    color: var(--color-v2-ink);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .v2-input::placeholder {
+    color: rgb(92 100 120 / 0.65);
+  }
+
+  .v2-input:focus {
+    border-color: rgb(86 79 208 / 0.55);
+    box-shadow: 0 0 0 3px rgb(86 79 208 / 0.12);
+    outline: none;
+  }
+
+  .v2-input:disabled {
+    cursor: not-allowed;
+    background-color: var(--color-v2-bg-subtle);
+    opacity: 0.85;
+  }
+
+  .v2-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    padding: 0.2rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .v2-badge--success {
+    background-color: var(--color-v2-success-bg);
+    color: var(--color-v2-success-text);
+    border: 1px solid var(--color-v2-success-border);
+  }
+
+  .v2-badge--warn {
+    background-color: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  .v2-badge--danger {
+    background-color: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .v2-btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .v2-btn-sm-primary {
+    background-color: var(--color-v2-primary-light);
+    color: var(--color-v2-link);
+    border: 1px solid rgb(86 79 208 / 0.25);
+  }
+
+  .v2-btn-sm-primary:hover:not(:disabled) {
+    background-color: rgb(86 79 208 / 0.12);
+    border-color: rgb(86 79 208 / 0.4);
+  }
+
+  .v2-btn-sm-danger {
+    background-color: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .v2-section-title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-v2-muted);
+  }
+
+  .v2-auth-card {
+    border: 1px solid rgb(229 231 235 / 0.95);
+    border-radius: 1rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f7fc 100%);
+    box-shadow:
+      0 1px 2px rgb(10 16 26 / 0.04),
+      0 12px 40px rgb(86 79 208 / 0.08);
+  }
 }
 
 @keyframes v2-dropzone-ring {
