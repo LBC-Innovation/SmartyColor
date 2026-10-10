@@ -291,13 +291,111 @@ export async function confirmDraftBookOrder(input: {
     return { data: null, error: { message: error.message } };
   }
 
+  const register = await registerBookOrderJob(input.userId, input.orderId);
+  if (register.error) return { data: null, error: register.error };
+
   await appendOrderEvent(input.orderId, {
     kind: "checkout_confirmed",
     title: "Ready for checkout",
-    detail: "You confirmed this book — complete payment when checkout is available.",
+    detail: "Your book is registered — add credits and place the order when you're ready.",
   });
 
   return { data: { orderId: input.orderId, status: "awaiting_payment" }, error: null };
+}
+
+/** Registers fulfillment metadata (Lulu external id) without charging the wallet. */
+export async function registerBookOrderJob(
+  userId: string,
+  orderId: string,
+): Promise<ApiResult<{ orderId: string }>> {
+  const { data: order, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("id, user_id, status, lulu_external_id, total_cents, page_count")
+    .eq("id", orderId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) return { data: null, error: { message: error.message } };
+  if (!order) {
+    return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  }
+  if (order.status !== "awaiting_payment" && order.status !== "draft") {
+    return {
+      data: null,
+      error: { message: "Order cannot be registered in its current state", code: "INVALID_STATE" },
+    };
+  }
+
+  const externalId = (order.lulu_external_id as string | null) ?? orderId;
+
+  const { error: updateError } = await getSupabaseAdmin()
+    .from("book_orders")
+    .update({
+      lulu_external_id: externalId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId)
+    .eq("user_id", userId);
+
+  if (updateError) return { data: null, error: { message: updateError.message } };
+
+  if (!order.lulu_external_id) {
+    await appendOrderEvent(orderId, {
+      kind: "job_registered",
+      title: "Print job registered",
+      detail: `${order.page_count} pages queued for fulfillment once you place the order.`,
+      metadata: { luluExternalId: externalId },
+    });
+  }
+
+  return { data: { orderId }, error: null };
+}
+
+export async function placeBookOrderWithCredits(input: {
+  userId: string;
+  orderId: string;
+}): Promise<
+  ApiResult<{
+    orderId: string;
+    status: BookOrderStatus;
+    creditsBalanceCents: number;
+    creditsAppliedCents: number;
+  }>
+> {
+  const { data, error } = await getSupabaseAdmin().rpc("place_book_order_with_credits", {
+    p_user_id: input.userId,
+    p_order_id: input.orderId,
+  });
+
+  if (error) {
+    const message = error.message.includes("insufficient credits")
+      ? "You do not have enough credits to place this order"
+      : error.message.includes("order not found")
+        ? "Order not found"
+        : error.message.includes("not awaiting payment")
+          ? "This order is not ready to place"
+          : error.message;
+    const code = error.message.includes("insufficient credits")
+      ? "INSUFFICIENT_CREDITS"
+      : error.message.includes("order not found")
+        ? "NOT_FOUND"
+        : error.message.includes("not awaiting payment")
+          ? "INVALID_STATE"
+          : undefined;
+    return { data: null, error: { message, ...(code ? { code } : {}) } };
+  }
+
+  const payload = data as {
+    orderId: string;
+    status: BookOrderStatus;
+    creditsBalanceCents: number;
+    creditsAppliedCents: number;
+  };
+
+  await recordOrderPlacedEvent(input.orderId);
+
+  return { data: payload, error: null };
 }
 
 const TERMINAL_STATUSES: BookOrderStatus[] = [

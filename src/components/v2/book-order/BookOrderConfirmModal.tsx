@@ -63,7 +63,8 @@ export function BookOrderConfirmModal({
               Confirm your book order?
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">
-              We&apos;ll save your book and mark it ready for checkout. You can still view it in
+              We&apos;ll save your book, register the print job, and take you to checkout. You can
+              still view it in
               My Orders before payment is complete.
             </p>
           </div>

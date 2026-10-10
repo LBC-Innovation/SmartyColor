@@ -7,6 +7,7 @@ import { ArrowLeft, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { V2Sidebar, V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
+import { BookOrderCheckoutPanel } from "@/components/v2/orders/BookOrderCheckoutPanel";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
@@ -25,9 +26,10 @@ function formatAddress(order: BookOrderDetail): string {
 }
 
 export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const searchParams = useSearchParams();
   const justConfirmed = searchParams.get("confirmed") === "1";
+  const creditsReturn = searchParams.get("credits");
   const [order, setOrder] = useState<BookOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,12 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   useEffect(() => {
     void load(true);
   }, [load, user?.id]);
+
+  useEffect(() => {
+    if (creditsReturn === "success") {
+      void refreshUser();
+    }
+  }, [creditsReturn, refreshUser]);
 
   async function confirmDraftFromDetail() {
     setConfirmingCheckout(true);
@@ -129,7 +137,21 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
 
               {justConfirmed && order.status === "awaiting_payment" ? (
                 <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
-                  Your book is saved and confirmed. Complete payment here when checkout is available.
+                  Your book is saved and your print job is registered. Add credits below if needed,
+                  then place your order.
+                </div>
+              ) : null}
+
+              {creditsReturn === "success" && order.status === "awaiting_payment" ? (
+                <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
+                  Credits added to your wallet. You can place your order when your balance covers
+                  the total.
+                </div>
+              ) : null}
+
+              {creditsReturn === "canceled" && order.status === "awaiting_payment" ? (
+                <div className="v2-panel mb-4 border-gray-200 bg-v2-bg-subtle p-4 text-sm text-v2-muted">
+                  Credit purchase canceled — your wallet was not charged.
                 </div>
               ) : null}
 
@@ -166,28 +188,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
               ) : null}
 
               {order.status === "awaiting_payment" ? (
-                <section className="v2-panel mb-4 border-v2-primary/25 p-4 sm:p-5">
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
-                    Checkout
-                  </h2>
-                  <p className="mt-2 text-sm text-v2-muted">
-                    Payment integration is coming soon. Your order is confirmed and queued for
-                    checkout
-                    {order.totalCents != null ? (
-                      <>
-                        {" "}
-                        at{" "}
-                        <span className="font-semibold tabular-nums text-v2-ink">
-                          {formatCredits(order.totalCents)}
-                        </span>
-                      </>
-                    ) : null}
-                    .
-                  </p>
-                  <button type="button" className="v2-btn-primary mt-4 text-sm" disabled>
-                    Pay now (coming soon)
-                  </button>
-                </section>
+                <BookOrderCheckoutPanel order={order} onOrderUpdated={() => load(false)} />
               ) : null}
 
               {order.deliveryExpectation ? (

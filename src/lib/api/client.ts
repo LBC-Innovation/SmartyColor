@@ -284,6 +284,29 @@ export function confirmDraftBookOrder(
   });
 }
 
+export function placeBookOrder(orderId: string): Promise<
+  ApiResult<{
+    orderId: string;
+    status: string;
+    creditsBalanceCents: number;
+    creditsAppliedCents: number;
+  }>
+> {
+  return request(`/orders/${orderId}/place`, {
+    method: "POST",
+  });
+}
+
+export function createCreditTopUpCheckout(input: {
+  amountCents: number;
+  returnPath: string;
+}): Promise<ApiResult<{ checkoutUrl: string }>> {
+  return request("/credits/checkout", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
   return request<CreditLedgerEntry[]>(`/admin/users/${userId}/credits`);
 }
