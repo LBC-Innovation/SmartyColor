@@ -16,36 +16,36 @@ export type V2NavItem = {
 };
 
 export const v2TopNav: V2NavItem[] = [
-  { id: "projects", label: "My Projects", icon: ClipboardList, href: "/v2" },
-  { id: "storybook", label: "Story book", icon: BookOpen, href: "/v2/storybook" },
+  { id: "projects", label: "My Projects", icon: ClipboardList, href: "/" },
+  { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook" },
   { id: "books", label: "Print Books", icon: BookOpen },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
   {
     id: "vision-costs",
     label: "Vision costs",
     icon: CircleDollarSign,
-    href: "/v2/vision-costs",
+    href: "/vision-costs",
   },
 ];
 
 export const v2BottomNav: V2NavItem[] = [
-  { id: "home", label: "Create", icon: Home, href: "/v2" },
+  { id: "home", label: "Create", icon: Home, href: "/" },
   { id: "projects", label: "My Projects", icon: ClipboardList },
   {
     id: "vision-costs",
     label: "Vision costs",
     icon: CircleDollarSign,
-    href: "/v2/vision-costs",
+    href: "/vision-costs",
   },
-  { id: "storybook", label: "Story book", icon: BookOpen, href: "/v2/storybook" },
+  { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook" },
   { id: "books", label: "Print Books", icon: BookOpen },
   { id: "inspiration", label: "Inspiration", icon: Lightbulb },
 ];
 
 export function isV2NavItemActive(pathname: string, item: V2NavItem): boolean {
   if (!item.href) return false;
-  if (item.href === "/v2") {
-    return pathname === "/v2" || pathname === "/v2/";
+  if (item.href === "/") {
+    return pathname === "/" || pathname === "";
   }
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }

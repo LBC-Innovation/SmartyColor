@@ -89,7 +89,7 @@ export default async function LibraryPage() {
           ))}
         </ul>
       )}
-      <Link href="/" className="mt-8 inline-block">
+      <Link href="/legacy" className="mt-8 inline-block">
         <KidButton>Make another</KidButton>
       </Link>
     </div>

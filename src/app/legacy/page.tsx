@@ -11,7 +11,7 @@ export default function HomePage() {
   useEffect(() => {
     const session = createBlankSession();
     saveLocalSession(session);
-    router.replace(`/create/${session.id}`);
+    router.replace(`/legacy/create/${session.id}`);
   }, [router]);
 
   return (

@@ -110,7 +110,7 @@ export function V2TopBar() {
   return (
     <header className="shrink-0 border-b border-gray-200 bg-white">
       <div className="v2-gutter-x flex w-full items-center justify-between gap-4 py-3.5">
-        <Link href="/v2" className="min-w-0 rounded-lg outline-offset-2">
+        <Link href="/" className="min-w-0 rounded-lg outline-offset-2">
           <BrandBlock />
         </Link>
 

@@ -16,12 +16,12 @@ export function AppHeader({
   onPrintPrefsChange,
 }: AppHeaderProps) {
   const pathname = usePathname();
-  const showNewIdea = pathname !== "/";
-  const onPhotoFlow = pathname.startsWith("/photo");
+  const showNewIdea = pathname !== "/legacy";
+  const onPhotoFlow = pathname.startsWith("/legacy/photo");
 
   return (
     <header className="flex flex-wrap items-center gap-3">
-      <Link href="/" className="flex shrink-0 items-center gap-2.5 rounded-2xl">
+      <Link href="/legacy" className="flex shrink-0 items-center gap-2.5 rounded-2xl">
         <span
           className="grid size-10 place-items-center rounded-2xl border-[3px] border-ink bg-crayon-coral font-display text-lg font-bold text-white"
           aria-hidden
@@ -36,7 +36,7 @@ export function AppHeader({
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {!onPhotoFlow && !showNewIdea ? (
           <Link
-            href="/photo"
+            href="/legacy/photo"
             className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-lilac px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
           >
             From a photo
@@ -44,7 +44,7 @@ export function AppHeader({
         ) : null}
         {showNewIdea || onPhotoFlow ? (
           <Link
-            href="/"
+            href="/legacy"
             className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-paper px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
           >
             New idea
@@ -52,7 +52,7 @@ export function AppHeader({
         ) : null}
         {showNewIdea && !onPhotoFlow ? (
           <Link
-            href="/photo"
+            href="/legacy/photo"
             className="inline-flex min-h-11 items-center rounded-full border-2 border-ink bg-lilac px-4 font-display text-sm font-semibold text-ink hover:bg-sky"
           >
             From a photo

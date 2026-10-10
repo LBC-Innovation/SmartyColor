@@ -40,7 +40,7 @@ export function MakeStudio({ sessionId }: { sessionId: string }) {
           status: "done",
           sheet: payload.sheet,
         });
-        router.replace(`/create/${sessionId}/sheet`);
+        router.replace(`/legacy/create/${sessionId}/sheet`);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "The crayons jammed.");
@@ -58,7 +58,7 @@ export function MakeStudio({ sessionId }: { sessionId: string }) {
       <div className="mx-auto max-w-lg px-6 py-16 text-center">
         <AppHeader />
         <p className="mt-10 font-display text-2xl">We lost that idea.</p>
-        <KidButton className="mt-6" onClick={() => router.push("/")}>
+        <KidButton className="mt-6" onClick={() => router.push("/legacy")}>
           Start over
         </KidButton>
       </div>
@@ -91,7 +91,7 @@ export function MakeStudio({ sessionId }: { sessionId: string }) {
         {error ? (
           <div className="flex flex-col items-center gap-4">
             <p className="font-display text-lg text-crayon-coral">{error}</p>
-            <KidButton onClick={() => router.push(`/create/${sessionId}`)}>
+            <KidButton onClick={() => router.push(`/legacy/create/${sessionId}`)}>
               Back to the plan
             </KidButton>
           </div>

@@ -567,7 +567,7 @@ export function V2StoryBookApp() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <Link
-                href="/v2"
+                href="/"
                 className="text-xs font-medium text-v2-link hover:underline"
               >
                 ← Coloring studio
