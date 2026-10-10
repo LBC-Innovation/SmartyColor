@@ -691,7 +691,7 @@ export function ColorfulMomentsApp() {
       window.open(storeUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    toast.info("Book checkout is coming soon.");
+    window.location.href = "/orders";
   }
 
   const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];

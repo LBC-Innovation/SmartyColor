@@ -1,4 +1,5 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
+import type { BookOrderDetail, BookOrderSummary } from "@/lib/orders/types";
 
 const TOKEN_KEY = "cm_access_token";
 const SESSION_HINT_KEY = "cm_session_hint";
@@ -209,4 +210,13 @@ export function updateUserPermissions(
     method: "PUT",
     body: JSON.stringify({ permissions }),
   });
+}
+
+export function listOrders(): Promise<ApiResult<BookOrderSummary[]>> {
+  return request<BookOrderSummary[]>("/orders");
+}
+
+export function fetchOrder(id: string, sync = true): Promise<ApiResult<BookOrderDetail>> {
+  const qs = sync ? "" : "?sync=0";
+  return request<BookOrderDetail>(`/orders/${id}${qs}`);
 }
