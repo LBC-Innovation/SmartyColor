@@ -13,10 +13,9 @@ import {
   MessageCircle,
   Sparkles,
 } from "lucide-react";
-import { V2Sidebar, V2StudioFrame } from "@/components/v2/V2Chrome";
+import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2PhotoLibraryList } from "@/components/v2/V2PhotoLibraryList";
-import { V2ProjectNameField } from "@/components/v2/V2ProjectNameField";
-import { V2ProjectsPanel } from "@/components/v2/V2ProjectsPanel";
+import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useV2Toast } from "@/components/v2/V2Toast";
@@ -39,7 +38,7 @@ import {
   type StoryChatMessage,
   type StoryPrintArtMode,
 } from "@/lib/v2/storybookTypes";
-import type { V2PhotoEntry } from "@/lib/v2/studioTypes";
+import { photoImageMeta, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 import { V2StoryPhotoChat } from "@/components/v2/storybook/V2StoryPhotoChat";
 import { V2StoryPhotoCropModal } from "@/components/v2/storybook/V2StoryPhotoCropModal";
 import { V2StoryModeReader } from "@/components/v2/storybook/V2StoryModeReader";
@@ -183,6 +182,7 @@ export function V2StoryBookApp() {
           id: newId(),
           previewUrl,
           photoDataUrl: prepared.photoDataUrl,
+          image: photoImageMeta(layout),
           printPrefs,
           capturedAt,
           fileName: file.name,
@@ -440,7 +440,7 @@ export function V2StoryBookApp() {
 
   if (!hydrated) {
     return (
-      <V2StudioFrame sidebar={<V2Sidebar showProgress={false} />}>
+      <V2StudioFrame>
         <div className="flex flex-1 items-center justify-center pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           <p className="flex items-center gap-2 text-sm text-v2-muted">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -452,7 +452,7 @@ export function V2StoryBookApp() {
   }
 
   return (
-    <V2StudioFrame sidebar={<V2Sidebar showProgress={false} />}>
+    <V2StudioFrame>
       <input
         ref={fileRef}
         type="file"
@@ -467,14 +467,15 @@ export function V2StoryBookApp() {
 
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <div className="v2-photo-list-column flex max-h-[min(52dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-gray-200 lg:bg-white xl:w-80">
-            <div className="v2-panel shrink-0 p-3 sm:p-4 lg:hidden">
-              <V2ProjectsPanel compact />
+          <div className="v2-photo-list-column flex max-h-[min(52dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:gap-0 lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-gray-200 lg:bg-white xl:w-80">
+            <div
+              className="v2-studio-toolbar v2-studio-toolbar-zone v2-studio-toolbar-zone--library shrink-0 rounded-xl border lg:rounded-none lg:border-x-0 lg:border-t-0"
+              role="toolbar"
+              aria-label="Photo library actions"
+            >
+              <V2ProjectSwitcher />
             </div>
             <section className="v2-panel flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none lg:ring-0">
-              <div className="mb-2 shrink-0 lg:mb-3">
-                <V2ProjectNameField variant="workspace" />
-              </div>
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-v2-primary">
                 <BookOpen className="h-3.5 w-3.5" />
                 Story book
@@ -518,7 +519,7 @@ export function V2StoryBookApp() {
 
               {libraryPhotoCount === 0 ? (
                 <V2UploadDropzone
-                  className="mb-4"
+                  className="mb-4 min-h-[16rem] lg:-mx-5 lg:mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0"
                   onFiles={(files) => void ingestFiles(files)}
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
@@ -536,7 +537,7 @@ export function V2StoryBookApp() {
                     <button
                       type="button"
                       onClick={() => fileRef.current?.click()}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white"
+                      className="v2-breathe inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-v2-primary-dark"
                     >
                       Select Photos
                     </button>

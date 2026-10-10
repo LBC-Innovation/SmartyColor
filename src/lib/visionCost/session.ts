@@ -5,12 +5,17 @@ import {
 } from "@/lib/visionCost/rates";
 import { appendVisionCostLogLine } from "@/lib/visionCost/log";
 import { VISION_COST_LOG_FILE } from "@/lib/visionCost/paths";
+import { classifyVisionError } from "@/lib/visionCost/classifyError";
+import { sanitizeSecretText } from "@/lib/security/publicError";
 import type {
   ModelRateSnapshot,
   VisionCostOperation,
   VisionCostSessionSnapshot,
+  VisionErrorEvent,
   VisionUsageEvent,
 } from "@/lib/visionCost/types";
+
+const MAX_ERRORS_KEPT = 200;
 
 type SessionState = {
   sessionId: string;
@@ -20,6 +25,7 @@ type SessionState = {
   ratesSource: string | null;
   modelRates: Map<string, ModelRateSnapshot>;
   events: VisionUsageEvent[];
+  errors: VisionErrorEvent[];
   totals: VisionCostSessionSnapshot["totals"];
 };
 
@@ -38,6 +44,7 @@ function getState(): SessionState {
       ratesSource: null,
       modelRates: new Map(),
       events: [],
+      errors: [],
       totals: {
         inputTokens: 0,
         outputTokens: 0,
@@ -45,10 +52,15 @@ function getState(): SessionState {
         outputCostUsd: 0,
         totalCostUsd: 0,
         callCount: 0,
+        errorCount: 0,
       },
     };
   }
-  return g[globalKey];
+  // State survives dev HMR; backfill fields added after the object was created.
+  const state = g[globalKey];
+  state.errors ??= [];
+  state.totals.errorCount ??= 0;
+  return state;
 }
 
 function configuredModelIds(): string[] {
@@ -174,6 +186,42 @@ export async function recordVisionUsage(input: {
   );
 }
 
+/**
+ * Record a failed vision call so billing / quota / auth problems show up on
+ * the admin Vision costs page instead of only in the browser toast.
+ */
+export async function recordVisionError(input: {
+  operation: VisionCostOperation;
+  modelId: string;
+  error: unknown;
+  httpStatus?: number | null;
+}) {
+  const state = getState();
+  const classified = classifyVisionError(input.error, input.httpStatus ?? null);
+  const event: VisionErrorEvent = {
+    id: crypto.randomUUID(),
+    at: new Date().toISOString(),
+    operation: input.operation,
+    modelId: input.modelId,
+    kind: classified.kind,
+    httpStatus: classified.httpStatus,
+    message: sanitizeSecretText(classified.message).slice(0, 600),
+  };
+
+  state.errors.push(event);
+  if (state.errors.length > MAX_ERRORS_KEPT) {
+    state.errors.splice(0, state.errors.length - MAX_ERRORS_KEPT);
+  }
+  state.totals.errorCount += 1;
+
+  await appendVisionCostLogLine(
+    `${event.at} | ERROR | ${event.operation} | model=${event.modelId}` +
+      ` | kind=${event.kind}` +
+      (event.httpStatus != null ? ` status=${event.httpStatus}` : "") +
+      ` | ${event.message.replace(/\s+/g, " ")}`,
+  );
+}
+
 export function getVisionCostSessionSnapshot(): VisionCostSessionSnapshot {
   const state = getState();
   return {
@@ -183,6 +231,7 @@ export function getVisionCostSessionSnapshot(): VisionCostSessionSnapshot {
     ratesSource: state.ratesSource,
     modelRates: [...state.modelRates.values()],
     events: [...state.events],
+    errors: [...state.errors],
     totals: { ...state.totals },
     logFilePath: VISION_COST_LOG_FILE,
   };

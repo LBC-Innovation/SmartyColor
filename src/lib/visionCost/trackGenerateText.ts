@@ -2,6 +2,7 @@ import { generateText, type LanguageModelUsage } from "ai";
 import type { LanguageModel } from "ai";
 import {
   modelIdFromLanguageModel,
+  recordVisionError,
   recordVisionUsage,
 } from "@/lib/visionCost/session";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
@@ -19,12 +20,24 @@ export async function trackVisionGenerateText(
   operation: VisionCostOperation,
   params: GenerateTextParams,
 ) {
-  const result = await generateText(params);
+  const modelId = modelIdFromLanguageModel(params.model as LanguageModel);
+
+  let result: Awaited<ReturnType<typeof generateText>>;
+  try {
+    result = await generateText(params);
+  } catch (error) {
+    try {
+      await recordVisionError({ operation, modelId, error });
+    } catch {
+      /* error logging must never mask the real failure */
+    }
+    throw error;
+  }
+
   const hasImageOutput = result.files.some((file) =>
     file.mediaType.startsWith("image/"),
   );
   const { inputTokens, outputTokens } = usageNumbers(result.usage);
-  const modelId = modelIdFromLanguageModel(params.model as LanguageModel);
 
   try {
     await recordVisionUsage({

@@ -1,4 +1,6 @@
 import type { PhotoLayout } from "@/lib/photo/orientation";
+import { recordVisionError } from "@/lib/visionCost/session";
+import type { VisionCostOperation } from "@/lib/visionCost/types";
 
 type RestPart =
   | { text: string }
@@ -65,6 +67,7 @@ function parseImageFromResponse(payload: unknown): { base64: string; mimeType: s
 export async function generateGeminiImageViaRest(
   parts: RestPart[],
   layout: PhotoLayout,
+  operation: VisionCostOperation = "photoToColoring",
 ): Promise<{ base64: string; mediaType: string }> {
   const attempts: RestAttempt[] = [
     { imageSize: "1K" },
@@ -93,6 +96,7 @@ export async function generateGeminiImageViaRest(
   ];
 
   let lastError: unknown;
+  let lastStatus: number | null = null;
 
   for (let index = 0; index < attempts.length; index++) {
     const attempt = attempts[index];
@@ -136,6 +140,7 @@ export async function generateGeminiImageViaRest(
       }
 
       if (!response.ok) {
+        lastStatus = response.status;
         const message =
           typeof payload === "object" &&
           payload &&
@@ -160,7 +165,19 @@ export async function generateGeminiImageViaRest(
     }
   }
 
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Could not generate a coloring sheet. Please try again.");
+  const finalError =
+    lastError instanceof Error
+      ? lastError
+      : new Error("Could not generate a coloring sheet. Please try again.");
+  try {
+    await recordVisionError({
+      operation,
+      modelId: modelId(),
+      error: finalError,
+      httpStatus: lastStatus,
+    });
+  } catch {
+    /* error logging must never mask the real failure */
+  }
+  throw finalError;
 }

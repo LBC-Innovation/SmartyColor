@@ -9,6 +9,7 @@ import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import {
   PHOTO_MAX_CORRECTIONS,
   PHOTO_MAX_CORRECTION_CHARS,
+  type PhotoImageSizeHint,
 } from "@/lib/session/photoTypes";
 
 export const maxDuration = 120;
@@ -18,6 +19,7 @@ type Body =
       mode: "generate";
       photoDataUrl: string;
       printPrefs?: PrintPrefs;
+      image?: PhotoImageSizeHint;
     }
   | {
       mode: "correct";
@@ -25,6 +27,7 @@ type Body =
       sheetDataUrl: string;
       corrections: string[];
       printPrefs?: PrintPrefs;
+      image?: PhotoImageSizeHint;
     };
 
 function mergePrintPrefs(raw?: PrintPrefs): PrintPrefs {
@@ -32,10 +35,27 @@ function mergePrintPrefs(raw?: PrintPrefs): PrintPrefs {
   return { ...defaultPrintPrefs, ...raw };
 }
 
+function imageSizeHint(raw: unknown): PhotoImageSizeHint | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const { width, height } = raw as { width?: unknown; height?: unknown };
+  if (
+    typeof width === "number" &&
+    typeof height === "number" &&
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+  ) {
+    return { width: Math.round(width), height: Math.round(height) };
+  }
+  return undefined;
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Body;
     const printPrefs = mergePrintPrefs(body.printPrefs);
+    const image = imageSizeHint(body.image);
     const ai = createColoringAI();
 
     if (body.mode === "generate") {
@@ -50,6 +70,7 @@ export async function POST(request: Request) {
       const sheet = await ai.photoToColoring({
         photoDataUrl: photo.dataUrl,
         printPrefs,
+        image,
       });
       return Response.json({ sheet });
     }
@@ -103,6 +124,7 @@ export async function POST(request: Request) {
         sheetDataUrl: currentSheet.dataUrl,
         corrections,
         printPrefs,
+        image,
       });
       return Response.json({ sheet });
     }

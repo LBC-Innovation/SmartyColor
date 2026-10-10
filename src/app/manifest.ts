@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 
-const APP_NAME = "SmartyColor";
-const THEME_COLOR = "#fff8ef";
+const APP_NAME = "ColorfulMoments";
+const THEME_COLOR = "#564fd0";
+const BACKGROUND_COLOR = "#fbfbfc";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -9,14 +10,15 @@ export default function manifest(): MetadataRoute.Manifest {
     name: APP_NAME,
     short_name: APP_NAME,
     description:
-      "Kids describe something they want to color. We turn it into a printable coloring sheet.",
-    start_url: "/",
+      "Turn family photos into coloring pages and printed coloring books.",
+    start_url: "/studio",
     scope: "/",
     display: "standalone",
     lang: "en",
     theme_color: THEME_COLOR,
-    background_color: THEME_COLOR,
+    background_color: BACKGROUND_COLOR,
     icons: [
+      { src: "/pwa/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
       {
         src: "/pwa/icon-192.png",
         sizes: "192x192",

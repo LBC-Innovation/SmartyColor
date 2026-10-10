@@ -3,42 +3,17 @@
 import type { ComponentType, ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Bell,
-  BookOpen,
-  ChevronDown,
-  Gift,
-  Shield,
-  User,
-} from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
-import { formatCredits } from "@/lib/credits/money";
 import { cn } from "@/lib/cn";
-import { V2ProgressStepper } from "@/components/v2/V2ProgressStepper";
-import { V2ProjectsPanel } from "@/components/v2/V2ProjectsPanel";
+import { V2UserMenu } from "@/components/v2/auth/V2UserMenu";
+import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
+import { CircleHelp } from "lucide-react";
+import { V2BrandLogo } from "@/components/v2/ui/V2BrandLogo";
 import {
   isV2NavItemActive,
+  STUDIO_HOME,
   v2BottomNav,
   v2TopNav,
 } from "@/components/v2/nav-config";
-
-function BrandBlock({ compact }: { compact?: boolean }) {
-  return (
-    <div className={cn("flex items-start gap-2.5", compact && "min-w-0 flex-1")}>
-      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-v2-primary-light text-v2-primary">
-        <BookOpen className="h-5 w-5" aria-hidden strokeWidth={2.25} />
-      </span>
-      <div className="min-w-0">
-        <p className="v2-brand-title truncate text-lg text-v2-ink sm:text-xl">
-          ColorfulMoments
-        </p>
-        <p className="text-xs leading-snug text-v2-muted sm:text-sm">
-          Turn your family photos into coloring memories
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function NavButton({
   label,
@@ -88,76 +63,18 @@ function NavButton({
   );
 }
 
-function UserAccountMenu() {
-  const { user, loading, signOut } = useAuth();
-  const canManageUsers =
-    user &&
-    (user.role === "admin" || user.permissions.includes("usermanage:listusers"));
-
-  if (loading) {
-    return (
-      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-v2-bg-subtle text-v2-muted">
-        <User className="h-5 w-5" aria-hidden />
-      </span>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Link
-        href="/sign-in"
-        className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
-      >
-        <User className="h-4 w-4" aria-hidden />
-        <span className="hidden sm:inline">Sign in</span>
-      </Link>
-    );
-  }
-
+function HelpButton() {
+  const { open } = useV2WelcomeGuide();
   return (
-    <div className="flex items-center gap-1">
-      {canManageUsers ? (
-        <Link
-          href="/admin/users"
-          className="hidden rounded-full p-2 text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-link sm:inline-flex"
-          title="User management"
-        >
-          <Shield className="h-5 w-5" aria-hidden />
-        </Link>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => void signOut()}
-        className="flex max-w-[10rem] items-center gap-1.5 rounded-full py-1 pl-1 pr-2 transition hover:bg-v2-bg-subtle sm:max-w-[12rem]"
-        title={`Signed in as ${user.email}`}
-      >
-        <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-v2-primary-light to-v2-primary/30 text-sm font-bold text-v2-primary ring-2 ring-white">
-          {(user.displayName ?? user.email).charAt(0).toUpperCase()}
-        </span>
-        <span className="hidden truncate text-xs font-semibold text-v2-navy sm:block">
-          {user.displayName ?? user.email.split("@")[0]}
-        </span>
-        <ChevronDown className="hidden h-4 w-4 shrink-0 text-v2-muted sm:block" aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-function CreditsChip() {
-  const { user, loading } = useAuth();
-  if (loading || !user) return null;
-
-  const label = formatCredits(user.creditsBalanceCents, { compact: true });
-
-  return (
-    <Link
-      href="/orders"
-      className="inline-flex max-w-[9rem] items-center gap-1.5 rounded-full border border-v2-primary/25 bg-v2-primary-light px-2 py-0.5 text-xs font-semibold text-v2-link transition hover:border-v2-primary/40 sm:px-2.5 sm:py-1"
-      title={`Promo balance ${formatCredits(user.creditsBalanceCents)} — applies toward purchases`}
+    <button
+      type="button"
+      onClick={open}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
+      aria-label="Open the welcome guide"
+      title="Welcome guide"
     >
-      <Gift className="h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
-      <span className="truncate tabular-nums">{label}</span>
-    </Link>
+      <CircleHelp className="h-5 w-5" aria-hidden />
+    </button>
   );
 }
 
@@ -166,9 +83,9 @@ export function V2TopBar() {
 
   return (
     <header className="shrink-0 border-b border-gray-200 bg-white">
-      <div className="v2-gutter-x flex w-full items-center justify-between gap-4 py-3.5">
+      <div className="v2-gutter-x flex w-full items-center justify-between gap-4 py-2.5 sm:py-3.5">
         <Link href="/studio" className="min-w-0 rounded-lg outline-offset-2">
-          <BrandBlock />
+          <V2BrandLogo />
         </Link>
 
         <nav
@@ -194,70 +111,11 @@ export function V2TopBar() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <CreditsChip />
-          <button
-            type="button"
-            className="relative hidden rounded-full p-2 text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-ink sm:inline-flex"
-            aria-label="Notifications (coming soon)"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-v2-primary ring-2 ring-white" />
-          </button>
-          <UserAccountMenu />
+          <HelpButton />
+          <V2UserMenu />
         </div>
       </div>
     </header>
-  );
-}
-
-type V2SidebarProps = {
-  photosCount?: number;
-  hasSheet?: boolean;
-  onDownloadPrint?: () => void;
-  downloadPrintDisabled?: boolean;
-  downloadingPrint?: boolean;
-  showProgress?: boolean;
-  /** Replace default coloring projects panel (e.g. story albums). */
-  projectsPanel?: ReactNode;
-};
-
-export function V2Sidebar({
-  photosCount = 0,
-  hasSheet = false,
-  onDownloadPrint,
-  downloadPrintDisabled,
-  downloadingPrint,
-  showProgress = true,
-  projectsPanel,
-}: V2SidebarProps) {
-  return (
-    <aside className="hidden h-full min-h-0 w-52 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex xl:w-56">
-      <nav
-        className="v2-gutter-pl flex min-h-0 flex-1 flex-col overflow-hidden py-3 pr-3"
-        aria-label="Projects"
-      >
-        {projectsPanel ?? <V2ProjectsPanel />}
-      </nav>
-
-      {showProgress && onDownloadPrint ? (
-        <div
-          className="v2-gutter-pl shrink-0 border-t border-gray-200 bg-v2-bg-subtle py-3 pr-3"
-          aria-label="Progress"
-        >
-          <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-v2-muted">
-            Your progress
-          </p>
-          <V2ProgressStepper
-            compact
-            photosCount={photosCount}
-            hasSheet={hasSheet}
-            onDownloadPrint={onDownloadPrint}
-            downloadPrintDisabled={downloadPrintDisabled}
-            downloadingPrint={downloadingPrint}
-          />
-        </div>
-      ) : null}
-    </aside>
   );
 }
 
@@ -266,39 +124,32 @@ export function V2BottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       aria-label="Mobile"
     >
-      <ul className="grid grid-cols-5">
+      <ul className="grid grid-cols-3">
         {v2BottomNav.map((item) => {
           const active = isV2NavItemActive(pathname, item);
-          const className = cn(
-            "flex w-full flex-col items-center gap-0.5 px-1 py-2 text-[10px] font-medium",
-            active ? "text-v2-link" : "text-v2-muted",
-          );
           return (
             <li key={item.id}>
-              {item.href ? (
-                <Link
-                  href={item.href}
-                  className={className}
-                  aria-current={active ? "page" : undefined}
+              <Link
+                href={item.href ?? STUDIO_HOME}
+                className={cn(
+                  "flex h-14 w-full flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold",
+                  active ? "text-v2-link" : "text-v2-muted",
+                )}
+                aria-current={active ? "page" : undefined}
+              >
+                <span
+                  className={cn(
+                    "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
+                    active && "bg-v2-primary-light",
+                  )}
                 >
                   <item.icon className="h-5 w-5" aria-hidden />
-                  <span className="truncate">{item.label}</span>
-                  {active ? (
-                    <span className="mt-0.5 h-0.5 w-8 rounded-full bg-v2-link" />
-                  ) : (
-                    <span className="mt-0.5 h-0.5 w-8" />
-                  )}
-                </Link>
-              ) : (
-                <button type="button" className={className} disabled title="Coming soon">
-                  <item.icon className="h-5 w-5" aria-hidden />
-                  <span className="truncate">{item.label}</span>
-                  <span className="mt-0.5 h-0.5 w-8" />
-                </button>
-              )}
+                </span>
+                <span className="truncate">{item.label}</span>
+              </Link>
             </li>
           );
         })}
@@ -310,9 +161,11 @@ export function V2BottomNav() {
 type V2StudioFrameProps = {
   sidebar?: ReactNode;
   children: ReactNode;
+  /** Focused flows (checkout) own the bottom of the screen. */
+  hideBottomNav?: boolean;
 };
 
-export function V2StudioFrame({ sidebar, children }: V2StudioFrameProps) {
+export function V2StudioFrame({ sidebar, children, hideBottomNav }: V2StudioFrameProps) {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <V2TopBar />
@@ -320,7 +173,7 @@ export function V2StudioFrame({ sidebar, children }: V2StudioFrameProps) {
         {sidebar}
         {children}
       </div>
-      <V2BottomNav />
+      {hideBottomNav ? null : <V2BottomNav />}
     </div>
   );
 }

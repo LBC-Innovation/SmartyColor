@@ -67,7 +67,7 @@ export function V2UploadDropzone({
   return (
     <div
       className={cn(
-        "relative min-w-0 flex-1 overflow-hidden rounded-2xl border-2 border-dashed transition-[border-color,background-color,transform,box-shadow] duration-200 ease-out",
+        "relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border-2 border-dashed transition-[border-color,background-color,transform,box-shadow] duration-200 ease-out",
         isDragOver
           ? "v2-dropzone-active scale-[1.01] border-v2-primary bg-gradient-to-br from-v2-primary-light via-white to-v2-primary-light shadow-lg shadow-v2-primary/25"
           : "border-v2-primary/30 bg-v2-primary-light/60",
@@ -111,7 +111,7 @@ export function V2UploadDropzone({
 
       <div
         className={cn(
-          "relative px-4 py-5 transition-opacity duration-200 sm:px-6",
+          "relative flex flex-1 flex-col justify-center px-4 py-5 transition-opacity duration-200 sm:px-6",
           isDragOver ? "opacity-25" : "opacity-100",
         )}
       >

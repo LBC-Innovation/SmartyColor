@@ -2,13 +2,32 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
-import type { VisionCostSessionSnapshot } from "@/lib/visionCost/types";
+import type {
+  VisionCostSessionSnapshot,
+  VisionErrorKind,
+} from "@/lib/visionCost/types";
 
 type ApiPayload = VisionCostSessionSnapshot & { logTail: string };
 
 function usd(n: number) {
   return `$${n.toFixed(4)}`;
 }
+
+const ERROR_KIND_LABEL: Record<VisionErrorKind, string> = {
+  billing: "Billing",
+  quota: "Quota",
+  auth: "Auth",
+  safety: "Safety",
+  other: "Error",
+};
+
+const ERROR_KIND_BADGE: Record<VisionErrorKind, string> = {
+  billing: "v2-badge--danger",
+  quota: "v2-badge--warn",
+  auth: "v2-badge--danger",
+  safety: "v2-badge--warn",
+  other: "bg-gray-100 text-gray-700 border border-gray-200",
+};
 
 type VisionCostDashboardProps = {
   variant?: "default" | "v2";
@@ -82,8 +101,29 @@ export function VisionCostDashboard({
     ? "rounded-lg border border-slate-200/80 bg-v2-bg-subtle px-4 py-3"
     : "rounded-xl border border-ink/5 bg-cream/80 px-4 py-3";
 
+  const errors = data.errors ?? [];
+  const blockingError = [...errors]
+    .reverse()
+    .find((e) => e.kind === "billing" || e.kind === "auth");
+
   return (
     <div className={cn("space-y-6 sm:space-y-8", !isV2 && "mt-8 space-y-10")}>
+      {blockingError ? (
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+          role="alert"
+        >
+          <p className="font-semibold">
+            {ERROR_KIND_LABEL[blockingError.kind]} problem with the Gemini API
+          </p>
+          <p className="mt-1 break-words">{blockingError.message}</p>
+          <p className="mt-1 text-xs text-red-800/80">
+            Last seen {new Date(blockingError.at).toLocaleString()} ·{" "}
+            {errors.length} error{errors.length === 1 ? "" : "s"} this session
+          </p>
+        </div>
+      ) : null}
+
       <section className={sectionClass}>
         <h2 className={headingClass}>This server session</h2>
         <dl className={cn("mt-4 grid gap-3 sm:grid-cols-2", bodyClass)}>
@@ -141,7 +181,14 @@ export function VisionCostDashboard({
         <dl className={cn("mt-4 grid gap-3 sm:grid-cols-3", bodyClass)}>
           <div>
             <dt className={labelClass}>API calls</dt>
-            <dd className={statClass}>{data.totals.callCount}</dd>
+            <dd className={statClass}>
+              {data.totals.callCount}
+              {data.totals.errorCount > 0 ? (
+                <span className="ml-2 text-base font-semibold text-red-700">
+                  {data.totals.errorCount} failed
+                </span>
+              ) : null}
+            </dd>
           </div>
           <div>
             <dt className={labelClass}>Input tokens</dt>
@@ -170,6 +217,49 @@ export function VisionCostDashboard({
             </dd>
           </div>
         </dl>
+      </section>
+
+      <section className={sectionClass}>
+        <h2 className={headingClass}>Errors</h2>
+        {errors.length === 0 ? (
+          <p className={cn("mt-4", labelClass)}>
+            No failed vision API calls this session.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className={cn("min-w-full border-collapse text-sm", bodyClass)}>
+              <thead>
+                <tr className={cn("border-b text-left", isV2 ? "border-slate-200 text-v2-muted" : "border-ink/10 text-ink-soft")}>
+                  <th className="py-2 pr-4">Time</th>
+                  <th className="py-2 pr-4">Type</th>
+                  <th className="py-2 pr-4">Operation</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...errors].reverse().map((event) => (
+                  <tr
+                    key={event.id}
+                    className={isV2 ? "border-b border-slate-100 align-top" : "border-b border-ink/5 align-top"}
+                  >
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      {new Date(event.at).toLocaleTimeString()}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <span className={cn("v2-badge", ERROR_KIND_BADGE[event.kind])}>
+                        {ERROR_KIND_LABEL[event.kind]}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 whitespace-nowrap">{event.operation}</td>
+                    <td className="py-2 pr-4 tabular-nums">{event.httpStatus ?? "—"}</td>
+                    <td className="min-w-[20rem] py-2 pr-4 break-words">{event.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className={sectionClass}>

@@ -1,20 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BookOpen,
+  CheckSquare,
+  ChevronLeft,
   CloudUpload,
   Download,
   ImageIcon,
   Loader2,
+  PencilLine,
   Printer,
   Sparkles,
+  Square,
   Trash2,
+  Upload,
 } from "lucide-react";
-import { V2Sidebar, V2StudioFrame } from "@/components/v2/V2Chrome";
-import { V2ProjectNameField } from "@/components/v2/V2ProjectNameField";
-import { V2ProjectsPanel } from "@/components/v2/V2ProjectsPanel";
-import { V2ProgressStepper } from "@/components/v2/V2ProgressStepper";
+import { V2StudioFrame } from "@/components/v2/V2Chrome";
+import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import {
   V2AssetLightbox,
   type LightboxFocus,
@@ -35,6 +39,7 @@ import { useV2Toast } from "@/components/v2/V2Toast";
 import { V2DeletePagesConfirmModal } from "@/components/v2/V2DeletePagesConfirmModal";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
+import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { cn } from "@/lib/cn";
 import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
@@ -57,6 +62,8 @@ import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import {
   normalizeV2SheetRevisions,
   type V2PhotoEntry,
+  photoImageMeta,
+  photoPrintPrefs,
 } from "@/lib/v2/studioTypes";
 
 function newId() {
@@ -75,8 +82,11 @@ type GenerateResult = "success" | "failed" | "skipped";
 
 export function ColorfulMomentsApp() {
   const toast = useV2Toast();
+  const router = useRouter();
+  const welcomeGuide = useV2WelcomeGuide();
   const {
     hydrated,
+    activeProjectId,
     photos,
     photosRef,
     pendingUploads,
@@ -113,8 +123,16 @@ export function ColorfulMomentsApp() {
   );
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  /** Below lg the studio is a full-screen view opened by tapping a photo. */
+  const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
+  const selectedIndex = selected ? photos.indexOf(selected) : -1;
+
+  function openPhoto(id: string) {
+    setSelectedId(id);
+    setMobileStudioOpen(true);
+  }
 
   useEffect(() => {
     setLightboxFocus(null);
@@ -180,6 +198,7 @@ export function ColorfulMomentsApp() {
           id: newId(),
           previewUrl,
           photoDataUrl: prepared.photoDataUrl,
+          image: photoImageMeta(layout),
           printPrefs,
           capturedAt,
           fileName: file.name,
@@ -251,6 +270,15 @@ export function ColorfulMomentsApp() {
     setPendingDeleteIds([]);
   }
 
+  /** Pages that can be checked for deletion (generating ones are locked). */
+  const deletableIds = photos.filter((p) => !p.generating).map((p) => p.id);
+  const allDeletableSelected =
+    deletableIds.length > 0 && deletableIds.every((id) => deleteSelectedIds.has(id));
+
+  function toggleSelectAllForDelete() {
+    setDeleteSelectedIds(allDeletableSelected ? new Set() : new Set(deletableIds));
+  }
+
   function openDeletePagesMode() {
     setDeleteSelectedIds(new Set());
     setDeletePagesMode(true);
@@ -293,7 +321,8 @@ export function ColorfulMomentsApp() {
         body: JSON.stringify({
           mode: "generate",
           photoDataUrl: photo.photoDataUrl,
-          printPrefs: photo.printPrefs,
+          printPrefs: photoPrintPrefs(photo),
+          image: photo.image,
         }),
       });
       const rawBody = await response.text();
@@ -441,7 +470,8 @@ export function ColorfulMomentsApp() {
           photoDataUrl: photo.photoDataUrl,
           sheetDataUrl,
           corrections: [trimmed],
-          printPrefs: photo.printPrefs,
+          printPrefs: photoPrintPrefs(photo),
+          image: photo.image,
         }),
       });
       const payload = (await response.json()) as {
@@ -601,7 +631,7 @@ export function ColorfulMomentsApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           imageDataUrl: selected.sheet.imageDataUrl,
-          printPrefs: selected.printPrefs,
+          printPrefs: photoPrintPrefs(selected),
         }),
       });
       if (!response.ok) {
@@ -626,7 +656,7 @@ export function ColorfulMomentsApp() {
       .filter((entry) => entry.sheet)
       .map((entry) => ({
         imageDataUrl: entry.sheet!.imageDataUrl,
-        printPrefs: entry.printPrefs,
+        printPrefs: photoPrintPrefs(entry),
       }));
 
     if (pages.length === 0) {
@@ -691,7 +721,9 @@ export function ColorfulMomentsApp() {
       window.open(storeUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    window.location.href = "/studio/order";
+    router.push(
+      activeProjectId ? `/studio/order?project=${encodeURIComponent(activeProjectId)}` : "/studio/order",
+    );
   }
 
   const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];
@@ -704,9 +736,14 @@ export function ColorfulMomentsApp() {
     selectedRevisions[selectedRevisions.length - 1]?.id ??
     null;
 
+  // First visit: walk new users through the workspace.
+  useEffect(() => {
+    if (hydrated) welcomeGuide.openIfNotDismissed();
+  }, [hydrated, welcomeGuide]);
+
   if (!hydrated) {
     return (
-      <V2StudioFrame sidebar={<V2Sidebar showProgress={false} />}>
+      <V2StudioFrame>
         <div className="flex flex-1 items-center justify-center pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           <p className="flex items-center gap-2 text-sm text-v2-muted">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -717,159 +754,264 @@ export function ColorfulMomentsApp() {
     );
   }
 
-  return (
-    <V2StudioFrame
-      sidebar={
-        <V2Sidebar
-          photosCount={photos.length}
-          hasSheet={hasAnySheet}
-          onDownloadPrint={() => void downloadPrintBook()}
-          downloadPrintDisabled={
-            !hasAnySheet || printingBook || anyGenerating
-          }
-          downloadingPrint={printingBook}
+  const studioOpen = mobileStudioOpen && Boolean(selected);
+
+  const fileInput = (
+    <input
+      ref={fileRef}
+      type="file"
+      accept="image/*,.heic,.heif"
+      multiple
+      className="sr-only"
+      onChange={(event) => {
+        const list = event.target.files;
+        if (list?.length) void ingestFiles(list);
+        event.target.value = "";
+      }}
+    />
+  );
+
+  const generateAllButton =
+    photos.length > 0 ? (
+      <button
+        type="button"
+        disabled={!canGenerateAll}
+        onClick={() => void generateAllSheets()}
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-v2-primary/30 bg-v2-primary-light px-3.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {generatingAll ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <Sparkles className="h-4 w-4" aria-hidden />
+        )}
+        Generate all
+        {needsSheetCount > 0 && !generatingAll ? (
+          <span className="rounded-full bg-v2-primary/15 px-1.5 text-xs font-bold tabular-nums">
+            {needsSheetCount}
+          </span>
+        ) : null}
+      </button>
+    ) : null;
+
+  const photoPane = (
+    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <button
+        type="button"
+        disabled={!selected}
+        onClick={() => selected && openLightbox("original")}
+        className={cn(
+          "flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl bg-v2-bg-subtle",
+          selected &&
+            "cursor-zoom-in transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
+          !selected && "cursor-default",
+        )}
+        aria-label={selected ? "View original photo full screen" : undefined}
+      >
+        {selected ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={selected.previewUrl}
+            alt="Selected photo"
+            className="pointer-events-none max-h-full max-w-full object-contain"
+          />
+        ) : (
+          <span className="p-6 text-center text-sm text-v2-muted">
+            Select a photo to preview
+          </span>
+        )}
+      </button>
+    </div>
+  );
+
+  const sheetPane = (
+    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      {selected?.sheet ? (
+        <div className="relative flex min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-v2-bg-subtle">
+          <button
+            type="button"
+            disabled={sheetCorrecting}
+            onClick={() => openLightbox("sheet")}
+            className="relative flex h-full min-h-0 w-full flex-1 cursor-zoom-in items-center justify-center transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary disabled:cursor-wait"
+            aria-label="View coloring sheet full screen"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={selected.sheet.imageDataUrl}
+              alt="Generated coloring sheet"
+              className="pointer-events-none max-h-full max-w-full object-contain"
+            />
+          </button>
+          {sheetCorrecting ? (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/75 p-4 text-center backdrop-blur-[1px]"
+              aria-busy="true"
+            >
+              <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
+              <span className="text-sm font-medium text-v2-navy">
+                Applying your edits…
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : sheetBusy && selected ? (
+        <V2SheetGeneratingPlaceholder
+          imageSrc={selected.previewUrl}
+          imageAlt="Photo being traced"
+          className="min-h-0 w-full flex-1 rounded-xl border border-gray-200"
+          imageFit="contain"
         />
-      }
-    >
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
-          <V2StudioToolbar
-            library={
+      ) : (
+        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-v2-primary/30 bg-v2-primary-light/60 p-6 text-center">
+          <p className="max-w-xs text-sm text-v2-muted">
+            {selected
+              ? "This photo doesn’t have a coloring sheet yet."
+              : "Select a photo from your library to get started."}
+          </p>
+          <button
+            type="button"
+            disabled={!selected || generatingAll}
+            onClick={() => void generateForSelected()}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+          >
+            <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+            Generate coloring sheet
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <V2StudioFrame>
+      {fileInput}
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <V2StudioToolbar
+          library={
+            deletePagesMode ? (
+              /* Delete mode owns the whole toolbar: count, Cancel, Delete. */
               <>
+                <button
+                  type="button"
+                  onClick={toggleSelectAllForDelete}
+                  disabled={deletableIds.length === 0}
+                  className="v2-studio-toolbar-btn px-3"
+                  aria-pressed={allDeletableSelected}
+                >
+                  {allDeletableSelected ? (
+                    <CheckSquare className="h-4 w-4 shrink-0" aria-hidden />
+                  ) : (
+                    <Square className="h-4 w-4 shrink-0" aria-hidden />
+                  )}
+                  {allDeletableSelected ? "Deselect all" : "Select all"}
+                </button>
+                <span className="min-w-0 flex-1" aria-hidden />
+                <button
+                  type="button"
+                  onClick={exitDeletePagesMode}
+                  className="v2-studio-toolbar-btn px-3"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitBulkDeleteFromRail}
+                  disabled={deleteSelectedIds.size === 0}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-3.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Delete
+                  {deleteSelectedIds.size > 0 ? (
+                    <span className="rounded-full bg-white/20 px-1.5 text-xs font-bold tabular-nums">
+                      {deleteSelectedIds.size}
+                    </span>
+                  ) : null}
+                </button>
+              </>
+            ) : (
+              <>
+                <V2ProjectSwitcher />
                 {libraryPhotoCount > 0 ? (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    className="v2-studio-toolbar-btn"
+                    className="v2-studio-toolbar-btn v2-studio-toolbar-btn--icon"
+                    title="Upload photos"
+                    aria-label="Upload photos"
                   >
                     {uploading ? (
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                      <Loader2 className="h-[18px] w-[18px] shrink-0 animate-spin" aria-hidden />
                     ) : (
-                      <ImageIcon className="h-4 w-4 shrink-0" aria-hidden />
+                      <Upload className="h-[18px] w-[18px] shrink-0" aria-hidden />
                     )}
-                    Upload
                   </button>
                 ) : null}
                 {photos.length > 0 ? (
-                  deletePagesMode ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={submitBulkDeleteFromRail}
-                        disabled={deleteSelectedIds.size === 0}
-                        className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
-                      >
-                        <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                        Delete
-                        {deleteSelectedIds.size > 0 ? (
-                          <span className="v2-studio-toolbar-badge">
-                            {deleteSelectedIds.size}
-                          </span>
-                        ) : null}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={exitDeletePagesMode}
-                        className="v2-studio-toolbar-btn"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={openDeletePagesMode}
-                      disabled={uploading || generatingAll}
-                      className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
-                    >
-                      <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                      Delete pages
-                    </button>
-                  )
-                ) : null}
-              </>
-            }
-            studio={
-              <>
-                <button
-                  type="button"
-                  disabled={!sheetReady || downloading || busy}
-                  onClick={() => void downloadSelected()}
-                  className="v2-studio-toolbar-btn"
-                >
-                  <Download className="h-4 w-4 shrink-0" aria-hidden />
-                  Download page
-                </button>
-                <button
-                  type="button"
-                  disabled={!hasAnySheet || printingBook || busy || anyGenerating}
-                  onClick={() => void downloadPrintBook()}
-                  className="v2-studio-toolbar-btn v2-studio-toolbar-btn--primary"
-                >
-                  {printingBook ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                  ) : (
-                    <Printer className="h-4 w-4 shrink-0" aria-hidden />
-                  )}
-                  Print book
-                </button>
-                {selected ? (
                   <button
                     type="button"
-                    onClick={deleteSelectedPageFromStudio}
-                    disabled={busy || deletePagesMode}
-                    className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
+                    onClick={openDeletePagesMode}
+                    disabled={uploading || generatingAll}
+                    className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger v2-studio-toolbar-btn--icon"
+                    title="Delete pages"
+                    aria-label="Delete pages"
                   >
-                    <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                    Delete page
+                    <Trash2 className="h-[18px] w-[18px] shrink-0" aria-hidden />
                   </button>
                 ) : null}
               </>
-            }
-          />
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          {/* Photo library — full-height column beside side nav */}
-          <div className="v2-photo-list-column flex max-h-[min(52dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-gray-200 lg:bg-white xl:w-80">
-            <div className="v2-panel shrink-0 p-3 sm:p-4 lg:hidden">
-              <V2ProjectsPanel compact />
-            </div>
-            <section className="v2-panel flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none lg:ring-0">
-              <div className="mb-2 shrink-0 lg:mb-3">
-                <V2ProjectNameField variant="workspace" />
-              </div>
-              <div className="mb-3 shrink-0">
-                <h2 className="text-lg font-semibold tracking-tight text-v2-ink">
-                  Your Photos
-                  <span className="ml-1.5 text-base font-medium text-v2-muted">
-                    ({libraryPhotoCount})
-                  </span>
-                </h2>
-              </div>
-
-              {photos.length > 0 ? (
+            )
+          }
+          studio={
+            <>
+              <button
+                type="button"
+                disabled={!sheetReady || downloading || busy}
+                onClick={() => void downloadSelected()}
+                className="v2-studio-toolbar-btn"
+              >
+                <Download className="h-4 w-4 shrink-0" aria-hidden />
+                Download page
+              </button>
+              <button
+                type="button"
+                disabled={!sheetReady || busy}
+                onClick={openSheetEditChat}
+                className="v2-studio-toolbar-btn v2-studio-toolbar-btn--primary"
+              >
+                <PencilLine className="h-4 w-4 shrink-0" aria-hidden />
+                Edit sheet
+              </button>
+              {selected ? (
                 <button
                   type="button"
-                  disabled={!canGenerateAll}
-                  onClick={() => void generateAllSheets()}
-                  className="mb-2 inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-v2-primary/30 bg-v2-primary-light px-4 py-2.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={deleteSelectedPageFromStudio}
+                  disabled={busy || deletePagesMode}
+                  className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
                 >
-                  {generatingAll ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Sparkles className="h-4 w-4" aria-hidden />
-                  )}
-                  Generate All
-                  {needsSheetCount > 0 && !generatingAll ? (
-                    <span className="rounded-full bg-v2-primary/15 px-2 py-0.5 text-xs font-bold">
-                      {needsSheetCount}
-                    </span>
-                  ) : null}
+                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Delete page
                 </button>
               ) : null}
+            </>
+          }
+        />
+
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* Photo library — the whole page on phones, a fixed column on desktop */}
+          <div className="v2-photo-list-column flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-white lg:w-[min(100%,22rem)] lg:max-w-sm lg:flex-none lg:border-r lg:border-gray-200 xl:w-80">
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-3 sm:px-5 lg:pt-4">
+              <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+                <h2 className="text-base font-semibold tracking-tight text-v2-ink">
+                  Your Photos
+                  <span className="ml-1.5 font-medium text-v2-muted tabular-nums">
+                    {libraryPhotoCount}
+                  </span>
+                </h2>
+                {generateAllButton}
+              </div>
 
               {libraryPhotoCount === 0 ? (
                 <V2UploadDropzone
-                  className="mb-4"
+                  className="mb-4 min-h-[16rem] lg:-mx-5 lg:mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0"
                   onFiles={(files) => void ingestFiles(files)}
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
@@ -890,13 +1032,10 @@ export function ColorfulMomentsApp() {
                     <button
                       type="button"
                       onClick={() => fileRef.current?.click()}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark"
+                      className="v2-breathe inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-v2-primary-dark"
                     >
                       {uploading ? (
-                        <Loader2
-                          className="h-4 w-4 animate-spin"
-                          aria-hidden
-                        />
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                       ) : (
                         <ImageIcon className="h-4 w-4" aria-hidden />
                       )}
@@ -916,7 +1055,7 @@ export function ColorfulMomentsApp() {
                       photos={photos}
                       pendingUploads={pendingUploads}
                       selectedId={selectedId}
-                      onSelect={setSelectedId}
+                      onSelect={openPhoto}
                       onReorder={replacePhotos}
                       onGenerateSheet={(id) => {
                         if (generatingAll || coloringApiLockRef.current) return;
@@ -929,201 +1068,156 @@ export function ColorfulMomentsApp() {
                     />
                   </div>
                   <div className="v2-photo-list-dock-bar">
-                    <button
-                      type="button"
-                      disabled={!canBuyBook}
-                      onClick={buyBook}
-                      className="v2-photo-list-dock-cta"
-                    >
-                      <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
-                      Buy book
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={!hasAnySheet || printingBook || busy || anyGenerating}
+                        onClick={() => void downloadPrintBook()}
+                        className="v2-photo-list-dock-cta v2-photo-list-dock-cta--secondary"
+                        title="Download a print-ready PDF"
+                      >
+                        {printingBook ? (
+                          <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                        ) : (
+                          <Printer className="h-5 w-5 shrink-0" aria-hidden />
+                        )}
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canBuyBook}
+                        onClick={buyBook}
+                        className="v2-photo-list-dock-cta"
+                      >
+                        <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
+                        Buy book
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : null}
-
-            </section>
-
-            <section
-              className="v2-panel shrink-0 p-5 sm:p-6 lg:hidden"
-              aria-label="Progress"
-            >
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-v2-muted">
-                Your progress
-              </p>
-              <V2ProgressStepper
-                photosCount={photos.length}
-                hasSheet={hasAnySheet}
-                onDownloadPrint={() => void downloadPrintBook()}
-                downloadPrintDisabled={
-                  !hasAnySheet || printingBook || anyGenerating
-                }
-                downloadingPrint={printingBook}
-              />
             </section>
           </div>
 
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden px-5 py-4 pb-20 sm:px-6 sm:py-5 lg:overflow-hidden lg:pb-5 lg:pl-6 lg:pr-8 xl:pl-8 xl:pr-10">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,.heic,.heif"
-              multiple
-              className="sr-only"
-              onChange={(event) => {
-                const list = event.target.files;
-                if (list?.length) void ingestFiles(list);
-                event.target.value = "";
-              }}
-            />
-
-            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <div className="v2-panel flex min-h-0 flex-1 overflow-hidden">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                  <div className="shrink-0 border-b border-gray-100 px-5 py-4 sm:px-6 xl:px-8">
-                    <div className="flex flex-wrap items-start justify-between gap-3 gap-y-2">
-                      <div className="min-w-0">
-                        <h2 className="text-xl font-semibold tracking-tight text-v2-ink">
-                          Studio preview
-                        </h2>
-                        <p className="mt-1 text-sm text-v2-muted">
-                          Compare your photo and coloring sheet at full size.
-                        </p>
-                      </div>
-                      <V2StudioLayoutToggle
-                        className="shrink-0"
-                        value={studioLayout}
-                        onChange={setStudioLayout}
-                      />
-                    </div>
+          {/* Studio — right column on desktop, full-screen view on phones */}
+          <main
+            className={cn(
+              "flex-col bg-v2-bg",
+              studioOpen ? "fixed inset-0 z-[45] flex" : "hidden",
+              "lg:static lg:z-auto lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:overflow-hidden lg:p-4 xl:p-6",
+            )}
+            aria-label="Studio"
+          >
+            <section className="v2-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 shadow-none lg:rounded-2xl lg:border lg:shadow-[0_1px_2px_rgb(10_16_26/0.04),0_8px_24px_rgb(10_16_26/0.05)]">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <header className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2 sm:px-5 lg:px-6 lg:py-3">
+                  <button
+                    type="button"
+                    onClick={() => setMobileStudioOpen(false)}
+                    className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-bg-subtle lg:hidden"
+                    aria-label="Back to photos"
+                  >
+                    <ChevronLeft className="h-6 w-6" aria-hidden />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
+                      Studio
+                    </h2>
+                    {selected ? (
+                      <p className="truncate text-xs text-v2-muted tabular-nums">
+                        Photo {selectedIndex + 1} of {photos.length}
+                      </p>
+                    ) : null}
                   </div>
+                  <V2StudioLayoutToggle
+                    className="shrink-0"
+                    value={studioLayout}
+                    onChange={setStudioLayout}
+                  />
+                </header>
 
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-4 sm:px-6 sm:py-5 xl:px-8">
-                    <div
-                      className={cn(
-                        "grid min-h-0 flex-1 gap-4 overflow-hidden lg:gap-5 xl:gap-6",
-                        studioLayout === "both"
-                          ? "grid-cols-1 sm:grid-cols-2"
-                          : "grid-cols-1",
-                      )}
-                    >
-                      {showPhotoPane ? (
-                        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-                          <button
-                            type="button"
-                            disabled={!selected}
-                            onClick={() => selected && openLightbox("original")}
-                            className={cn(
-                              "flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl bg-v2-bg-subtle",
-                              selected &&
-                                "cursor-zoom-in transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
-                              !selected && "cursor-default",
-                            )}
-                            aria-label={
-                              selected
-                                ? "View original photo full screen"
-                                : undefined
-                            }
-                          >
-                            {selected ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={selected.previewUrl}
-                                alt="Selected photo"
-                                className="pointer-events-none max-h-full max-w-full object-contain"
-                              />
-                            ) : (
-                              <span className="p-6 text-center text-sm text-v2-muted">
-                                Select a photo to preview
-                              </span>
-                            )}
-                          </button>
-                        </div>
-                      ) : null}
-
-                      {showSheetPane ? (
-                        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-                          {selected?.sheet ? (
-                            <div className="relative flex min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-v2-bg-subtle">
-                              <button
-                                type="button"
-                                disabled={sheetCorrecting}
-                                onClick={() => openLightbox("sheet")}
-                                className="relative flex h-full min-h-0 w-full flex-1 cursor-zoom-in items-center justify-center transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary disabled:cursor-wait"
-                                aria-label="View coloring sheet full screen"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={selected.sheet.imageDataUrl}
-                                  alt="Generated coloring sheet"
-                                  className="pointer-events-none max-h-full max-w-full object-contain"
-                                />
-                              </button>
-                              {sheetCorrecting ? (
-                                <div
-                                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/75 p-4 text-center backdrop-blur-[1px]"
-                                  aria-busy="true"
-                                >
-                                  <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
-                                  <span className="text-sm font-medium text-v2-navy">
-                                    Applying your edits…
-                                  </span>
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : sheetBusy && selected ? (
-                            <V2SheetGeneratingPlaceholder
-                              imageSrc={selected.previewUrl}
-                              imageAlt="Photo being traced"
-                              className="min-h-0 w-full flex-1 rounded-xl border border-gray-200"
-                              imageFit="contain"
-                            />
-                          ) : (
-                            <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-v2-primary/30 bg-v2-primary-light/60 p-6 text-center">
-                              <p className="max-w-xs text-sm text-v2-muted">
-                                {selected
-                                  ? "This photo doesn’t have a coloring sheet yet."
-                                  : "Select a photo from your library to get started."}
-                              </p>
-                              <button
-                                type="button"
-                                disabled={!selected || generatingAll}
-                                onClick={() => void generateForSelected()}
-                                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
-                              >
-                                <Sparkles
-                                  className="h-4 w-4 shrink-0"
-                                  aria-hidden
-                                />
-                                Generate coloring sheet
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-5 lg:p-6">
+                  <div
+                    className={cn(
+                      "grid min-h-0 flex-1 gap-3 overflow-hidden lg:gap-5",
+                      studioLayout === "both"
+                        ? "grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
+                        : "grid-cols-1",
+                    )}
+                  >
+                    {showPhotoPane ? photoPane : null}
+                    {showSheetPane ? sheetPane : null}
                   </div>
                 </div>
 
+                {/* Phone-only: revisions + page actions */}
                 {showRevisionSidebar && selected ? (
                   <V2SheetRevisionStrip
-                    variant="sidebar"
-                    className="min-h-0 self-stretch"
+                    variant="compact"
+                    className="shrink-0 border-t border-gray-100 px-3 py-2 lg:hidden"
                     revisions={selectedRevisions}
                     activeRevisionId={activeRevisionId}
                     onSelect={(revisionId) =>
                       selectSheetRevision(selected.id, revisionId)
                     }
-                    onEditSheet={openSheetEditChat}
-                    editDisabled={busy}
                     disabled={sheetCorrecting}
                   />
                 ) : null}
+                {selected ? (
+                  <footer className="grid shrink-0 grid-cols-3 gap-2 border-t border-gray-100 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 lg:hidden">
+                    <button
+                      type="button"
+                      disabled={!sheetReady || downloading || busy}
+                      onClick={() => void downloadSelected()}
+                      className="v2-studio-action"
+                    >
+                      {downloading ? (
+                        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+                      ) : (
+                        <Download className="h-5 w-5" aria-hidden />
+                      )}
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!sheetReady || busy}
+                      onClick={openSheetEditChat}
+                      className="v2-studio-action v2-studio-action--primary"
+                    >
+                      <PencilLine className="h-5 w-5" aria-hidden />
+                      Edit sheet
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || deletePagesMode}
+                      onClick={deleteSelectedPageFromStudio}
+                      className="v2-studio-action v2-studio-action--danger"
+                    >
+                      <Trash2 className="h-5 w-5" aria-hidden />
+                      Delete
+                    </button>
+                  </footer>
+                ) : null}
               </div>
+
+              {showRevisionSidebar && selected ? (
+                <V2SheetRevisionStrip
+                  variant="sidebar"
+                  className="hidden min-h-0 self-stretch lg:flex"
+                  revisions={selectedRevisions}
+                  activeRevisionId={activeRevisionId}
+                  onSelect={(revisionId) =>
+                    selectSheetRevision(selected.id, revisionId)
+                  }
+                  onEditSheet={openSheetEditChat}
+                  editDisabled={busy}
+                  disabled={sheetCorrecting}
+                />
+              ) : null}
             </section>
           </main>
-          </div>
         </div>
+      </div>
 
       {selected?.sheet ? (
         <V2SheetEditChat

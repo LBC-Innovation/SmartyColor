@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import { formatCredits } from "@/lib/credits/money";
-import { BOOK_PAGE_COUNT_HINT } from "@/lib/print/bookPageCountCopy";
 
 type Props = {
   open: boolean;
@@ -63,9 +62,8 @@ export function BookOrderConfirmModal({
               Confirm your book order?
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">
-              We&apos;ll save your book, register the print job, and take you to checkout. You can
-              still view it in
-              My Orders before payment is complete.
+              We&apos;ll set up the print job and take you to payment. Nothing is charged until
+              you pay on the next screen.
             </p>
           </div>
         </div>
@@ -79,16 +77,13 @@ export function BookOrderConfirmModal({
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-v2-muted">Binding</dt>
-            <dd className="font-semibold text-v2-ink">{binding.label}</dd>
+            <dd className="font-semibold text-v2-ink">{binding.shortLabel}</dd>
           </div>
-          <div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-v2-muted">Pages (sides)</dt>
-              <dd className="font-semibold tabular-nums text-v2-ink">
-                {pageCount} ({photoCount} coloring)
-              </dd>
-            </div>
-            <p className="mt-1 text-[11px] leading-snug text-v2-muted">{BOOK_PAGE_COUNT_HINT}</p>
+          <div className="flex justify-between gap-3">
+            <dt className="text-v2-muted">Pages</dt>
+            <dd className="font-semibold tabular-nums text-v2-ink">
+              {pageCount} ({photoCount} coloring)
+            </dd>
           </div>
           {shippingZip.trim() ? (
             <div className="flex justify-between gap-3">
@@ -120,7 +115,7 @@ export function BookOrderConfirmModal({
             className="v2-btn-primary min-h-11 text-sm disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Save &amp; confirm order
+            Continue to payment
           </button>
         </div>
       </div>

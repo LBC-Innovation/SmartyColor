@@ -29,11 +29,13 @@ import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingP
 import { cn } from "@/lib/cn";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { PrintPrefs } from "@/lib/print/settings";
+import { photoThumbObjectPosition, type V2PhotoImageMeta } from "@/lib/v2/studioTypes";
 
 export type V2LibraryPhoto = {
   id: string;
   previewUrl: string;
   photoDataUrl: string;
+  image?: V2PhotoImageMeta;
   printPrefs: PrintPrefs;
   sheet: GeneratedSheet | null;
   generating: boolean;
@@ -155,7 +157,10 @@ function PhotoLibraryRow({
             <img
               src={photo.previewUrl}
               alt=""
-              className="aspect-[4/3] h-full w-full object-cover"
+              className={cn(
+                "aspect-[4/3] h-full w-full object-cover",
+                photoThumbObjectPosition(photo) === "top" ? "object-top" : "object-center",
+              )}
             />
           </div>
 

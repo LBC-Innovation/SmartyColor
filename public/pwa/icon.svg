@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
+    
+    <defs>
+      <linearGradient id="tile" x1="4" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#6d66f0"/><stop offset="1" stop-color="#3f3aa6"/>
+      </linearGradient>
+      <linearGradient id="stroke" x1="7" y1="30" x2="33" y2="10" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#ff6b6b"/><stop offset="0.5" stop-color="#ffd166"/><stop offset="1" stop-color="#2ee6b7"/>
+      </linearGradient>
+    </defs>
+    <path d="M8 29 C 14 32, 18 20, 24 20 S 31 13, 33 10" stroke="url(#stroke)" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 9 l1.6 3.4 L17 14 l-3.4 1.6 L12 19 l-1.6 -3.4 L7 14 l3.4 -1.6 Z" fill="#ffffff"/>
+    <rect x="1.5" y="1.5" width="37" height="37" rx="9.5" fill="url(#tile)"/>
+    <rect x="1.5" y="1.5" width="37" height="37" rx="9.5" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1.5"/>
+    <path d="M8 29 C 14 32, 18 20, 24 20 S 31 13, 33 10" stroke="url(#stroke)" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 9 l1.6 3.4 L17 14 l-3.4 1.6 L12 19 l-1.6 -3.4 L7 14 l3.4 -1.6 Z" fill="#ffffff"/>
+  </svg>

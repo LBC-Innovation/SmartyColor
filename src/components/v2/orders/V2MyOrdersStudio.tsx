@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Package, RefreshCw } from "lucide-react";
-import { V2Sidebar, V2StudioFrame } from "@/components/v2/V2Chrome";
+import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
@@ -50,7 +50,7 @@ export function V2MyOrdersStudio() {
   }, [load, user?.id]);
 
   return (
-    <V2StudioFrame sidebar={<V2Sidebar showProgress={false} />}>
+    <V2StudioFrame>
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
         <div className="mx-auto w-full max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-3">

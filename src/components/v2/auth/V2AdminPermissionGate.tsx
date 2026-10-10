@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -14,14 +14,15 @@ export function V2AdminPermissionGate({
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (loading) return;
-    if (!user) router.replace(`/sign-in?next=/admin/users`);
+    if (!user) router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
     else if (!user.permissions.includes(permission) && user.role !== "admin") {
       router.replace("/");
     }
-  }, [user, loading, permission, router]);
+  }, [user, loading, permission, router, pathname]);
 
   if (loading) {
     return (
