@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
+  Gift,
   Loader2,
   Lock,
   Mail,
@@ -14,7 +15,9 @@ import { PERMISSION_META } from "@/lib/auth/permissionMeta";
 import * as api from "@/lib/api/client";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/cn";
+import type { CreditLedgerEntry } from "@/lib/credits/types";
 
 function StatusBadge({ status }: { status: string }) {
   return (
@@ -40,14 +43,45 @@ export function V2UserManagementModal({
   onUpdate: (user: AdminUser) => void;
   onDelete: (userId: string) => void;
 }) {
+  const { user: me } = useAuth();
   const [localUser, setLocalUser] = useState(user);
   const [displayName, setDisplayName] = useState(user.displayName ?? "");
   const [email, setEmail] = useState(user.email ?? "");
   const [password, setPassword] = useState("");
+  const [creditDelta, setCreditDelta] = useState("1");
+  const [creditNote, setCreditNote] = useState("");
+  const [creditLedger, setCreditLedger] = useState<CreditLedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<Record<string, "ok" | "err">>({});
+
+  const canAdjustCredits =
+    me?.role === "admin" || (me?.permissions.includes("usermanage:adjustcredits") ?? false);
+
+  useEffect(() => {
+    setLocalUser(user);
+    setDisplayName(user.displayName ?? "");
+    setEmail(user.email ?? "");
+  }, [user]);
+
+  useEffect(() => {
+    if (!canAdjustCredits) return;
+    let cancelled = false;
+    const loadLedger = async () => {
+      setLedgerLoading(true);
+      const result = await api.adminListUserCredits(user.id);
+      if (!cancelled) {
+        if (!api.isError(result)) setCreditLedger(result.data);
+        setLedgerLoading(false);
+      }
+    };
+    void loadLedger();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.id, canAdjustCredits]);
 
   const patch = (changes: Partial<AdminUser>) => {
     const updated = { ...localUser, ...changes };
@@ -314,6 +348,156 @@ export function V2UserManagementModal({
             </div>
           </div>
         </section>
+
+        {canAdjustCredits ? (
+          <section>
+            <p className="v2-section-title mb-3">Promo book credits</p>
+            <div className="v2-panel space-y-4 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-semibold text-v2-ink">
+                    <Gift className="h-4 w-4 text-v2-primary" aria-hidden />
+                    Current balance
+                  </p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-v2-ink">
+                    {localUser.creditsBalance}{" "}
+                    <span className="text-sm font-semibold text-v2-muted">
+                      {localUser.creditsBalance === 1 ? "book credit" : "book credits"}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-v2-muted">
+                    One credit covers one standard coloring book order (when checkout is enabled).
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[1, 3, 5].map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      className="v2-btn-sm v2-btn-sm-primary"
+                      disabled={busy === "credits"}
+                      onClick={() =>
+                        run("credits", async () => {
+                          const r = await api.adminAdjustUserCredits(localUser.id, {
+                            delta: amount,
+                            note: creditNote.trim() || `Granted ${amount} book credit(s)`,
+                          });
+                          if (api.isError(r)) return { ok: false };
+                          patch({ creditsBalance: r.data.creditsBalance });
+                          const ledger = await api.adminListUserCredits(localUser.id);
+                          if (!api.isError(ledger)) setCreditLedger(ledger.data);
+                          return { ok: true };
+                        })
+                      }
+                    >
+                      +{amount}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form
+                className="space-y-3 border-t border-gray-100 pt-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const delta = Number.parseInt(creditDelta, 10);
+                  if (!Number.isInteger(delta) || delta === 0) return;
+                  void run("credits", async () => {
+                    const r = await api.adminAdjustUserCredits(localUser.id, {
+                      delta,
+                      note: creditNote.trim() || undefined,
+                    });
+                    if (api.isError(r)) return { ok: false };
+                    patch({ creditsBalance: r.data.creditsBalance });
+                    const ledger = await api.adminListUserCredits(localUser.id);
+                    if (!api.isError(ledger)) setCreditLedger(ledger.data);
+                    setCreditDelta(delta > 0 ? "1" : "-1");
+                    return { ok: true };
+                  });
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="v2-label" htmlFor="credit-delta">
+                      Adjust by (+ grant / − revoke)
+                    </label>
+                    <input
+                      id="credit-delta"
+                      type="number"
+                      className="v2-input"
+                      value={creditDelta}
+                      onChange={(e) => setCreditDelta(e.target.value)}
+                      step={1}
+                      min={-1000}
+                      max={1000}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="v2-label" htmlFor="credit-note">
+                      Note (optional)
+                    </label>
+                    <input
+                      id="credit-note"
+                      type="text"
+                      className="v2-input"
+                      placeholder="e.g. Launch promo"
+                      value={creditNote}
+                      onChange={(e) => setCreditNote(e.target.value)}
+                      maxLength={500}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={busy === "credits"}
+                    className="v2-btn-sm v2-btn-sm-primary"
+                  >
+                    {busy === "credits" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : null}
+                    {flash.credits === "ok" ? "Updated" : "Apply adjustment"}
+                  </button>
+                </div>
+              </form>
+
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">
+                  Recent activity
+                </p>
+                {ledgerLoading ? (
+                  <p className="mt-2 text-sm text-v2-muted">Loading…</p>
+                ) : creditLedger.length === 0 ? (
+                  <p className="mt-2 text-sm text-v2-muted">No credit changes yet.</p>
+                ) : (
+                  <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                    {creditLedger.map((entry) => (
+                      <li
+                        key={entry.id}
+                        className="flex items-start justify-between gap-2 text-sm"
+                      >
+                        <span className="text-v2-ink">
+                          {entry.delta > 0 ? "+" : ""}
+                          {entry.delta}{" "}
+                          <span className="text-v2-muted">
+                            → balance {entry.balanceAfter}
+                          </span>
+                          {entry.note ? (
+                            <span className="block text-xs text-v2-muted">{entry.note}</span>
+                          ) : null}
+                        </span>
+                        <span className="shrink-0 text-xs text-v2-muted">
+                          {new Date(entry.createdAt).toLocaleDateString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section>
           <p className="v2-section-title mb-3">Permissions</p>

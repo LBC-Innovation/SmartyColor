@@ -1,5 +1,6 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { BookOrderDetail, BookOrderSummary } from "@/lib/orders/types";
+import type { CreditLedgerEntry } from "@/lib/credits/types";
 
 const TOKEN_KEY = "cm_access_token";
 const SESSION_HINT_KEY = "cm_session_hint";
@@ -219,4 +220,18 @@ export function listOrders(): Promise<ApiResult<BookOrderSummary[]>> {
 export function fetchOrder(id: string, sync = true): Promise<ApiResult<BookOrderDetail>> {
   const qs = sync ? "" : "?sync=0";
   return request<BookOrderDetail>(`/orders/${id}${qs}`);
+}
+
+export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
+  return request<CreditLedgerEntry[]>(`/admin/users/${userId}/credits`);
+}
+
+export function adminAdjustUserCredits(
+  userId: string,
+  input: { delta: number; note?: string },
+): Promise<ApiResult<{ creditsBalance: number }>> {
+  return request<{ creditsBalance: number }>(`/admin/users/${userId}/credits`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }

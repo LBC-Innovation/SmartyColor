@@ -5,5 +5,6 @@ export const PERMISSION_META = [
   { key: "usermanage:updatepassword", name: "Reset passwords", description: "Can reset passwords for other users" },
   { key: "usermanage:deleteusers", name: "Delete users", description: "Can permanently delete accounts" },
   { key: "usermanage:editpermissions", name: "Edit permissions", description: "Can grant or revoke permissions for other users" },
+  { key: "usermanage:adjustcredits", name: "Adjust promo credits", description: "Can grant or revoke book credits on user accounts" },
   { key: "usermanage:selfmanage", name: "Full self-management", description: "Can manage all aspects of their own account" },
 ] as const;

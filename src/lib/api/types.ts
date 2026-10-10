@@ -28,6 +28,7 @@ export interface AdminUser {
   permissions: string[];
   emailConfirmed: boolean;
   createdAt: string;
+  creditsBalance: number;
 }
 
 export const USERMANAGE_PERMISSIONS = [
@@ -37,5 +38,6 @@ export const USERMANAGE_PERMISSIONS = [
   "usermanage:listusers",
   "usermanage:deleteusers",
   "usermanage:editpermissions",
+  "usermanage:adjustcredits",
   "usermanage:selfmanage",
 ] as const;
