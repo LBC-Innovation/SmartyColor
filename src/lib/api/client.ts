@@ -77,6 +77,12 @@ export function clearSessionHint(): void {
   }
 }
 
+/** Authorization header for raw fetches that bypass request() (file/PDF responses). */
+export function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function request<T>(path: string, options: RequestInit = {}): Promise<ApiResult<T>> {
   const token = getToken();
   try {

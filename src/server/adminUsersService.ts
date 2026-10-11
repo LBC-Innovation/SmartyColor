@@ -1,3 +1,4 @@
+import { removePrefix } from "@/server/storage/libraryFiles";
 import type { AdminUser, ApiResult } from "@/lib/api/types";
 import { USERMANAGE_PERMISSIONS } from "@/lib/api/types";
 import type { AuthUser } from "@/lib/auth/authenticate";
@@ -274,6 +275,12 @@ export async function setPermissions(
 export async function deleteUser(id: string, adminId: string): Promise<ApiResult<{ success: boolean }>> {
   const { error } = await getSupabaseAuth().auth.admin.deleteUser(id);
   if (error) return { data: null, error: { message: error.message } };
+  // Rows cascade from auth.users; files don't — purge the user's library folder.
+  try {
+    await removePrefix(id);
+  } catch (e) {
+    log("warn", "Library file purge failed", { targetId: id, error: String(e) });
+  }
   log("info", "User deleted", { adminId, targetId: id });
   return { data: { success: true }, error: null };
 }

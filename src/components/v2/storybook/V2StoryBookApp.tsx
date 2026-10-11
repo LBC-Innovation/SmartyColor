@@ -18,6 +18,10 @@ import { V2PhotoLibraryList } from "@/components/v2/V2PhotoLibraryList";
 import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { authHeaders } from "@/lib/api/client";
+import { entryFromLibraryPhoto, uploadPhotoToLibrary } from "@/lib/v2/cloudLibrary";
+import type { LibraryPhoto } from "@/lib/library/types";
+import { blobToDataUrl } from "@/lib/photo/dataUrlBlob";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { cn } from "@/lib/cn";
 import { applyPhotoCropDataUrl } from "@/lib/photo/applyPhotoCrop";
@@ -58,6 +62,8 @@ export function V2StoryBookApp() {
   const toast = useV2Toast();
   const {
     hydrated,
+    cloud,
+    activeProjectId: activeLibraryProjectId,
     activeProject,
     photos,
     pendingUploads,
@@ -110,7 +116,7 @@ export function V2StoryBookApp() {
       if (artUrlCache[photo.id]) return artUrlCache[photo.id];
 
       let base = await applyPhotoCropDataUrl(
-        photo.photoDataUrl,
+        photo.photoDataUrl || photo.previewUrl,
         photo.crop ?? null,
       );
 
@@ -122,6 +128,10 @@ export function V2StoryBookApp() {
           photo.sheet.imageDataUrl,
           45,
         );
+      }
+      // The PDF route needs bytes inline; cloud sheets are cached object URLs.
+      if (base.startsWith("blob:")) {
+        base = await blobToDataUrl(await (await fetch(base)).blob());
       }
 
       setArtUrlCache((prev) => ({ ...prev, [photo.id]: base }));
@@ -178,6 +188,23 @@ export function V2StoryBookApp() {
         };
         const capturedAt = await readPhotoCapturedAt(file);
 
+        if (cloud) {
+          if (!activeLibraryProjectId) throw new Error("No album selected.");
+          URL.revokeObjectURL(previewUrl);
+          const entry = await uploadPhotoToLibrary({
+            projectId: activeLibraryProjectId,
+            blob: prepared.previewBlob,
+            mimeType: prepared.previewBlob.type || "image/jpeg",
+            layout,
+            printPrefs,
+            fileName: file.name,
+            capturedAt,
+          });
+          firstAddedId ??= entry.id;
+          newEntries.push(entry);
+          continue;
+        }
+
         const entry: V2PhotoEntry = {
           id: newId(),
           previewUrl,
@@ -227,18 +254,26 @@ export function V2StoryBookApp() {
     try {
       const res = await fetch("/api/photo-coloring", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "generate",
-          photoDataUrl: photo.photoDataUrl,
-          printPrefs: photo.printPrefs,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(photo.remote ? authHeaders() : {}),
+        },
+        body: JSON.stringify(
+          photo.remote
+            ? { mode: "generate-library", photoId: photo.remote.photoId }
+            : { mode: "generate", photoDataUrl: photo.photoDataUrl, printPrefs: photo.printPrefs },
+        ),
       });
-      const data = (await res.json()) as { error?: string; sheet?: GeneratedSheet };
-      if (!res.ok || !data.sheet) {
+      const data = (await res.json()) as { error?: string; sheet?: GeneratedSheet; photo?: LibraryPhoto };
+      if (!res.ok || (!data.sheet && !data.photo)) {
         throw new Error(data.error ?? "Could not make a coloring page.");
       }
-      updatePhoto(id, { sheet: data.sheet, generating: false });
+      if (data.photo) {
+        const fresh = await entryFromLibraryPhoto(data.photo);
+        updatePhoto(id, { ...fresh, generating: false }, { persist: false });
+      } else {
+        updatePhoto(id, { sheet: data.sheet, generating: false });
+      }
       toast.success({
         message: "Coloring page ready for blended or coloring-book print.",
       });
@@ -266,7 +301,10 @@ export function V2StoryBookApp() {
     try {
       const res = await fetch("/api/storybook/photo-chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(selected.remote ? authHeaders() : {}),
+        },
         body: JSON.stringify({
           albumTitle,
           tripNarrative,
@@ -275,7 +313,7 @@ export function V2StoryBookApp() {
           photoSummary: selected.photoSummary ?? null,
           history: prior,
           userMessage: text,
-          photoDataUrl: selected.photoDataUrl,
+          ...(selected.remote ? { photoId: selected.remote.photoId } : { photoDataUrl: selected.photoDataUrl }),
         }),
       });
       const data = (await res.json()) as {

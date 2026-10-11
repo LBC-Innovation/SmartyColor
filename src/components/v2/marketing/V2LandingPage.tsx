@@ -103,7 +103,7 @@ const FAQ = [
   },
   {
     q: "What happens to my photos?",
-    a: "Photos are processed to make your page and aren't kept on our servers. Your projects live on your device, and in your account if you sign in.",
+    a: "When you're signed in, your photos and coloring pages are stored privately in your account so they're on every device you use. Delete an album or your account and they're gone. Trying it without an account? Nothing is uploaded — everything stays in your browser.",
   },
 ] as const;
 
@@ -241,7 +241,7 @@ export function V2LandingPage() {
                   {
                     icon: ShieldCheck,
                     t: "Your photos stay yours",
-                    b: "Pictures are used to make your page and aren't kept on our servers.",
+                    b: "Stored privately in your account, never shared. Delete an album and it's really gone.",
                   },
                 ].map(({ icon: Icon, t, b }) => (
                   <li key={t} className="flex gap-3.5">
@@ -357,7 +357,7 @@ export function V2LandingPage() {
             {[
               { icon: ShieldCheck, t: "Exact price shown before you pay" },
               { icon: Truck, t: "Printed in the US and shipped to you" },
-              { icon: ImageIcon, t: "Photos aren't stored on our servers" },
+              { icon: ImageIcon, t: "Photos stay private to your account" },
             ].map(({ icon: Icon, t }) => (
               <li key={t} className="flex items-center gap-2.5">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
