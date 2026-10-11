@@ -7,6 +7,8 @@ import { appendVisionCostLogLine } from "@/lib/visionCost/log";
 import { VISION_COST_LOG_FILE } from "@/lib/visionCost/paths";
 import { classifyVisionError } from "@/lib/visionCost/classifyError";
 import { sanitizeSecretText } from "@/lib/security/publicError";
+import { currentVisionUserId } from "@/lib/visionCost/context";
+import { persistErrorEvent, persistUsageEvent } from "@/lib/visionCost/store";
 import type {
   ModelRateSnapshot,
   VisionCostOperation,
@@ -140,15 +142,26 @@ export async function recordVisionUsage(input: {
   inputTokens: number;
   outputTokens: number;
   hasImageOutput: boolean;
+  /** Output tokens by modality when the provider reports them. */
+  imageOutputTokens?: number;
+  textOutputTokens?: number;
 }) {
   await ensureVisionCostSession();
   const state = getState();
   const rate = rateForModel(input.modelId);
+  const split =
+    input.imageOutputTokens != null || input.textOutputTokens != null
+      ? {
+          imageOutputTokens: input.imageOutputTokens ?? 0,
+          textOutputTokens: input.textOutputTokens ?? Math.max(0, input.outputTokens - (input.imageOutputTokens ?? 0)),
+        }
+      : undefined;
   const costs = costForUsage(
     rate,
     input.inputTokens,
     input.outputTokens,
     input.hasImageOutput,
+    split,
   );
 
   const event: VisionUsageEvent = {
@@ -183,6 +196,11 @@ export async function recordVisionUsage(input: {
   await appendVisionCostLogLine(
     `SESSION_TOTAL in=${state.totals.inputTokens} out=${state.totals.outputTokens}` +
       ` cost=$${state.totals.totalCostUsd.toFixed(6)} calls=${state.totals.callCount}`,
+  );
+  // Durable copy — the in-memory session dies with the serverless instance.
+  await persistUsageEvent(
+    { ...event, imageOutputTokens: split?.imageOutputTokens, textOutputTokens: split?.textOutputTokens, rateSource: rate.source },
+    currentVisionUserId(),
   );
 }
 
@@ -220,6 +238,7 @@ export async function recordVisionError(input: {
       (event.httpStatus != null ? ` status=${event.httpStatus}` : "") +
       ` | ${event.message.replace(/\s+/g, " ")}`,
   );
+  await persistErrorEvent(event, currentVisionUserId());
 }
 
 export function getVisionCostSessionSnapshot(): VisionCostSessionSnapshot {

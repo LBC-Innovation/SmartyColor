@@ -1,5 +1,5 @@
 import type { PhotoLayout } from "@/lib/photo/orientation";
-import { recordVisionError } from "@/lib/visionCost/session";
+import { recordVisionError, recordVisionUsage } from "@/lib/visionCost/session";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
 
 type RestPart =
@@ -58,6 +58,33 @@ function parseImageFromResponse(payload: unknown): { base64: string; mimeType: s
   }
 
   return null;
+}
+
+type RestUsage = {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+  candidatesTokensDetails?: Array<{ modality?: string; tokenCount?: number }>;
+};
+
+/** Token counts from a generateContent response, split by output modality when reported. */
+function usageFromRestResponse(payload: unknown): {
+  inputTokens: number;
+  outputTokens: number;
+  hasImageOutput: boolean;
+  imageOutputTokens?: number;
+  textOutputTokens?: number;
+} {
+  const usage = (payload as { usageMetadata?: RestUsage } | null)?.usageMetadata;
+  const inputTokens = usage?.promptTokenCount ?? 0;
+  const outputTokens = usage?.candidatesTokenCount ?? 0;
+  const details = usage?.candidatesTokensDetails;
+  if (Array.isArray(details) && details.length > 0) {
+    const image = details.filter((d) => d.modality === "IMAGE").reduce((n, d) => n + (d.tokenCount ?? 0), 0);
+    const text = details.filter((d) => d.modality !== "IMAGE").reduce((n, d) => n + (d.tokenCount ?? 0), 0);
+    return { inputTokens, outputTokens, hasImageOutput: true, imageOutputTokens: image, textOutputTokens: text };
+  }
+  return { inputTokens, outputTokens, hasImageOutput: true };
 }
 
 /**
@@ -154,6 +181,11 @@ export async function generateGeminiImageViaRest(
 
       const image = parseImageFromResponse(payload);
       if (image) {
+        try {
+          await recordVisionUsage({ operation, modelId: modelId(), ...usageFromRestResponse(payload) });
+        } catch {
+          /* cost logging must never break generation */
+        }
         return { base64: image.base64, mediaType: image.mimeType };
       }
 

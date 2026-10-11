@@ -8,6 +8,7 @@ import { estimateJsonBodyBytes } from "@/lib/photo/payloadBudget";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
+import { withVisionUser } from "@/lib/visionCost/context";
 import { addRevisionFromSheet } from "@/server/libraryService";
 import {
   PHOTO_MAX_CORRECTIONS,
@@ -162,6 +163,13 @@ async function handleLibraryMode(
     return Response.json({ error: "photoId is required." }, { status: 400 });
   }
 
+  return withVisionUser(userId, async () => handleLibraryModeForUser(userId, body));
+}
+
+async function handleLibraryModeForUser(
+  userId: string,
+  body: Extract<Body, { mode: "generate-library" | "correct-library" }>,
+) {
   const photo = await photoDataUrlById(userId, body.photoId);
   if (photo.error) {
     return Response.json({ error: photo.error.message }, { status: photo.error.code === "NOT_FOUND" ? 404 : 500 });

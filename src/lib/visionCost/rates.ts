@@ -162,13 +162,22 @@ export function costForUsage(
   inputTokens: number,
   outputTokens: number,
   hasImageOutput: boolean,
+  /** When the provider reports output tokens by modality, price each at its own rate. */
+  split?: { imageOutputTokens: number; textOutputTokens: number },
 ): { inputCostUsd: number; outputCostUsd: number; totalCostUsd: number } {
   const inputCostUsd = (inputTokens / 1_000_000) * rate.inputUsdPerMTok;
-  const outputRate =
-    hasImageOutput && rate.outputImageUsdPerMTok != null
-      ? rate.outputImageUsdPerMTok
-      : rate.outputTextUsdPerMTok;
-  const outputCostUsd = (outputTokens / 1_000_000) * outputRate;
+  let outputCostUsd: number;
+  if (split && rate.outputImageUsdPerMTok != null) {
+    outputCostUsd =
+      (split.imageOutputTokens / 1_000_000) * rate.outputImageUsdPerMTok +
+      (split.textOutputTokens / 1_000_000) * rate.outputTextUsdPerMTok;
+  } else {
+    const outputRate =
+      hasImageOutput && rate.outputImageUsdPerMTok != null
+        ? rate.outputImageUsdPerMTok
+        : rate.outputTextUsdPerMTok;
+    outputCostUsd = (outputTokens / 1_000_000) * outputRate;
+  }
   return {
     inputCostUsd,
     outputCostUsd,
