@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, Loader2, Users } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { hasSessionToken } from "@/lib/api/client";
+import { getInvitePreview } from "@/lib/library/client";
+import type { AlbumInvitePreview } from "@/lib/library/types";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 import { cn } from "@/lib/cn";
@@ -14,7 +16,9 @@ const STEPS = ["Welcome", "Your account", "Done"] as const;
 
 export function V2SignUpStudio() {
   const router = useRouter();
+  const inviteId = useSearchParams().get("invite");
   const { signUp } = useAuth();
+  const [invite, setInvite] = useState<AlbumInvitePreview | null>(null);
   const [step, setStep] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +26,25 @@ export function V2SignUpStudio() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
+
+  // Arriving from a share email: say which album this is for and start on the right address.
+  useEffect(() => {
+    if (!inviteId) return;
+    let cancelled = false;
+    void getInvitePreview(inviteId).then((res) => {
+      if (cancelled || res.error) return;
+      setInvite(res.data!);
+      setEmail((current) => current || res.data!.email);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteId]);
+
+  const studioPath = invite ? `${STUDIO_PATH}?album=${encodeURIComponent(invite.albumId)}` : STUDIO_PATH;
+  const signInHref = invite ? `/sign-in?next=${encodeURIComponent(studioPath)}` : "/sign-in";
+  const invitedEmailMismatch =
+    invite != null && email.trim() !== "" && email.trim().toLowerCase() !== invite.email;
 
   async function onCreateAccount(e: FormEvent) {
     e.preventDefault();
@@ -78,6 +101,18 @@ export function V2SignUpStudio() {
           ))}
         </div>
 
+        {invite ? (
+          <div className="mb-4 flex w-full max-w-md gap-3 rounded-2xl border border-v2-primary/25 bg-v2-primary-light px-4 py-3.5">
+            <Users className="mt-0.5 h-5 w-5 shrink-0 text-v2-primary" aria-hidden />
+            <p className="min-w-0 text-sm leading-relaxed text-v2-navy">
+              <strong className="text-v2-ink">{invite.inviterName}</strong> invited you to add photos to
+              <strong className="block truncate text-base text-v2-ink">{invite.albumName}</strong>
+              Create your account with <strong className="text-v2-ink">{invite.email}</strong> and the
+              album will be waiting for you.
+            </p>
+          </div>
+        ) : null}
+
         <div className="v2-auth-card w-full max-w-md p-6 sm:p-8">
           {step === 0 && (
             <>
@@ -128,6 +163,12 @@ export function V2SignUpStudio() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
+                  {invitedEmailMismatch ? (
+                    <p className="mt-1.5 text-xs leading-relaxed text-amber-800">
+                      The invitation was sent to {invite!.email}. The shared album only appears for
+                      an account that uses that address.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="v2-label" htmlFor="signup-password">
@@ -190,26 +231,28 @@ export function V2SignUpStudio() {
                 {needsEmailConfirm ? (
                   <p className="mt-3 text-sm leading-relaxed text-v2-muted">
                     We sent a confirmation link to <strong className="text-v2-ink">{email}</strong>.
-                    Confirm your email, then sign in to open the studio.
+                    Confirm your email, then sign in to open {invite ? `“${invite.albumName}”` : "the studio"}.
                   </p>
                 ) : (
                   <p className="mt-3 text-sm text-v2-muted">
-                    Your account is ready. Head to the studio to start coloring.
+                    {invite
+                      ? `Your account is ready. “${invite.albumName}” is waiting in the studio.`
+                      : "Your account is ready. Head to the studio to start coloring."}
                   </p>
                 )}
               </div>
               <div className="mt-8 flex flex-col gap-2">
                 {needsEmailConfirm ? (
-                  <Link href="/sign-in" className="v2-btn-primary w-full py-3 text-center">
+                  <Link href={signInHref} className="v2-btn-primary w-full py-3 text-center">
                     Go to sign in
                   </Link>
                 ) : (
                   <button
                     type="button"
                     className="v2-btn-primary w-full py-3"
-                    onClick={() => router.push(STUDIO_PATH)}
+                    onClick={() => router.push(studioPath)}
                   >
-                    Open studio
+                    {invite ? "Open the album" : "Open studio"}
                   </button>
                 )}
                 <Link href="/" className="v2-btn-outline w-full py-3 text-center">
@@ -222,7 +265,7 @@ export function V2SignUpStudio() {
           {step < 2 ? (
             <p className="mt-6 text-center text-sm text-v2-muted">
               Already have an account?{" "}
-              <Link href="/sign-in" className="font-semibold text-v2-link hover:underline">
+              <Link href={signInHref} className="font-semibold text-v2-link hover:underline">
                 Sign in
               </Link>
             </p>

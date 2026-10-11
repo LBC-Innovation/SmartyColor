@@ -67,6 +67,8 @@ export type V2PhotoEntry = {
    */
   photoDataUrl: string;
   remote?: V2RemotePhoto;
+  /** False for a photo someone else added to an album shared with this user. */
+  canDelete?: boolean;
   /** Set for every photo added since image metadata was introduced; older entries fall back to printPrefs. */
   image?: V2PhotoImageMeta;
   printPrefs: PrintPrefs;
@@ -109,6 +111,12 @@ export type V2ProjectMeta = {
   name: string;
   updatedAt: string;
   photoCount: number;
+  /** Cloud albums only: "contributor" when someone else shared it with this user. */
+  role?: "owner" | "contributor";
+  /** Who shared the album (contributor rows). */
+  ownerName?: string | null;
+  /** How many people this user has invited to the album (owner rows). */
+  sharedCount?: number;
 };
 
 export type V2ProjectsMeta = {

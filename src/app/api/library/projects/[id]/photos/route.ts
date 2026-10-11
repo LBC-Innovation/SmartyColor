@@ -10,6 +10,7 @@ export async function GET(request: Request, { params }: Params) {
   if ("error" in auth) return auth.error;
   const { id } = await params;
   const result = await library.listPhotos(auth.user.id, id);
+  if (result.error?.code === "NOT_FOUND") return jsonError(result.error.message, 404, "NOT_FOUND");
   return jsonResult(result, result.error ? 500 : 200);
 }
 
@@ -23,6 +24,7 @@ export async function POST(request: Request, { params }: Params) {
     return jsonError("id and mimeType are required", 400);
   }
   const result = await library.registerPhoto(auth.user.id, id, body);
+  if (result.error?.code === "NOT_FOUND") return jsonError(result.error.message, 404, "NOT_FOUND");
   if (result.error?.code === "UPLOAD_MISSING") return jsonError(result.error.message, 409, "UPLOAD_MISSING");
   return jsonResult(result, result.error ? 500 : 201);
 }
@@ -37,5 +39,6 @@ export async function PATCH(request: Request, { params }: Params) {
     return jsonError("orderedIds must be a string array", 400);
   }
   const result = await library.reorderPhotos(auth.user.id, id, body.orderedIds as string[]);
+  if (result.error?.code === "NOT_FOUND") return jsonError(result.error.message, 404, "NOT_FOUND");
   return jsonResult(result, result.error ? 500 : 200);
 }

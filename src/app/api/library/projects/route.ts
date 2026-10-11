@@ -5,7 +5,10 @@ import * as library from "@/server/libraryService";
 export async function GET(request: Request) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  const result = await library.listProjects(auth.user.id);
+  const result = await library.listProjects(auth.user.id, {
+    email: auth.user.email,
+    emailVerified: auth.user.emailVerified,
+  });
   return jsonResult(result, result.error ? 500 : 200);
 }
 

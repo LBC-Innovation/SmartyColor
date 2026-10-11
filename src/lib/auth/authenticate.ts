@@ -3,6 +3,7 @@ import { getSupabaseAdmin, getSupabaseAuth } from "@/lib/supabase/service";
 export type AuthUser = {
   id: string;
   email: string;
+  emailVerified: boolean;
   role: string;
   permissions: string[];
   amr: string[] | null;
@@ -67,6 +68,7 @@ export async function authenticateBearer(
     user: {
       id: user.id,
       email: user.email ?? "",
+      emailVerified: Boolean(user.email_confirmed_at),
       role: (user.app_metadata?.role as string | undefined) ?? "user",
       permissions: (user.app_metadata?.permissions as string[] | undefined) ?? [],
       amr,

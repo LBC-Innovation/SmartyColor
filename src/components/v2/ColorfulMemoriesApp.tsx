@@ -12,6 +12,7 @@ import {
   Loader2,
   PencilLine,
   Printer,
+  RefreshCw,
   Sparkles,
   Square,
   Trash2,
@@ -98,6 +99,7 @@ export function ColorfulMemoriesApp() {
   const {
     hydrated,
     cloud,
+    refreshActiveProject,
     activeProjectId,
     photos,
     photosRef,
@@ -117,6 +119,7 @@ export function ColorfulMemoriesApp() {
   const [downloading, setDownloading] = useState(false);
   const [printingBook, setPrintingBook] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const generateAllRunRef = useRef(false);
   const coloringApiLockRef = useRef(false);
   const generateRequestIdRef = useRef<Map<string, string>>(new Map());
@@ -282,9 +285,17 @@ export function ColorfulMemoriesApp() {
   }
 
   function confirmPermanentDelete() {
-    const ids = pendingDeleteIds;
+    const locked = new Set(
+      photosRef.current.filter((entry) => entry.canDelete === false).map((entry) => entry.id),
+    );
+    const ids = pendingDeleteIds.filter((id) => !locked.has(id));
+    const skipped = pendingDeleteIds.length - ids.length;
     if (ids.length === 0) {
       setDeleteConfirmOpen(false);
+      setPendingDeleteIds([]);
+      if (skipped > 0) {
+        toast.error("Only the person who added a photo, or the album's owner, can delete it.");
+      }
       return;
     }
     removePhotosByIds(ids);
@@ -297,6 +308,13 @@ export function ColorfulMemoriesApp() {
           ? "Page permanently deleted."
           : `${ids.length} pages permanently deleted.`,
     });
+    if (skipped > 0) {
+      toast.info(
+        skipped === 1
+          ? "1 photo was added by someone else and was kept."
+          : `${skipped} photos were added by other people and were kept.`,
+      );
+    }
   }
 
   function cancelPermanentDelete() {
@@ -688,6 +706,20 @@ export function ColorfulMemoriesApp() {
     }
   }
 
+  /** Cloud albums: pull in photos and sheets added from other devices or by other people. */
+  async function refreshLibrary() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const result = await refreshActiveProject();
+      if (result === "gone") toast.info("That album is no longer available, so we opened another one.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not refresh this album.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function downloadSelected() {
     if (!selected?.sheet) return;
     setDownloading(true);
@@ -846,8 +878,23 @@ export function ColorfulMemoriesApp() {
     />
   );
 
-  const generateAllButton =
-    photos.length > 0 ? (
+  const refreshButton = (
+    <button
+      type="button"
+      disabled={refreshing || uploading || generatingAll || anyGenerating}
+      onClick={() => void refreshLibrary()}
+      title="Check for new photos"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-v2-primary/30 bg-v2-primary-light px-3.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} aria-hidden />
+      Refresh
+    </button>
+  );
+
+  // Guests have nothing to refresh from, so they keep the batch generate shortcut.
+  const generateAllButton = cloud ? (
+    refreshButton
+  ) : photos.length > 0 ? (
       <button
         type="button"
         disabled={!canGenerateAll}

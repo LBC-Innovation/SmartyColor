@@ -11,8 +11,11 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { StudioLayoutMode } from "@/components/v2/V2StudioLayoutToggle";
+import { useV2Toast } from "@/components/v2/V2Toast";
 import { useAuth } from "@/context/AuthContext";
+import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import * as library from "@/lib/library/client";
 import {
   entriesFromLibraryPhotos,
@@ -57,14 +60,24 @@ type V2StudioContextValue = {
   cloud: boolean;
   /** Re-read the active project from its source (after a migration, for instance). */
   reload: () => Promise<void>;
+  /**
+   * Cloud only: pull the active album's photos again, so pages other people
+   * added show up. Resolves "gone" when the album is no longer available.
+   */
+  refreshActiveProject: () => Promise<"ok" | "gone">;
   projects: V2ProjectMeta[];
   activeProjectId: string | null;
   activeProject: V2ProjectMeta | null;
   createProject: () => void;
   switchProject: (projectId: string) => void;
   renameActiveProject: (name: string) => void;
-  /** Permanently removes a project and all its photos; switches to another project (or a fresh one). */
+  /**
+   * Permanently removes a project and all its photos; switches to another project (or a fresh one).
+   * For an album someone else shared, this leaves it instead and nothing is deleted.
+   */
   deleteProject: (projectId: string) => Promise<void>;
+  /** Keep the "Shared with N" hint in step after invites change. */
+  setProjectSharedCount: (projectId: string, sharedCount: number) => void;
   photos: V2PhotoEntry[];
   photosRef: RefObject<V2PhotoEntry[]>;
   pendingUploads: PendingUpload[];
@@ -103,6 +116,28 @@ function readActiveProjectPref(userId: string): string | null {
     return localStorage.getItem(`${ACTIVE_PROJECT_KEY}:${userId}`);
   } catch {
     return null;
+  }
+}
+
+const ALBUM_LINK_PARAM = "album";
+
+/** Album id from a share email's link (`/studio?album=…`), if this page load has one. */
+function readAlbumLink(): string | null {
+  try {
+    if (window.location.pathname !== STUDIO_PATH) return null;
+    return new URLSearchParams(window.location.search).get(ALBUM_LINK_PARAM);
+  } catch {
+    return null;
+  }
+}
+
+function clearAlbumLink() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete(ALBUM_LINK_PARAM);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -147,7 +182,12 @@ function applySessionToState(
 
 export function V2StudioProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const toast = useV2Toast();
+  const toastRef = useRef(toast);
   const userId = user?.id ?? null;
+  const userEmailRef = useRef<string | null>(user?.email ?? null);
   const mode: V2StudioMode = userId ? "cloud" : "local";
   const cloud = mode === "cloud";
 
@@ -231,6 +271,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
   useEffect(() => { modeRef.current = mode; userIdRef.current = userId; }, [mode, userId]);
+  useEffect(() => { toastRef.current = toast; userEmailRef.current = user?.email ?? null; }, [toast, user?.email]);
 
   // ---------------------------------------------------------------- loading
 
@@ -264,6 +305,14 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     [setters],
   );
 
+  const notifyAlbumLinkMiss = useCallback(() => {
+    const who = userEmailRef.current ? ` with ${userEmailRef.current}` : "";
+    toastRef.current.error(
+      `That album isn't shared${who}. Check that you're signed in with the address the invitation was sent to.`,
+      "Album not available",
+    );
+  }, []);
+
   const bootstrapCloud = useCallback(
     async (uid: string) => {
       const res = await library.listProjects();
@@ -274,8 +323,15 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
         if (created.error) throw new Error(created.error.message);
         list = [created.data!];
       }
+      // A share email's link wins over wherever this user last was.
+      const linked = readAlbumLink();
+      if (linked) {
+        clearAlbumLink();
+        if (!list.some((p) => p.id === linked)) notifyAlbumLinkMiss();
+      }
       const preferred = readActiveProjectPref(uid);
-      const active = list.find((p) => p.id === preferred)?.id ?? list[0].id;
+      const active =
+        list.find((p) => p.id === linked)?.id ?? list.find((p) => p.id === preferred)?.id ?? list[0].id;
       const meta = list.map(projectMetaFromLibrary);
       setProjects(meta);
       setActiveProjectId(active);
@@ -283,7 +339,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       writeActiveProjectPref(uid, active);
       await loadCloudProject(active, meta);
     },
-    [loadCloudProject],
+    [loadCloudProject, notifyAlbumLinkMiss],
   );
 
   const bootstrapLocal = useCallback(async () => {
@@ -299,6 +355,13 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   // Re-bootstrap whenever the identity changes (sign-in, sign-out, first load).
   useEffect(() => {
     if (authLoading) return;
+    // Share links need an account: sign in first, then come back to the album.
+    const linkedAlbum = userId ? null : readAlbumLink();
+    if (linkedAlbum) {
+      const next = `${STUDIO_PATH}?${ALBUM_LINK_PARAM}=${encodeURIComponent(linkedAlbum)}`;
+      router.replace(`/sign-in?next=${encodeURIComponent(next)}`);
+      return;
+    }
     let cancelled = false;
     persistSkipRef.current = true;
     setHydrated(false);
@@ -321,7 +384,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, userId, bootstrapCloud, bootstrapLocal, revokeAllPreviews]);
+  }, [authLoading, userId, bootstrapCloud, bootstrapLocal, revokeAllPreviews, router]);
 
   const reload = useCallback(async () => {
     if (modeRef.current === "cloud" && userIdRef.current) {
@@ -335,6 +398,30 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       await bootstrapLocal();
     }
   }, [bootstrapCloud, bootstrapLocal]);
+
+  const refreshActiveProject = useCallback(async (): Promise<"ok" | "gone"> => {
+    const projectId = activeProjectIdRef.current;
+    const uid = userIdRef.current;
+    if (modeRef.current !== "cloud" || !projectId || !uid || switchingRef.current) return "ok";
+    switchingRef.current = true;
+    persistSkipRef.current = true;
+    const keepSelected = selectedIdRef.current;
+    try {
+      const list = await library.listProjects();
+      if (list.error) throw new Error(list.error.message);
+      if (!list.data!.some((p) => p.id === projectId)) {
+        // Deleted, or the owner stopped sharing it: fall back to another album.
+        await bootstrapCloud(uid);
+        return "gone";
+      }
+      await loadCloudProject(projectId, list.data!.map(projectMetaFromLibrary));
+      if (keepSelected && photosRef.current.some((p) => p.id === keepSelected)) setSelectedId(keepSelected);
+      return "ok";
+    } finally {
+      persistSkipRef.current = false;
+      switchingRef.current = false;
+    }
+  }, [bootstrapCloud, loadCloudProject]);
 
   // ------------------------------------------------------------- persisting
 
@@ -442,6 +529,9 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removePhotosByIds = useCallback((ids: string[]) => {
+    // Photos other people added to a shared album aren't this user's to delete.
+    const locked = new Set(photosRef.current.filter((e) => e.canDelete === false).map((e) => e.id));
+    ids = ids.filter((id) => !locked.has(id));
     if (ids.length === 0) return;
     const idSet = new Set(ids);
     const removed = photosRef.current.filter((e) => idSet.has(e.id));
@@ -500,7 +590,14 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
             setActiveProjectId(projectId);
             activeProjectIdRef.current = projectId;
             if (userIdRef.current) writeActiveProjectPref(userIdRef.current, projectId);
-            await loadCloudProject(projectId, projectsRef.current);
+            try {
+              await loadCloudProject(projectId, projectsRef.current);
+            } catch (e) {
+              // Most likely an album that stopped being shared since the list was loaded.
+              console.error("switch project failed", e);
+              toastRef.current.error("That album is no longer available.");
+              if (userIdRef.current) await bootstrapCloud(userIdRef.current);
+            }
             return;
           }
 
@@ -524,8 +621,19 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
         }
       })();
     },
-    [buildSnapshot, loadCloudProject, revokeAllPreviews, setters],
+    [bootstrapCloud, buildSnapshot, loadCloudProject, revokeAllPreviews, setters],
   );
+
+  // Arriving at a share link after the studio has already loaded (e.g. straight from sign-in).
+  useEffect(() => {
+    if (!hydrated || !userId) return;
+    const linked = readAlbumLink();
+    if (!linked) return;
+    clearAlbumLink();
+    if (linked === activeProjectIdRef.current) return;
+    if (projectsRef.current.some((p) => p.id === linked)) switchProject(linked);
+    else notifyAlbumLinkMiss();
+  }, [hydrated, userId, pathname, switchProject, notifyAlbumLinkMiss]);
 
   const createProject = useCallback(() => {
     if (switchingRef.current) return;
@@ -610,7 +718,8 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       try {
         if (modeRef.current === "cloud") {
           const removedEntries = wasActive ? photosRef.current : [];
-          const res = await library.deleteProject(projectId);
+          const shared = projectsRef.current.find((p) => p.id === projectId)?.role === "contributor";
+          const res = shared ? await library.leaveAlbum(projectId) : await library.deleteProject(projectId);
           if (res.error) throw new Error(res.error.message);
           void evictEntryImages(removedEntries);
 
@@ -666,6 +775,10 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     [loadCloudProject, revokeAllPreviews, setters],
   );
 
+  const setProjectSharedCount = useCallback((projectId: string, sharedCount: number) => {
+    setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, sharedCount } : p)));
+  }, []);
+
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [projects, activeProjectId],
@@ -677,6 +790,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       mode,
       cloud,
       reload,
+      refreshActiveProject,
       projects,
       activeProjectId,
       activeProject,
@@ -684,6 +798,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       switchProject,
       renameActiveProject,
       deleteProject,
+      setProjectSharedCount,
       photos,
       photosRef,
       pendingUploads,
@@ -715,6 +830,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       mode,
       cloud,
       reload,
+      refreshActiveProject,
       projects,
       activeProjectId,
       activeProject,
@@ -722,6 +838,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       switchProject,
       renameActiveProject,
       deleteProject,
+      setProjectSharedCount,
       photos,
       pendingUploads,
       selectedId,

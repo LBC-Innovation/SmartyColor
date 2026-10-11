@@ -17,7 +17,15 @@ export function isCloudPhoto(entry: Pick<V2PhotoEntry, "remote">): boolean {
 }
 
 export function projectMetaFromLibrary(p: LibraryProject): V2ProjectMeta {
-  return { id: p.id, name: p.name, updatedAt: p.updatedAt, photoCount: p.photoCount };
+  return {
+    id: p.id,
+    name: p.name,
+    updatedAt: p.updatedAt,
+    photoCount: p.photoCount,
+    role: p.role,
+    ownerName: p.ownerName,
+    sharedCount: p.sharedCount,
+  };
 }
 
 async function revisionToVersion(rev: LibraryRevision): Promise<SheetVersion> {
@@ -44,6 +52,7 @@ export async function entryFromLibraryPhoto(
   return {
     id: p.id,
     remote: { photoId: p.id, projectId: p.projectId, storagePath: p.storagePath },
+    canDelete: p.canDelete,
     previewUrl,
     photoDataUrl: "",
     image:
