@@ -47,6 +47,8 @@ import { V2DeletePagesConfirmModal } from "@/components/v2/V2DeletePagesConfirmM
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
+import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
+import { LayoutGrid } from "lucide-react";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { withViewTransition } from "@/lib/v2/viewTransition";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
@@ -137,6 +139,8 @@ export function ColorfulMemoriesApp() {
   const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
   /** While the project name is being edited the toolbar is given over to that. */
   const [renamingProject, setRenamingProject] = useState(false);
+  /** Studio shows every photo as a sortable grid instead of the photo/sheet panes. */
+  const [gridView, setGridView] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
   const selectedIndex = selected ? photos.indexOf(selected) : -1;
@@ -1206,28 +1210,64 @@ export function ColorfulMemoriesApp() {
                     ) : null}
                   </div>
                   <V2StudioLayoutToggle
-                    className="shrink-0"
+                    className={cn("shrink-0", gridView && "opacity-50")}
                     value={studioLayout}
-                    onChange={setStudioLayout}
+                    onChange={(mode) => {
+                      setGridView(false);
+                      setStudioLayout(mode);
+                    }}
                   />
+                  <label className="ml-1 inline-flex shrink-0 cursor-pointer items-center gap-2 text-xs font-semibold text-v2-navy">
+                    <LayoutGrid className="h-4 w-4 text-v2-muted" aria-hidden />
+                    <span className="hidden sm:inline">Grid</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={gridView}
+                      aria-label="Show all photos as a grid"
+                      onClick={() => setGridView((v) => !v)}
+                      className={cn(
+                        "relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
+                        gridView ? "border-v2-primary bg-v2-primary" : "border-gray-300 bg-gray-200",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform",
+                          gridView ? "translate-x-[18px]" : "translate-x-0.5",
+                        )}
+                      />
+                    </button>
+                  </label>
                 </header>
 
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-5 lg:p-6">
-                  <div
-                    className={cn(
-                      "grid min-h-0 flex-1 gap-3 overflow-hidden lg:gap-5",
-                      studioLayout === "both"
-                        ? "grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
-                        : "grid-cols-1",
-                    )}
-                  >
-                    {showPhotoPane ? photoPane : null}
-                    {showSheetPane ? sheetPane : null}
-                  </div>
+                  {gridView ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+                      <V2StudioPhotoGrid
+                        photos={photos}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onReorder={replacePhotos}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "grid min-h-0 flex-1 gap-3 overflow-hidden lg:gap-5",
+                        studioLayout === "both"
+                          ? "grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
+                          : "grid-cols-1",
+                      )}
+                    >
+                      {showPhotoPane ? photoPane : null}
+                      {showSheetPane ? sheetPane : null}
+                    </div>
+                  )}
                 </div>
 
                 {/* Phone-only: revisions + page actions */}
-                {showRevisionSidebar && selected ? (
+                {showRevisionSidebar && selected && !gridView ? (
                   <V2SheetRevisionStrip
                     variant="compact"
                     className="shrink-0 border-t border-gray-100 px-3 py-2 lg:hidden"
@@ -1276,7 +1316,7 @@ export function ColorfulMemoriesApp() {
                 ) : null}
               </div>
 
-              {showRevisionSidebar && selected ? (
+              {showRevisionSidebar && selected && !gridView ? (
                 <V2SheetRevisionStrip
                   variant="sidebar"
                   className="hidden min-h-0 self-stretch lg:flex"
