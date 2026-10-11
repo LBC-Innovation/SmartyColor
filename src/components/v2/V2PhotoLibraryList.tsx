@@ -193,25 +193,25 @@ function PhotoLibraryRow({
         )}
 
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-          <div className="relative overflow-hidden rounded-lg bg-v2-bg-subtle">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo.previewUrl}
-              alt=""
-              className={cn(
-                "aspect-[4/3] h-full w-full object-cover",
-                photoThumbObjectPosition(photo) === "top" ? "object-top" : "object-center",
-              )}
-            />
-          </div>
+          <div
+            role="img"
+            aria-label=""
+            className="aspect-[4/3] rounded-lg bg-v2-bg-subtle bg-cover bg-no-repeat"
+            style={{
+              backgroundImage: `url("${photo.previewUrl}")`,
+              backgroundPosition:
+                photoThumbObjectPosition(photo) === "top" ? "center top" : "center center",
+            }}
+          />
 
           {photo.sheet ? (
-            <div className="relative overflow-hidden rounded-lg border border-gray-100 bg-white">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photo.sheet.imageDataUrl}
-                alt=""
-                className="aspect-[4/3] h-full w-full object-contain"
+            <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-gray-100 bg-white">
+              {/* Background image, scaled a touch past the frame so the sheet's own black border is cropped */}
+              <div
+                role="img"
+                aria-label=""
+                className="absolute -inset-[3%] bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: `url("${photo.sheet.imageDataUrl}")` }}
               />
               {photo.generating ? (
                 <V2SheetGeneratingPlaceholder
