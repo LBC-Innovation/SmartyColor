@@ -436,10 +436,15 @@ export function V2LandingPage() {
 
       <footer className="border-t border-gray-200 bg-white py-6">
         <div className="v2-gutter-x mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 text-xs text-v2-muted sm:flex-row">
-          <span>© {new Date().getFullYear()} ColorfulMoments · LBC Innovation</span>
-          <Link href="/sign-in" className="font-semibold text-v2-link">
-            Already have an account? Sign in
-          </Link>
+          <span>© {new Date().getFullYear()} ColorfulMemories · LBC Innovation</span>
+          <span className="flex items-center gap-4">
+            <Link href="/terms" className="font-semibold text-v2-muted hover:text-v2-ink">
+              Terms &amp; privacy
+            </Link>
+            <Link href="/sign-in" className="font-semibold text-v2-link">
+              Already have an account? Sign in
+            </Link>
+          </span>
         </div>
       </footer>
 
@@ -490,7 +495,7 @@ type BeforeAfterProps = {
   className?: string;
 };
 
-/** A real family photo beside the coloring page ColorfulMoments made from it. */
+/** A real family photo beside the coloring page ColorfulMemories made from it. */
 function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, eager, className }: BeforeAfterProps) {
   const aspect = `${width}/${height}`;
   return (
@@ -614,7 +619,7 @@ function PrintedBook() {
               Beach Days
             </p>
             <p className="mt-0.5 truncate text-[7.5px] font-semibold uppercase tracking-[0.12em] text-white/70 sm:text-[9px]">
-              ColorfulMoments
+              ColorfulMemories
             </p>
           </div>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/25" />

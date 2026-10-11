@@ -24,7 +24,7 @@ const luckiest = Luckiest_Guy({
   variable: "--font-luckiest",
 });
 
-const APP_NAME = "ColorfulMoments";
+const APP_NAME = "ColorfulMemories";
 const APP_DESCRIPTION =
   "Turn family photos into coloring pages and printed coloring books.";
 const THEME_COLOR = "#564fd0";
@@ -84,7 +84,7 @@ export default function RootLayout({
             decoding="sync"
           />
           <span className="pwa-splash-title">
-            <span className="pwa-splash-title-accent">Colorful</span>Moments
+            <span className="pwa-splash-title-accent">Colorful</span>Memories
           </span>
         </div>
         {children}

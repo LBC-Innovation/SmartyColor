@@ -16,7 +16,7 @@ const calistoga = Calistoga({
 });
 
 export const metadata: Metadata = {
-  title: "ColorfulMoments",
+  title: "ColorfulMemories",
   description:
     "Turn your family photos into coloring memories with a clean, modern studio.",
 };

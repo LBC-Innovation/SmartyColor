@@ -81,7 +81,7 @@ function createSheetRevision(sheet: GeneratedSheet): SheetVersion {
 
 type GenerateResult = "success" | "failed" | "skipped";
 
-export function ColorfulMomentsApp() {
+export function ColorfulMemoriesApp() {
   const toast = useV2Toast();
   const router = useRouter();
   const welcomeGuide = useV2WelcomeGuide();
@@ -648,7 +648,7 @@ export function ColorfulMomentsApp() {
       const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = "colorful-moments-coloring-sheet.pdf";
+      link.download = "colorful-memories-coloring-sheet.pdf";
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (err) {
@@ -687,7 +687,7 @@ export function ColorfulMomentsApp() {
       const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = "colorful-moments-print-book.pdf";
+      link.download = "colorful-memories-print-book.pdf";
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (err) {

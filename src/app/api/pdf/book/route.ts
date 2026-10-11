@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     return new Response(Buffer.from(bytes), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": "attachment; filename=colorful-moments-print-book.pdf",
+        "Content-Disposition": "attachment; filename=colorful-memories-print-book.pdf",
       },
     });
   } catch (error) {
