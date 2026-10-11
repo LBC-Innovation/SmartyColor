@@ -62,22 +62,27 @@ function Tile({
       )}
     >
       <button type="button" onClick={onSelect} className="relative block aspect-[4/3] w-full bg-v2-bg-subtle">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.previewUrl}
-          alt=""
-          className={cn(
-            "h-full w-full object-cover",
-            photoThumbObjectPosition(photo) === "top" ? "object-top" : "object-center",
-          )}
+        <span
+          role="img"
+          aria-label=""
+          className="absolute inset-0 bg-cover bg-no-repeat"
+          style={{
+            backgroundImage: `url("${photo.previewUrl}")`,
+            backgroundPosition: photoThumbObjectPosition(photo) === "top" ? "center top" : "center center",
+          }}
         />
         <span className="absolute left-1.5 top-1.5 rounded-md bg-slate-900/70 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white">
           {index + 1}
         </span>
         {photo.sheet ? (
           <span className="absolute bottom-1.5 right-1.5 h-12 w-12 overflow-hidden rounded-md border-2 border-white bg-white shadow">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photo.sheet.imageDataUrl} alt="" className="h-full w-full object-contain" />
+            {/* Oversized background so the sheet's own black border is cropped out */}
+            <span
+              role="img"
+              aria-label=""
+              className="absolute -inset-[3%] bg-cover bg-center bg-no-repeat"
+              style={{ backgroundImage: `url("${photo.sheet.imageDataUrl}")` }}
+            />
           </span>
         ) : photo.generating ? (
           <span className="absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-v2-primary shadow">
