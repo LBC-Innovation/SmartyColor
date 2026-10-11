@@ -92,14 +92,12 @@ function Tile({
       </button>
 
       {dragHandle ? (
-        <button
-          type="button"
-          {...dragHandle}
-          className="absolute right-1 top-1 hidden h-8 w-8 cursor-grab touch-none items-center justify-center rounded-lg bg-white/85 text-v2-muted shadow-sm backdrop-blur active:cursor-grabbing lg:inline-flex"
-          aria-label={`Drag photo ${index + 1}`}
+        <span
+          className="absolute right-1 top-1 hidden h-8 w-8 cursor-grab items-center justify-center rounded-lg bg-white/85 text-v2-muted shadow-sm backdrop-blur lg:inline-flex"
+          aria-hidden
         >
-          <GripVertical className="h-4 w-4" aria-hidden />
-        </button>
+          <GripVertical className="h-4 w-4" />
+        </span>
       ) : null}
 
       {onMove ? (
@@ -128,12 +126,19 @@ function Tile({
   );
 }
 
-function SortableTile(props: Omit<Parameters<typeof Tile>[0], "dragHandle" | "isOverlay">) {
+function SortableTile(props: Omit<Parameters<typeof Tile>[0], "dragHandle" | "isOverlay" | "onMove">) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.photo.id });
   const style: CSSProperties = { transform: CSS.Transform.toString(transform), transition };
   return (
-    <div ref={setNodeRef} style={style} className={cn(isDragging && "opacity-40")}>
-      <Tile {...props} dragHandle={{ ...attributes, ...listeners }} />
+    // Hold-to-drag anywhere on the tile (touch) or drag outright (mouse); a plain tap still selects.
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn("select-none", isDragging && "opacity-40")}
+    >
+      <Tile {...props} dragHandle={{}} />
     </div>
   );
 }
@@ -146,13 +151,6 @@ export function V2StudioPhotoGrid({ photos, selectedId, onSelect, onReorder, cla
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  function move(id: string, delta: -1 | 1) {
-    const from = photos.findIndex((p) => p.id === id);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= photos.length) return;
-    onReorder(arrayMove(photos, from, to));
-  }
 
   function onDragEnd(e: DragEndEvent) {
     setActiveId(null);
@@ -182,6 +180,7 @@ export function V2StudioPhotoGrid({ photos, selectedId, onSelect, onReorder, cla
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
+      <p className="mb-2 text-xs text-v2-muted lg:hidden">Hold a photo, then drag to reorder. Tap to select.</p>
       <SortableContext items={photos.map((p) => p.id)} strategy={rectSortingStrategy}>
         {/* Column count follows the available width: as many 9–11rem tiles as fit. */}
         <div
@@ -198,7 +197,6 @@ export function V2StudioPhotoGrid({ photos, selectedId, onSelect, onReorder, cla
               count={photos.length}
               selected={photo.id === selectedId}
               onSelect={() => onSelect(photo.id)}
-              onMove={(delta) => move(photo.id, delta)}
             />
           ))}
         </div>
