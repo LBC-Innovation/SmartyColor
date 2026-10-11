@@ -1,6 +1,8 @@
 import * as api from "@/lib/api/client";
 import type { ApiResult } from "@/lib/api/types";
 import type {
+  AlbumInvitePreview,
+  AlbumShare,
   LibraryPhoto,
   LibraryPhotoPatch,
   LibraryProject,
@@ -103,4 +105,36 @@ export async function putToSignedUrl(
   } catch {
     return { data: null, error: { message: "Network error during upload", code: "UNAVAILABLE" } };
   }
+}
+
+// ------------------------------------------------------------------ sharing
+
+export function listShares(projectId: string) {
+  return api.request<AlbumShare[]>(`${base}/projects/${projectId}/shares`);
+}
+
+export function inviteToAlbum(projectId: string, email: string) {
+  return api.request<{ share: AlbumShare; emailSent: boolean }>(`${base}/projects/${projectId}/shares`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resendShare(projectId: string, shareId: string) {
+  return api.request<{ emailSent: boolean }>(`${base}/projects/${projectId}/shares/${shareId}/resend`, {
+    method: "POST",
+  });
+}
+
+export function removeShare(projectId: string, shareId: string) {
+  return api.request<{ id: string }>(`${base}/projects/${projectId}/shares/${shareId}`, { method: "DELETE" });
+}
+
+/** Stop contributing to an album someone else shared. */
+export function leaveAlbum(projectId: string) {
+  return removeShare(projectId, "me");
+}
+
+export function getInvitePreview(inviteId: string) {
+  return api.request<AlbumInvitePreview>(`${base}/invites/${inviteId}`);
 }

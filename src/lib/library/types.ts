@@ -14,8 +14,31 @@ export type LibraryProject = {
   generatedStory: unknown | null;
   printArtMode: string | null;
   storyPhase: string | null;
+  /** "contributor" when someone else shared this album with the caller. */
+  role: LibraryProjectRole;
+  /** Display name of the album's owner (contributor rows only). */
+  ownerName: string | null;
+  /** How many people the caller has invited (owner rows only). */
+  sharedCount: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type LibraryProjectRole = "owner" | "contributor";
+
+/** One invite on an album, as its owner sees it. Deliberately says nothing about the invitee's account. */
+export type AlbumShare = {
+  id: string;
+  email: string;
+  invitedAt: string;
+};
+
+/** What the sign-up page shows for an invite link. */
+export type AlbumInvitePreview = {
+  albumId: string;
+  albumName: string;
+  inviterName: string;
+  email: string;
 };
 
 export type LibraryRevision = {
@@ -47,6 +70,8 @@ export type LibraryPhoto = {
   crop: PhotoCropRect | null;
   activeRevisionId: string | null;
   revisions: LibraryRevision[];
+  /** False for a contributor looking at someone else's photo. */
+  canDelete: boolean;
   /** Short-lived read URL for the original. */
   url: string;
   createdAt: string;

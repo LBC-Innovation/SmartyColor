@@ -1,6 +1,7 @@
 import * as library from "@/lib/library/client";
 import { cachedImageUrl } from "@/lib/v2/imageCache";
 import { loadV2ProjectSession, loadV2ProjectsMeta } from "@/lib/v2/studioSessionDb";
+import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import { normalizeV2SheetRevisions, photoOrientation } from "@/lib/v2/studioTypes";
@@ -9,7 +10,7 @@ export async function loadProjectsCatalog(cloud = false): Promise<V2ProjectMeta[
   if (cloud) {
     const res = await library.listProjects();
     if (res.error) throw new Error(res.error.message);
-    return res.data!.map((p) => ({ id: p.id, name: p.name, updatedAt: p.updatedAt, photoCount: p.photoCount }));
+    return res.data!.map(projectMetaFromLibrary);
   }
   const meta = await loadV2ProjectsMeta();
   return meta.projects;
