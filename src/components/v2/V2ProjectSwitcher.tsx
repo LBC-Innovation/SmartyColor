@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, CircleCheck, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, CircleCheck, FolderOpen, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
 import { useV2Toast } from "@/components/v2/V2Toast";
@@ -137,17 +137,20 @@ export function V2ProjectSwitcher({
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-red-200 bg-white text-red-700 transition hover:bg-red-50"
+            aria-label="Delete album"
+            title="Delete album"
           >
-            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-            Delete
+            <Trash2 className="h-[18px] w-[18px]" aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white px-2 text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle"
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white text-v2-navy transition hover:bg-v2-bg-subtle"
+            aria-label="Cancel renaming"
+            title="Cancel"
           >
-            Cancel
+            <X className="h-[18px] w-[18px]" aria-hidden />
           </button>
         </div>
       ) : (
