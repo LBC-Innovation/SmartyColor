@@ -134,3 +134,22 @@ export async function evictImages(paths: string[]): Promise<void> {
   }
   await idbDelete(paths);
 }
+
+/** Drop every cached image and object URL — used on sign-out so nothing lingers on a shared device. */
+export async function clearImageCache(): Promise<void> {
+  for (const url of objectUrls.values()) URL.revokeObjectURL(url);
+  objectUrls.clear();
+  inflight.clear();
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore(STORE).clear();
+    });
+    db.close();
+  } catch {
+    /* best effort */
+  }
+}
