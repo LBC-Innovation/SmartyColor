@@ -319,6 +319,10 @@ export function createCreditTopUpCheckout(input: {
   });
 }
 
+export function listMyCreditLedger(): Promise<ApiResult<CreditLedgerEntry[]>> {
+  return request<CreditLedgerEntry[]>("/credits/ledger");
+}
+
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
   return request<CreditLedgerEntry[]>(`/admin/users/${userId}/credits`);
 }

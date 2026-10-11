@@ -211,7 +211,7 @@ function FormError({ message }: { message: string | null }) {
   );
 }
 
-function EditProfileModal({ onClose }: { onClose: () => void }) {
+export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const { user, refreshUser } = useAuth();
   const toast = useV2Toast();
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
@@ -312,7 +312,7 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
   const toast = useV2Toast();
   const [password, setPassword] = useState("");
