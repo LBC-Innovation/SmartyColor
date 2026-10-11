@@ -106,7 +106,7 @@ export function V2ProjectSwitcher({
     >
       {editing ? (
         <div className="flex w-full min-w-0 items-center gap-2">
-          <div className="relative min-w-0 flex-[2]">
+          <div className="relative min-w-0 flex-[4]">
             <input
               type="text"
               value={draft}
