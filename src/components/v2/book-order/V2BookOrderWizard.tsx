@@ -18,7 +18,36 @@ import { formatCredits } from "@/lib/credits/money";
 import { getBookBinding, recommendBinding, type BookBindingId } from "@/lib/print/bookBindings";
 import { computeBookPagePlan, explainBookPagePadding, nextRotation } from "@/lib/print/bookPagePlan";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
-import { readStoredQuoteShippingZip, storeQuoteShippingZip } from "@/lib/print/quoteShippingZip";
+import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
+import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
+import {
+  EMPTY_SHIPPING_ADDRESS,
+  isShippingAddressComplete,
+  normalizeShippingAddress,
+  validateShippingAddress,
+  type ShippingAddressErrors,
+} from "@/lib/orders/shippingAddress";
+import type { ShippingAddress } from "@/lib/orders/types";
+
+const ADDRESS_STORAGE_KEY = "cm_shipping_address";
+
+function readStoredAddress(): ShippingAddress {
+  if (typeof window === "undefined") return EMPTY_SHIPPING_ADDRESS;
+  try {
+    const raw = localStorage.getItem(ADDRESS_STORAGE_KEY);
+    return raw ? { ...EMPTY_SHIPPING_ADDRESS, ...(JSON.parse(raw) as Partial<ShippingAddress>) } : EMPTY_SHIPPING_ADDRESS;
+  } catch {
+    return EMPTY_SHIPPING_ADDRESS;
+  }
+}
+
+function storeAddress(address: ShippingAddress) {
+  try {
+    localStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(address));
+  } catch {
+    /* ignore */
+  }
+}
 import {
   collectPhotoPagesFromProjects,
   countProjectSheets,
@@ -47,7 +76,11 @@ export function V2BookOrderWizard() {
   const [bindingTouched, setBindingTouched] = useState(false);
 
   // Only rendered on the review step, so reading storage up front can't mismatch SSR.
-  const [shippingZip, setShippingZip] = useState(() => readStoredQuoteShippingZip());
+  // Legacy ZIP-only estimate, used until a full address is entered.
+  const [shippingZip] = useState(() => readStoredQuoteShippingZip());
+  const [address, setAddress] = useState<ShippingAddress>(() => readStoredAddress());
+  const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
+  const addressComplete = isShippingAddressComplete(address);
   const [quoteCents, setQuoteCents] = useState<number | null>(null);
   const [printCents, setPrintCents] = useState<number | null>(null);
   const [shippingCents, setShippingCents] = useState<number | null>(null);
@@ -159,11 +192,22 @@ export function V2BookOrderWizard() {
       void (async () => {
         setQuoteLoading(true);
         setQuoteError(null);
-        const zip = shippingZip.trim();
+        const zip = (addressComplete ? address.postcode : shippingZip).trim();
         const result = await api.fetchOrderQuote({
           bindingId,
           pageCount: plan.totalPages,
-          ...(zip ? { shippingPostcode: zip } : {}),
+          ...(addressComplete
+            ? {
+                shippingAddress: {
+                  city: address.city,
+                  state_code: address.state_code,
+                  postcode: address.postcode,
+                  country_code: address.country_code,
+                },
+              }
+            : zip
+              ? { shippingPostcode: zip }
+              : {}),
         });
         setQuoteLoading(false);
         if (api.isError(result)) {
@@ -180,11 +224,12 @@ export function V2BookOrderWizard() {
       })();
     }, 350);
     return () => window.clearTimeout(t);
-  }, [quoteActive, bindingId, plan.totalPages, shippingZip]);
+  }, [quoteActive, bindingId, plan.totalPages, shippingZip, addressComplete, address.city, address.state_code, address.postcode, address.country_code]);
 
-  function updateShippingZip(next: string) {
-    setShippingZip(next);
-    storeQuoteShippingZip(next);
+  function updateAddress(next: ShippingAddress) {
+    setAddress(next);
+    storeAddress(next);
+    if (Object.keys(addressErrors).length > 0) setAddressErrors(validateShippingAddress(next));
   }
 
   // ---- navigation ----------------------------------------------------------
@@ -201,9 +246,16 @@ export function V2BookOrderWizard() {
     } else if (step === "book") {
       setStep("review");
     } else {
+      const errors = validateShippingAddress(address);
+      setAddressErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        setError("Please complete the shipping address.");
+        document.getElementById("ship-name")?.focus();
+        return;
+      }
       setConfirmOpen(true);
     }
-  }, [step, plan.photoCount, bindingTouched]);
+  }, [step, plan.photoCount, bindingTouched, address]);
 
   function goBack() {
     setError(null);
@@ -216,6 +268,7 @@ export function V2BookOrderWizard() {
     setPlacing(true);
     setError(null);
     const shippingPostcode = shippingZip.trim() || null;
+    const shippingAddress = normalizeShippingAddress(address);
     let orderId = savedDraftIdRef.current;
 
     if (orderId) {
@@ -225,6 +278,7 @@ export function V2BookOrderWizard() {
         projectTitle,
         estimatedTotalCents: quoteCents,
         shippingPostcode,
+        shippingAddress,
       });
       if (api.isError(updated)) {
         setError(updated.error.message);
@@ -240,6 +294,7 @@ export function V2BookOrderWizard() {
         projectTitle,
         estimatedTotalCents: quoteCents,
         shippingPostcode,
+        shippingAddress,
       });
       if (api.isError(created)) {
         setError(created.error.message);
@@ -393,7 +448,7 @@ export function V2BookOrderWizard() {
                 ) : null}
 
                 {step === "review" ? (
-                  <section className="grid gap-4 lg:grid-cols-[1fr_20rem]" aria-label="Review order">
+                  <section className="grid gap-4 lg:grid-cols-[18rem_1fr]" aria-label="Review order">
                     <div className="v2-panel p-5 sm:p-6">
                       <h2 className="text-base font-semibold text-v2-ink">Your book</h2>
                       <dl className="mt-4 divide-y divide-gray-100 text-sm">
@@ -423,25 +478,23 @@ export function V2BookOrderWizard() {
                     </div>
 
                     <div className="v2-panel p-5 sm:p-6">
-                      <h2 className="text-base font-semibold text-v2-ink">Shipping &amp; price</h2>
-                      <label htmlFor="ship-zip" className="v2-label mt-4">
-                        Ship to ZIP (US)
-                      </label>
-                      <input
-                        id="ship-zip"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="postal-code"
-                        placeholder="e.g. 90210"
-                        maxLength={10}
-                        value={shippingZip}
-                        onChange={(e) => updateShippingZip(e.target.value)}
-                        className="v2-input tabular-nums"
-                      />
-                      <p className="mt-1.5 text-xs text-v2-muted">
-                        Standard mail from the printer. Enter your ZIP for an exact shipping charge.
+                      <h2 className="text-base font-semibold text-v2-ink">Ship to</h2>
+                      <p className="mt-0.5 text-xs text-v2-muted">
+                        Where the printer should mail your book.
                       </p>
+                      <BookShippingAddressForm
+                        className="mt-4"
+                        value={address}
+                        onChange={updateAddress}
+                        errors={addressErrors}
+                      />
 
+                      <h2 className="mt-6 text-base font-semibold text-v2-ink">Price</h2>
+                      {!addressComplete ? (
+                        <p className="mt-1 text-xs text-v2-muted">
+                          Shipping is estimated until the address above is complete.
+                        </p>
+                      ) : null}
                       <dl className="mt-4 space-y-1.5 text-sm">
                         <Money label="Printing" cents={printCents} loading={quoteLoading} />
                         <Money label="Shipping" cents={shippingCents} loading={quoteLoading} />
@@ -496,6 +549,7 @@ export function V2BookOrderWizard() {
         photoCount={plan.photoCount}
         totalCents={quoteCents}
         shippingZip={shippingZip}
+        shippingAddress={address}
         onCancel={() => !placing && setConfirmOpen(false)}
         onConfirm={() => void placeOrder()}
       />

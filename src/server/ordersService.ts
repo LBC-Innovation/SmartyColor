@@ -13,6 +13,7 @@ import type {
   BookPaymentMethod,
   ShippingAddress,
 } from "@/lib/orders/types";
+import { isShippingAddressComplete, normalizeShippingAddress } from "@/lib/orders/shippingAddress";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { luluConfigured } from "@/server/lulu/config";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
@@ -152,6 +153,8 @@ export async function createDraftBookOrder(input: {
   luluCostCents: number | null;
   totalCents: number | null;
   shippingPostcode?: string | null;
+  /** Full address when the customer has entered one; wins over the quote postcode. */
+  shippingAddress?: ShippingAddress | null;
 }): Promise<ApiResult<{ orderId: string }>> {
   const { data, error } = await getSupabaseAdmin()
     .from("book_orders")
@@ -164,7 +167,9 @@ export async function createDraftBookOrder(input: {
       contact_email: input.contactEmail,
       lulu_cost_cents: input.luluCostCents,
       total_cents: input.totalCents,
-      shipping_address: shippingAddressFromQuotePostcode(input.shippingPostcode),
+      shipping_address: input.shippingAddress
+        ? normalizeShippingAddress(input.shippingAddress)
+        : shippingAddressFromQuotePostcode(input.shippingPostcode),
     })
     .select("id")
     .single();
@@ -232,15 +237,17 @@ export async function updateDraftBookOrder(input: {
   luluCostCents: number | null;
   totalCents: number | null;
   shippingPostcode?: string | null;
+  shippingAddress?: ShippingAddress | null;
 }): Promise<ApiResult<{ orderId: string }>> {
   const owned = await getOwnedDraftOrder(input.userId, input.orderId);
   if (owned.error) return { data: null, error: owned.error };
 
-  const quoteAddress = shippingAddressFromQuotePostcode(input.shippingPostcode);
-  const mergedAddress: ShippingAddress = {
-    ...((owned.data!.shipping_address ?? {}) as ShippingAddress),
-    ...quoteAddress,
-  };
+  const mergedAddress: ShippingAddress = input.shippingAddress
+    ? normalizeShippingAddress(input.shippingAddress)
+    : {
+        ...((owned.data!.shipping_address ?? {}) as ShippingAddress),
+        ...shippingAddressFromQuotePostcode(input.shippingPostcode),
+      };
 
   const { error } = await getSupabaseAdmin()
     .from("book_orders")
@@ -270,12 +277,56 @@ export async function updateDraftBookOrder(input: {
   return { data: { orderId: input.orderId }, error: null };
 }
 
+export async function updateOrderShippingAddress(input: {
+  userId: string;
+  orderId: string;
+  shippingAddress: ShippingAddress;
+}): Promise<ApiResult<{ orderId: string }>> {
+  const { data: order, error: loadError } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("id, user_id, status")
+    .eq("id", input.orderId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  if (loadError) return { data: null, error: { message: loadError.message } };
+  if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  if (order.status !== "draft" && order.status !== "awaiting_payment") {
+    return {
+      data: null,
+      error: { message: "The address can't be changed once the order is placed.", code: "INVALID_STATE" },
+    };
+  }
+
+  const { error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .update({
+      shipping_address: normalizeShippingAddress(input.shippingAddress),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.orderId)
+    .eq("user_id", input.userId);
+  if (error) return { data: null, error: { message: error.message } };
+
+  await appendOrderEvent(input.orderId, {
+    kind: "shipping_address_updated",
+    title: "Shipping address updated",
+  });
+  return { data: { orderId: input.orderId }, error: null };
+}
+
 export async function confirmDraftBookOrder(input: {
   userId: string;
   orderId: string;
 }): Promise<ApiResult<{ orderId: string; status: BookOrderStatus }>> {
   const owned = await getOwnedDraftOrder(input.userId, input.orderId);
   if (owned.error) return { data: null, error: owned.error };
+
+  if (!isShippingAddressComplete(owned.data!.shipping_address as Partial<ShippingAddress>)) {
+    return {
+      data: null,
+      error: { message: "Add a shipping address before confirming the order.", code: "ADDRESS_REQUIRED" },
+    };
+  }
 
   const { error } = await getSupabaseAdmin()
     .from("book_orders")

@@ -1,7 +1,7 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
-import type { BookOrderDetail, BookOrderSummary } from "@/lib/orders/types";
+import type { BookOrderDetail, BookOrderSummary, ShippingAddress } from "@/lib/orders/types";
 import type { CreditLedgerEntry } from "@/lib/credits/types";
 
 const TOKEN_KEY = "cm_access_token";
@@ -240,6 +240,7 @@ export function fetchOrderQuote(input: {
   pageCount: number;
   shippingPostcode?: string;
   shippingLevel?: string;
+  shippingAddress?: Partial<ShippingAddress>;
 }): Promise<ApiResult<OrderQuoteData>> {
   return request("/orders/quote", {
     method: "POST",
@@ -255,6 +256,7 @@ export type BookDraftPayload = {
   projectTitle: string;
   estimatedTotalCents: number | null;
   shippingPostcode?: string | null;
+  shippingAddress?: ShippingAddress | null;
 };
 
 export function createDraftBookOrder(
@@ -273,6 +275,16 @@ export function updateDraftBookOrder(
   return request(`/orders/${orderId}/draft`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export function updateOrderShippingAddress(
+  orderId: string,
+  shippingAddress: ShippingAddress,
+): Promise<ApiResult<{ orderId: string }>> {
+  return request(`/orders/${orderId}/shipping`, {
+    method: "PATCH",
+    body: JSON.stringify({ shippingAddress }),
   });
 }
 
