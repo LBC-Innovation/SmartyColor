@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { V2UserMenu } from "@/components/v2/auth/V2UserMenu";
-import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
-import { CircleHelp } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { formatCredits } from "@/lib/credits/money";
+import { CircleDollarSign } from "lucide-react";
 import { V2BrandLogo } from "@/components/v2/ui/V2BrandLogo";
 import {
   isV2NavItemActive,
@@ -63,18 +64,19 @@ function NavButton({
   );
 }
 
-function HelpButton() {
-  const { open } = useV2WelcomeGuide();
+function CreditsChip() {
+  const { user, loading } = useAuth();
+  if (loading || !user) return null;
+  const label = formatCredits(user.creditsBalanceCents, { compact: true });
   return (
-    <button
-      type="button"
-      onClick={open}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
-      aria-label="Open the welcome guide"
-      title="Welcome guide"
+    <Link
+      href="/orders"
+      className="inline-flex max-w-[9rem] items-center gap-1.5 rounded-full border border-v2-success-border bg-v2-success-bg px-2 py-0.5 text-xs font-semibold text-v2-success-text transition hover:border-emerald-400 sm:px-2.5 sm:py-1"
+      title={`Promo balance ${formatCredits(user.creditsBalanceCents)} — applies toward purchases`}
     >
-      <CircleHelp className="h-5 w-5" aria-hidden />
-    </button>
+      <CircleDollarSign className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="truncate tabular-nums">{label}</span>
+    </Link>
   );
 }
 
@@ -111,7 +113,7 @@ export function V2TopBar() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <HelpButton />
+          <CreditsChip />
           <V2UserMenu />
         </div>
       </div>
