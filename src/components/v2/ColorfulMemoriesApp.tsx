@@ -143,7 +143,6 @@ export function ColorfulMemoriesApp() {
   const [gridView, setGridView] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
-  const selectedIndex = selected ? photos.indexOf(selected) : -1;
 
   function openPhoto(id: string) {
     setSelectedId(id);
@@ -1199,19 +1198,12 @@ export function ColorfulMemoriesApp() {
                   >
                     <ChevronLeft className="h-6 w-6" aria-hidden />
                   </button>
-                  <div className="min-w-0">
-                    <h2 className="truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
-                      Studio
-                    </h2>
-                    {selected ? (
-                      <p className="truncate text-xs text-v2-muted tabular-nums">
-                        Photo {selectedIndex + 1} of {photos.length}
-                      </p>
-                    ) : null}
-                  </div>
+                  <h2 className="flex h-9 min-w-0 items-center truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
+                    Studio
+                  </h2>
                   {/* sheet view ⇄ grid view */}
                   <div
-                    className="ml-2 inline-flex shrink-0 items-center gap-1.5 sm:ml-3"
+                    className="ml-2 inline-flex h-9 shrink-0 items-center gap-1.5 sm:ml-3"
                     role="group"
                     aria-label="Studio view"
                   >
@@ -1245,7 +1237,7 @@ export function ColorfulMemoriesApp() {
                   </div>
                   <span className="flex-1" aria-hidden />
                   <V2StudioLayoutToggle
-                    className={cn("shrink-0", gridView && "opacity-50")}
+                    className={cn("h-9 shrink-0", gridView && "opacity-50")}
                     value={studioLayout}
                     onChange={(mode) => {
                       setGridView(false);

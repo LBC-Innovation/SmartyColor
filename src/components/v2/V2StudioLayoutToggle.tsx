@@ -33,7 +33,7 @@ export function V2StudioLayoutToggle({
   return (
     <div
       className={cn(
-        "inline-flex rounded-lg border p-0.5",
+        "inline-flex items-stretch rounded-lg border p-0.5",
         isToolbar
           ? "scale-[0.92] border-gray-200/90 bg-white/80 origin-right"
           : "border-gray-200 bg-v2-bg-subtle",
@@ -56,7 +56,7 @@ export function V2StudioLayoutToggle({
               "inline-flex items-center gap-1.5 rounded-md font-semibold transition",
               isToolbar
                 ? "px-2 py-1 text-[11px] sm:text-xs"
-                : "px-2.5 py-1.5 text-xs sm:px-3 sm:text-sm",
+                : "px-2.5 text-xs sm:px-3 sm:text-sm",
               active
                 ? "bg-white text-v2-primary shadow-sm"
                 : "text-v2-muted hover:text-v2-ink",
