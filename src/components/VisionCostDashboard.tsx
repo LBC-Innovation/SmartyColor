@@ -6,8 +6,17 @@ import type {
   VisionCostSessionSnapshot,
   VisionErrorKind,
 } from "@/lib/visionCost/types";
+import type { VisionPersistedSummary, VisionPeriodTotals } from "@/lib/visionCost/store";
+import { authHeaders } from "@/lib/api/client";
 
-type ApiPayload = VisionCostSessionSnapshot & { logTail: string };
+type ApiPayload = VisionCostSessionSnapshot & { logTail: string; persisted?: VisionPersistedSummary };
+
+const PERIODS: Array<{ key: keyof VisionPersistedSummary["periods"]; label: string }> = [
+  { key: "today", label: "Today" },
+  { key: "last7d", label: "Last 7 days" },
+  { key: "last30d", label: "Last 30 days" },
+  { key: "allTime", label: "All time" },
+];
 
 function usd(n: number) {
   return `$${n.toFixed(4)}`;
@@ -39,10 +48,11 @@ export function VisionCostDashboard({
   const isV2 = variant === "v2";
   const [data, setData] = useState<ApiPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [periodKey, setPeriodKey] = useState<keyof VisionPersistedSummary["periods"]>("last30d");
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/vision-costs", { cache: "no-store" });
+      const response = await fetch("/api/vision-costs", { cache: "no-store", headers: authHeaders() });
       if (!response.ok) {
         throw new Error(`Could not load costs (${response.status})`);
       }
@@ -101,10 +111,13 @@ export function VisionCostDashboard({
     ? "rounded-lg border border-slate-200/80 bg-v2-bg-subtle px-4 py-3"
     : "rounded-xl border border-ink/5 bg-cream/80 px-4 py-3";
 
-  const errors = data.errors ?? [];
+  const persisted = data.persisted;
+  const errors = persisted?.available ? persisted.recentErrors : (data.errors ?? []);
   const blockingError = [...errors]
+    .sort((a, b) => a.at.localeCompare(b.at))
     .reverse()
     .find((e) => e.kind === "billing" || e.kind === "auth");
+  const period: VisionPeriodTotals | null = persisted?.available ? persisted.periods[periodKey] : null;
 
   return (
     <div className={cn("space-y-6 sm:space-y-8", !isV2 && "mt-8 space-y-10")}>
@@ -124,8 +137,90 @@ export function VisionCostDashboard({
         </div>
       ) : null}
 
+      {persisted?.available ? (
+        <>
+          <section className={sectionClass}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className={headingClass}>Spend</h2>
+              <div className="inline-flex rounded-lg border border-gray-200 bg-v2-bg-subtle p-0.5" role="group" aria-label="Period">
+                {PERIODS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    aria-pressed={periodKey === p.key}
+                    onClick={() => setPeriodKey(p.key)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-xs font-semibold transition sm:text-sm",
+                      periodKey === p.key ? "bg-white text-v2-primary shadow-sm" : "text-v2-muted hover:text-v2-ink",
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <dl className={cn("mt-4 grid gap-3 sm:grid-cols-4", bodyClass)}>
+              <div>
+                <dt className={labelClass}>Total cost</dt>
+                <dd className={cn(statClass, "text-v2-success-text")}>{usd(period!.totalCostUsd)}</dd>
+              </div>
+              <div>
+                <dt className={labelClass}>API calls</dt>
+                <dd className={statClass}>
+                  {period!.callCount}
+                  {period!.errorCount > 0 ? (
+                    <span className="ml-2 text-base font-semibold text-red-700">{period!.errorCount} failed</span>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className={labelClass}>Input tokens</dt>
+                <dd className={statClass}>{period!.inputTokens.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className={labelClass}>Output tokens</dt>
+                <dd className={statClass}>{period!.outputTokens.toLocaleString()}</dd>
+              </div>
+            </dl>
+            <p className={cn("mt-3 text-xs", labelClass)}>
+              Input {usd(period!.inputCostUsd)} · output {usd(period!.outputCostUsd)}. Persisted across every
+              server instance; this is the number to trust on Vercel.
+            </p>
+            {persisted.byOperation.length > 0 ? (
+              <div className="mt-4 overflow-x-auto">
+                <table className={cn("min-w-full border-collapse text-sm", bodyClass)}>
+                  <thead>
+                    <tr className={cn("border-b text-left", isV2 ? "border-slate-200 text-v2-muted" : "border-ink/10 text-ink-soft")}>
+                      <th className="py-2 pr-4">Operation (30 days)</th>
+                      <th className="py-2 pr-4">Calls</th>
+                      <th className="py-2 pr-4">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {persisted.byOperation.map((row) => (
+                      <tr key={row.operation} className={isV2 ? "border-b border-slate-100" : "border-b border-ink/5"}>
+                        <td className="py-2 pr-4">{row.operation}</td>
+                        <td className="py-2 pr-4 tabular-nums">{row.callCount}</td>
+                        <td className="py-2 pr-4 tabular-nums">{usd(row.totalCostUsd)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </section>
+        </>
+      ) : (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+          Persistent cost history isn&apos;t available (database not configured). Showing this server instance only.
+        </div>
+      )}
+
       <section className={sectionClass}>
-        <h2 className={headingClass}>This server session</h2>
+        <h2 className={headingClass}>This server instance</h2>
+        <p className={cn("mt-1 text-xs", labelClass)}>
+          In-memory, per instance. On Vercel this resets on every cold start — use Spend above.
+        </p>
         <dl className={cn("mt-4 grid gap-3 sm:grid-cols-2", bodyClass)}>
           <div>
             <dt className={labelClass}>Session ID</dt>
@@ -264,7 +359,7 @@ export function VisionCostDashboard({
 
       <section className={sectionClass}>
         <h2 className={headingClass}>Interactions</h2>
-        {data.events.length === 0 ? (
+        {(persisted?.available ? persisted.recentEvents : data.events).length === 0 ? (
           <p className={cn("mt-4", labelClass)}>
             No vision API calls yet this session. Generate a photo coloring sheet
             to see entries here.
@@ -283,7 +378,7 @@ export function VisionCostDashboard({
                 </tr>
               </thead>
               <tbody>
-                {[...data.events].reverse().map((event) => (
+                {(persisted?.available ? persisted.recentEvents : [...data.events].reverse()).map((event) => (
                   <tr
                     key={event.id}
                     className={isV2 ? "border-b border-slate-100" : "border-b border-ink/5"}
