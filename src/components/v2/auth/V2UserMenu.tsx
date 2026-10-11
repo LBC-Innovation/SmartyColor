@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   CircleDollarSign,
@@ -28,6 +29,7 @@ const ITEM_CLASS =
 /** Avatar button in the header; opens a small account dropdown. */
 export function V2UserMenu() {
   const { user, loading, signOut } = useAuth();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<OpenModal>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -176,7 +178,7 @@ export function V2UserMenu() {
               )}
               onClick={() => {
                 setOpen(false);
-                void signOut();
+                void signOut().then(() => router.replace("/"));
               }}
             >
               <LogOut className="h-4 w-4 shrink-0" aria-hidden />

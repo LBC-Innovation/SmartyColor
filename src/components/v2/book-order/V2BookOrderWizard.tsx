@@ -99,6 +99,22 @@ export function V2BookOrderWizard() {
     };
   }, [preselectId]);
 
+  // Albums can be deleted in the studio; re-read the catalog when we come back.
+  useEffect(() => {
+    const refresh = () => {
+      void loadProjectsCatalog().then((list) => {
+        setProjects(list);
+        setSelectedProjectIds((prev) => prev.filter((id) => list.some((p) => p.id === id)));
+      });
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   // Re-collect pages whenever the album selection changes, keeping the
   // order, rotations and removals the user already made.
   const selectionKey = selectedProjectIds.join("|");

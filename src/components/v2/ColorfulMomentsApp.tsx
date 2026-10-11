@@ -125,6 +125,8 @@ export function ColorfulMomentsApp() {
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   /** Below lg the studio is a full-screen view opened by tapping a photo. */
   const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
+  /** While the project name is being edited the toolbar is given over to that. */
+  const [renamingProject, setRenamingProject] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
   const selectedIndex = selected ? photos.indexOf(selected) : -1;
@@ -929,8 +931,8 @@ export function ColorfulMomentsApp() {
               </>
             ) : (
               <>
-                <V2ProjectSwitcher />
-                {libraryPhotoCount > 0 ? (
+                <V2ProjectSwitcher onEditingChange={setRenamingProject} />
+                {!renamingProject && libraryPhotoCount > 0 ? (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -945,7 +947,7 @@ export function ColorfulMomentsApp() {
                     )}
                   </button>
                 ) : null}
-                {photos.length > 0 ? (
+                {!renamingProject && photos.length > 0 ? (
                   <button
                     type="button"
                     onClick={openDeletePagesMode}

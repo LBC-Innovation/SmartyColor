@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, FolderOpen, Pencil, Plus } from "lucide-react";
+import { Check, ChevronDown, CircleCheck, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
+import { useV2Toast } from "@/components/v2/V2Toast";
 import { cn } from "@/lib/cn";
 
 /**
@@ -10,7 +12,14 @@ import { cn } from "@/lib/cn";
  * dropdown trigger; the pencil swaps it for an inline rename field of the
  * same height so the toolbar never shifts.
  */
-export function V2ProjectSwitcher({ className }: { className?: string }) {
+export function V2ProjectSwitcher({
+  className,
+  onEditingChange,
+}: {
+  className?: string;
+  /** Lets the host toolbar hide its other controls while the name is being edited. */
+  onEditingChange?: (editing: boolean) => void;
+}) {
   const {
     hydrated,
     projects,
@@ -19,10 +28,35 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
     createProject,
     switchProject,
     renameActiveProject,
+    deleteProject,
   } = useV2Studio();
+  const toast = useV2Toast();
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(false);
   const [draft, setDraft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  function setEditing(next: boolean) {
+    setEditingState(next);
+    onEditingChange?.(next);
+  }
+
+  async function confirmDeleteProject() {
+    if (!activeProject) return;
+    setDeleting(true);
+    const name = activeProject.name;
+    try {
+      await deleteProject(activeProject.id);
+      setConfirmDelete(false);
+      setEditing(false);
+      toast.success({ title: "Album deleted", message: `“${name}” and its photos were removed.` });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete the album.");
+    } finally {
+      setDeleting(false);
+    }
+  }
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
@@ -71,24 +105,51 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
       aria-label="Project"
     >
       {editing ? (
-        <input
-          type="text"
-          value={draft}
-          autoFocus
-          onFocus={(e) => e.currentTarget.select()}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitRename();
-            }
-            if (e.key === "Escape") setEditing(false);
-          }}
-          maxLength={80}
-          aria-label="Project name"
-          className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white px-3 text-sm font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
-        />
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <div className="relative min-w-0 flex-[2]">
+            <input
+              type="text"
+              value={draft}
+              autoFocus
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitRename();
+                }
+                if (e.key === "Escape") setEditing(false);
+              }}
+              maxLength={80}
+              aria-label="Project name"
+              className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white pl-3 pr-10 text-sm font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
+            />
+            <button
+              type="button"
+              onClick={commitRename}
+              className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-v2-primary transition hover:bg-v2-primary-light"
+              aria-label="Save name"
+              title="Save"
+            >
+              <CircleCheck className="h-5 w-5" aria-hidden />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-white px-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white px-2 text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle"
+          >
+            Cancel
+          </button>
+        </div>
       ) : (
         <>
           <button
@@ -191,6 +252,16 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
             </button>
           </div>
         </div>
+      ) : null}
+
+      {confirmDelete && activeProject ? (
+        <V2DeleteProjectConfirmModal
+          projectName={activeProject.name}
+          photoCount={activeProject.photoCount}
+          busy={deleting}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => void confirmDeleteProject()}
+        />
       ) : null}
     </div>
   );
