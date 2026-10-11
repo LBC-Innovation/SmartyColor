@@ -6,6 +6,7 @@ import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { cn } from "@/lib/cn";
+import { withViewTransition } from "@/lib/v2/viewTransition";
 
 /**
  * Project title + switcher for the library toolbar. The name doubles as the
@@ -38,8 +39,10 @@ export function V2ProjectSwitcher({
   const [deleting, setDeleting] = useState(false);
 
   function setEditing(next: boolean) {
-    setEditingState(next);
-    onEditingChange?.(next);
+    withViewTransition(() => {
+      setEditingState(next);
+      onEditingChange?.(next);
+    });
   }
 
   async function confirmDeleteProject() {
@@ -106,7 +109,7 @@ export function V2ProjectSwitcher({
     >
       {editing ? (
         <div className="flex w-full min-w-0 items-center gap-2">
-          <div className="relative min-w-0 flex-[4]">
+          <div className="relative min-w-0 flex-[4]" style={{ viewTransitionName: "cm-project-name" }}>
             <input
               type="text"
               value={draft}
@@ -138,6 +141,7 @@ export function V2ProjectSwitcher({
             type="button"
             onClick={() => setConfirmDelete(true)}
             className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-red-200 bg-white text-red-700 transition hover:bg-red-50"
+            style={{ viewTransitionName: "cm-project-edit" }}
             aria-label="Delete album"
             title="Delete album"
           >
@@ -147,6 +151,7 @@ export function V2ProjectSwitcher({
             type="button"
             onClick={() => setEditing(false)}
             className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white text-v2-navy transition hover:bg-v2-bg-subtle"
+            style={{ viewTransitionName: "cm-toolbar-cancel" }}
             aria-label="Cancel renaming"
             title="Cancel"
           >
@@ -164,6 +169,7 @@ export function V2ProjectSwitcher({
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left transition hover:bg-v2-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ viewTransitionName: "cm-project-name" }}
           >
             <FolderOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-v2-ink">
@@ -182,6 +188,7 @@ export function V2ProjectSwitcher({
               type="button"
               onClick={startRename}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
+              style={{ viewTransitionName: "cm-project-edit" }}
               aria-label="Rename project"
               title="Rename project"
             >

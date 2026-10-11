@@ -729,3 +729,49 @@ body:has(.v2-shell) {
     animation: none;
   }
 }
+
+/* Toolbar mode changes run inside a View Transition: named controls slide to
+   their new spot, everything else crossfades. */
+::view-transition-group(*) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
+/* Sliding controls stay solid: no crossfade, only the new snapshot rides the
+   moving/resizing group box. */
+::view-transition-old(cm-project-name),
+::view-transition-old(cm-project-edit),
+::view-transition-old(cm-toolbar-trash),
+::view-transition-old(cm-toolbar-cancel) {
+  display: none;
+}
+
+::view-transition-new(cm-project-name),
+::view-transition-new(cm-project-edit),
+::view-transition-new(cm-toolbar-trash),
+::view-transition-new(cm-toolbar-cancel) {
+  animation: none;
+  mix-blend-mode: normal;
+  height: 100%;
+  width: 100%;
+}
+
+::view-transition-image-pair(cm-project-name),
+::view-transition-image-pair(cm-project-edit),
+::view-transition-image-pair(cm-toolbar-trash),
+::view-transition-image-pair(cm-toolbar-cancel) {
+  isolation: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
