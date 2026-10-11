@@ -103,7 +103,7 @@ const FAQ = [
   },
   {
     q: "What happens to my photos?",
-    a: "Photos are processed to make your page and aren't kept on our servers. Your projects live on your device, and in your account if you sign in.",
+    a: "When you're signed in, your photos and coloring pages are stored privately in your account so they're on every device you use. Delete an album or your account and they're gone. Trying it without an account? Nothing is uploaded — everything stays in your browser.",
   },
 ] as const;
 
@@ -241,7 +241,7 @@ export function V2LandingPage() {
                   {
                     icon: ShieldCheck,
                     t: "Your photos stay yours",
-                    b: "Pictures are used to make your page and aren't kept on our servers.",
+                    b: "Stored privately in your account, never shared. Delete an album and it's really gone.",
                   },
                 ].map(({ icon: Icon, t, b }) => (
                   <li key={t} className="flex gap-3.5">
@@ -357,7 +357,7 @@ export function V2LandingPage() {
             {[
               { icon: ShieldCheck, t: "Exact price shown before you pay" },
               { icon: Truck, t: "Printed in the US and shipped to you" },
-              { icon: ImageIcon, t: "Photos aren't stored on our servers" },
+              { icon: ImageIcon, t: "Photos stay private to your account" },
             ].map(({ icon: Icon, t }) => (
               <li key={t} className="flex items-center gap-2.5">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
@@ -436,10 +436,15 @@ export function V2LandingPage() {
 
       <footer className="border-t border-gray-200 bg-white py-6">
         <div className="v2-gutter-x mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 text-xs text-v2-muted sm:flex-row">
-          <span>© {new Date().getFullYear()} ColorfulMoments · LBC Innovation</span>
-          <Link href="/sign-in" className="font-semibold text-v2-link">
-            Already have an account? Sign in
-          </Link>
+          <span>© {new Date().getFullYear()} ColorfulMemories · LBC Innovation</span>
+          <span className="flex items-center gap-4">
+            <Link href="/terms" className="font-semibold text-v2-muted hover:text-v2-ink">
+              Terms &amp; privacy
+            </Link>
+            <Link href="/sign-in" className="font-semibold text-v2-link">
+              Already have an account? Sign in
+            </Link>
+          </span>
         </div>
       </footer>
 
@@ -490,7 +495,7 @@ type BeforeAfterProps = {
   className?: string;
 };
 
-/** A real family photo beside the coloring page ColorfulMoments made from it. */
+/** A real family photo beside the coloring page ColorfulMemories made from it. */
 function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, eager, className }: BeforeAfterProps) {
   const aspect = `${width}/${height}`;
   return (
@@ -614,7 +619,7 @@ function PrintedBook() {
               Beach Days
             </p>
             <p className="mt-0.5 truncate text-[7.5px] font-semibold uppercase tracking-[0.12em] text-white/70 sm:text-[9px]">
-              ColorfulMoments
+              ColorfulMemories
             </p>
           </div>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/25" />

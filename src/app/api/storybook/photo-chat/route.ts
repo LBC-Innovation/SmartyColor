@@ -1,4 +1,6 @@
 import { ensurePhotoDataUrlForRequest } from "@/lib/ai/compressPhotoServer";
+import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { photoDataUrlById } from "@/server/libraryImages";
 import {
   storybookPhotoChat,
   storybookStubPhotoChat,
@@ -16,6 +18,8 @@ type Body = {
   history?: StoryChatMessage[];
   userMessage?: string;
   photoDataUrl?: string;
+  /* Cloud library: read the photo from storage instead of the body. */
+  photoId?: string;
 };
 
 export async function POST(request: Request) {
@@ -37,6 +41,13 @@ export async function POST(request: Request) {
     }
 
     let photoDataUrl = body.photoDataUrl;
+    if (body.photoId) {
+      const auth = await requireAuthRequest(request);
+      if ("error" in auth) return auth.error;
+      const photo = await photoDataUrlById(auth.user.id, body.photoId);
+      if (photo.error) return Response.json({ error: photo.error.message }, { status: 404 });
+      photoDataUrl = photo.data!.dataUrl;
+    }
     if (photoDataUrl) {
       const prepared = await ensurePhotoDataUrlForRequest(photoDataUrl, 1);
       photoDataUrl = prepared.dataUrl;

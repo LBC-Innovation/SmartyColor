@@ -12,6 +12,14 @@ import {
   type RefObject,
 } from "react";
 import type { StudioLayoutMode } from "@/components/v2/V2StudioLayoutToggle";
+import { useAuth } from "@/context/AuthContext";
+import * as library from "@/lib/library/client";
+import {
+  entriesFromLibraryPhotos,
+  evictEntryImages,
+  pickPersistedPatch,
+  projectMetaFromLibrary,
+} from "@/lib/v2/cloudLibrary";
 import {
   defaultNewProjectName,
   loadV2ProjectSession,
@@ -34,8 +42,21 @@ import {
 
 type PendingUpload = { id: string };
 
+/**
+ * The studio runs in one of two modes behind the same context:
+ *  - "local": guests; projects and images persist in IndexedDB only.
+ *  - "cloud": signed-in; the Supabase library is the source of truth and
+ *    IndexedDB is only an image cache.
+ */
+export type V2StudioMode = "local" | "cloud";
+
 type V2StudioContextValue = {
   hydrated: boolean;
+  mode: V2StudioMode;
+  /** True when the library lives in the user's account. */
+  cloud: boolean;
+  /** Re-read the active project from its source (after a migration, for instance). */
+  reload: () => Promise<void>;
   projects: V2ProjectMeta[];
   activeProjectId: string | null;
   activeProject: V2ProjectMeta | null;
@@ -56,19 +77,17 @@ type V2StudioContextValue = {
   familyContext: string;
   setFamilyContext: React.Dispatch<React.SetStateAction<string>>;
   generatedStory: V2GeneratedStory | null;
-  setGeneratedStory: React.Dispatch<
-    React.SetStateAction<V2GeneratedStory | null>
-  >;
+  setGeneratedStory: React.Dispatch<React.SetStateAction<V2GeneratedStory | null>>;
   printArtMode: StoryPrintArtMode;
   setPrintArtMode: React.Dispatch<React.SetStateAction<StoryPrintArtMode>>;
   storyPhase: V2StoryBookPhase;
   setStoryPhase: React.Dispatch<React.SetStateAction<V2StoryBookPhase>>;
   setPendingUploads: React.Dispatch<React.SetStateAction<PendingUpload[]>>;
+  /** Replace the list (reorders persist in cloud mode). */
   replacePhotos: (next: V2PhotoEntry[]) => void;
-  mutatePhotos: (
-    recipe: (prev: V2PhotoEntry[]) => V2PhotoEntry[],
-  ) => void;
-  updatePhoto: (id: string, patch: Partial<V2PhotoEntry>) => void;
+  mutatePhotos: (recipe: (prev: V2PhotoEntry[]) => V2PhotoEntry[]) => void;
+  /** Patch one entry; persisted fields sync to the cloud unless `persist: false`. */
+  updatePhoto: (id: string, patch: Partial<V2PhotoEntry>, opts?: { persist?: boolean }) => void;
   appendPhoto: (entry: V2PhotoEntry) => void;
   removePhotosByIds: (ids: string[]) => void;
   clearAllPhotos: () => void;
@@ -77,25 +96,43 @@ type V2StudioContextValue = {
 
 const V2StudioContext = createContext<V2StudioContextValue | null>(null);
 
+const ACTIVE_PROJECT_KEY = "cm_cloud_active_project";
+
+function readActiveProjectPref(userId: string): string | null {
+  try {
+    return localStorage.getItem(`${ACTIVE_PROJECT_KEY}:${userId}`);
+  } catch {
+    return null;
+  }
+}
+
+function writeActiveProjectPref(userId: string, projectId: string) {
+  try {
+    localStorage.setItem(`${ACTIVE_PROJECT_KEY}:${userId}`, projectId);
+  } catch {
+    /* ignore */
+  }
+}
+
+type Setters = {
+  setPhotos: React.Dispatch<React.SetStateAction<V2PhotoEntry[]>>;
+  setSelectedId: React.Dispatch<React.SetStateAction<string | null>>;
+  setStudioLayout: React.Dispatch<React.SetStateAction<StudioLayoutMode>>;
+  setTripNarrative: React.Dispatch<React.SetStateAction<string>>;
+  setFamilyContext: React.Dispatch<React.SetStateAction<string>>;
+  setGeneratedStory: React.Dispatch<React.SetStateAction<V2GeneratedStory | null>>;
+  setPrintArtMode: React.Dispatch<React.SetStateAction<StoryPrintArtMode>>;
+  setStoryPhase: React.Dispatch<React.SetStateAction<V2StoryBookPhase>>;
+  photosRef: React.MutableRefObject<V2PhotoEntry[]>;
+};
+
 function applySessionToState(
   session: V2StudioSnapshot,
   previewUrlsRef: React.MutableRefObject<Set<string>>,
-  setters: {
-    setPhotos: React.Dispatch<React.SetStateAction<V2PhotoEntry[]>>;
-    setSelectedId: React.Dispatch<React.SetStateAction<string | null>>;
-    setStudioLayout: React.Dispatch<React.SetStateAction<StudioLayoutMode>>;
-    setTripNarrative: React.Dispatch<React.SetStateAction<string>>;
-    setFamilyContext: React.Dispatch<React.SetStateAction<string>>;
-    setGeneratedStory: React.Dispatch<
-      React.SetStateAction<V2GeneratedStory | null>
-    >;
-    setPrintArtMode: React.Dispatch<React.SetStateAction<StoryPrintArtMode>>;
-    setStoryPhase: React.Dispatch<React.SetStateAction<V2StoryBookPhase>>;
-    photosRef: React.MutableRefObject<V2PhotoEntry[]>;
-  },
+  setters: Setters,
 ) {
   for (const photo of session.photos) {
-    previewUrlsRef.current.add(photo.previewUrl);
+    if (photo.previewUrl.startsWith("blob:") && !photo.remote) previewUrlsRef.current.add(photo.previewUrl);
   }
   setters.photosRef.current = session.photos;
   setters.setPhotos(session.photos);
@@ -109,6 +146,11 @@ function applySessionToState(
 }
 
 export function V2StudioProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
+  const mode: V2StudioMode = userId ? "cloud" : "local";
+  const cloud = mode === "cloud";
+
   const [hydrated, setHydrated] = useState(false);
   const [projects, setProjects] = useState<V2ProjectMeta[]>([]);
   const projectsRef = useRef<V2ProjectMeta[]>([]);
@@ -119,11 +161,8 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const [studioLayout, setStudioLayout] = useState<StudioLayoutMode>("both");
   const [tripNarrative, setTripNarrative] = useState("");
   const [familyContext, setFamilyContext] = useState("");
-  const [generatedStory, setGeneratedStory] = useState<V2GeneratedStory | null>(
-    null,
-  );
-  const [printArtMode, setPrintArtMode] =
-    useState<StoryPrintArtMode>("photos");
+  const [generatedStory, setGeneratedStory] = useState<V2GeneratedStory | null>(null);
+  const [printArtMode, setPrintArtMode] = useState<StoryPrintArtMode>("photos");
   const [storyPhase, setStoryPhase] = useState<V2StoryBookPhase>("setup");
 
   const photosRef = useRef(photos);
@@ -138,9 +177,28 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const printArtModeRef = useRef<StoryPrintArtMode>("photos");
   const storyPhaseRef = useRef<V2StoryBookPhase>("setup");
   const switchingRef = useRef(false);
+  const modeRef = useRef<V2StudioMode>(mode);
+  const userIdRef = useRef<string | null>(userId);
+  const photoPatchTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingPhotoPatches = useRef<Map<string, Record<string, unknown>>>(new Map());
 
-  const buildSnapshot = useCallback((): V2StudioSnapshot => {
-    return {
+  const setters = useMemo<Setters>(
+    () => ({
+      setPhotos,
+      setSelectedId,
+      setStudioLayout,
+      setTripNarrative,
+      setFamilyContext,
+      setGeneratedStory,
+      setPrintArtMode,
+      setStoryPhase,
+      photosRef,
+    }),
+    [],
+  );
+
+  const buildSnapshot = useCallback(
+    (): V2StudioSnapshot => ({
       photos: photosRef.current,
       selectedId: selectedIdRef.current,
       studioLayout: studioLayoutRef.current,
@@ -149,13 +207,12 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       generatedStory: generatedStoryRef.current,
       printArtMode: printArtModeRef.current,
       storyPhase: storyPhaseRef.current,
-    };
-  }, []);
+    }),
+    [],
+  );
 
   const revokeAllPreviews = useCallback(() => {
-    for (const url of previewUrlsRef.current) {
-      URL.revokeObjectURL(url);
-    }
+    for (const url of previewUrlsRef.current) URL.revokeObjectURL(url);
     previewUrlsRef.current.clear();
   }, []);
 
@@ -163,86 +220,147 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     previewUrlsRef.current.add(url);
   }, []);
 
-  useEffect(() => {
-    photosRef.current = photos;
-  }, [photos]);
+  // ---- keep refs in sync with state
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  useEffect(() => { studioLayoutRef.current = studioLayout; }, [studioLayout]);
+  useEffect(() => { tripNarrativeRef.current = tripNarrative; }, [tripNarrative]);
+  useEffect(() => { familyContextRef.current = familyContext; }, [familyContext]);
+  useEffect(() => { generatedStoryRef.current = generatedStory; }, [generatedStory]);
+  useEffect(() => { printArtModeRef.current = printArtMode; }, [printArtMode]);
+  useEffect(() => { storyPhaseRef.current = storyPhase; }, [storyPhase]);
+  useEffect(() => { activeProjectIdRef.current = activeProjectId; }, [activeProjectId]);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
+  useEffect(() => { modeRef.current = mode; userIdRef.current = userId; }, [mode, userId]);
 
-  useEffect(() => {
-    activeProjectIdRef.current = activeProjectId;
-  }, [activeProjectId]);
+  // ---------------------------------------------------------------- loading
 
-  useEffect(() => {
-    projectsRef.current = projects;
-  }, [projects]);
+  const loadCloudProject = useCallback(
+    async (projectId: string, meta: V2ProjectMeta[]): Promise<void> => {
+      const [photosRes, projectsRes] = await Promise.all([
+        library.listPhotos(projectId),
+        library.listProjects(),
+      ]);
+      if (photosRes.error) throw new Error(photosRes.error.message);
+      const entries = await entriesFromLibraryPhotos(photosRes.data!);
+      const project = projectsRes.error ? null : projectsRes.data!.find((p) => p.id === projectId) ?? null;
+      const session: V2StudioSnapshot = {
+        ...emptyV2StudioSnapshot(),
+        photos: entries,
+        selectedId:
+          project?.selectedPhotoId && entries.some((e) => e.id === project.selectedPhotoId)
+            ? project.selectedPhotoId
+            : entries[0]?.id ?? null,
+        studioLayout: (project?.studioLayout as StudioLayoutMode) ?? "both",
+        tripNarrative: project?.tripNarrative ?? "",
+        familyContext: project?.familyContext ?? "",
+        generatedStory: (project?.generatedStory as V2GeneratedStory | null) ?? null,
+        printArtMode: (project?.printArtMode as StoryPrintArtMode) ?? "photos",
+        storyPhase: (project?.storyPhase as V2StoryBookPhase) ?? "setup",
+      };
+      applySessionToState(session, previewUrlsRef, setters);
+      if (!projectsRes.error) setProjects(projectsRes.data!.map(projectMetaFromLibrary));
+      else setProjects(meta);
+    },
+    [setters],
+  );
 
-  useEffect(() => {
-    selectedIdRef.current = selectedId;
-  }, [selectedId]);
-
-  useEffect(() => {
-    studioLayoutRef.current = studioLayout;
-  }, [studioLayout]);
-
-  useEffect(() => {
-    tripNarrativeRef.current = tripNarrative;
-  }, [tripNarrative]);
-
-  useEffect(() => {
-    familyContextRef.current = familyContext;
-  }, [familyContext]);
-
-  useEffect(() => {
-    generatedStoryRef.current = generatedStory;
-  }, [generatedStory]);
-
-  useEffect(() => {
-    printArtModeRef.current = printArtMode;
-  }, [printArtMode]);
-
-  useEffect(() => {
-    storyPhaseRef.current = storyPhase;
-  }, [storyPhase]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadV2StudioBootstrap().then((bootstrap) => {
-      if (cancelled) return;
-      if (bootstrap) {
-        setProjects(bootstrap.meta.projects);
-        setActiveProjectId(bootstrap.meta.activeProjectId);
-        activeProjectIdRef.current = bootstrap.meta.activeProjectId;
-        applySessionToState(bootstrap.session, previewUrlsRef, {
-          setPhotos,
-          setSelectedId,
-          setStudioLayout,
-          setTripNarrative,
-          setFamilyContext,
-          setGeneratedStory,
-          setPrintArtMode,
-          setStoryPhase,
-          photosRef,
-        });
+  const bootstrapCloud = useCallback(
+    async (uid: string) => {
+      const res = await library.listProjects();
+      if (res.error) throw new Error(res.error.message);
+      let list = res.data!;
+      if (list.length === 0) {
+        const created = await library.createProject(defaultNewProjectName(0));
+        if (created.error) throw new Error(created.error.message);
+        list = [created.data!];
       }
-      persistSkipRef.current = false;
-      setHydrated(true);
-    });
+      const preferred = readActiveProjectPref(uid);
+      const active = list.find((p) => p.id === preferred)?.id ?? list[0].id;
+      const meta = list.map(projectMetaFromLibrary);
+      setProjects(meta);
+      setActiveProjectId(active);
+      activeProjectIdRef.current = active;
+      writeActiveProjectPref(uid, active);
+      await loadCloudProject(active, meta);
+    },
+    [loadCloudProject],
+  );
+
+  const bootstrapLocal = useCallback(async () => {
+    const bootstrap = await loadV2StudioBootstrap();
+    if (bootstrap) {
+      setProjects(bootstrap.meta.projects);
+      setActiveProjectId(bootstrap.meta.activeProjectId);
+      activeProjectIdRef.current = bootstrap.meta.activeProjectId;
+      applySessionToState(bootstrap.session, previewUrlsRef, setters);
+    }
+  }, [setters]);
+
+  // Re-bootstrap whenever the identity changes (sign-in, sign-out, first load).
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+    persistSkipRef.current = true;
+    setHydrated(false);
+    revokeAllPreviews();
+    setPendingUploads([]);
+
+    void (async () => {
+      try {
+        if (userId) await bootstrapCloud(userId);
+        else await bootstrapLocal();
+      } catch (e) {
+        console.error("studio bootstrap failed", e);
+      } finally {
+        if (!cancelled) {
+          persistSkipRef.current = false;
+          setHydrated(true);
+        }
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, userId, bootstrapCloud, bootstrapLocal, revokeAllPreviews]);
 
+  const reload = useCallback(async () => {
+    if (modeRef.current === "cloud" && userIdRef.current) {
+      persistSkipRef.current = true;
+      try {
+        await bootstrapCloud(userIdRef.current);
+      } finally {
+        persistSkipRef.current = false;
+      }
+    } else {
+      await bootstrapLocal();
+    }
+  }, [bootstrapCloud, bootstrapLocal]);
+
+  // ------------------------------------------------------------- persisting
+
+  // Project-level fields (selection, layout, story) — local snapshot or cloud PATCH.
   useEffect(() => {
     if (!hydrated || persistSkipRef.current || switchingRef.current) return;
     const projectId = activeProjectIdRef.current;
     if (!projectId) return;
 
     const timer = window.setTimeout(() => {
+      if (modeRef.current === "cloud") {
+        void library.updateProject(projectId, {
+          selectedPhotoId: selectedIdRef.current,
+          studioLayout: studioLayoutRef.current,
+          tripNarrative: tripNarrativeRef.current,
+          familyContext: familyContextRef.current,
+          generatedStory: generatedStoryRef.current,
+          printArtMode: printArtModeRef.current,
+          storyPhase: storyPhaseRef.current,
+        });
+        return;
+      }
       void saveV2ProjectSession(projectId, buildSnapshot()).then(() => {
         setProjects((prev) =>
           prev.map((project) =>
-            project.id === projectId
-              ? { ...project, photoCount: photos.length }
-              : project,
+            project.id === projectId ? { ...project, photoCount: photos.length } : project,
           ),
         );
       });
@@ -264,31 +382,56 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => revokeAllPreviews(), [revokeAllPreviews]);
 
+  // ---------------------------------------------------------- photo mutators
+
   const replacePhotos = useCallback((next: V2PhotoEntry[]) => {
+    const prev = photosRef.current;
     photosRef.current = next;
     setPhotos(next);
+    if (modeRef.current === "cloud" && activeProjectIdRef.current) {
+      const prevIds = prev.filter((p) => p.remote).map((p) => p.id).join("|");
+      const nextIds = next.filter((p) => p.remote).map((p) => p.id);
+      if (nextIds.join("|") !== prevIds && nextIds.length > 0) {
+        void library.reorderPhotos(activeProjectIdRef.current, nextIds);
+      }
+    }
   }, []);
 
-  const mutatePhotos = useCallback(
-    (recipe: (prev: V2PhotoEntry[]) => V2PhotoEntry[]) => {
-      setPhotos((prev) => {
-        const next = recipe(prev);
-        photosRef.current = next;
-        return next;
-      });
-    },
-    [],
-  );
-
-  const updatePhoto = useCallback((id: string, patch: Partial<V2PhotoEntry>) => {
+  const mutatePhotos = useCallback((recipe: (prev: V2PhotoEntry[]) => V2PhotoEntry[]) => {
     setPhotos((prev) => {
-      const next = prev.map((entry) =>
-        entry.id === id ? { ...entry, ...patch } : entry,
-      );
+      const next = recipe(prev);
       photosRef.current = next;
       return next;
     });
   }, []);
+
+  const flushPhotoPatch = useCallback((id: string) => {
+    const patch = pendingPhotoPatches.current.get(id);
+    pendingPhotoPatches.current.delete(id);
+    photoPatchTimers.current.delete(id);
+    if (!patch || Object.keys(patch).length === 0) return;
+    const entry = photosRef.current.find((p) => p.id === id);
+    if (!entry?.remote) return;
+    void library.updatePhoto(entry.remote.photoId, patch);
+  }, []);
+
+  const updatePhoto = useCallback(
+    (id: string, patch: Partial<V2PhotoEntry>, opts?: { persist?: boolean }) => {
+      setPhotos((prev) => {
+        const next = prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
+        photosRef.current = next;
+        return next;
+      });
+      if (modeRef.current !== "cloud" || opts?.persist === false) return;
+      const persisted = pickPersistedPatch(patch);
+      if (Object.keys(persisted).length === 0) return;
+      pendingPhotoPatches.current.set(id, { ...(pendingPhotoPatches.current.get(id) ?? {}), ...persisted });
+      const existing = photoPatchTimers.current.get(id);
+      if (existing) clearTimeout(existing);
+      photoPatchTimers.current.set(id, setTimeout(() => flushPhotoPatch(id), 400));
+    },
+    [flushPhotoPatch],
+  );
 
   const appendPhoto = useCallback((entry: V2PhotoEntry) => {
     setPhotos((prev) => {
@@ -301,13 +444,16 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const removePhotosByIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
+    const removed = photosRef.current.filter((e) => idSet.has(e.id));
     let nextPhotos: V2PhotoEntry[] = [];
 
     setPhotos((prev) => {
       nextPhotos = prev.filter((entry) => {
         if (idSet.has(entry.id)) {
-          URL.revokeObjectURL(entry.previewUrl);
-          previewUrlsRef.current.delete(entry.previewUrl);
+          if (!entry.remote) {
+            URL.revokeObjectURL(entry.previewUrl);
+            previewUrlsRef.current.delete(entry.previewUrl);
+          }
           return false;
         }
         return true;
@@ -317,149 +463,141 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     });
 
     setSelectedId((current) => {
-      if (current && idSet.has(current)) {
-        return nextPhotos[0]?.id ?? null;
-      }
+      if (current && idSet.has(current)) return nextPhotos[0]?.id ?? null;
       return current;
     });
+
+    if (modeRef.current === "cloud") {
+      const remoteIds = removed.filter((e) => e.remote).map((e) => e.remote!.photoId);
+      if (remoteIds.length > 0) {
+        void library.deletePhotos(remoteIds).then(() => evictEntryImages(removed));
+      }
+    }
   }, []);
+
+  const clearAllPhotos = useCallback(() => {
+    revokeAllPreviews();
+    photosRef.current = [];
+    setPhotos([]);
+    setPendingUploads([]);
+    setSelectedId(null);
+  }, [revokeAllPreviews]);
+
+  // ---------------------------------------------------------------- projects
 
   const switchProject = useCallback(
     (projectId: string) => {
-      if (projectId === activeProjectIdRef.current || switchingRef.current) {
-        return;
-      }
-
+      if (projectId === activeProjectIdRef.current || switchingRef.current) return;
       switchingRef.current = true;
       persistSkipRef.current = true;
 
       void (async () => {
-        const previousId = activeProjectIdRef.current;
-        const previousPhotoCount = photosRef.current.length;
-        if (previousId) {
-          await saveV2ProjectSession(previousId, buildSnapshot());
-        }
+        try {
+          const previousId = activeProjectIdRef.current;
+          const previousPhotoCount = photosRef.current.length;
 
-        revokeAllPreviews();
-        setPendingUploads([]);
+          if (modeRef.current === "cloud") {
+            setActiveProjectId(projectId);
+            activeProjectIdRef.current = projectId;
+            if (userIdRef.current) writeActiveProjectPref(userIdRef.current, projectId);
+            await loadCloudProject(projectId, projectsRef.current);
+            return;
+          }
 
-        const session = await loadV2ProjectSession(projectId);
-        applySessionToState(session, previewUrlsRef, {
-          setPhotos,
-          setSelectedId,
-          setStudioLayout,
-          setTripNarrative,
-          setFamilyContext,
-          setGeneratedStory,
-          setPrintArtMode,
-          setStoryPhase,
-          photosRef,
-        });
-
-        setActiveProjectId(projectId);
-        activeProjectIdRef.current = projectId;
-
-        setProjects((prev) => {
-          const next = prev.map((project) =>
-            project.id === previousId
-              ? { ...project, photoCount: previousPhotoCount }
-              : project,
-          );
-          void saveV2ProjectsMeta({
-            activeProjectId: projectId,
-            projects: next,
+          if (previousId) await saveV2ProjectSession(previousId, buildSnapshot());
+          revokeAllPreviews();
+          setPendingUploads([]);
+          const session = await loadV2ProjectSession(projectId);
+          applySessionToState(session, previewUrlsRef, setters);
+          setActiveProjectId(projectId);
+          activeProjectIdRef.current = projectId;
+          setProjects((prev) => {
+            const next = prev.map((project) =>
+              project.id === previousId ? { ...project, photoCount: previousPhotoCount } : project,
+            );
+            void saveV2ProjectsMeta({ activeProjectId: projectId, projects: next });
+            return next;
           });
-          return next;
-        });
-
-        persistSkipRef.current = false;
-        switchingRef.current = false;
+        } finally {
+          persistSkipRef.current = false;
+          switchingRef.current = false;
+        }
       })();
     },
-    [buildSnapshot, revokeAllPreviews],
+    [buildSnapshot, loadCloudProject, revokeAllPreviews, setters],
   );
 
   const createProject = useCallback(() => {
     if (switchingRef.current) return;
-
     switchingRef.current = true;
     persistSkipRef.current = true;
 
     void (async () => {
-      const previousId = activeProjectIdRef.current;
-      const previousPhotoCount = photosRef.current.length;
-      if (previousId) {
-        await saveV2ProjectSession(previousId, buildSnapshot());
+      try {
+        if (modeRef.current === "cloud") {
+          const created = await library.createProject(defaultNewProjectName(projectsRef.current.length));
+          if (created.error) throw new Error(created.error.message);
+          const meta = projectMetaFromLibrary(created.data!);
+          setProjects((prev) => [...prev, meta]);
+          setActiveProjectId(meta.id);
+          activeProjectIdRef.current = meta.id;
+          if (userIdRef.current) writeActiveProjectPref(userIdRef.current, meta.id);
+          revokeAllPreviews();
+          setPendingUploads([]);
+          applySessionToState(emptyV2StudioSnapshot(), previewUrlsRef, setters);
+          return;
+        }
+
+        const previousId = activeProjectIdRef.current;
+        const previousPhotoCount = photosRef.current.length;
+        if (previousId) await saveV2ProjectSession(previousId, buildSnapshot());
+
+        const newProjectId = crypto.randomUUID();
+        const empty = emptyV2StudioSnapshot();
+        setProjects((prev) => {
+          const newProject: V2ProjectMeta = {
+            id: newProjectId,
+            name: defaultNewProjectName(prev.length),
+            updatedAt: new Date().toISOString(),
+            photoCount: 0,
+          };
+          const nextProjects = [
+            ...prev.map((project) =>
+              project.id === previousId ? { ...project, photoCount: previousPhotoCount } : project,
+            ),
+            newProject,
+          ];
+          void saveV2ProjectsMeta({ activeProjectId: newProjectId, projects: nextProjects });
+          return nextProjects;
+        });
+        await saveV2ProjectSession(newProjectId, empty);
+        revokeAllPreviews();
+        setPendingUploads([]);
+        applySessionToState(empty, previewUrlsRef, setters);
+        setActiveProjectId(newProjectId);
+        activeProjectIdRef.current = newProjectId;
+      } catch (e) {
+        console.error("create project failed", e);
+      } finally {
+        persistSkipRef.current = false;
+        switchingRef.current = false;
       }
-
-      const newProjectId = crypto.randomUUID();
-      const empty = emptyV2StudioSnapshot();
-
-      setProjects((prev) => {
-        const newProject: V2ProjectMeta = {
-          id: newProjectId,
-          name: defaultNewProjectName(prev.length),
-          updatedAt: new Date().toISOString(),
-          photoCount: 0,
-        };
-        const nextProjects = [
-          ...prev.map((project) =>
-            project.id === previousId
-              ? { ...project, photoCount: previousPhotoCount }
-              : project,
-          ),
-          newProject,
-        ];
-        void saveV2ProjectsMeta({
-          activeProjectId: newProjectId,
-          projects: nextProjects,
-        });
-        return nextProjects;
-      });
-
-      await saveV2ProjectSession(newProjectId, empty);
-
-      revokeAllPreviews();
-      setPendingUploads([]);
-      applySessionToState(empty, previewUrlsRef, {
-        setPhotos,
-        setSelectedId,
-        setStudioLayout,
-        setTripNarrative,
-        setFamilyContext,
-        setGeneratedStory,
-        setPrintArtMode,
-        setStoryPhase,
-        photosRef,
-      });
-      setActiveProjectId(newProjectId);
-      activeProjectIdRef.current = newProjectId;
-
-      persistSkipRef.current = false;
-      switchingRef.current = false;
     })();
-  }, [buildSnapshot, revokeAllPreviews]);
+  }, [buildSnapshot, revokeAllPreviews, setters]);
 
-  const renameActiveProject = useCallback(
-    (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed || !activeProjectIdRef.current) return;
-
-      setProjects((prev) => {
-        const next = prev.map((project) =>
-          project.id === activeProjectIdRef.current
-            ? { ...project, name: trimmed, updatedAt: new Date().toISOString() }
-            : project,
-        );
-        void saveV2ProjectsMeta({
-          activeProjectId: activeProjectIdRef.current!,
-          projects: next,
-        });
-        return next;
-      });
-    },
-    [],
-  );
+  const renameActiveProject = useCallback((name: string) => {
+    const trimmed = name.trim();
+    const id = activeProjectIdRef.current;
+    if (!trimmed || !id) return;
+    setProjects((prev) => {
+      const next = prev.map((project) =>
+        project.id === id ? { ...project, name: trimmed, updatedAt: new Date().toISOString() } : project,
+      );
+      if (modeRef.current === "cloud") void library.updateProject(id, { name: trimmed });
+      else void saveV2ProjectsMeta({ activeProjectId: id, projects: next });
+      return next;
+    });
+  }, []);
 
   const deleteProject = useCallback(
     async (projectId: string) => {
@@ -470,91 +608,63 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       switchingRef.current = true;
       persistSkipRef.current = true;
       try {
-        await clearV2ProjectSession(projectId);
+        if (modeRef.current === "cloud") {
+          const removedEntries = wasActive ? photosRef.current : [];
+          const res = await library.deleteProject(projectId);
+          if (res.error) throw new Error(res.error.message);
+          void evictEntryImages(removedEntries);
 
+          let nextProjects = remaining;
+          let nextActiveId = activeProjectIdRef.current;
+          if (wasActive) {
+            if (remaining.length === 0) {
+              const created = await library.createProject(defaultNewProjectName(0));
+              if (created.error) throw new Error(created.error.message);
+              nextProjects = [projectMetaFromLibrary(created.data!)];
+            }
+            nextActiveId = nextProjects[0].id;
+            setActiveProjectId(nextActiveId);
+            activeProjectIdRef.current = nextActiveId;
+            if (userIdRef.current) writeActiveProjectPref(userIdRef.current, nextActiveId);
+            revokeAllPreviews();
+            setPendingUploads([]);
+            await loadCloudProject(nextActiveId, nextProjects);
+          }
+          setProjects(nextProjects);
+          return;
+        }
+
+        await clearV2ProjectSession(projectId);
         let nextActiveId = activeProjectIdRef.current;
         let nextProjects = remaining;
-
         if (wasActive) {
           revokeAllPreviews();
           setPendingUploads([]);
-
           if (remaining.length > 0) {
             nextActiveId = remaining[0].id;
             const session = await loadV2ProjectSession(nextActiveId);
-            applySessionToState(session, previewUrlsRef, {
-              setPhotos,
-              setSelectedId,
-              setStudioLayout,
-              setTripNarrative,
-              setFamilyContext,
-              setGeneratedStory,
-              setPrintArtMode,
-              setStoryPhase,
-              photosRef,
-            });
+            applySessionToState(session, previewUrlsRef, setters);
           } else {
-            // Nothing left: start a fresh, empty project so the studio never has no album.
             nextActiveId = crypto.randomUUID();
             const empty = emptyV2StudioSnapshot();
             nextProjects = [
-              {
-                id: nextActiveId,
-                name: defaultNewProjectName(0),
-                updatedAt: new Date().toISOString(),
-                photoCount: 0,
-              },
+              { id: nextActiveId, name: defaultNewProjectName(0), updatedAt: new Date().toISOString(), photoCount: 0 },
             ];
             await saveV2ProjectSession(nextActiveId, empty);
-            applySessionToState(empty, previewUrlsRef, {
-              setPhotos,
-              setSelectedId,
-              setStudioLayout,
-              setTripNarrative,
-              setFamilyContext,
-              setGeneratedStory,
-              setPrintArtMode,
-              setStoryPhase,
-              photosRef,
-            });
+            applySessionToState(empty, previewUrlsRef, setters);
           }
           setActiveProjectId(nextActiveId);
           activeProjectIdRef.current = nextActiveId;
         }
-
         setProjects(nextProjects);
-        await saveV2ProjectsMeta({
-          activeProjectId: nextActiveId!,
-          projects: nextProjects,
-        });
+        await saveV2ProjectsMeta({ activeProjectId: nextActiveId!, projects: nextProjects });
       } finally {
         persistSkipRef.current = false;
         switchingRef.current = false;
       }
     },
-    [revokeAllPreviews],
+    [loadCloudProject, revokeAllPreviews, setters],
   );
-
-  const clearAllPhotos = useCallback(() => {
-    revokeAllPreviews();
-    photosRef.current = [];
-    setPhotos([]);
-    setPendingUploads([]);
-    setSelectedId(null);
-    const projectId = activeProjectIdRef.current;
-    if (projectId) {
-      void saveV2ProjectSession(projectId, {
-        ...buildSnapshot(),
-        photos: [],
-        selectedId: null,
-      });
-      setProjects((prev) =>
-        prev.map((project) =>
-          project.id === projectId ? { ...project, photoCount: 0 } : project,
-        ),
-      );
-    }
-  }, [buildSnapshot, revokeAllPreviews]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
@@ -564,6 +674,9 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       hydrated,
+      mode,
+      cloud,
+      reload,
       projects,
       activeProjectId,
       activeProject,
@@ -599,6 +712,9 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     }),
     [
       hydrated,
+      mode,
+      cloud,
+      reload,
       projects,
       activeProjectId,
       activeProject,
@@ -625,15 +741,11 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return (
-    <V2StudioContext.Provider value={value}>{children}</V2StudioContext.Provider>
-  );
+  return <V2StudioContext.Provider value={value}>{children}</V2StudioContext.Provider>;
 }
 
 export function useV2Studio() {
   const ctx = useContext(V2StudioContext);
-  if (!ctx) {
-    throw new Error("useV2Studio must be used within V2StudioProvider");
-  }
+  if (!ctx) throw new Error("useV2Studio must be used within V2StudioProvider");
   return ctx;
 }

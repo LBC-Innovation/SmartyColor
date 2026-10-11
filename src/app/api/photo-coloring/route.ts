@@ -6,6 +6,9 @@ import { createColoringAI } from "@/lib/ai/createProvider";
 import { normalizeCorrections, parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
 import { estimateJsonBodyBytes } from "@/lib/photo/payloadBudget";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
+import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
+import { addRevisionFromSheet } from "@/server/libraryService";
 import {
   PHOTO_MAX_CORRECTIONS,
   PHOTO_MAX_CORRECTION_CHARS,
@@ -28,7 +31,10 @@ type Body =
       corrections: string[];
       printPrefs?: PrintPrefs;
       image?: PhotoImageSizeHint;
-    };
+    }
+  /* Cloud library (signed-in): bytes are read from storage and the result is stored as a revision. */
+  | { mode: "generate-library"; photoId: string }
+  | { mode: "correct-library"; photoId: string; revisionId: string; corrections: string[] };
 
 function mergePrintPrefs(raw?: PrintPrefs): PrintPrefs {
   if (!raw) return defaultPrintPrefs;
@@ -54,6 +60,10 @@ function imageSizeHint(raw: unknown): PhotoImageSizeHint | undefined {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Body;
+
+    if (body.mode === "generate-library" || body.mode === "correct-library") {
+      return handleLibraryMode(request, body);
+    }
     const printPrefs = mergePrintPrefs(body.printPrefs);
     const image = imageSizeHint(body.image);
     const ai = createColoringAI();
@@ -139,4 +149,53 @@ export async function POST(request: Request) {
     console.error("[photo-coloring]", raw, error);
     return Response.json({ error: message }, { status: 500 });
   }
+}
+
+async function handleLibraryMode(
+  request: Request,
+  body: Extract<Body, { mode: "generate-library" | "correct-library" }>,
+) {
+  const auth = await requireAuthRequest(request);
+  if ("error" in auth) return auth.error;
+  const userId = auth.user.id;
+  if (typeof body.photoId !== "string" || !body.photoId) {
+    return Response.json({ error: "photoId is required." }, { status: 400 });
+  }
+
+  const photo = await photoDataUrlById(userId, body.photoId);
+  if (photo.error) {
+    return Response.json({ error: photo.error.message }, { status: photo.error.code === "NOT_FOUND" ? 404 : 500 });
+  }
+  const { photo: record, dataUrl, printPrefs } = photo.data!;
+  const image =
+    record.width && record.height ? { width: record.width, height: record.height } : undefined;
+  const ai = createColoringAI();
+
+  let sheet;
+  if (body.mode === "generate-library") {
+    sheet = await ai.photoToColoring({ photoDataUrl: dataUrl, printPrefs, image });
+  } else {
+    if (typeof body.revisionId !== "string" || !body.revisionId) {
+      return Response.json({ error: "revisionId is required." }, { status: 400 });
+    }
+    const corrections = normalizeCorrections(body.corrections ?? []);
+    if (corrections.length === 0) {
+      return Response.json({ error: "Add at least one correction." }, { status: 400 });
+    }
+    const current = await revisionDataUrlById(userId, body.revisionId);
+    if (current.error) {
+      return Response.json({ error: current.error.message }, { status: current.error.code === "NOT_FOUND" ? 404 : 500 });
+    }
+    sheet = await ai.correctPhotoColoring({
+      photoDataUrl: dataUrl,
+      sheetDataUrl: current.data!.dataUrl,
+      corrections,
+      printPrefs,
+      image,
+    });
+  }
+
+  const stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet);
+  if (stored.error) return Response.json({ error: stored.error.message }, { status: 500 });
+  return Response.json({ photo: stored.data });
 }

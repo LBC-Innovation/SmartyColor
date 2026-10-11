@@ -34,8 +34,11 @@ export type FeedbackTurn = {
 
 export type GeneratedSheet = {
   title: string;
+  /** Data URL for guests; for cloud revisions this is a cached object URL. */
   imageDataUrl: string;
   mimeType: string;
+  /** Storage path when the sheet lives in the cloud library. */
+  storagePath?: string;
 };
 
 export type SheetVersion = {

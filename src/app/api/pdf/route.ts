@@ -1,13 +1,25 @@
 import { sheetToPdf } from "@/lib/print/pdf";
 import type { PrintPrefs } from "@/lib/print/settings";
+import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { revisionDataUrlById } from "@/server/libraryImages";
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
-      imageDataUrl: string;
+      imageDataUrl?: string;
+      /* Cloud library: read the sheet from storage instead. */
+      revisionId?: string;
       printPrefs: PrintPrefs;
     };
-    const bytes = await sheetToPdf(body.imageDataUrl, body.printPrefs);
+    let imageDataUrl = body.imageDataUrl ?? "";
+    if (body.revisionId) {
+      const auth = await requireAuthRequest(request);
+      if ("error" in auth) return auth.error;
+      const rev = await revisionDataUrlById(auth.user.id, body.revisionId);
+      if (rev.error) return Response.json({ error: rev.error.message }, { status: 404 });
+      imageDataUrl = rev.data!.dataUrl;
+    }
+    const bytes = await sheetToPdf(imageDataUrl, body.printPrefs);
     return new Response(Buffer.from(bytes), {
       headers: {
         "Content-Type": "application/pdf",

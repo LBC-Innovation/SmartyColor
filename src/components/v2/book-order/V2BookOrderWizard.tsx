@@ -63,6 +63,7 @@ export function V2BookOrderWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, refreshUser } = useAuth();
+  const cloud = Boolean(user);
   const toast = useV2Toast();
 
   const [step, setStep] = useState<BookOrderStep>("pages");
@@ -139,7 +140,7 @@ export function V2BookOrderWizard() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const list = await loadProjectsCatalog();
+      const list = await loadProjectsCatalog(cloud);
       if (cancelled) return;
       setProjects(list);
       setLoadingAlbums(false);
@@ -151,19 +152,19 @@ export function V2BookOrderWizard() {
 
       const counts: Record<string, number> = {};
       for (const p of list) {
-        counts[p.id] = await countProjectSheets(p.id);
+        counts[p.id] = await countProjectSheets(p.id, cloud);
       }
       if (!cancelled) setSheetCounts(counts);
     })();
     return () => {
       cancelled = true;
     };
-  }, [preselectId]);
+  }, [preselectId, cloud]);
 
   // Albums can be deleted in the studio; re-read the catalog when we come back.
   useEffect(() => {
     const refresh = () => {
-      void loadProjectsCatalog().then((list) => {
+      void loadProjectsCatalog(cloud).then((list) => {
         setProjects(list);
         setSelectedProjectIds((prev) => prev.filter((id) => list.some((p) => p.id === id)));
       });
@@ -174,7 +175,7 @@ export function V2BookOrderWizard() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, []);
+  }, [cloud]);
 
   // Re-collect pages whenever the album selection changes, keeping the
   // order, rotations and removals the user already made.
@@ -184,7 +185,7 @@ export function V2BookOrderWizard() {
   useEffect(() => {
     if (projects.length === 0) return;
     let cancelled = false;
-    void collectPhotoPagesFromProjects({ projectIds: selectedProjectIds, projects }).then(
+    void collectPhotoPagesFromProjects({ projectIds: selectedProjectIds, projects, cloud }).then(
       ({ pages: collected }) => {
         if (cancelled) return;
         setPhotoPages((prev) => {

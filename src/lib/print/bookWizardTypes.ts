@@ -9,6 +9,8 @@ export type BookWizardPhotoPage = {
   sourceProjectId: string;
   sourceProjectName: string;
   photoId: string;
+  /** Cloud library revision backing this page (absent for guest libraries). */
+  revisionId?: string;
   title: string;
   imageDataUrl: string;
   sheetOrientation: Orientation;

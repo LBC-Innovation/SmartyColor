@@ -50,10 +50,23 @@ export function photoThumbObjectPosition(photo: {
   return orientation === "portrait" ? "top" : "center";
 }
 
+/** Where a photo lives when the user is signed in. Absent for guest (local-only) entries. */
+export type V2RemotePhoto = {
+  photoId: string;
+  projectId: string;
+  storagePath: string;
+};
+
 export type V2PhotoEntry = {
   id: string;
   previewUrl: string;
+  /**
+   * Base64 data URL of the original — guests only. Cloud entries keep this
+   * empty and are addressed by `remote.photoId`; their bytes live in the
+   * image cache behind `previewUrl`.
+   */
   photoDataUrl: string;
+  remote?: V2RemotePhoto;
   /** Set for every photo added since image metadata was introduced; older entries fall back to printPrefs. */
   image?: V2PhotoImageMeta;
   printPrefs: PrintPrefs;

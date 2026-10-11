@@ -207,7 +207,7 @@ body:has(.v2-shell) {
   @media (min-width: 1024px) {
     .v2-studio-toolbar-zone--studio {
       display: flex;
-      justify-content: center;
+      justify-content: flex-end;
     }
   }
 

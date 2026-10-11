@@ -2,7 +2,7 @@ import { useId } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * ColorfulMoments mark: a tilted photo tile with a bold rainbow crayon
+ * ColorfulMemories mark: a tilted photo tile with a bold rainbow crayon
  * stroke sweeping across it — a snapshot becoming something you color in.
  */
 export function V2BrandMark({
@@ -92,7 +92,7 @@ export function V2BrandLogo({
         <span className="bg-gradient-to-r from-v2-primary via-[#7c3aed] to-[#ec4899] bg-clip-text pr-[0.04em] text-transparent">
           Colorful
         </span>
-        Moments
+        Memories
       </span>
     </span>
   );

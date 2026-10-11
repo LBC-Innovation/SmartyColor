@@ -75,8 +75,8 @@ const STEPS: Step[] = [
           pictures straight in. iPhone HEIC files work fine.
         </p>
         <p className="mt-2">
-          Clear, well-lit shots with one to three people come out best. Photos aren&apos;t kept on
-          our servers.
+          Clear, well-lit shots with one to three people come out best. Signed in, your photos are
+          saved privately to your account; as a guest they stay on this device.
         </p>
       </>
     ),

@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { User } from "@/lib/api/types";
 import * as api from "@/lib/api/client";
+import { clearImageCache } from "@/lib/v2/imageCache";
 
 export type AuthSessionState = "anonymous" | "authenticated" | "expired";
 
@@ -108,6 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async (): Promise<void> => {
     await api.logout();
+    // Cached library images are tied to the account; don't leave them on a shared device.
+    await clearImageCache();
     expireSession();
   };
 

@@ -3,7 +3,7 @@ import path from "node:path";
 import sharp from "sharp";
 
 /**
- * Renders the ColorfulMoments brand mark (same geometry as V2BrandMark)
+ * Renders the ColorfulMemories brand mark (same geometry as V2BrandMark)
  * into the PWA icon set. Run: node scripts/generate-pwa-icons.mjs
  */
 const ROOT = path.resolve(import.meta.dirname, "..");

@@ -35,10 +35,20 @@ import {
   type SheetEditMessage,
 } from "@/components/v2/V2SheetEditChat";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { authHeaders } from "@/lib/api/client";
+import {
+  entryFromLibraryPhoto,
+  uploadPhotoToLibrary,
+  uploadRevisionToLibrary,
+} from "@/lib/v2/cloudLibrary";
+import type { LibraryPhoto } from "@/lib/library/types";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { V2DeletePagesConfirmModal } from "@/components/v2/V2DeletePagesConfirmModal";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
+import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
+import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
+import { Columns2, LayoutGrid } from "lucide-react";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { withViewTransition } from "@/lib/v2/viewTransition";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
@@ -81,12 +91,13 @@ function createSheetRevision(sheet: GeneratedSheet): SheetVersion {
 
 type GenerateResult = "success" | "failed" | "skipped";
 
-export function ColorfulMomentsApp() {
+export function ColorfulMemoriesApp() {
   const toast = useV2Toast();
   const router = useRouter();
   const welcomeGuide = useV2WelcomeGuide();
   const {
     hydrated,
+    cloud,
     activeProjectId,
     photos,
     photosRef,
@@ -128,9 +139,10 @@ export function ColorfulMomentsApp() {
   const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
   /** While the project name is being edited the toolbar is given over to that. */
   const [renamingProject, setRenamingProject] = useState(false);
+  /** Studio shows every photo as a sortable grid instead of the photo/sheet panes. */
+  const [gridView, setGridView] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
-  const selectedIndex = selected ? photos.indexOf(selected) : -1;
 
   function openPhoto(id: string) {
     setSelectedId(id);
@@ -196,6 +208,23 @@ export function ColorfulMomentsApp() {
           orientation: layout.orientation,
         };
         const capturedAt = await readPhotoCapturedAt(file);
+
+        if (cloud) {
+          if (!activeProjectId) throw new Error("No album selected.");
+          URL.revokeObjectURL(previewUrl);
+          const entry = await uploadPhotoToLibrary({
+            projectId: activeProjectId,
+            blob: prepared.previewBlob,
+            mimeType: prepared.previewBlob.type || "image/jpeg",
+            layout,
+            printPrefs,
+            fileName: file.name,
+            capturedAt,
+          });
+          firstAddedId ??= entry.id;
+          appendPhoto(entry);
+          continue;
+        }
 
         const entry: V2PhotoEntry = {
           id: newId(),
@@ -324,19 +353,27 @@ export function ColorfulMomentsApp() {
     try {
       const response = await fetch("/api/photo-coloring", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "generate",
-          photoDataUrl: photo.photoDataUrl,
-          printPrefs: photoPrintPrefs(photo),
-          image: photo.image,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(photo.remote ? authHeaders() : {}),
+        },
+        body: JSON.stringify(
+          photo.remote
+            ? { mode: "generate-library", photoId: photo.remote.photoId }
+            : {
+                mode: "generate",
+                photoDataUrl: photo.photoDataUrl,
+                printPrefs: photoPrintPrefs(photo),
+                image: photo.image,
+              },
+        ),
       });
       const rawBody = await response.text();
-      let payload: { sheet?: GeneratedSheet; error?: string };
+      let payload: { sheet?: GeneratedSheet; photo?: LibraryPhoto; error?: string };
       try {
         payload = JSON.parse(rawBody) as {
           sheet?: GeneratedSheet;
+          photo?: LibraryPhoto;
           error?: string;
         };
       } catch {
@@ -350,23 +387,28 @@ export function ColorfulMomentsApp() {
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not make a coloring sheet.");
       }
-      if (!payload.sheet) {
-        throw new Error("No coloring sheet came back.");
+      if (payload.photo) {
+        const fresh = await entryFromLibraryPhoto(payload.photo);
+        mutatePhotos((prev) => prev.map((entry) => (entry.id === photoId ? fresh : entry)));
+      } else {
+        if (!payload.sheet) {
+          throw new Error("No coloring sheet came back.");
+        }
+        const revision = createSheetRevision(payload.sheet);
+        mutatePhotos((prev) =>
+          prev.map((entry) =>
+            entry.id === photoId
+              ? {
+                  ...entry,
+                  sheet: payload.sheet!,
+                  sheetRevisions: [revision],
+                  activeRevisionId: revision.id,
+                  generating: false,
+                }
+              : entry,
+          ),
+        );
       }
-      const revision = createSheetRevision(payload.sheet);
-      mutatePhotos((prev) =>
-        prev.map((entry) =>
-          entry.id === photoId
-            ? {
-                ...entry,
-                sheet: payload.sheet!,
-                sheetRevisions: [revision],
-                activeRevisionId: revision.id,
-                generating: false,
-              }
-            : entry,
-        ),
-      );
       if (!options?.batch) {
         toast.success({
           title: "Coloring sheet ready!",
@@ -465,43 +507,58 @@ export function ColorfulMomentsApp() {
     updatePhoto(photo.id, { correcting: true });
 
     try {
-      const sheetDataUrl = await prepareSheetDataUrlForApi(
-        photo.sheet.imageDataUrl,
-        2,
-      );
-      const response = await fetch("/api/photo-coloring", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      let body: Record<string, unknown>;
+      if (photo.remote) {
+        const revisions = normalizeV2SheetRevisions(photo);
+        const revisionId = photo.activeRevisionId ?? revisions[revisions.length - 1]?.id;
+        if (!revisionId) throw new Error("No sheet to edit yet.");
+        body = { mode: "correct-library", photoId: photo.remote.photoId, revisionId, corrections: [trimmed] };
+      } else {
+        const sheetDataUrl = await prepareSheetDataUrlForApi(photo.sheet.imageDataUrl, 2);
+        body = {
           mode: "correct",
           photoDataUrl: photo.photoDataUrl,
           sheetDataUrl,
           corrections: [trimmed],
           printPrefs: photoPrintPrefs(photo),
           image: photo.image,
-        }),
+        };
+      }
+      const response = await fetch("/api/photo-coloring", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(photo.remote ? authHeaders() : {}),
+        },
+        body: JSON.stringify(body),
       });
       const payload = (await response.json()) as {
         sheet?: GeneratedSheet;
+        photo?: LibraryPhoto;
         error?: string;
       };
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not apply that edit.");
       }
-      if (!payload.sheet) {
-        throw new Error("No updated sheet came back.");
-      }
 
-      const prior = photosRef.current.find((entry) => entry.id === photo.id);
-      const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
-      const revision = createSheetRevision(payload.sheet);
-      revisions.push(revision);
-      updatePhoto(photo.id, {
-        sheet: payload.sheet,
-        sheetRevisions: revisions,
-        activeRevisionId: revision.id,
-        correcting: false,
-      });
+      if (payload.photo) {
+        const fresh = await entryFromLibraryPhoto(payload.photo);
+        updatePhoto(photo.id, { ...fresh, correcting: false }, { persist: false });
+      } else {
+        if (!payload.sheet) {
+          throw new Error("No updated sheet came back.");
+        }
+        const prior = photosRef.current.find((entry) => entry.id === photo.id);
+        const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
+        const revision = createSheetRevision(payload.sheet);
+        revisions.push(revision);
+        updatePhoto(photo.id, {
+          sheet: payload.sheet,
+          sheetRevisions: revisions,
+          activeRevisionId: revision.id,
+          correcting: false,
+        });
+      }
       setEditMessages((prev) =>
         prev.map((message) =>
           message.id === pendingId
@@ -541,7 +598,7 @@ export function ColorfulMomentsApp() {
     setSavingOverlayRevision(true);
     try {
       const imageDataUrl = await compositeSheetOverlayDataUrl(
-        photo.photoDataUrl,
+        photo.photoDataUrl || photo.previewUrl,
         photo.sheet.imageDataUrl,
         opacityPercent,
       );
@@ -550,6 +607,16 @@ export function ColorfulMomentsApp() {
         imageDataUrl,
         mimeType: "image/png",
       };
+      if (photo.remote) {
+        const stored = await uploadRevisionToLibrary({ photoId: photo.remote.photoId, sheet: tintedSheet });
+        const fresh = await entryFromLibraryPhoto(stored);
+        updatePhoto(photo.id, fresh, { persist: false });
+        toast.success({
+          title: "Revision saved",
+          message: `Added a ${opacityPercent}% color overlay to your sheet history.`,
+        });
+        return;
+      }
       const prior = photosRef.current.find((entry) => entry.id === photo.id);
       const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
       const revision = createSheetRevision(tintedSheet);
@@ -575,20 +642,12 @@ export function ColorfulMomentsApp() {
   }
 
   function selectSheetRevision(photoId: string, revisionId: string) {
-    replacePhotos(
-      photosRef.current.map((entry) => {
-        if (entry.id !== photoId) return entry;
-        const revisions = normalizeV2SheetRevisions(entry);
-        const picked = revisions.find((item) => item.id === revisionId);
-        if (!picked) return entry;
-        return {
-          ...entry,
-          sheetRevisions: revisions,
-          activeRevisionId: revisionId,
-          sheet: picked.sheet,
-        };
-      }),
-    );
+    const entry = photosRef.current.find((item) => item.id === photoId);
+    if (!entry) return;
+    const revisions = normalizeV2SheetRevisions(entry);
+    const picked = revisions.find((item) => item.id === revisionId);
+    if (!picked) return;
+    updatePhoto(photoId, { sheetRevisions: revisions, activeRevisionId: revisionId, sheet: picked.sheet });
   }
 
   async function generateAllSheets() {
@@ -635,11 +694,15 @@ export function ColorfulMomentsApp() {
     try {
       const response = await fetch("/api/pdf", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageDataUrl: selected.sheet.imageDataUrl,
-          printPrefs: photoPrintPrefs(selected),
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(selected.remote ? authHeaders() : {}),
+        },
+        body: JSON.stringify(
+          selected.remote
+            ? { revisionId: selected.activeRevisionId, printPrefs: photoPrintPrefs(selected) }
+            : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: photoPrintPrefs(selected) },
+        ),
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
@@ -648,7 +711,7 @@ export function ColorfulMomentsApp() {
       const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = "colorful-moments-coloring-sheet.pdf";
+      link.download = "colorful-memories-coloring-sheet.pdf";
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (err) {
@@ -659,12 +722,14 @@ export function ColorfulMomentsApp() {
   }
 
   async function downloadPrintBook() {
-    const pages = photos
-      .filter((entry) => entry.sheet)
-      .map((entry) => ({
-        imageDataUrl: entry.sheet!.imageDataUrl,
-        printPrefs: photoPrintPrefs(entry),
-      }));
+    const withSheets = photos.filter((entry) => entry.sheet);
+    const pages = withSheets.map((entry) => ({
+      imageDataUrl: entry.sheet!.imageDataUrl,
+      printPrefs: photoPrintPrefs(entry),
+    }));
+    const revisions = withSheets
+      .filter((entry) => entry.remote && entry.activeRevisionId)
+      .map((entry) => ({ revisionId: entry.activeRevisionId!, printPrefs: photoPrintPrefs(entry) }));
 
     if (pages.length === 0) {
       toast.error(
@@ -677,8 +742,11 @@ export function ColorfulMomentsApp() {
     try {
       const response = await fetch("/api/pdf/book", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pages }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(cloud ? authHeaders() : {}),
+        },
+        body: JSON.stringify(cloud ? { revisions } : { pages }),
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
@@ -687,7 +755,7 @@ export function ColorfulMomentsApp() {
       const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = "colorful-moments-print-book.pdf";
+      link.download = "colorful-memories-print-book.pdf";
       link.click();
       URL.revokeObjectURL(link.href);
     } catch (err) {
@@ -892,6 +960,7 @@ export function ColorfulMomentsApp() {
     <V2StudioFrame>
       {fileInput}
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <V2LibraryMigrationBanner />
         <V2StudioToolbar
           library={
             deletePagesMode ? (
@@ -1129,39 +1198,81 @@ export function ColorfulMomentsApp() {
                   >
                     <ChevronLeft className="h-6 w-6" aria-hidden />
                   </button>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
-                      Studio
-                    </h2>
-                    {selected ? (
-                      <p className="truncate text-xs text-v2-muted tabular-nums">
-                        Photo {selectedIndex + 1} of {photos.length}
-                      </p>
-                    ) : null}
+                  <h2 className="flex h-9 min-w-0 items-center truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
+                    Studio
+                  </h2>
+                  {/* sheet view ⇄ grid view */}
+                  <div
+                    className="ml-2 inline-flex h-9 shrink-0 items-center gap-1.5 sm:ml-3"
+                    role="group"
+                    aria-label="Studio view"
+                  >
+                    <Columns2
+                      className={cn("h-4 w-4", gridView ? "text-v2-muted" : "text-v2-primary")}
+                      aria-hidden
+                    />
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={gridView}
+                      aria-label={gridView ? "Showing all photos as a grid" : "Showing the selected photo and sheet"}
+                      title={gridView ? "Switch to sheet view" : "Switch to grid view"}
+                      onClick={() => setGridView((v) => !v)}
+                      className={cn(
+                        "relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
+                        gridView ? "border-v2-primary bg-v2-primary" : "border-v2-primary/40 bg-v2-primary-light",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform",
+                          gridView ? "translate-x-[18px]" : "translate-x-0.5",
+                        )}
+                      />
+                    </button>
+                    <LayoutGrid
+                      className={cn("h-4 w-4", gridView ? "text-v2-primary" : "text-v2-muted")}
+                      aria-hidden
+                    />
                   </div>
+                  <span className="flex-1" aria-hidden />
                   <V2StudioLayoutToggle
-                    className="shrink-0"
+                    className={cn("h-9 shrink-0", gridView && "opacity-50")}
                     value={studioLayout}
-                    onChange={setStudioLayout}
+                    onChange={(mode) => {
+                      setGridView(false);
+                      setStudioLayout(mode);
+                    }}
                   />
                 </header>
 
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-5 lg:p-6">
-                  <div
-                    className={cn(
-                      "grid min-h-0 flex-1 gap-3 overflow-hidden lg:gap-5",
-                      studioLayout === "both"
-                        ? "grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
-                        : "grid-cols-1",
-                    )}
-                  >
-                    {showPhotoPane ? photoPane : null}
-                    {showSheetPane ? sheetPane : null}
-                  </div>
+                  {gridView ? (
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+                      <V2StudioPhotoGrid
+                        photos={photos}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onReorder={replacePhotos}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "grid min-h-0 flex-1 gap-3 overflow-hidden lg:gap-5",
+                        studioLayout === "both"
+                          ? "grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
+                          : "grid-cols-1",
+                      )}
+                    >
+                      {showPhotoPane ? photoPane : null}
+                      {showSheetPane ? sheetPane : null}
+                    </div>
+                  )}
                 </div>
 
                 {/* Phone-only: revisions + page actions */}
-                {showRevisionSidebar && selected ? (
+                {showRevisionSidebar && selected && !gridView ? (
                   <V2SheetRevisionStrip
                     variant="compact"
                     className="shrink-0 border-t border-gray-100 px-3 py-2 lg:hidden"
@@ -1210,7 +1321,7 @@ export function ColorfulMomentsApp() {
                 ) : null}
               </div>
 
-              {showRevisionSidebar && selected ? (
+              {showRevisionSidebar && selected && !gridView ? (
                 <V2SheetRevisionStrip
                   variant="sidebar"
                   className="hidden min-h-0 self-stretch lg:flex"

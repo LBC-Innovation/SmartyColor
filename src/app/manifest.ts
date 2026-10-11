@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const APP_NAME = "ColorfulMoments";
+const APP_NAME = "ColorfulMemories";
 const THEME_COLOR = "#564fd0";
 const BACKGROUND_COLOR = "#fbfbfc";
 
