@@ -2,6 +2,8 @@ import { jsonError, jsonResult } from "@/lib/api/respond";
 import { getBookBinding, type BookBindingId } from "@/lib/print/bookBindings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as orders from "@/server/ordersService";
+import { normalizeShippingAddress } from "@/lib/orders/shippingAddress";
+import type { ShippingAddress } from "@/lib/orders/types";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,6 +18,7 @@ export async function PATCH(request: Request, { params }: Params) {
     projectTitle?: string;
     estimatedTotalCents?: number | null;
     shippingPostcode?: string | null;
+    shippingAddress?: Partial<ShippingAddress> | null;
   };
 
   if (body.bindingId !== "perfect_bound" && body.bindingId !== "saddle_stitch") {
@@ -35,6 +38,7 @@ export async function PATCH(request: Request, { params }: Params) {
     luluCostCents: body.estimatedTotalCents ?? null,
     totalCents: body.estimatedTotalCents ?? null,
     shippingPostcode: body.shippingPostcode ?? null,
+    shippingAddress: body.shippingAddress ? normalizeShippingAddress(body.shippingAddress) : null,
   });
 
   if (result.error?.code === "NOT_FOUND") {

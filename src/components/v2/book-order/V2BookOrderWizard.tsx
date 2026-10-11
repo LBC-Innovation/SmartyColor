@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
-import { BookBindingPicker } from "@/components/v2/book-order/BookBindingPicker";
+import { BookBindingPicker, type BindingQuote } from "@/components/v2/book-order/BookBindingPicker";
+import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
+import { useV2Toast } from "@/components/v2/V2Toast";
 import { BookFlipThroughModal } from "@/components/v2/book-order/BookFlipThroughModal";
 import { BookOrderConfirmModal } from "@/components/v2/book-order/BookOrderConfirmModal";
 import { BookOrderPriceBar } from "@/components/v2/book-order/BookOrderPriceBar";
@@ -15,10 +17,39 @@ import { BookPageThumbnailGrid } from "@/components/v2/book-order/BookPageThumbn
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
-import { getBookBinding, recommendBinding, type BookBindingId } from "@/lib/print/bookBindings";
+import { BOOK_BINDINGS, getBookBinding, recommendBinding, type BookBindingId } from "@/lib/print/bookBindings";
 import { computeBookPagePlan, explainBookPagePadding, nextRotation } from "@/lib/print/bookPagePlan";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
-import { readStoredQuoteShippingZip, storeQuoteShippingZip } from "@/lib/print/quoteShippingZip";
+import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
+import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
+import {
+  EMPTY_SHIPPING_ADDRESS,
+  isShippingAddressComplete,
+  normalizeShippingAddress,
+  validateShippingAddress,
+  type ShippingAddressErrors,
+} from "@/lib/orders/shippingAddress";
+import type { ShippingAddress } from "@/lib/orders/types";
+
+const ADDRESS_STORAGE_KEY = "cm_shipping_address";
+
+function readStoredAddress(): ShippingAddress {
+  if (typeof window === "undefined") return EMPTY_SHIPPING_ADDRESS;
+  try {
+    const raw = localStorage.getItem(ADDRESS_STORAGE_KEY);
+    return raw ? { ...EMPTY_SHIPPING_ADDRESS, ...(JSON.parse(raw) as Partial<ShippingAddress>) } : EMPTY_SHIPPING_ADDRESS;
+  } catch {
+    return EMPTY_SHIPPING_ADDRESS;
+  }
+}
+
+function storeAddress(address: ShippingAddress) {
+  try {
+    localStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(address));
+  } catch {
+    /* ignore */
+  }
+}
 import {
   collectPhotoPagesFromProjects,
   countProjectSheets,
@@ -31,7 +62,8 @@ const STEPS: BookOrderStep[] = ["pages", "book", "review"];
 export function V2BookOrderWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
+  const toast = useV2Toast();
 
   const [step, setStep] = useState<BookOrderStep>("pages");
   const [projects, setProjects] = useState<V2ProjectMeta[]>([]);
@@ -47,12 +79,13 @@ export function V2BookOrderWizard() {
   const [bindingTouched, setBindingTouched] = useState(false);
 
   // Only rendered on the review step, so reading storage up front can't mismatch SSR.
-  const [shippingZip, setShippingZip] = useState(() => readStoredQuoteShippingZip());
-  const [quoteCents, setQuoteCents] = useState<number | null>(null);
-  const [printCents, setPrintCents] = useState<number | null>(null);
-  const [shippingCents, setShippingCents] = useState<number | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
+  // Legacy ZIP-only estimate, used until a full address is entered.
+  const [shippingZip] = useState(() => readStoredQuoteShippingZip());
+  const [address, setAddress] = useState<ShippingAddress>(() => readStoredAddress());
+  const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
+  const addressComplete = isShippingAddressComplete(address);
+  const [bindingQuotes, setBindingQuotes] = useState<Partial<Record<BookBindingId, BindingQuote>>>({});
+  const [addCreditShortfall, setAddCreditShortfall] = useState<number | null>(null);
 
   const [flipOpen, setFlipOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -62,6 +95,15 @@ export function V2BookOrderWizard() {
 
   const binding = getBookBinding(bindingId);
   const plan = useMemo(() => computeBookPagePlan(photoPages, binding), [photoPages, binding]);
+  const selectedQuote = bindingQuotes[bindingId];
+  const quoteCents = selectedQuote?.totalCents ?? null;
+  const printCents = selectedQuote?.printCents ?? null;
+  const shippingCents = selectedQuote?.shippingCents ?? null;
+  const quoteLoading = selectedQuote?.loading ?? false;
+  const quoteError = selectedQuote?.error ?? null;
+  const balanceCents = user?.creditsBalanceCents ?? null;
+  const selectedAffordable =
+    balanceCents == null || quoteCents == null || balanceCents >= quoteCents;
   const paddingNote = explainBookPagePadding(plan.photoCount, binding, plan);
 
   const selectedProjects = useMemo(
@@ -74,6 +116,25 @@ export function V2BookOrderWizard() {
   // ---- albums ------------------------------------------------------------
 
   const preselectId = searchParams.get("project");
+  const creditsReturn = searchParams.get("credits");
+  const jumpToStepRef = useRef<BookOrderStep | null>(
+    searchParams.get("step") === "book" ? "book" : null,
+  );
+
+  useEffect(() => {
+    if (!creditsReturn) return;
+    if (creditsReturn === "success") {
+      void refreshUser();
+      toast.success({ title: "Credit added", message: "Your balance is updated — pick a binding to continue." });
+    } else if (creditsReturn === "canceled") {
+      toast.info("No charge was made.", "Payment canceled");
+    }
+    // Clean the flag so a refresh doesn't repeat the toast.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("credits");
+    window.history.replaceState(null, "", url.toString());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creditsReturn]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +160,22 @@ export function V2BookOrderWizard() {
     };
   }, [preselectId]);
 
+  // Albums can be deleted in the studio; re-read the catalog when we come back.
+  useEffect(() => {
+    const refresh = () => {
+      void loadProjectsCatalog().then((list) => {
+        setProjects(list);
+        setSelectedProjectIds((prev) => prev.filter((id) => list.some((p) => p.id === id)));
+      });
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   // Re-collect pages whenever the album selection changes, keeping the
   // order, rotations and removals the user already made.
   const selectionKey = selectedProjectIds.join("|");
@@ -120,11 +197,18 @@ export function V2BookOrderWizard() {
           return [...kept, ...added];
         });
         setLoadedKey(selectionKey);
+        // Coming back from payment: resume on the binding step.
+        if (jumpToStepRef.current === "book" && collected.length > 0) {
+          jumpToStepRef.current = null;
+          setBindingId((current) => (bindingTouched ? current : recommendBinding(collected.length)));
+          setStep("book");
+        }
       },
     );
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectIds, selectionKey, projects]);
 
   function toggleProject(id: string) {
@@ -140,35 +224,64 @@ export function V2BookOrderWizard() {
   useEffect(() => {
     if (!quoteActive) return;
     const t = window.setTimeout(() => {
-      void (async () => {
-        setQuoteLoading(true);
-        setQuoteError(null);
-        const zip = shippingZip.trim();
-        const result = await api.fetchOrderQuote({
-          bindingId,
-          pageCount: plan.totalPages,
-          ...(zip ? { shippingPostcode: zip } : {}),
-        });
-        setQuoteLoading(false);
-        if (api.isError(result)) {
-          setQuoteCents(null);
-          setPrintCents(null);
-          setShippingCents(null);
-          setQuoteError(result.error.message);
-          return;
-        }
-        setQuoteCents(result.data.estimatedTotalCents);
-        setPrintCents(result.data.printCents ?? null);
-        setShippingCents(result.data.shippingCents ?? null);
-        setQuoteError(result.data.quoteError ?? null);
-      })();
+      const ids = Object.keys(BOOK_BINDINGS) as BookBindingId[];
+      const zip = (addressComplete ? address.postcode : shippingZip).trim();
+      const shipping = addressComplete
+        ? {
+            shippingAddress: {
+              city: address.city,
+              state_code: address.state_code,
+              postcode: address.postcode,
+              country_code: address.country_code,
+            },
+          }
+        : zip
+          ? { shippingPostcode: zip }
+          : {};
+
+      setBindingQuotes((prev) =>
+        Object.fromEntries(
+          ids.map((id) => [
+            id,
+            { totalCents: null, printCents: null, shippingCents: null, error: null, ...prev[id], loading: true },
+          ]),
+        ),
+      );
+
+      void Promise.all(
+        ids.map(async (id) => {
+          const spec = BOOK_BINDINGS[id];
+          if (photoPages.length > spec.maxPages) {
+            setBindingQuotes((prev) => ({
+              ...prev,
+              [id]: { totalCents: null, printCents: null, shippingCents: null, loading: false, error: null },
+            }));
+            return;
+          }
+          const pageCount = computeBookPagePlan(photoPages, spec).totalPages;
+          const result = await api.fetchOrderQuote({ bindingId: id, pageCount, ...shipping });
+          setBindingQuotes((prev) => ({
+            ...prev,
+            [id]: api.isError(result)
+              ? { totalCents: null, printCents: null, shippingCents: null, loading: false, error: result.error.message }
+              : {
+                  totalCents: result.data.estimatedTotalCents,
+                  printCents: result.data.printCents ?? null,
+                  shippingCents: result.data.shippingCents ?? null,
+                  loading: false,
+                  error: result.data.quoteError ?? null,
+                },
+          }));
+        }),
+      );
     }, 350);
     return () => window.clearTimeout(t);
-  }, [quoteActive, bindingId, plan.totalPages, shippingZip]);
+  }, [quoteActive, photoPages, shippingZip, addressComplete, address.city, address.state_code, address.postcode, address.country_code]);
 
-  function updateShippingZip(next: string) {
-    setShippingZip(next);
-    storeQuoteShippingZip(next);
+  function updateAddress(next: ShippingAddress) {
+    setAddress(next);
+    storeAddress(next);
+    if (Object.keys(addressErrors).length > 0) setAddressErrors(validateShippingAddress(next));
   }
 
   // ---- navigation ----------------------------------------------------------
@@ -185,9 +298,16 @@ export function V2BookOrderWizard() {
     } else if (step === "book") {
       setStep("review");
     } else {
+      const errors = validateShippingAddress(address);
+      setAddressErrors(errors);
+      if (Object.keys(errors).length > 0) {
+        setError("Please complete the shipping address.");
+        document.getElementById("ship-name")?.focus();
+        return;
+      }
       setConfirmOpen(true);
     }
-  }, [step, plan.photoCount, bindingTouched]);
+  }, [step, plan.photoCount, bindingTouched, address]);
 
   function goBack() {
     setError(null);
@@ -200,6 +320,7 @@ export function V2BookOrderWizard() {
     setPlacing(true);
     setError(null);
     const shippingPostcode = shippingZip.trim() || null;
+    const shippingAddress = normalizeShippingAddress(address);
     let orderId = savedDraftIdRef.current;
 
     if (orderId) {
@@ -209,6 +330,7 @@ export function V2BookOrderWizard() {
         projectTitle,
         estimatedTotalCents: quoteCents,
         shippingPostcode,
+        shippingAddress,
       });
       if (api.isError(updated)) {
         setError(updated.error.message);
@@ -224,6 +346,7 @@ export function V2BookOrderWizard() {
         projectTitle,
         estimatedTotalCents: quoteCents,
         shippingPostcode,
+        shippingAddress,
       });
       if (api.isError(created)) {
         setError(created.error.message);
@@ -250,6 +373,7 @@ export function V2BookOrderWizard() {
     step === "pages" ? "Choose binding" : step === "book" ? "Review order" : "Place order";
   const nextDisabled =
     (step === "pages" && (plan.photoCount === 0 || loadingPages)) ||
+    (step === "book" && (!selectedAffordable || quoteLoading)) ||
     (step === "review" && placing);
 
   return (
@@ -363,7 +487,26 @@ export function V2BookOrderWizard() {
                         setBindingTouched(true);
                         setBindingId(id);
                       }}
+                      quotes={bindingQuotes}
+                      balanceCents={balanceCents}
+                      onAddCredit={(shortfall) => setAddCreditShortfall(shortfall)}
                     />
+                    {balanceCents != null ? (
+                      <p className="text-xs text-v2-muted">
+                        Your balance:{" "}
+                        <span className="font-semibold tabular-nums text-v2-success-text">
+                          {formatCredits(balanceCents)}
+                        </span>
+                        {" · "}
+                        <button
+                          type="button"
+                          className="font-semibold text-v2-link hover:underline"
+                          onClick={() => setAddCreditShortfall(0)}
+                        >
+                          Add credit
+                        </button>
+                      </p>
+                    ) : null}
                     <button
                       type="button"
                       className="v2-btn-outline w-full sm:w-auto"
@@ -377,7 +520,7 @@ export function V2BookOrderWizard() {
                 ) : null}
 
                 {step === "review" ? (
-                  <section className="grid gap-4 lg:grid-cols-[1fr_20rem]" aria-label="Review order">
+                  <section className="grid gap-4 lg:grid-cols-[18rem_1fr]" aria-label="Review order">
                     <div className="v2-panel p-5 sm:p-6">
                       <h2 className="text-base font-semibold text-v2-ink">Your book</h2>
                       <dl className="mt-4 divide-y divide-gray-100 text-sm">
@@ -407,25 +550,23 @@ export function V2BookOrderWizard() {
                     </div>
 
                     <div className="v2-panel p-5 sm:p-6">
-                      <h2 className="text-base font-semibold text-v2-ink">Shipping &amp; price</h2>
-                      <label htmlFor="ship-zip" className="v2-label mt-4">
-                        Ship to ZIP (US)
-                      </label>
-                      <input
-                        id="ship-zip"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="postal-code"
-                        placeholder="e.g. 90210"
-                        maxLength={10}
-                        value={shippingZip}
-                        onChange={(e) => updateShippingZip(e.target.value)}
-                        className="v2-input tabular-nums"
-                      />
-                      <p className="mt-1.5 text-xs text-v2-muted">
-                        Standard mail from the printer. Enter your ZIP for an exact shipping charge.
+                      <h2 className="text-base font-semibold text-v2-ink">Ship to</h2>
+                      <p className="mt-0.5 text-xs text-v2-muted">
+                        Where the printer should mail your book.
                       </p>
+                      <BookShippingAddressForm
+                        className="mt-4"
+                        value={address}
+                        onChange={updateAddress}
+                        errors={addressErrors}
+                      />
 
+                      <h2 className="mt-6 text-base font-semibold text-v2-ink">Price</h2>
+                      {!addressComplete ? (
+                        <p className="mt-1 text-xs text-v2-muted">
+                          Shipping is estimated until the address above is complete.
+                        </p>
+                      ) : null}
                       <dl className="mt-4 space-y-1.5 text-sm">
                         <Money label="Printing" cents={printCents} loading={quoteLoading} />
                         <Money label="Shipping" cents={shippingCents} loading={quoteLoading} />
@@ -471,6 +612,17 @@ export function V2BookOrderWizard() {
         <BookFlipThroughModal pages={plan.allPages} binding={binding} onClose={() => setFlipOpen(false)} />
       ) : null}
 
+      {addCreditShortfall != null ? (
+        <V2AddCreditModal
+          onClose={() => setAddCreditShortfall(null)}
+          shortfallCents={addCreditShortfall}
+          returnPath={`/studio/order?${new URLSearchParams({
+            ...(selectedProjectIds[0] ? { project: selectedProjectIds[0] } : {}),
+            step: "book",
+          }).toString()}`}
+        />
+      ) : null}
+
       <BookOrderConfirmModal
         open={confirmOpen}
         busy={placing}
@@ -480,6 +632,7 @@ export function V2BookOrderWizard() {
         photoCount={plan.photoCount}
         totalCents={quoteCents}
         shippingZip={shippingZip}
+        shippingAddress={address}
         onCancel={() => !placing && setConfirmOpen(false)}
         onConfirm={() => void placeOrder()}
       />

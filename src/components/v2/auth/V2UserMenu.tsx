@@ -2,9 +2,10 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown,
-  CircleDollarSign,
+  CircleHelp,
   KeyRound,
   Loader2,
   LogOut,
@@ -13,8 +14,8 @@ import {
   UserPen,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import * as api from "@/lib/api/client";
-import { formatCredits } from "@/lib/credits/money";
 import { cn } from "@/lib/cn";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
@@ -28,6 +29,8 @@ const ITEM_CLASS =
 /** Avatar button in the header; opens a small account dropdown. */
 export function V2UserMenu() {
   const { user, loading, signOut } = useAuth();
+  const router = useRouter();
+  const welcomeGuide = useV2WelcomeGuide();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<OpenModal>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -112,19 +115,7 @@ export function V2UserMenu() {
           <div className="border-b border-gray-200 px-3.5 py-3">
             <p className="truncate text-sm font-semibold text-v2-ink">{name}</p>
             <p className="truncate text-xs text-v2-muted">{user.email}</p>
-            <Link
-              href="/orders"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="mt-2.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-v2-success-border bg-v2-success-bg px-2.5 py-1 text-xs font-semibold text-v2-success-text transition hover:border-emerald-400"
-              title="Promo balance — applies toward purchases"
-            >
-              <CircleDollarSign className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="truncate tabular-nums">
-                {formatCredits(user.creditsBalanceCents)} credits
-              </span>
-            </Link>
-          </div>
+</div>
 
           <div className="p-1">
             <button
@@ -162,6 +153,18 @@ export function V2UserMenu() {
                 Admin
               </Link>
             ) : null}
+            <button
+              type="button"
+              role="menuitem"
+              className={ITEM_CLASS}
+              onClick={() => {
+                setOpen(false);
+                welcomeGuide.open();
+              }}
+            >
+              <CircleHelp className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+              Welcome guide
+            </button>
           </div>
 
           <hr className="border-gray-200" />
@@ -176,7 +179,7 @@ export function V2UserMenu() {
               )}
               onClick={() => {
                 setOpen(false);
-                void signOut();
+                void signOut().then(() => router.replace("/"));
               }}
             >
               <LogOut className="h-4 w-4 shrink-0" aria-hidden />
@@ -208,7 +211,7 @@ function FormError({ message }: { message: string | null }) {
   );
 }
 
-function EditProfileModal({ onClose }: { onClose: () => void }) {
+export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const { user, refreshUser } = useAuth();
   const toast = useV2Toast();
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
@@ -309,7 +312,7 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
   const toast = useV2Toast();
   const [password, setPassword] = useState("");

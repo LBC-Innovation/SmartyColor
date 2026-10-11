@@ -173,8 +173,8 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
       >
         <div className="px-5 py-4 sm:px-6 sm:py-5">
           <p className="text-sm text-v2-muted">
-            You can always reopen it from the <strong className="text-v2-ink">?</strong> button in
-            the header.
+            You can always reopen it from <strong className="text-v2-ink">Welcome guide</strong> in
+            your account menu.
           </p>
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button type="button" className="v2-btn-outline h-11" onClick={dismissForever}>

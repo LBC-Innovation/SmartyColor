@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     pageCount?: number;
     shippingPostcode?: string;
     shippingLevel?: string;
+    shippingAddress?: { city?: string; state_code?: string; postcode?: string; country_code?: string };
   };
 
   if (body.bindingId !== "perfect_bound" && body.bindingId !== "saddle_stitch") {
@@ -51,7 +52,25 @@ export async function POST(request: Request) {
   } | undefined;
   let resolvedPostcode: string | null = null;
 
-  if (typeof body.shippingPostcode === "string" && body.shippingPostcode.trim()) {
+  const addr = body.shippingAddress;
+  if (addr && addr.city?.trim() && addr.postcode?.trim() && (addr.country_code ?? "US") === "US" && addr.state_code?.trim()) {
+    const usPostcode = normalizeUsPostcode(addr.postcode) ?? addr.postcode.trim();
+    resolvedPostcode = usPostcode;
+    shippingAddressOverride = {
+      city: addr.city.trim(),
+      state_code: addr.state_code.trim().toUpperCase(),
+      postcode: usPostcode,
+      country_code: "US",
+    };
+  } else if (addr && addr.city?.trim() && addr.postcode?.trim() && addr.country_code && addr.country_code !== "US") {
+    resolvedPostcode = addr.postcode.trim();
+    shippingAddressOverride = {
+      city: addr.city.trim(),
+      state_code: addr.state_code?.trim().toUpperCase() ?? "",
+      postcode: resolvedPostcode,
+      country_code: addr.country_code.trim().toUpperCase(),
+    };
+  } else if (typeof body.shippingPostcode === "string" && body.shippingPostcode.trim()) {
     try {
       const location = await lookupUsPostcode(body.shippingPostcode);
       resolvedPostcode = location.postcode;

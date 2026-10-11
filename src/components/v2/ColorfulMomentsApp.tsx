@@ -40,6 +40,7 @@ import { V2DeletePagesConfirmModal } from "@/components/v2/V2DeletePagesConfirmM
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
+import { withViewTransition } from "@/lib/v2/viewTransition";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { cn } from "@/lib/cn";
 import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
@@ -125,6 +126,8 @@ export function ColorfulMomentsApp() {
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   /** Below lg the studio is a full-screen view opened by tapping a photo. */
   const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
+  /** While the project name is being edited the toolbar is given over to that. */
+  const [renamingProject, setRenamingProject] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
   const selectedIndex = selected ? photos.indexOf(selected) : -1;
@@ -228,8 +231,10 @@ export function ColorfulMomentsApp() {
   }
 
   function exitDeletePagesMode() {
-    setDeletePagesMode(false);
-    setDeleteSelectedIds(new Set());
+    withViewTransition(() => {
+      setDeletePagesMode(false);
+      setDeleteSelectedIds(new Set());
+    });
   }
 
   function toggleDeletePagesSelection(id: string) {
@@ -280,8 +285,10 @@ export function ColorfulMomentsApp() {
   }
 
   function openDeletePagesMode() {
-    setDeleteSelectedIds(new Set());
-    setDeletePagesMode(true);
+    withViewTransition(() => {
+      setDeleteSelectedIds(new Set());
+      setDeletePagesMode(true);
+    });
   }
 
   function submitBulkDeleteFromRail() {
@@ -909,6 +916,7 @@ export function ColorfulMomentsApp() {
                   type="button"
                   onClick={exitDeletePagesMode}
                   className="v2-studio-toolbar-btn px-3"
+                  style={{ viewTransitionName: "cm-toolbar-cancel" }}
                 >
                   Cancel
                 </button>
@@ -917,6 +925,7 @@ export function ColorfulMomentsApp() {
                   onClick={submitBulkDeleteFromRail}
                   disabled={deleteSelectedIds.size === 0}
                   className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-3.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ viewTransitionName: "cm-toolbar-trash" }}
                 >
                   <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
                   Delete
@@ -929,8 +938,8 @@ export function ColorfulMomentsApp() {
               </>
             ) : (
               <>
-                <V2ProjectSwitcher />
-                {libraryPhotoCount > 0 ? (
+                <V2ProjectSwitcher onEditingChange={setRenamingProject} />
+                {!renamingProject && libraryPhotoCount > 0 ? (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -945,12 +954,13 @@ export function ColorfulMomentsApp() {
                     )}
                   </button>
                 ) : null}
-                {photos.length > 0 ? (
+                {!renamingProject && photos.length > 0 ? (
                   <button
                     type="button"
                     onClick={openDeletePagesMode}
                     disabled={uploading || generatingAll}
                     className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger v2-studio-toolbar-btn--icon"
+                    style={{ viewTransitionName: "cm-toolbar-trash" }}
                     title="Delete pages"
                     aria-label="Delete pages"
                   >

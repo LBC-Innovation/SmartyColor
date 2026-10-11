@@ -2,6 +2,8 @@ import { jsonError, jsonResult } from "@/lib/api/respond";
 import { getBookBinding, type BookBindingId } from "@/lib/print/bookBindings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as orders from "@/server/ordersService";
+import { normalizeShippingAddress } from "@/lib/orders/shippingAddress";
+import type { ShippingAddress } from "@/lib/orders/types";
 
 export async function POST(request: Request) {
   const auth = await requireAuthRequest(request);
@@ -15,6 +17,7 @@ export async function POST(request: Request) {
     projectTitle?: string;
     estimatedTotalCents?: number | null;
     shippingPostcode?: string | null;
+    shippingAddress?: Partial<ShippingAddress> | null;
   };
 
   if (body.bindingId !== "perfect_bound" && body.bindingId !== "saddle_stitch") {
@@ -34,6 +37,7 @@ export async function POST(request: Request) {
     luluCostCents: body.estimatedTotalCents ?? null,
     totalCents: body.estimatedTotalCents ?? null,
     shippingPostcode: body.shippingPostcode ?? null,
+    shippingAddress: body.shippingAddress ? normalizeShippingAddress(body.shippingAddress) : null,
   });
 
   if (result.error?.code === "NOT_FOUND") {

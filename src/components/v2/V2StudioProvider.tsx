@@ -18,6 +18,7 @@ import {
   loadV2StudioBootstrap,
   saveV2ProjectSession,
   saveV2ProjectsMeta,
+  clearV2ProjectSession,
 } from "@/lib/v2/studioSessionDb";
 import type {
   StoryPrintArtMode,
@@ -41,6 +42,8 @@ type V2StudioContextValue = {
   createProject: () => void;
   switchProject: (projectId: string) => void;
   renameActiveProject: (name: string) => void;
+  /** Permanently removes a project and all its photos; switches to another project (or a fresh one). */
+  deleteProject: (projectId: string) => Promise<void>;
   photos: V2PhotoEntry[];
   photosRef: RefObject<V2PhotoEntry[]>;
   pendingUploads: PendingUpload[];
@@ -108,6 +111,7 @@ function applySessionToState(
 export function V2StudioProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [projects, setProjects] = useState<V2ProjectMeta[]>([]);
+  const projectsRef = useRef<V2ProjectMeta[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [photos, setPhotos] = useState<V2PhotoEntry[]>([]);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
@@ -166,6 +170,10 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     activeProjectIdRef.current = activeProjectId;
   }, [activeProjectId]);
+
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -453,6 +461,80 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const deleteProject = useCallback(
+    async (projectId: string) => {
+      if (switchingRef.current) return;
+      const remaining = projectsRef.current.filter((project) => project.id !== projectId);
+      const wasActive = activeProjectIdRef.current === projectId;
+
+      switchingRef.current = true;
+      persistSkipRef.current = true;
+      try {
+        await clearV2ProjectSession(projectId);
+
+        let nextActiveId = activeProjectIdRef.current;
+        let nextProjects = remaining;
+
+        if (wasActive) {
+          revokeAllPreviews();
+          setPendingUploads([]);
+
+          if (remaining.length > 0) {
+            nextActiveId = remaining[0].id;
+            const session = await loadV2ProjectSession(nextActiveId);
+            applySessionToState(session, previewUrlsRef, {
+              setPhotos,
+              setSelectedId,
+              setStudioLayout,
+              setTripNarrative,
+              setFamilyContext,
+              setGeneratedStory,
+              setPrintArtMode,
+              setStoryPhase,
+              photosRef,
+            });
+          } else {
+            // Nothing left: start a fresh, empty project so the studio never has no album.
+            nextActiveId = crypto.randomUUID();
+            const empty = emptyV2StudioSnapshot();
+            nextProjects = [
+              {
+                id: nextActiveId,
+                name: defaultNewProjectName(0),
+                updatedAt: new Date().toISOString(),
+                photoCount: 0,
+              },
+            ];
+            await saveV2ProjectSession(nextActiveId, empty);
+            applySessionToState(empty, previewUrlsRef, {
+              setPhotos,
+              setSelectedId,
+              setStudioLayout,
+              setTripNarrative,
+              setFamilyContext,
+              setGeneratedStory,
+              setPrintArtMode,
+              setStoryPhase,
+              photosRef,
+            });
+          }
+          setActiveProjectId(nextActiveId);
+          activeProjectIdRef.current = nextActiveId;
+        }
+
+        setProjects(nextProjects);
+        await saveV2ProjectsMeta({
+          activeProjectId: nextActiveId!,
+          projects: nextProjects,
+        });
+      } finally {
+        persistSkipRef.current = false;
+        switchingRef.current = false;
+      }
+    },
+    [revokeAllPreviews],
+  );
+
   const clearAllPhotos = useCallback(() => {
     revokeAllPreviews();
     photosRef.current = [];
@@ -488,6 +570,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       createProject,
       switchProject,
       renameActiveProject,
+      deleteProject,
       photos,
       photosRef,
       pendingUploads,
@@ -522,6 +605,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       createProject,
       switchProject,
       renameActiveProject,
+      deleteProject,
       photos,
       pendingUploads,
       selectedId,

@@ -1,16 +1,26 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, FolderOpen, Pencil, Plus } from "lucide-react";
+import { Check, ChevronDown, CircleCheck, FolderOpen, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
+import { useV2Toast } from "@/components/v2/V2Toast";
 import { cn } from "@/lib/cn";
+import { withViewTransition } from "@/lib/v2/viewTransition";
 
 /**
  * Project title + switcher for the library toolbar. The name doubles as the
  * dropdown trigger; the pencil swaps it for an inline rename field of the
  * same height so the toolbar never shifts.
  */
-export function V2ProjectSwitcher({ className }: { className?: string }) {
+export function V2ProjectSwitcher({
+  className,
+  onEditingChange,
+}: {
+  className?: string;
+  /** Lets the host toolbar hide its other controls while the name is being edited. */
+  onEditingChange?: (editing: boolean) => void;
+}) {
   const {
     hydrated,
     projects,
@@ -19,10 +29,37 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
     createProject,
     switchProject,
     renameActiveProject,
+    deleteProject,
   } = useV2Studio();
+  const toast = useV2Toast();
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(false);
   const [draft, setDraft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  function setEditing(next: boolean) {
+    withViewTransition(() => {
+      setEditingState(next);
+      onEditingChange?.(next);
+    });
+  }
+
+  async function confirmDeleteProject() {
+    if (!activeProject) return;
+    setDeleting(true);
+    const name = activeProject.name;
+    try {
+      await deleteProject(activeProject.id);
+      setConfirmDelete(false);
+      setEditing(false);
+      toast.success({ title: "Album deleted", message: `“${name}” and its photos were removed.` });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete the album.");
+    } finally {
+      setDeleting(false);
+    }
+  }
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
@@ -71,24 +108,56 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
       aria-label="Project"
     >
       {editing ? (
-        <input
-          type="text"
-          value={draft}
-          autoFocus
-          onFocus={(e) => e.currentTarget.select()}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitRename}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitRename();
-            }
-            if (e.key === "Escape") setEditing(false);
-          }}
-          maxLength={80}
-          aria-label="Project name"
-          className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white px-3 text-sm font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
-        />
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <div className="relative min-w-0 flex-[4]" style={{ viewTransitionName: "cm-project-name" }}>
+            <input
+              type="text"
+              value={draft}
+              autoFocus
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitRename();
+                }
+                if (e.key === "Escape") setEditing(false);
+              }}
+              maxLength={80}
+              aria-label="Project name"
+              className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white pl-3 pr-10 text-sm font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
+            />
+            <button
+              type="button"
+              onClick={commitRename}
+              className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-v2-primary transition hover:bg-v2-primary-light"
+              aria-label="Save name"
+              title="Save"
+            >
+              <CircleCheck className="h-5 w-5" aria-hidden />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-red-200 bg-white text-red-700 transition hover:bg-red-50"
+            style={{ viewTransitionName: "cm-project-edit" }}
+            aria-label="Delete album"
+            title="Delete album"
+          >
+            <Trash2 className="h-[18px] w-[18px]" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white text-v2-navy transition hover:bg-v2-bg-subtle"
+            style={{ viewTransitionName: "cm-toolbar-cancel" }}
+            aria-label="Cancel renaming"
+            title="Cancel"
+          >
+            <X className="h-[18px] w-[18px]" aria-hidden />
+          </button>
+        </div>
       ) : (
         <>
           <button
@@ -100,6 +169,7 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left transition hover:bg-v2-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ viewTransitionName: "cm-project-name" }}
           >
             <FolderOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-v2-ink">
@@ -118,6 +188,7 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
               type="button"
               onClick={startRename}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
+              style={{ viewTransitionName: "cm-project-edit" }}
               aria-label="Rename project"
               title="Rename project"
             >
@@ -191,6 +262,16 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
             </button>
           </div>
         </div>
+      ) : null}
+
+      {confirmDelete && activeProject ? (
+        <V2DeleteProjectConfirmModal
+          projectName={activeProject.name}
+          photoCount={activeProject.photoCount}
+          busy={deleting}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => void confirmDeleteProject()}
+        />
       ) : null}
     </div>
   );

@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import { formatCredits } from "@/lib/credits/money";
+import { formatShippingAddress } from "@/lib/orders/shippingAddress";
+import type { ShippingAddress } from "@/lib/orders/types";
 
 type Props = {
   open: boolean;
@@ -14,6 +16,7 @@ type Props = {
   photoCount: number;
   totalCents: number | null;
   shippingZip: string;
+  shippingAddress?: ShippingAddress | null;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -27,9 +30,11 @@ export function BookOrderConfirmModal({
   photoCount,
   totalCents,
   shippingZip,
+  shippingAddress,
   onCancel,
   onConfirm,
 }: Props) {
+  const addressLine = formatShippingAddress(shippingAddress);
   useEffect(() => {
     if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
@@ -85,7 +90,14 @@ export function BookOrderConfirmModal({
               {pageCount} ({photoCount} coloring)
             </dd>
           </div>
-          {shippingZip.trim() ? (
+          {addressLine ? (
+            <div className="flex justify-between gap-3">
+              <dt className="shrink-0 text-v2-muted">Ship to</dt>
+              <dd className="text-right text-xs font-semibold leading-snug text-v2-ink sm:text-sm">
+                {addressLine}
+              </dd>
+            </div>
+          ) : shippingZip.trim() ? (
             <div className="flex justify-between gap-3">
               <dt className="text-v2-muted">Ship to ZIP</dt>
               <dd className="font-semibold tabular-nums text-v2-ink">{shippingZip.trim()}</dd>

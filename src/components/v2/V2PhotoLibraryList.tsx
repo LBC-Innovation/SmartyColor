@@ -9,7 +9,8 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   type DragEndEvent,
   type DragStartEvent,
@@ -24,7 +25,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Loader2, Sparkles } from "lucide-react";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { cn } from "@/lib/cn";
 import type { GeneratedSheet } from "@/lib/session/types";
@@ -84,6 +85,10 @@ type PhotoRowProps = {
   onSelect: () => void;
   onGenerateSheet: () => void;
   dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
+  /** Touch-friendly reorder: shown instead of the drag grip below lg. */
+  onMove?: (delta: -1 | 1) => void;
+  isFirst?: boolean;
+  isLast?: boolean;
   deleteMode?: boolean;
   deleteChecked?: boolean;
   onToggleDeleteSelect?: () => void;
@@ -98,6 +103,9 @@ function PhotoLibraryRow({
   onSelect,
   onGenerateSheet,
   dragHandleProps,
+  onMove,
+  isFirst,
+  isLast,
   deleteMode,
   deleteChecked,
   onToggleDeleteSelect,
@@ -140,15 +148,48 @@ function PhotoLibraryRow({
             />
           </div>
         ) : (
-          <button
-            type="button"
-            {...dragHandleProps}
-            onClick={(event) => event.stopPropagation()}
-            className="flex w-6 shrink-0 cursor-grab items-center justify-center rounded text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-muted active:cursor-grabbing"
-            aria-label="Drag to reorder"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
+          <div className="flex w-7 shrink-0 flex-col items-center justify-center">
+            {onMove ? (
+              <div className="flex flex-col gap-1 lg:hidden">
+                <button
+                  type="button"
+                  disabled={isFirst}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onMove(-1);
+                  }}
+                  className="inline-flex h-8 w-7 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  aria-label="Move photo up"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={isLast}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onMove(1);
+                  }}
+                  className="inline-flex h-8 w-7 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  aria-label="Move photo down"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              {...dragHandleProps}
+              onClick={(event) => event.stopPropagation()}
+              className={cn(
+                "h-9 w-7 cursor-grab touch-none items-center justify-center rounded text-v2-muted hover:bg-v2-bg-subtle active:cursor-grabbing",
+                onMove ? "hidden lg:flex" : "flex",
+              )}
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          </div>
         )}
 
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
@@ -222,6 +263,9 @@ function SortablePhotoRow({
   generateDisabled,
   onSelect,
   onGenerateSheet,
+  onMove,
+  isFirst,
+  isLast,
 }: Omit<
   PhotoRowProps,
   "dragHandleProps" | "isOverlay" | "deleteMode" | "deleteChecked" | "onToggleDeleteSelect" | "deleteSelectDisabled"
@@ -254,6 +298,9 @@ function SortablePhotoRow({
         onSelect={onSelect}
         onGenerateSheet={onGenerateSheet}
         dragHandleProps={{ ...attributes, ...listeners }}
+        onMove={onMove}
+        isFirst={isFirst}
+        isLast={isLast}
       />
     </div>
   );
@@ -275,13 +322,19 @@ export function V2PhotoLibraryList({
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+
+  function movePhoto(id: string, delta: -1 | 1) {
+    const from = photos.findIndex((photo) => photo.id === id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= photos.length) return;
+    onReorder(arrayMove(photos, from, to));
+  }
 
   const activePhoto = activeId
     ? photos.find((photo) => photo.id === activeId)
@@ -351,7 +404,7 @@ export function V2PhotoLibraryList({
           items={photos.map((photo) => photo.id)}
           strategy={verticalListSortingStrategy}
         >
-          {photos.map((photo) => (
+          {photos.map((photo, index) => (
             <SortablePhotoRow
               key={photo.id}
               photo={photo}
@@ -359,6 +412,9 @@ export function V2PhotoLibraryList({
               generateDisabled={generateDisabled}
               onSelect={() => onSelect(photo.id)}
               onGenerateSheet={() => onGenerateSheet(photo.id)}
+              onMove={(delta) => movePhoto(photo.id, delta)}
+              isFirst={index === 0}
+              isLast={index === photos.length - 1}
             />
           ))}
         </SortableContext>
