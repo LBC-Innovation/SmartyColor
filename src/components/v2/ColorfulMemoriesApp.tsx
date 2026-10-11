@@ -48,7 +48,7 @@ import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingP
 import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
 import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
-import { LayoutGrid } from "lucide-react";
+import { Columns2, LayoutGrid } from "lucide-react";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { withViewTransition } from "@/lib/v2/viewTransition";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
@@ -1199,7 +1199,7 @@ export function ColorfulMemoriesApp() {
                   >
                     <ChevronLeft className="h-6 w-6" aria-hidden />
                   </button>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
                       Studio
                     </h2>
@@ -1209,26 +1209,26 @@ export function ColorfulMemoriesApp() {
                       </p>
                     ) : null}
                   </div>
-                  <V2StudioLayoutToggle
-                    className={cn("shrink-0", gridView && "opacity-50")}
-                    value={studioLayout}
-                    onChange={(mode) => {
-                      setGridView(false);
-                      setStudioLayout(mode);
-                    }}
-                  />
-                  <label className="ml-1 inline-flex shrink-0 cursor-pointer items-center gap-2 text-xs font-semibold text-v2-navy">
-                    <LayoutGrid className="h-4 w-4 text-v2-muted" aria-hidden />
-                    <span className="hidden sm:inline">Grid</span>
+                  {/* sheet view ⇄ grid view */}
+                  <div
+                    className="ml-2 inline-flex shrink-0 items-center gap-1.5 sm:ml-3"
+                    role="group"
+                    aria-label="Studio view"
+                  >
+                    <Columns2
+                      className={cn("h-4 w-4", gridView ? "text-v2-muted" : "text-v2-primary")}
+                      aria-hidden
+                    />
                     <button
                       type="button"
                       role="switch"
                       aria-checked={gridView}
-                      aria-label="Show all photos as a grid"
+                      aria-label={gridView ? "Showing all photos as a grid" : "Showing the selected photo and sheet"}
+                      title={gridView ? "Switch to sheet view" : "Switch to grid view"}
                       onClick={() => setGridView((v) => !v)}
                       className={cn(
                         "relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
-                        gridView ? "border-v2-primary bg-v2-primary" : "border-gray-300 bg-gray-200",
+                        gridView ? "border-v2-primary bg-v2-primary" : "border-v2-primary/40 bg-v2-primary-light",
                       )}
                     >
                       <span
@@ -1238,7 +1238,20 @@ export function ColorfulMemoriesApp() {
                         )}
                       />
                     </button>
-                  </label>
+                    <LayoutGrid
+                      className={cn("h-4 w-4", gridView ? "text-v2-primary" : "text-v2-muted")}
+                      aria-hidden
+                    />
+                  </div>
+                  <span className="flex-1" aria-hidden />
+                  <V2StudioLayoutToggle
+                    className={cn("shrink-0", gridView && "opacity-50")}
+                    value={studioLayout}
+                    onChange={(mode) => {
+                      setGridView(false);
+                      setStudioLayout(mode);
+                    }}
+                  />
                 </header>
 
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-5 lg:p-6">
