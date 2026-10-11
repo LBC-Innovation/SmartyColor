@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Loader2, Wallet } from "lucide-react";
+import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
@@ -12,16 +13,10 @@ type Props = {
   onOrderUpdated: () => void | Promise<void>;
 };
 
-function suggestedTopUpCents(shortfallCents: number): number {
-  const min = 50;
-  if (shortfallCents <= 0) return min;
-  return Math.max(min, shortfallCents);
-}
-
 export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
   const { user, refreshUser } = useAuth();
   const [placing, setPlacing] = useState(false);
-  const [loadingCredits, setLoadingCredits] = useState(false);
+  const [addCreditOpen, setAddCreditOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const totalCents = order.totalCents;
@@ -34,24 +29,6 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
     const shortfall = Math.max(0, totalCents - balanceCents);
     return { shortfallCents: shortfall, canPlace: shortfall === 0 };
   }, [totalCents, balanceCents]);
-
-  const topUpDefault = suggestedTopUpCents(shortfallCents);
-
-  async function handleLoadCredits() {
-    setLoadingCredits(true);
-    setError(null);
-    const returnPath = `/orders/${order.id}`;
-    const result = await api.createCreditTopUpCheckout({
-      amountCents: topUpDefault,
-      returnPath,
-    });
-    setLoadingCredits(false);
-    if (api.isError(result)) {
-      setError(result.error.message);
-      return;
-    }
-    window.location.href = result.data.checkoutUrl;
-  }
 
   async function handlePlaceOrder() {
     setPlacing(true);
@@ -108,15 +85,10 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
           <button
             type="button"
             className="v2-btn-primary mt-3 text-sm"
-            disabled={loadingCredits}
-            onClick={() => void handleLoadCredits()}
+            onClick={() => setAddCreditOpen(true)}
           >
-            {loadingCredits ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <Wallet className="h-4 w-4" aria-hidden />
-            )}
-            Load {formatCredits(topUpDefault)} credits
+            <Wallet className="h-4 w-4" aria-hidden />
+            Add {formatCredits(shortfallCents)} credit
           </button>
         </div>
       ) : null}
@@ -138,16 +110,19 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
           Place order
         </button>
         {canPlace ? (
-          <button
-            type="button"
-            className="v2-btn-outline text-sm"
-            disabled={loadingCredits}
-            onClick={() => void handleLoadCredits()}
-          >
-            Add more credits
+          <button type="button" className="v2-btn-outline text-sm" onClick={() => setAddCreditOpen(true)}>
+            Add more credit
           </button>
         ) : null}
       </div>
+
+      {addCreditOpen ? (
+        <V2AddCreditModal
+          onClose={() => setAddCreditOpen(false)}
+          shortfallCents={shortfallCents}
+          returnPath={`/orders/${order.id}`}
+        />
+      ) : null}
     </section>
   );
 }
