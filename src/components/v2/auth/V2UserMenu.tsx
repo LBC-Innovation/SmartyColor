@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  ReceiptText,
   Shield,
   User,
   UserPen,
@@ -139,6 +140,18 @@ export function V2UserMenu() {
               />
               Change password
             </button>
+            <Link
+              href="/activity"
+              role="menuitem"
+              className={ITEM_CLASS}
+              onClick={() => setOpen(false)}
+            >
+              <ReceiptText
+                className="h-4 w-4 shrink-0 text-v2-muted"
+                aria-hidden
+              />
+              Transaction history
+            </Link>
             {isAdmin ? (
               <Link
                 href="/admin/users"

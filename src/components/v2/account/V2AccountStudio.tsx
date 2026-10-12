@@ -152,8 +152,8 @@ export function V2AccountStudio() {
               <section className="v2-panel p-5 sm:p-6">
                 <div className="flex items-baseline justify-between gap-3">
                   <h2 className="text-lg font-semibold text-v2-ink">Transactions</h2>
-                  <Link href="/orders" className="text-sm font-semibold text-v2-link hover:underline">
-                    View orders
+                  <Link href="/activity" className="text-sm font-semibold text-v2-link hover:underline">
+                    Full history
                   </Link>
                 </div>
                 {ledgerError ? (

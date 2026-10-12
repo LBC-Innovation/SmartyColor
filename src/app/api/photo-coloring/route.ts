@@ -10,6 +10,7 @@ import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
 import { withVisionUser } from "@/lib/visionCost/context";
 import { addRevisionFromSheet } from "@/server/libraryService";
+import { quoted, recordActivity } from "@/server/activityService";
 import {
   chargeSheetUsage,
   insufficientCreditsBody,
@@ -248,6 +249,20 @@ async function handleLibraryModeForUser(
   if (stored.error) {
     await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
     return Response.json({ error: stored.error.message }, { status: 500 });
+  }
+  // Charged sheets reach the history through their ledger entry; free ones have none.
+  if (charge.data.chargedCents === 0) {
+    await recordActivity({
+      userId,
+      category: "sheets",
+      type: kind === "edit" ? "sheet_edited" : "sheet_generated",
+      description:
+        kind === "edit"
+          ? `Edited the coloring sheet for ${quoted(record.fileName, "a photo")} (free edit)`
+          : `Generated a coloring sheet from ${quoted(record.fileName, "a photo")}`,
+      referenceType: "library_photo",
+      referenceId: record.id,
+    });
   }
   return Response.json({
     photo: stored.data,
