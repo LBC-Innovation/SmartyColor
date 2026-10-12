@@ -153,7 +153,7 @@ export function V2ProjectSwitcher({
   return (
     <div
       ref={rootRef}
-      className={cn("relative flex h-9 min-w-0 flex-1 items-center gap-0.5", className)}
+      className={cn("flex h-9 min-w-0 flex-1 items-center gap-0.5 sm:relative", className)}
       role="group"
       aria-label="Project"
     >
@@ -269,7 +269,8 @@ export function V2ProjectSwitcher({
       )}
 
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-gray-200 bg-v2-surface shadow-[0_12px_32px_rgb(10_16_26/0.14)]">
+        /* Phones: anchored to the toolbar zone so the list spans its full width. */
+        <div className="absolute inset-x-3 top-full z-30 overflow-hidden sm:inset-x-auto sm:left-0 sm:mt-1 sm:w-72 sm:max-w-[calc(100vw-1.5rem)] rounded-xl border border-gray-200 bg-v2-surface shadow-[0_12px_32px_rgb(10_16_26/0.14)]">
           <ul
             id={listId}
             aria-label="Your albums"
