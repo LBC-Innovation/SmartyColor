@@ -56,7 +56,7 @@ export function V2StoryPhotoCropModal({
       startY: event.clientY,
       startCrop: crop,
     };
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function pointerMove(event: React.PointerEvent) {
@@ -98,30 +98,30 @@ export function V2StoryPhotoCropModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <header className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
           <h2 id="story-crop-title" className="text-sm font-semibold text-v2-ink">
             Crop for print
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1.5 text-v2-muted hover:bg-v2-bg-subtle"
+            className="v2-hit rounded-full p-1.5 text-v2-muted hover:bg-v2-bg-subtle"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
         </header>
 
-        <div className="p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
           <p className="mb-3 text-xs text-v2-muted">
             Drag the frame to reframe landscape or portrait shots for your story pages.
           </p>
           <div
             ref={boxRef}
-            className="relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-xl bg-gray-100"
+            className="relative mx-auto aspect-[4/5] w-full max-w-sm touch-none select-none overflow-hidden rounded-xl bg-gray-100"
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}
             onPointerCancel={pointerUp}
@@ -143,18 +143,21 @@ export function V2StoryPhotoCropModal({
               }}
               onPointerDown={(e) => pointerDown(e, "move")}
             >
+              {/* 44px grab area kept inside the frame so the box edge never clips it */}
               <span
-                className="absolute bottom-0 right-0 h-5 w-5 translate-x-1/2 translate-y-1/2 cursor-se-resize rounded-full border-2 border-v2-primary bg-white"
+                className="absolute bottom-0 right-0 flex h-11 w-11 cursor-se-resize items-end justify-end p-0.5"
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   pointerDown(e, "se");
                 }}
-              />
+              >
+                <span className="h-5 w-5 rounded-full border-2 border-v2-primary bg-white" />
+              </span>
             </div>
           </div>
         </div>
 
-        <footer className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-4 py-3">
+        <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-100 px-4 py-3">
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-v2-muted hover:bg-v2-bg-subtle"

@@ -120,17 +120,16 @@ export function V2LandingPage() {
     router.push(STUDIO_PATH);
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center bg-v2-bg text-v2-muted">
-        Loading…
-      </div>
-    );
-  }
+  // Session check finished with nobody signed in (or a stale token): reveal the page.
+  useEffect(() => {
+    if (!loading && !user) document.documentElement.classList.remove("has-session");
+  }, [user, loading]);
+
   if (user) return null;
 
+  // Rendered without waiting for the session check so the hero is in the server HTML.
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-bg text-v2-ink">
+    <div className="v2-landing flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-bg text-v2-ink">
       <V2MarketingHeader />
 
       <main className="flex-1 pb-24 lg:pb-0">
@@ -483,6 +482,15 @@ function SectionHeading({
   );
 }
 
+/** `srcSet` for a /marketing image that has resized `-<width>.webp` siblings next to the full-size file. */
+function marketingSrcSet(src: string, widths: number[], fullWidth: number): string {
+  const base = src.replace(/\.webp$/, "");
+  return [...widths.map((w) => `${base}-${w}.webp ${w}w`), `${src} ${fullWidth}w`].join(", ");
+}
+
+const BEFORE_AFTER_SIZES = "(min-width: 640px) 170px, 40vw";
+const HERO_STACK_SIZES = "(min-width: 1024px) 330px, (min-width: 640px) 280px, 185px";
+
 type BeforeAfterProps = {
   photoSrc: string;
   sheetSrc: string;
@@ -504,13 +512,15 @@ function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, ea
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photoSrc}
+          srcSet={marketingSrcSet(photoSrc, [400, 800], width)}
+          sizes={BEFORE_AFTER_SIZES}
           width={width}
           height={height}
           alt={photoAlt}
           style={{ aspectRatio: aspect }}
           className="block w-full object-cover"
           loading={eager ? "eager" : "lazy"}
-          fetchPriority={eager ? "high" : "auto"}
+          decoding="async"
         />
         <figcaption className="px-3 py-2 text-center text-xs font-semibold text-v2-muted">Your photo</figcaption>
       </figure>
@@ -521,13 +531,15 @@ function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, ea
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={sheetSrc}
+          srcSet={marketingSrcSet(sheetSrc, [400, 800], width)}
+          sizes={BEFORE_AFTER_SIZES}
           width={width}
           height={height}
           alt={sheetAlt}
           style={{ aspectRatio: aspect }}
           className="block w-full object-cover"
           loading={eager ? "eager" : "lazy"}
-          fetchPriority={eager ? "high" : "auto"}
+          decoding="async"
         />
         <figcaption className="px-3 py-2 text-center text-xs font-semibold text-v2-link">Coloring page</figcaption>
       </figure>
@@ -547,6 +559,8 @@ function PhotoToPageDemo() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/marketing/hero-photo.webp"
+              srcSet={marketingSrcSet("/marketing/hero-photo.webp", [400, 800], 1200)}
+              sizes={HERO_STACK_SIZES}
               width={1200}
               height={900}
               alt="A family of four smiling on a balcony above the beach"
@@ -558,11 +572,12 @@ function PhotoToPageDemo() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/marketing/hero-sheet.webp"
+              srcSet={marketingSrcSet("/marketing/hero-sheet.webp", [400, 800], 1200)}
+              sizes={HERO_STACK_SIZES}
               width={1200}
               height={900}
               alt="The same photo as a black-and-white coloring page"
               className="block h-full w-full object-cover"
-              fetchPriority="high"
             />
           </div>
           </div>
@@ -607,11 +622,12 @@ function PrintedBook() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/marketing/boys-sheet.webp"
+              srcSet={marketingSrcSet("/marketing/boys-sheet.webp", [240, 400, 800], 900)}
+              sizes="(min-width: 640px) 112px, 80px"
               width={900}
               height={1200}
               alt=""
               className="block h-full w-full object-cover object-top"
-              fetchPriority="high"
             />
           </div>
           <div className="absolute inset-x-4 bottom-2.5 sm:inset-x-6 sm:bottom-3.5">

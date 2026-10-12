@@ -64,7 +64,7 @@ export function V2UserMenu() {
     return (
       <Link
         href="/sign-in"
-        className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
+        className="v2-hit inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
       >
         <User className="h-4 w-4" aria-hidden />
         <span className="hidden sm:inline">Sign in</span>
@@ -274,6 +274,8 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
             Display name
           </label>
           <input
+            autoComplete="name"
+            autoCapitalize="words"
             id="profile-name"
             type="text"
             className="v2-input"
@@ -287,6 +289,10 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
             Email
           </label>
           <input
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             id="profile-email"
             type="email"
             required

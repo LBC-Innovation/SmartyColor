@@ -55,7 +55,7 @@ export function BookOrderConfirmModal({
       onClick={() => !busy && onCancel()}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl shadow-slate-900/20"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl shadow-slate-900/20"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex gap-4">

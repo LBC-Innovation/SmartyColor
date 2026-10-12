@@ -94,14 +94,14 @@ export function V2StoryPhotoChat({
             <img
               src={previewUrl}
               alt=""
-              className="max-h-[220px] max-w-full rounded-lg object-contain shadow-sm sm:max-h-[min(60dvh,520px)]"
+              className="max-h-[min(22dvh,220px)] max-w-full rounded-lg object-contain shadow-sm sm:max-h-[min(60dvh,520px)]"
             />
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div
               ref={listRef}
-              className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+              className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4"
             >
               {messages.length === 0 ? (
                 <p className="text-sm text-v2-muted">
@@ -138,7 +138,8 @@ export function V2StoryPhotoChat({
                   onChange={(e) => setDraft(e.target.value)}
                   rows={2}
                   placeholder="This was our first ride on…"
-                  className="min-h-[44px] flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none ring-v2-primary focus:ring-2"
+                  enterKeyHint="send"
+                  className="min-h-[44px] flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-base lg:text-sm outline-none ring-v2-primary focus:ring-2"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

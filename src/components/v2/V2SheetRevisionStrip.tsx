@@ -3,6 +3,7 @@
 import { Crop } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { SheetVersion } from "@/lib/session/types";
+import { useThumbUrl } from "@/lib/v2/thumbnail";
 
 type V2SheetRevisionStripProps = {
   revisions: SheetVersion[];
@@ -15,6 +16,20 @@ type V2SheetRevisionStripProps = {
   /** Docked to the studio preview card edge */
   variant?: "sidebar" | "compact";
 };
+
+function RevisionThumb({ src }: { src: string }) {
+  const thumb = useThumbUrl(src);
+  if (!thumb) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={thumb}
+      alt=""
+      decoding="async"
+      className="absolute inset-0 h-full w-full object-cover object-center"
+    />
+  );
+}
 
 export function V2SheetRevisionStrip({
   revisions,
@@ -99,12 +114,7 @@ export function V2SheetRevisionStrip({
               )}
               aria-label={`Revision ${index + 1}${selected ? ", selected" : ""}`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={revision.sheet.imageDataUrl}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover object-center"
-              />
+              <RevisionThumb src={revision.sheet.imageDataUrl} />
               <span
                 className={cn(
                   "absolute inset-x-0 bottom-0 py-0.5 text-center text-[9px] font-semibold text-white",

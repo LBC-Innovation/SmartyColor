@@ -150,7 +150,7 @@ export function V2ToastProvider({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => dismiss(toast.id)}
-              className="shrink-0 rounded-lg p-1 text-v2-muted transition hover:bg-black/5 hover:text-v2-ink"
+              className="v2-hit shrink-0 rounded-lg p-1 text-v2-muted transition hover:bg-black/5 hover:text-v2-ink"
               aria-label="Dismiss notification"
             >
               <X className="h-4 w-4" />

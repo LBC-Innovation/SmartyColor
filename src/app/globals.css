@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* One Tailwind build for both themes; the studio theme only adds tokens and components. */
+@import "./(studio)/v2-theme.css";
 
 @theme inline {
   --color-ink: #1a2340;
@@ -91,7 +93,12 @@ body {
   transform-origin: center;
 }
 
+/* Launch splash for the installed app only; in a browser tab it would just hide the page. */
 #pwa-splash {
+  display: none;
+}
+
+html.standalone #pwa-splash {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -109,7 +116,7 @@ html.pwa-splash-hiding #pwa-splash {
   pointer-events: none;
 }
 
-html.pwa-splash-done #pwa-splash {
+html.standalone.pwa-splash-done #pwa-splash {
   display: none;
 }
 

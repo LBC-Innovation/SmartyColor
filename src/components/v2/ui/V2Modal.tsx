@@ -33,7 +33,7 @@ export function V2Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center"
       role="dialog"
       aria-modal="true"
     >
@@ -45,7 +45,7 @@ export function V2Modal({
       />
       <div
         className={cn(
-          "relative flex max-h-[min(90dvh,720px)] w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-v2-surface shadow-[0_24px_64px_rgb(10_16_26/0.18)]",
+          "relative flex max-h-[min(calc(100dvh_-_2rem_-_env(safe-area-inset-bottom)),720px)] w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-v2-surface shadow-[0_24px_64px_rgb(10_16_26/0.18)]",
           maxWidthClass,
           className,
         )}
@@ -56,7 +56,7 @@ export function V2Modal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full p-2 text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
+              className="v2-hit rounded-full p-2 text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
               aria-label="Close"
             >
               <X className="h-5 w-5" />

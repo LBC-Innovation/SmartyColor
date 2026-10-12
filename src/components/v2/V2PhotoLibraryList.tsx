@@ -31,6 +31,7 @@ import { cn } from "@/lib/cn";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { PrintPrefs } from "@/lib/print/settings";
 import { photoThumbObjectPosition, type V2PhotoImageMeta } from "@/lib/v2/studioTypes";
+import { useThumbUrl } from "@/lib/v2/thumbnail";
 
 export type V2LibraryPhoto = {
   id: string;
@@ -112,6 +113,8 @@ function PhotoLibraryRow({
   deleteSelectDisabled,
   isOverlay,
 }: PhotoRowProps) {
+  const photoThumb = useThumbUrl(photo.previewUrl);
+  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl);
   const rowSelect =
     deleteMode && !deleteSelectDisabled ? onToggleDeleteSelect : onSelect;
 
@@ -148,9 +151,9 @@ function PhotoLibraryRow({
             />
           </div>
         ) : (
-          <div className="flex w-7 shrink-0 flex-col items-center justify-center">
+          <div className="flex w-10 shrink-0 flex-col items-center justify-center lg:w-7">
             {onMove ? (
-              <div className="flex flex-col gap-1 lg:hidden">
+              <div className="flex flex-col gap-0.5 lg:hidden">
                 <button
                   type="button"
                   disabled={isFirst}
@@ -158,7 +161,7 @@ function PhotoLibraryRow({
                     event.stopPropagation();
                     onMove(-1);
                   }}
-                  className="inline-flex h-8 w-7 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
                   aria-label="Move photo up"
                 >
                   <ChevronUp className="h-4 w-4" />
@@ -170,7 +173,7 @@ function PhotoLibraryRow({
                     event.stopPropagation();
                     onMove(1);
                   }}
-                  className="inline-flex h-8 w-7 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
                   aria-label="Move photo down"
                 >
                   <ChevronDown className="h-4 w-4" />
@@ -198,7 +201,7 @@ function PhotoLibraryRow({
             aria-label=""
             className="aspect-[4/3] rounded-lg bg-v2-bg-subtle bg-cover bg-no-repeat"
             style={{
-              backgroundImage: `url("${photo.previewUrl}")`,
+              backgroundImage: photoThumb ? `url("${photoThumb}")` : undefined,
               backgroundPosition:
                 photoThumbObjectPosition(photo) === "top" ? "center top" : "center center",
             }}
@@ -211,7 +214,7 @@ function PhotoLibraryRow({
                 role="img"
                 aria-label=""
                 className="absolute -inset-[3%] bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: `url("${photo.sheet.imageDataUrl}")` }}
+                style={{ backgroundImage: sheetThumb ? `url("${sheetThumb}")` : undefined }}
               />
               {photo.generating ? (
                 <V2SheetGeneratingPlaceholder

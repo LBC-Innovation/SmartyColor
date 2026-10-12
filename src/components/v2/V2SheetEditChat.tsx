@@ -111,7 +111,7 @@ export function V2SheetEditChat({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-2 text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
+            className="v2-hit shrink-0 rounded-lg p-2 text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
             aria-label="Close editor"
           >
             <X className="h-5 w-5" />
@@ -119,8 +119,8 @@ export function V2SheetEditChat({
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          {/* Preview — 3/4 width on large screens */}
-          <div className="relative flex min-h-0 flex-[3] flex-col border-b border-gray-100 bg-v2-bg-subtle lg:border-b-0 lg:border-r">
+          {/* Preview — 3/4 width on large screens; capped on phones so the chat keeps room */}
+          <div className="relative flex max-h-[38dvh] min-h-0 flex-none flex-col lg:max-h-none lg:flex-[3] border-b border-gray-100 bg-v2-bg-subtle lg:border-b-0 lg:border-r">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100/80 px-4 py-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">
                 {showingSheet ? "Coloring sheet" : "Original photo"}
@@ -134,7 +134,7 @@ export function V2SheetEditChat({
                 {showingSheet ? "Show original" : "Show coloring sheet"}
               </button>
             </div>
-            <div className="relative flex min-h-[min(36dvh,320px)] flex-1 items-center justify-center p-4 lg:min-h-0">
+            <div className="relative flex h-[30dvh] min-h-0 items-center justify-center p-3 lg:h-auto lg:flex-1 lg:p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={showingSheet ? sheetImageUrl : originalPreviewUrl}
@@ -163,7 +163,7 @@ export function V2SheetEditChat({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div
               ref={listRef}
-              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3"
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-3"
             >
               {messages.length === 0 ? (
                 <p className="text-center text-xs leading-relaxed text-v2-muted">
@@ -225,7 +225,8 @@ export function V2SheetEditChat({
                   value={draft}
                   disabled={busy || disabled}
                   placeholder="What should we adjust?"
-                  className="block w-full resize-none border-0 bg-transparent px-3 py-2.5 text-sm leading-snug text-v2-ink placeholder:text-v2-muted focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  enterKeyHint="send"
+                  className="block w-full resize-none border-0 bg-transparent px-3 py-2.5 text-base leading-snug lg:text-sm text-v2-ink placeholder:text-v2-muted focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -235,14 +236,14 @@ export function V2SheetEditChat({
                   onChange={(event) => setDraft(event.target.value)}
                 />
                 <div className="flex items-center gap-2 border-t border-gray-100 bg-v2-bg-subtle/60 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate text-[10px] text-v2-muted">
+                  <span className="min-w-0 flex-1 truncate text-xs text-v2-muted lg:text-[10px]">
                     {draft.length}/{PHOTO_MAX_CORRECTION_CHARS} · Enter to
                     send
                   </span>
                   <button
                     type="submit"
                     disabled={!draft.trim() || busy || disabled}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-v2-primary text-white transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-v2-muted"
+                    className="v2-hit inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-v2-primary text-white transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-v2-muted"
                     aria-label="Send edit request"
                   >
                     {busy ? (

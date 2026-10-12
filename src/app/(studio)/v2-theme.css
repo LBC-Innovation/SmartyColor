@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 /* Lulu-inspired palette: purple CTAs, navy text, clean neutrals, pill buttons */
 @theme inline {
   --color-v2-bg: #fbfbfc;
@@ -33,7 +31,54 @@ body:has(.v2-shell) {
   height: 100%;
 }
 
+/* Signed-in visitors are redirected to the studio; don't flash the landing page first. */
+html.has-session .v2-landing {
+  visibility: hidden;
+}
+
+/* viewport-fit=cover: keep content clear of the notch / status bar. */
+.v2-shell {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* No double-tap zoom on controls (rapid taps on reorder / prev / next). */
+.v2-shell :is(a, button, input, select, textarea, label, summary, [role="button"], [role="switch"], [role="option"]) {
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  /* Unlayered so it beats text-sm etc.: fields under 16px zoom on focus in iOS. */
+  .v2-shell :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]), select, textarea) {
+    font-size: max(1rem, 16px);
+  }
+
+  /* Extend small controls to a 44px touch target without changing their look. */
+  .v2-hit {
+    position: relative;
+  }
+
+  .v2-hit::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 2.75rem);
+    height: max(100%, 2.75rem);
+    transform: translate(-50%, -50%);
+  }
+}
+
 @layer components {
+  /* Full-screen overlays are fixed, so they need the insets themselves.
+     Layered so padding utilities (e.g. lg:p-4) still win. */
+  .v2-safe-overlay {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
   .v2-brand-title {
     font-family: var(--font-v2-display), ui-serif, Georgia, serif;
     font-weight: 400;
@@ -233,7 +278,7 @@ body:has(.v2-shell) {
   .v2-studio-toolbar-btn {
     display: inline-flex;
     min-width: 0;
-    min-height: 2.25rem;
+    min-height: 2.75rem;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
@@ -252,8 +297,18 @@ body:has(.v2-shell) {
   }
 
   .v2-studio-toolbar-btn--icon {
-    width: 2.25rem;
+    width: 2.75rem;
     padding: 0;
+  }
+
+  @media (min-width: 1024px) {
+    .v2-studio-toolbar-btn {
+      min-height: 2.25rem;
+    }
+
+    .v2-studio-toolbar-btn--icon {
+      width: 2.25rem;
+    }
   }
 
   .v2-studio-toolbar-btn:hover:not(:disabled) {
@@ -336,6 +391,28 @@ body:has(.v2-shell) {
       transparent 100%
     );
     padding-top: 2.25rem;
+  }
+
+  /* Phones, page-scroll frames: the list is part of the page and the CTA bar pins above the tab bar. */
+  @media (max-width: 1023.98px) {
+    .v2-page-scroll .v2-photo-list-dock {
+      min-height: auto;
+      flex: none;
+    }
+
+    .v2-page-scroll .v2-photo-list-dock-scroll {
+      min-height: auto;
+      flex: none;
+      overflow-y: visible;
+      scrollbar-gutter: auto;
+    }
+
+    .v2-page-scroll .v2-photo-list-dock-bar {
+      position: fixed;
+      bottom: calc(3.5rem + env(safe-area-inset-bottom));
+      z-index: 30;
+      padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    }
   }
 
   .v2-photo-list-dock-cta {
@@ -476,7 +553,8 @@ body:has(.v2-shell) {
     border: 1px solid rgb(229 231 235);
     background-color: var(--color-v2-surface);
     padding: 0.625rem 0.875rem;
-    font-size: 0.9375rem;
+    /* 16px minimum: iOS Safari zooms the page when a smaller field is focused. */
+    font-size: 1rem;
     color: var(--color-v2-ink);
     transition:
       border-color 0.15s ease,

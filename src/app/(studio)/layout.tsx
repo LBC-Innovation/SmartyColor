@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Calistoga, DM_Sans } from "next/font/google";
 import { V2RootProviders } from "@/components/v2/V2RootProviders";
-import "./v2-theme.css";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],

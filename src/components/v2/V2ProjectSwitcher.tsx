@@ -174,13 +174,15 @@ export function V2ProjectSwitcher({
                 if (e.key === "Escape") setEditing(false);
               }}
               maxLength={80}
+              enterKeyHint="done"
+              autoCapitalize="words"
               aria-label="Project name"
-              className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white pl-3 pr-10 text-sm font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
+              className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white pl-3 pr-10 text-base font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
             />
             <button
               type="button"
               onClick={commitRename}
-              className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-v2-primary transition hover:bg-v2-primary-light"
+              className="v2-hit absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-v2-primary transition hover:bg-v2-primary-light"
               aria-label="Save name"
               title="Save"
             >
@@ -244,7 +246,7 @@ export function V2ProjectSwitcher({
                 setOpen(false);
                 setConfirmLeave(true);
               }}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
+              className="v2-hit inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
               style={{ viewTransitionName: "cm-project-edit" }}
               aria-label="Leave shared album"
               title="Leave shared album"
@@ -255,7 +257,7 @@ export function V2ProjectSwitcher({
             <button
               type="button"
               onClick={startRename}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
+              className="v2-hit inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
               style={{ viewTransitionName: "cm-project-edit" }}
               aria-label="Rename project"
               title="Rename project"
@@ -324,7 +326,7 @@ export function V2ProjectSwitcher({
                           setOpen(false);
                           setSharing(project);
                         }}
-                        className="mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-white hover:text-v2-link"
+                        className="v2-hit mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-white hover:text-v2-link"
                         aria-label={`Share ${project.name}`}
                         title="Share album"
                       >

@@ -1004,9 +1004,10 @@ export function ColorfulMemoriesApp() {
   );
 
   return (
-    <V2StudioFrame>
+    <V2StudioFrame pageScroll>
       {fileInput}
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+      {/* Phones: nothing here clips or scrolls — the frame scrolls the whole page. */}
+      <div className="flex w-full min-w-0 flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:overflow-hidden lg:pb-0">
         <V2LibraryMigrationBanner />
         <V2StudioToolbar
           library={
@@ -1121,10 +1122,10 @@ export function ColorfulMemoriesApp() {
           }
         />
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex flex-1 lg:min-h-0 lg:overflow-hidden">
           {/* Photo library — the whole page on phones, a fixed column on desktop */}
-          <div className="v2-photo-list-column flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-white lg:w-[min(100%,22rem)] lg:max-w-sm lg:flex-none lg:border-r lg:border-gray-200 xl:w-80">
-            <section className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-3 sm:px-5 lg:pt-4">
+          <div className="v2-photo-list-column flex w-full min-w-0 flex-1 flex-col bg-white lg:min-h-0 lg:overflow-hidden lg:w-[min(100%,22rem)] lg:max-w-sm lg:flex-none lg:border-r lg:border-gray-200 xl:w-80">
+            <section className="flex flex-1 flex-col px-4 pt-3 sm:px-5 lg:min-h-0 lg:overflow-hidden lg:pt-4">
               <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
                 <h2 className="text-base font-semibold tracking-tight text-v2-ink">
                   Your Photos
@@ -1229,7 +1230,7 @@ export function ColorfulMemoriesApp() {
           <main
             className={cn(
               "flex-col bg-v2-bg",
-              studioOpen ? "fixed inset-0 z-[45] flex" : "hidden",
+              studioOpen ? "v2-safe-overlay fixed inset-0 z-[45] flex" : "hidden",
               "lg:static lg:z-auto lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:overflow-hidden lg:p-4 xl:p-6",
             )}
             aria-label="Studio"
@@ -1266,7 +1267,7 @@ export function ColorfulMemoriesApp() {
                       title={gridView ? "Switch to sheet view" : "Switch to grid view"}
                       onClick={() => setGridView((v) => !v)}
                       className={cn(
-                        "relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
+                        "v2-hit relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
                         gridView ? "border-v2-primary bg-v2-primary" : "border-v2-primary/40 bg-v2-primary-light",
                       )}
                     >
