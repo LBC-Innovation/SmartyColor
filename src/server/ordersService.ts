@@ -15,6 +15,7 @@ import type {
 } from "@/lib/orders/types";
 import { isShippingAddressComplete, normalizeShippingAddress } from "@/lib/orders/shippingAddress";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
+import { quoted, recordActivity } from "@/server/activityService";
 import { luluConfigured } from "@/server/lulu/config";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import {
@@ -742,6 +743,14 @@ export async function cancelOrderAsAdmin(input: {
     title: "Order canceled",
     detail: "Canceled by an administrator.",
     metadata: { adminId: input.adminId },
+  });
+  await recordActivity({
+    userId: input.userId,
+    category: "orders",
+    type: "order_canceled",
+    description: `Order for ${quoted(order.project_title as string | null, "a printed book")} was canceled`,
+    referenceType: "book_order",
+    referenceId: input.orderId,
   });
 
   return { data: { status: "canceled" }, error: null };

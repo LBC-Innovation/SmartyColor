@@ -23,6 +23,7 @@ import {
   removePrefix,
   signedReadUrls,
 } from "@/server/storage/libraryFiles";
+import { quoted, recordActivity } from "@/server/activityService";
 import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } from "@/server/libraryAccess";
 
 type Row = Record<string, unknown>;
@@ -200,6 +201,14 @@ export async function createProject(userId: string, name: string): Promise<ApiRe
     .select("*")
     .single();
   if (error) return err(error.message);
+  await recordActivity({
+    userId,
+    category: "albums",
+    type: "album_created",
+    description: `Created album ${quoted(data.name as string, "Untitled project")}`,
+    referenceType: "library_project",
+    referenceId: data.id as string,
+  });
   return { data: projectFromRow(data, 0), error: null };
 }
 
@@ -285,15 +294,31 @@ async function updateContributorView(
 
 /** Deletes the project row (cascades photos/revisions/shares) and every file under it. Owner only. */
 export async function deleteProject(userId: string, projectId: string): Promise<ApiResult<{ id: string }>> {
+  const { count: photoCount } = await db()
+    .from("library_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId);
   const { data, error } = await db()
     .from("library_projects")
     .delete()
     .eq("id", projectId)
     .eq("user_id", userId)
-    .select("id")
+    .select("id, name")
     .maybeSingle();
   if (error) return err(error.message);
   if (!data) return NOT_FOUND;
+  const photos = photoCount ?? 0;
+  await recordActivity({
+    userId,
+    category: "albums",
+    type: "album_deleted",
+    description:
+      `Deleted album ${quoted(data.name as string, "Untitled project")}` +
+      (photos > 0 ? ` and its ${photos} ${photos === 1 ? "photo" : "photos"}` : ""),
+    referenceType: "library_project",
+    referenceId: projectId,
+    metadata: { photoCount: photos },
+  });
   try {
     await removePrefix(libraryPaths.project(userId, projectId));
   } catch (e) {
@@ -482,6 +507,15 @@ export async function registerPhoto(
     .select("*")
     .single();
   if (error) return err(error.message);
+  const album = quoted(access.project.name as string, "an album");
+  await recordActivity({
+    userId,
+    category: "photos",
+    type: "photo_uploaded",
+    description: `Uploaded ${quoted(input.fileName, "a photo")} to ${album}`,
+    referenceType: "library_photo",
+    referenceId: input.id,
+  });
   const hydrated = await hydratePhotos([data], { userId, role: access.role });
   if (hydrated.error) return hydrated;
   return { data: hydrated.data![0], error: null };
@@ -553,11 +587,12 @@ export async function deletePhotos(userId: string, photoIds: string[]): Promise<
   if (photoIds.length === 0) return { data: { deleted: [] }, error: null };
   const { data: rows, error: rErr } = await db()
     .from("library_photos")
-    .select("id, project_id, user_id, uploaded_by")
+    .select("id, project_id, user_id, uploaded_by, file_name")
     .in("id", photoIds);
   if (rErr) return err(rErr.message);
 
   const roles = new Map<string, LibraryProjectRole | null>();
+  const albumNames = new Map<string, string>();
   const allowed: Row[] = [];
   for (const row of rows ?? []) {
     const projectId = row.project_id as string;
@@ -565,6 +600,7 @@ export async function deletePhotos(userId: string, photoIds: string[]): Promise<
       const found = await accessFor(userId, projectId);
       if (found.error && found.error.code !== "NOT_FOUND") return found;
       roles.set(projectId, found.data?.role ?? null);
+      if (found.data) albumNames.set(projectId, found.data.project.name as string);
     }
     const role = roles.get(projectId);
     if (role === "owner" || (role === "contributor" && row.uploaded_by === userId)) allowed.push(row);
@@ -585,7 +621,30 @@ export async function deletePhotos(userId: string, photoIds: string[]): Promise<
       console.error(JSON.stringify({ level: "warn", message: "library: photo file cleanup failed", photoId: row.id, error: String(e) }));
     }
   }
-  return { data: { deleted: (data ?? []).map((r) => r.id as string) }, error: null };
+  // One history entry per album, however many photos went.
+  const deletedIds = new Set((data ?? []).map((r) => r.id as string));
+  const byProject = new Map<string, Row[]>();
+  for (const row of allowed) {
+    if (!deletedIds.has(row.id as string)) continue;
+    const projectId = row.project_id as string;
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), row]);
+  }
+  for (const [projectId, gone] of byProject) {
+    const album = quoted(albumNames.get(projectId), "an album");
+    await recordActivity({
+      userId,
+      category: "photos",
+      type: "photo_deleted",
+      description:
+        gone.length === 1
+          ? `Deleted ${quoted(gone[0].file_name as string | null, "a photo")} from ${album}`
+          : `Deleted ${gone.length} photos from ${album}`,
+      referenceType: "library_project",
+      referenceId: projectId,
+      metadata: { photoCount: gone.length, fileNames: gone.map((r) => r.file_name ?? null) },
+    });
+  }
+  return { data: { deleted: [...deletedIds] }, error: null };
 }
 
 // --------------------------------------------------------------- revisions

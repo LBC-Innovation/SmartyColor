@@ -3,6 +3,7 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, ShippingAddress } from "@/lib/orders/types";
 import type { CreditLedgerEntry } from "@/lib/credits/types";
+import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 
 const TOKEN_KEY = "cm_access_token";
 const SESSION_HINT_KEY = "cm_session_hint";
@@ -327,6 +328,22 @@ export function createCreditTopUpCheckout(input: {
 
 export function listMyCreditLedger(): Promise<ApiResult<CreditLedgerEntry[]>> {
   return request<CreditLedgerEntry[]>("/credits/ledger");
+}
+
+export function listMyActivity(
+  filter: ActivityFilter & { offset?: number } = {},
+): Promise<ApiResult<ActivityPage>> {
+  const qs = new URLSearchParams();
+  if (filter.category) qs.set("category", filter.category);
+  if (filter.type) qs.set("type", filter.type);
+  if (filter.moneyOnly) qs.set("money", "1");
+  if (filter.offset) qs.set("offset", String(filter.offset));
+  const query = qs.toString();
+  return request<ActivityPage>(`/activity${query ? `?${query}` : ""}`);
+}
+
+export function fetchActivityReceiptUrl(activityId: string): Promise<ApiResult<{ url: string }>> {
+  return request<{ url: string }>(`/activity/${activityId}/receipt`);
 }
 
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
