@@ -3,8 +3,8 @@ import Link from "next/link";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 
 export const metadata: Metadata = {
-  title: "Terms & privacy · ColorfulMemories",
-  description: "How ColorfulMemories uses your information and what it stores in cookies and your browser.",
+  title: "Terms & privacy · Colorful Memories",
+  description: "How Colorful Memories uses your information and what it stores in cookies and your browser.",
 };
 
 const UPDATED = "October 10, 2026";
@@ -52,7 +52,7 @@ export default function TermsPage() {
         <h1 className="v2-brand-title mt-2 text-3xl text-v2-ink sm:text-4xl">How we use your information</h1>
         <p className="mt-3 text-sm text-v2-muted">Last updated {UPDATED}</p>
         <p className="mt-6 text-[15px] leading-relaxed text-v2-navy">
-          ColorfulMemories turns your family photos into coloring pages and printed books. This page
+          Colorful Memories turns your family photos into coloring pages and printed books. This page
           explains, in plain language, what information the app collects, where it goes, and what it
           keeps in cookies and your browser. By using the app you agree to the terms below.
         </p>
@@ -160,7 +160,7 @@ export default function TermsPage() {
       </main>
       <footer className="border-t border-gray-200 bg-white py-6">
         <div className="v2-gutter-x mx-auto w-full max-w-3xl text-xs text-v2-muted">
-          © {new Date().getFullYear()} ColorfulMemories · LBC Innovation
+          © {new Date().getFullYear()} Colorful Memories · LBC Innovation
         </div>
       </footer>
     </div>

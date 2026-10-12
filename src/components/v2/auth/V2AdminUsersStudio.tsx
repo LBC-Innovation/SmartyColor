@@ -54,7 +54,7 @@ export function V2AdminUsersStudio() {
                   User management
                 </h1>
                 <p className="mt-2 text-sm text-v2-muted sm:text-base">
-                  Manage accounts, permissions, and access for ColorfulMemories.
+                  Manage accounts, permissions, and access for Colorful Memories.
                 </p>
               </div>
               {canAdd ? (

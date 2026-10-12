@@ -121,26 +121,13 @@ html.standalone.pwa-splash-done #pwa-splash {
 }
 
 .pwa-splash-icon {
-  width: min(24vw, 96px);
-  height: min(24vw, 96px);
-  border-radius: 22%;
-  box-shadow: 0 12px 32px rgb(86 79 208 / 0.28);
+  width: min(28vw, 112px);
+  height: auto;
 }
 
 .pwa-splash-title {
-  font-family: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
-  font-weight: 600;
-  font-size: clamp(1.5rem, 6.5vw, 2rem);
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: #0a101a;
-}
-
-.pwa-splash-title-accent {
-  background: linear-gradient(90deg, #564fd0, #7c3aed, #ec4899);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  width: min(60vw, 240px);
+  height: auto;
 }
 
 @media print {

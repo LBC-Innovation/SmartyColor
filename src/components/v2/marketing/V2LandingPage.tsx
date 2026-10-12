@@ -148,7 +148,7 @@ export function V2LandingPage() {
               <h1 id="hero-title" className="v2-brand-title mt-4 text-[2.5rem] leading-[1.05] text-v2-ink sm:text-5xl lg:text-6xl">
                 Your photos.
                 <br />
-                <span className="bg-gradient-to-r from-v2-primary via-[#7c3aed] to-[#ec4899] bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-brand-coral via-brand-pink to-brand-violet bg-clip-text text-transparent">
                   Their coloring book.
                 </span>
               </h1>
@@ -391,7 +391,7 @@ export function V2LandingPage() {
 
         {/* ------------------------------------------------------- final cta */}
         <section className="v2-gutter-x mx-auto w-full max-w-6xl pb-12 sm:pb-16">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-v2-primary to-[#3f3aa6] px-6 py-10 text-center text-white sm:px-10 sm:py-14">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-v2-primary to-[#4f2bc4] px-6 py-10 text-center text-white sm:px-10 sm:py-14">
             <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-white/10 blur-2xl" aria-hidden />
             <h2 className="v2-brand-title text-3xl sm:text-4xl">Make your first page right now</h2>
             <p className="mx-auto mt-3 max-w-md text-sm text-white/80 sm:text-base">
@@ -435,7 +435,7 @@ export function V2LandingPage() {
 
       <footer className="border-t border-gray-200 bg-white py-6">
         <div className="v2-gutter-x mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 text-xs text-v2-muted sm:flex-row">
-          <span>© {new Date().getFullYear()} ColorfulMemories · LBC Innovation</span>
+          <span>© {new Date().getFullYear()} Colorful Memories · LBC Innovation</span>
           <span className="flex items-center gap-4">
             <Link href="/terms" className="font-semibold text-v2-muted hover:text-v2-ink">
               Terms &amp; privacy
@@ -503,7 +503,7 @@ type BeforeAfterProps = {
   className?: string;
 };
 
-/** A real family photo beside the coloring page ColorfulMemories made from it. */
+/** A real family photo beside the coloring page Colorful Memories made from it. */
 function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, eager, className }: BeforeAfterProps) {
   const aspect = `${width}/${height}`;
   return (
@@ -615,7 +615,7 @@ function PrintedBook() {
         <div className="absolute inset-y-[4px] left-[8px] right-[-9px] rounded-r-md bg-[repeating-linear-gradient(to_right,#ffffff_0,#ffffff_1.5px,#d9dce3_1.5px,#d9dce3_2.5px)] shadow-[inset_-2px_0_3px_rgb(0_0_0/0.15)] [transform:translateZ(-8px)]" />
         <div className="absolute inset-x-[8px] bottom-[-7px] h-[8px] rounded-b-md bg-[repeating-linear-gradient(to_bottom,#ffffff_0,#ffffff_1.5px,#d9dce3_1.5px,#d9dce3_2.5px)] [transform:translateZ(-8px)]" />
         {/* cover */}
-        <div className="absolute inset-0 overflow-hidden rounded-l-[4px] rounded-r-lg bg-gradient-to-br from-[#6d66f0] via-v2-primary to-[#3f3aa6] shadow-[0_22px_40px_rgb(10_16_26/0.3),0_2px_6px_rgb(10_16_26/0.2)]">
+        <div className="absolute inset-0 overflow-hidden rounded-l-[4px] rounded-r-lg bg-gradient-to-br from-brand-violet via-v2-primary to-[#4f2bc4] shadow-[0_22px_40px_rgb(10_16_26/0.3),0_2px_6px_rgb(10_16_26/0.2)]">
           <div className="absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-black/30 via-black/10 to-transparent" />
           <div className="absolute inset-y-0 left-[14px] w-px bg-white/25" />
           <div className="absolute inset-x-4 top-4 bottom-[3.4rem] overflow-hidden rounded-md bg-white ring-1 ring-black/10 sm:inset-x-6 sm:top-5 sm:bottom-[3.75rem]">
@@ -635,7 +635,7 @@ function PrintedBook() {
               Beach Days
             </p>
             <p className="mt-0.5 truncate text-[7.5px] font-semibold uppercase tracking-[0.12em] text-white/70 sm:text-[9px]">
-              ColorfulMemories
+              Colorful Memories
             </p>
           </div>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/25" />

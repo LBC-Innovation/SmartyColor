@@ -26,10 +26,10 @@ const luckiest = Luckiest_Guy({
   preload: false,
 });
 
-const APP_NAME = "ColorfulMemories";
+const APP_NAME = "Colorful Memories";
 const APP_DESCRIPTION =
   "Turn family photos into coloring pages and printed coloring books.";
-const THEME_COLOR = "#564fd0";
+const THEME_COLOR = "#7446f0";
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
@@ -81,17 +81,24 @@ export default function RootLayout({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="pwa-splash-icon"
-            src="/pwa/icon-192.png"
+            src="/brand/mark.svg"
             alt=""
-            width={96}
-            height={96}
+            width={463}
+            height={400}
             // Only fetched when the splash is actually shown (installed app).
             loading="lazy"
             decoding="sync"
           />
-          <span className="pwa-splash-title">
-            <span className="pwa-splash-title-accent">Colorful</span>Memories
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="pwa-splash-title"
+            src="/brand/wordmark.svg"
+            alt=""
+            width={1468}
+            height={177}
+            loading="lazy"
+            decoding="sync"
+          />
         </div>
         {children}
         <PwaSplashDismissScript />
