@@ -393,6 +393,28 @@ html.has-session .v2-landing {
     padding-top: 2.25rem;
   }
 
+  /* Phones, page-scroll frames: the list is part of the page and the CTA bar pins above the tab bar. */
+  @media (max-width: 1023.98px) {
+    .v2-page-scroll .v2-photo-list-dock {
+      min-height: auto;
+      flex: none;
+    }
+
+    .v2-page-scroll .v2-photo-list-dock-scroll {
+      min-height: auto;
+      flex: none;
+      overflow-y: visible;
+      scrollbar-gutter: auto;
+    }
+
+    .v2-page-scroll .v2-photo-list-dock-bar {
+      position: fixed;
+      bottom: calc(3.5rem + env(safe-area-inset-bottom));
+      z-index: 30;
+      padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    }
+  }
+
   .v2-photo-list-dock-cta {
     pointer-events: auto;
     display: inline-flex;

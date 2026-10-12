@@ -165,13 +165,30 @@ type V2StudioFrameProps = {
   children: ReactNode;
   /** Focused flows (checkout) own the bottom of the screen. */
   hideBottomNav?: boolean;
+  /**
+   * Phones: the whole frame (top bar included) scrolls as one page instead of
+   * the content scrolling under a pinned header. Desktop is unchanged.
+   */
+  pageScroll?: boolean;
 };
 
-export function V2StudioFrame({ sidebar, children, hideBottomNav }: V2StudioFrameProps) {
+export function V2StudioFrame({ sidebar, children, hideBottomNav, pageScroll }: V2StudioFrameProps) {
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-1 flex-col",
+        pageScroll
+          ? "v2-page-scroll overflow-y-auto overscroll-y-contain lg:overflow-hidden"
+          : "overflow-hidden",
+      )}
+    >
       <V2TopBar />
-      <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+      <div
+        className={cn(
+          "flex w-full flex-1",
+          pageScroll ? "lg:min-h-0 lg:overflow-hidden" : "min-h-0 overflow-hidden",
+        )}
+      >
         {sidebar}
         {children}
       </div>
