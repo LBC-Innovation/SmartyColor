@@ -61,6 +61,28 @@ export async function login(
   return { data, error: null };
 }
 
+export async function refreshSession(refreshToken: string): Promise<ApiResult<unknown>> {
+  try {
+    const { data, error } = await getSupabaseAuth().auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+    if (error || !data.session) {
+      // 4xx: the refresh token is revoked, rotated away, or expired. Anything else is transient.
+      const definitive = error?.status !== undefined && error.status >= 400 && error.status < 500;
+      if (!definitive && error) {
+        log("error", "Session refresh unavailable", { error: error.message });
+        return { data: null, error: { message: "Could not refresh the session", code: "UNAVAILABLE" } };
+      }
+      log("warn", "Session refresh rejected", { error: error?.message });
+      return { data: null, error: { message: "Invalid or expired token" } };
+    }
+    return { data: { user: data.user, session: data.session }, error: null };
+  } catch (err) {
+    log("error", "Session refresh threw", { error: err instanceof Error ? err.message : String(err) });
+    return { data: null, error: { message: "Could not refresh the session", code: "UNAVAILABLE" } };
+  }
+}
+
 export async function logout(token: string, userId: string): Promise<ApiResult<{ success: boolean }>> {
   const { error } = await getSupabaseAuth().auth.admin.signOut(token);
   if (error) {
