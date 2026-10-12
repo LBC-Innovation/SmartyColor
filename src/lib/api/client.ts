@@ -2,7 +2,7 @@ import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, ShippingAddress } from "@/lib/orders/types";
-import type { CreditLedgerEntry } from "@/lib/credits/types";
+import type { CreditLedgerEntry, PromoCreditSettings } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 
 const TOKEN_KEY = "cm_access_token";
@@ -382,6 +382,19 @@ export function adminAdjustUserCredits(
 ): Promise<ApiResult<{ creditsBalanceCents: number }>> {
   return request<{ creditsBalanceCents: number }>(`/admin/users/${userId}/credits`, {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminGetPromoCredits(): Promise<ApiResult<PromoCreditSettings>> {
+  return request<PromoCreditSettings>("/admin/promo-credits");
+}
+
+export function adminUpdatePromoCredits(input: {
+  welcomeCreditDollars: string;
+}): Promise<ApiResult<PromoCreditSettings>> {
+  return request<PromoCreditSettings>("/admin/promo-credits", {
+    method: "PUT",
     body: JSON.stringify(input),
   });
 }

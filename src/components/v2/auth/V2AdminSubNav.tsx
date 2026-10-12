@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isV2NavItemActive, v2AdminNav } from "@/components/v2/nav-config";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/cn";
 
 /** Shared page-content container so the toolbar and admin content line up. */
@@ -14,6 +15,13 @@ export const ADMIN_CONTENT_CLASS = "mx-auto w-full max-w-5xl px-5 sm:px-8";
  */
 export function V2AdminToolbar({ className }: { className?: string }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const items = v2AdminNav.filter(
+    (item) =>
+      !item.permission ||
+      user?.role === "admin" ||
+      (user?.permissions.includes(item.permission) ?? false),
+  );
 
   return (
     <div className={cn("v2-studio-toolbar shrink-0", className)}>
@@ -21,7 +29,7 @@ export function V2AdminToolbar({ className }: { className?: string }) {
         className={cn(ADMIN_CONTENT_CLASS, "flex items-center gap-1 overflow-x-auto py-1.5")}
         aria-label="Admin"
       >
-        {v2AdminNav.map((item) => {
+        {items.map((item) => {
           const active = isV2NavItemActive(pathname, item);
           return (
             <Link
