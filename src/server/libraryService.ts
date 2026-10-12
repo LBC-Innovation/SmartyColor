@@ -335,6 +335,7 @@ function photoFromRow(row: Row, revisions: LibraryRevision[], url: string, viewe
     photoSummary: (row.photo_summary as string | null) ?? null,
     crop: (row.crop as LibraryPhoto["crop"]) ?? null,
     activeRevisionId: (row.active_revision_id as string | null) ?? null,
+    editCount: (row.edit_count as number | null) ?? 0,
     revisions,
     canDelete: viewer.role === "owner" || row.uploaded_by === viewer.userId,
     url,

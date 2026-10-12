@@ -23,6 +23,7 @@ import { entryFromLibraryPhoto, uploadPhotoToLibrary } from "@/lib/v2/cloudLibra
 import type { LibraryPhoto } from "@/lib/library/types";
 import { blobToDataUrl } from "@/lib/photo/dataUrlBlob";
 import { useV2Toast } from "@/components/v2/V2Toast";
+import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
 import { cn } from "@/lib/cn";
 import { applyPhotoCropDataUrl } from "@/lib/photo/applyPhotoCrop";
 import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
@@ -60,6 +61,7 @@ const PHASE_TABS = [
 
 export function V2StoryBookApp() {
   const toast = useV2Toast();
+  const sheetCredits = useSheetUsageCredits("/storybook");
   const {
     hydrated,
     cloud,
@@ -248,6 +250,7 @@ export function V2StoryBookApp() {
     if (coloringApiLockRef.current) return;
     const photo = photos.find((p) => p.id === id);
     if (!photo || photo.generating) return;
+    if (!sheetCredits.canAfford("generation", photo)) return;
 
     coloringApiLockRef.current = true;
     updatePhoto(id, { generating: true });
@@ -264,7 +267,17 @@ export function V2StoryBookApp() {
             : { mode: "generate", photoDataUrl: photo.photoDataUrl, printPrefs: photo.printPrefs },
         ),
       });
-      const data = (await res.json()) as { error?: string; sheet?: GeneratedSheet; photo?: LibraryPhoto };
+      const data = (await res.json()) as {
+        error?: string;
+        sheet?: GeneratedSheet;
+        photo?: LibraryPhoto;
+        code?: string;
+        creditsBalanceCents?: number;
+      };
+      if (sheetCredits.applyResponse(res.status, data, "generation")) {
+        updatePhoto(id, { generating: false });
+        return;
+      }
       if (!res.ok || (!data.sheet && !data.photo)) {
         throw new Error(data.error ?? "Could not make a coloring page.");
       }
@@ -851,6 +864,7 @@ export function V2StoryBookApp() {
           />
         </>
       ) : null}
+      {sheetCredits.addCreditModal}
     </V2StudioFrame>
   );
 }

@@ -22,6 +22,8 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** Apply a wallet balance the server just reported, without a round trip. */
+  setCreditsBalance: (cents: number) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,6 +69,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await api.fetchMe();
     if (!api.isError(result)) applyAuthenticated(result.data);
     else if (result.error.message.includes("Invalid or expired")) expireSession();
+  };
+
+  const setCreditsBalance = (cents: number): void => {
+    setUser((current) => (current ? { ...current, creditsBalanceCents: cents } : current));
   };
 
   useEffect(() => {
@@ -116,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, session, signIn, signUp, signOut, refreshUser }}
+      value={{ user, loading, session, signIn, signUp, signOut, refreshUser, setCreditsBalance }}
     >
       {children}
     </AuthContext.Provider>

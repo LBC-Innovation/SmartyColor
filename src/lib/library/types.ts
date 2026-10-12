@@ -69,6 +69,8 @@ export type LibraryPhoto = {
   photoSummary: string | null;
   crop: PhotoCropRect | null;
   activeRevisionId: string | null;
+  /** AI edits already applied to this photo's sheet; the first few are free. */
+  editCount: number;
   revisions: LibraryRevision[];
   /** False for a contributor looking at someone else's photo. */
   canDelete: boolean;

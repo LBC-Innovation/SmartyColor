@@ -68,6 +68,7 @@ export async function entryFromLibraryPhoto(
     sheet: active?.sheet ?? null,
     sheetRevisions: revisions,
     activeRevisionId: active?.id ?? null,
+    editCount: p.editCount,
     generating: transient?.generating ?? false,
     correcting: transient?.correcting ?? false,
     capturedAt: p.capturedAt ?? undefined,

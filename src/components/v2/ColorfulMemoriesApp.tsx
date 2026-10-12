@@ -44,6 +44,7 @@ import {
 } from "@/lib/v2/cloudLibrary";
 import type { LibraryPhoto } from "@/lib/library/types";
 import { useV2Toast } from "@/components/v2/V2Toast";
+import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
 import { V2DeletePagesConfirmModal } from "@/components/v2/V2DeletePagesConfirmModal";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
@@ -96,6 +97,7 @@ export function ColorfulMemoriesApp() {
   const toast = useV2Toast();
   const router = useRouter();
   const welcomeGuide = useV2WelcomeGuide();
+  const sheetCredits = useSheetUsageCredits("/studio");
   const {
     hydrated,
     cloud,
@@ -358,6 +360,7 @@ export function ColorfulMemoriesApp() {
     if (options?.select !== false) {
       setSelectedId(photoId);
     }
+    if (!sheetCredits.canAfford("generation", photo)) return "failed";
 
     coloringApiLockRef.current = true;
     const requestId = crypto.randomUUID();
@@ -387,13 +390,15 @@ export function ColorfulMemoriesApp() {
         ),
       });
       const rawBody = await response.text();
-      let payload: { sheet?: GeneratedSheet; photo?: LibraryPhoto; error?: string };
+      let payload: {
+        sheet?: GeneratedSheet;
+        photo?: LibraryPhoto;
+        error?: string;
+        code?: string;
+        creditsBalanceCents?: number;
+      };
       try {
-        payload = JSON.parse(rawBody) as {
-          sheet?: GeneratedSheet;
-          photo?: LibraryPhoto;
-          error?: string;
-        };
+        payload = JSON.parse(rawBody) as typeof payload;
       } catch {
         throw new Error(
           "The server sent an unexpected response. Please try again in a moment.",
@@ -401,6 +406,14 @@ export function ColorfulMemoriesApp() {
       }
       if (generateRequestIdRef.current.get(photoId) !== requestId) {
         return "skipped";
+      }
+      if (sheetCredits.applyResponse(response.status, payload, "generation")) {
+        mutatePhotos((prev) =>
+          prev.map((entry) =>
+            entry.id === photoId ? { ...entry, generating: false } : entry,
+          ),
+        );
+        return "failed";
       }
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not make a coloring sheet.");
@@ -507,6 +520,7 @@ export function ColorfulMemoriesApp() {
     if (coloringApiLockRef.current || photo.generating || photo.correcting) {
       return;
     }
+    if (!sheetCredits.canAfford("edit", photo)) return;
 
     const userMessageId = newId();
     const pendingId = newId();
@@ -523,6 +537,7 @@ export function ColorfulMemoriesApp() {
     ]);
     coloringApiLockRef.current = true;
     updatePhoto(photo.id, { correcting: true });
+    let outOfCredit = false;
 
     try {
       let body: Record<string, unknown>;
@@ -554,7 +569,10 @@ export function ColorfulMemoriesApp() {
         sheet?: GeneratedSheet;
         photo?: LibraryPhoto;
         error?: string;
+        code?: string;
+        creditsBalanceCents?: number;
       };
+      outOfCredit = sheetCredits.applyResponse(response.status, payload, "edit");
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not apply that edit.");
       }
@@ -592,7 +610,7 @@ export function ColorfulMemoriesApp() {
       updatePhoto(photo.id, { correcting: false });
       const message =
         err instanceof Error ? err.message : "Could not apply that edit.";
-      toast.error(message);
+      if (!outOfCredit) toast.error(message);
       setEditMessages((prev) =>
         prev.map((entry) =>
           entry.id === pendingId
@@ -1413,6 +1431,8 @@ export function ColorfulMemoriesApp() {
           saveOverlayRevisionBusy={savingOverlayRevision}
         />
       ) : null}
+
+      {sheetCredits.addCreditModal}
 
       <V2DeletePagesConfirmModal
         open={deleteConfirmOpen}

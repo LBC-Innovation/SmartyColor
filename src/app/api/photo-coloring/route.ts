@@ -11,6 +11,13 @@ import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
 import { withVisionUser } from "@/lib/visionCost/context";
 import { addRevisionFromSheet } from "@/server/libraryService";
 import {
+  chargeSheetUsage,
+  insufficientCreditsBody,
+  quoteSheetUsage,
+  refundSheetUsage,
+} from "@/server/sheetUsageService";
+import { INSUFFICIENT_CREDITS_CODE, type SheetUsageKind } from "@/lib/credits/pricing";
+import {
   PHOTO_MAX_CORRECTIONS,
   PHOTO_MAX_CORRECTION_CHARS,
   type PhotoImageSizeHint,
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Body;
 
     if (body.mode === "generate-library" || body.mode === "correct-library") {
-      return handleLibraryMode(request, body);
+      return await handleLibraryMode(request, body);
     }
     const printPrefs = mergePrintPrefs(body.printPrefs);
     const image = imageSizeHint(body.image);
@@ -170,11 +177,34 @@ async function handleLibraryModeForUser(
   userId: string,
   body: Extract<Body, { mode: "generate-library" | "correct-library" }>,
 ) {
+  const kind: SheetUsageKind = body.mode === "generate-library" ? "generation" : "edit";
+  let corrections: string[] = [];
+  if (body.mode === "correct-library") {
+    if (typeof body.revisionId !== "string" || !body.revisionId) {
+      return Response.json({ error: "revisionId is required." }, { status: 400 });
+    }
+    corrections = normalizeCorrections(body.corrections ?? []);
+    if (corrections.length === 0) {
+      return Response.json({ error: "Add at least one correction." }, { status: 400 });
+    }
+  }
+
   const photo = await photoDataUrlById(userId, body.photoId);
   if (photo.error) {
     return Response.json({ error: photo.error.message }, { status: photo.error.code === "NOT_FOUND" ? 404 : 500 });
   }
   const { photo: record, dataUrl, printPrefs } = photo.data!;
+
+  // Don't spend on the model for a wallet that can't cover it.
+  const quote = await quoteSheetUsage(userId, kind, record.editCount);
+  if (quote.error) return Response.json({ error: quote.error.message }, { status: 500 });
+  if (!quote.data.affordable) {
+    return Response.json(
+      insufficientCreditsBody(kind, quote.data.costCents, quote.data.creditsBalanceCents),
+      { status: 402 },
+    );
+  }
+
   const image =
     record.width && record.height ? { width: record.width, height: record.height } : undefined;
   const ai = createColoringAI();
@@ -183,13 +213,6 @@ async function handleLibraryModeForUser(
   if (body.mode === "generate-library") {
     sheet = await ai.photoToColoring({ photoDataUrl: dataUrl, printPrefs, image });
   } else {
-    if (typeof body.revisionId !== "string" || !body.revisionId) {
-      return Response.json({ error: "revisionId is required." }, { status: 400 });
-    }
-    const corrections = normalizeCorrections(body.corrections ?? []);
-    if (corrections.length === 0) {
-      return Response.json({ error: "Add at least one correction." }, { status: 400 });
-    }
     const current = await revisionDataUrlById(userId, body.revisionId);
     if (current.error) {
       return Response.json({ error: current.error.message }, { status: current.error.code === "NOT_FOUND" ? 404 : 500 });
@@ -203,7 +226,32 @@ async function handleLibraryModeForUser(
     });
   }
 
-  const stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet);
-  if (stored.error) return Response.json({ error: stored.error.message }, { status: 500 });
-  return Response.json({ photo: stored.data });
+  // Charge only once there is a sheet to hand over; refund if it can't be saved.
+  const charge = await chargeSheetUsage(userId, record.id, kind);
+  if (charge.error) {
+    if (charge.error.code === INSUFFICIENT_CREDITS_CODE) {
+      return Response.json(
+        insufficientCreditsBody(kind, quote.data.costCents, quote.data.creditsBalanceCents),
+        { status: 402 },
+      );
+    }
+    return Response.json({ error: charge.error.message }, { status: 500 });
+  }
+
+  let stored;
+  try {
+    stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet);
+  } catch (error) {
+    await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
+    throw error;
+  }
+  if (stored.error) {
+    await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
+    return Response.json({ error: stored.error.message }, { status: 500 });
+  }
+  return Response.json({
+    photo: stored.data,
+    chargedCents: charge.data.chargedCents,
+    creditsBalanceCents: charge.data.creditsBalanceCents,
+  });
 }
