@@ -1,20 +1,22 @@
-import { PDFDocument, PageSizes } from "pdf-lib";
+import { PDFDocument, degrees } from "pdf-lib";
+import {
+  layoutImageOnPage,
+  paperSizePt,
+  pdfDrawOptions,
+  type PageRotation,
+} from "@/lib/print/pageLayout";
 import type { PrintPrefs } from "@/lib/print/settings";
 
-function pageSize(prefs: PrintPrefs): [number, number] {
-  const letter = PageSizes.Letter;
-  const a4 = PageSizes.A4;
-  const size = prefs.paper === "a4" ? a4 : letter;
-  if (prefs.orientation === "landscape") {
-    return [size[1], size[0]];
-  }
-  return size;
-}
-
+/**
+ * Draw one coloring sheet on a new PDF page. All placement comes from
+ * `pageLayout`, the same engine the book preview uses, so every page keeps
+ * the same equal margin on all sides.
+ */
 async function drawSheetOnPdf(
   pdf: PDFDocument,
   imageDataUrl: string,
   prefs: PrintPrefs,
+  rotation: PageRotation = 0,
 ) {
   const match = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
   const svgMatch = imageDataUrl.match(/^data:image\/svg\+xml/);
@@ -27,33 +29,38 @@ async function drawSheetOnPdf(
 
   const mime = match[1];
   const bytes = Buffer.from(match[2], "base64");
-  const [width, height] = pageSize(prefs);
+  const [width, height] = paperSizePt(prefs);
   const page = pdf.addPage([width, height]);
   const image =
     mime.includes("png")
       ? await pdf.embedPng(bytes)
       : await pdf.embedJpg(bytes);
 
-  const scale = Math.min(width / image.width, height / image.height);
-  const drawW = image.width * scale;
-  const drawH = image.height * scale;
-  page.drawImage(image, {
-    x: (width - drawW) / 2,
-    y: (height - drawH) / 2,
-    width: drawW,
-    height: drawH,
+  const placement = layoutImageOnPage({
+    pageWidth: width,
+    pageHeight: height,
+    imageWidth: image.width,
+    imageHeight: image.height,
+    rotationDeg: rotation,
   });
+  const { x, y, rotateDeg, ...size } = pdfDrawOptions(placement, height);
+  page.drawImage(image, { x, y, ...size, rotate: degrees(rotateDeg) });
 }
 
-export async function sheetToPdf(imageDataUrl: string, prefs: PrintPrefs) {
+export async function sheetToPdf(
+  imageDataUrl: string,
+  prefs: PrintPrefs,
+  rotation: PageRotation = 0,
+) {
   const pdf = await PDFDocument.create();
-  await drawSheetOnPdf(pdf, imageDataUrl, prefs);
+  await drawSheetOnPdf(pdf, imageDataUrl, prefs, rotation);
   return pdf.save();
 }
 
 export type PdfSheetPage = {
   imageDataUrl: string;
   printPrefs: PrintPrefs;
+  rotation?: PageRotation;
 };
 
 export async function sheetsToPdf(pages: PdfSheetPage[]) {
@@ -62,7 +69,7 @@ export async function sheetsToPdf(pages: PdfSheetPage[]) {
   }
   const pdf = await PDFDocument.create();
   for (const page of pages) {
-    await drawSheetOnPdf(pdf, page.imageDataUrl, page.printPrefs);
+    await drawSheetOnPdf(pdf, page.imageDataUrl, page.printPrefs, page.rotation);
   }
   return pdf.save();
 }

@@ -4,6 +4,7 @@ import {
   type StorybookPdfPage,
 } from "@/lib/print/storybookPdf";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PRINT_MARGIN_PT } from "@/lib/print/pageLayout";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 
 type Body = {
@@ -46,10 +47,10 @@ export async function POST(request: Request) {
       const page = closingDoc.addPage([cw, ch]);
       const { width, height } = page.getSize();
       page.drawText(body.closing.trim(), {
-        x: 48,
+        x: PRINT_MARGIN_PT,
         y: height / 2,
         size: 14,
-        maxWidth: width - 96,
+        maxWidth: width - PRINT_MARGIN_PT * 2,
       });
       const closingPages = await merged.copyPages(
         closingDoc,
