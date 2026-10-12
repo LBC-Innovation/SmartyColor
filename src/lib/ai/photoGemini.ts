@@ -69,8 +69,9 @@ async function layoutForPhotoBytes(
 async function toSheet(
   file: { base64: string; mediaType: string },
   showTitle: boolean,
+  referenceBase64?: string,
 ): Promise<GeneratedSheet> {
-  const lineArtBase64 = await toPhotoLineArtPng(file.base64);
+  const lineArtBase64 = await toPhotoLineArtPng(file.base64, { referenceBase64 });
   return {
     title: showTitle ? "My photo coloring page" : "Coloring sheet",
     imageDataUrl: `data:image/png;base64,${lineArtBase64}`,
@@ -205,6 +206,8 @@ async function drawFromReferences(
   photoBytes: Buffer,
   printPrefs: PrintPrefs,
   hint?: PhotoImageSizeHint,
+  /** Sheet being edited; the result is matched to its stroke weight. */
+  weightReferenceBase64?: string,
 ): Promise<GeneratedSheet> {
   const layout = await layoutForPhotoBytes(photoBytes, printPrefs, hint);
 
@@ -222,7 +225,7 @@ async function drawFromReferences(
 
   const file = await generateImageFileFromReferences(operation, content, layout);
 
-  return toSheet(file, printPrefs.showTitle);
+  return toSheet(file, printPrefs.showTitle, weightReferenceBase64);
 }
 
 export function createPhotoGeminiHandlers(): Pick<
@@ -281,6 +284,7 @@ export function createPhotoGeminiHandlers(): Pick<
         photo.bytes,
         input.printPrefs,
         input.image,
+        sheet.base64,
       );
     },
   };
