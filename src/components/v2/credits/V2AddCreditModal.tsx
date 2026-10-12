@@ -11,10 +11,12 @@ type Props = {
   returnPath: string;
   /** Amount still needed for the thing they're buying, if any. */
   shortfallCents?: number | null;
+  /** What the shortfall is for, e.g. "this book". */
+  shortfallFor?: string;
 };
 
 /** Pick an amount, then hand off to Stripe Checkout for card entry. */
-export function V2AddCreditModal({ onClose, returnPath, shortfallCents }: Props) {
+export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfallFor = "this book" }: Props) {
   const { user } = useAuth();
   const balance = user?.creditsBalanceCents ?? 0;
 
@@ -33,7 +35,7 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents }: Props)
                 {" "}
                 · you need{" "}
                 <span className="font-semibold tabular-nums text-v2-ink">{formatCredits(shortfallCents)}</span>{" "}
-                more for this book
+                more for {shortfallFor}
               </>
             ) : null}
           </p>

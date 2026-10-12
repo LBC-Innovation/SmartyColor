@@ -75,6 +75,8 @@ export type V2PhotoEntry = {
   sheet: GeneratedSheet | null;
   sheetRevisions?: SheetVersion[];
   activeRevisionId?: string | null;
+  /** Cloud entries: AI edits already applied to this sheet (the first few are free). */
+  editCount?: number;
   generating: boolean;
   correcting?: boolean;
   /** ISO timestamp for story timeline ordering */
