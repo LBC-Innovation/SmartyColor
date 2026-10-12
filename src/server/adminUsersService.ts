@@ -157,7 +157,11 @@ export async function resendVerification(
   if (user.email_confirmed_at) {
     return { data: null, error: { message: "User email is already confirmed" } };
   }
-  const { error } = await getSupabaseAuth().auth.resend({ type: "signup", email: user.email });
+  const { error } = await getSupabaseAuth().auth.resend({
+    type: "signup",
+    email: user.email,
+    options: { emailRedirectTo: clientOrigin() },
+  });
   if (error) return { data: null, error: { message: error.message } };
   log("info", "Verification email resent", { adminId, targetId: id });
   return { data: { success: true }, error: null };
@@ -197,7 +201,7 @@ export async function sendMagicLink(
     email: user.email,
     options: {
       shouldCreateUser: false,
-      ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+      emailRedirectTo: redirectTo || `${clientOrigin()}/auth/callback`,
     },
   });
   if (error) return { data: null, error: { message: error.message } };
