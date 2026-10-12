@@ -34,7 +34,11 @@ export async function register(
   email: string,
   password: string,
 ): Promise<ApiResult<unknown>> {
-  const { data, error } = await getSupabaseAuth().auth.signUp({ email, password });
+  const { data, error } = await getSupabaseAuth().auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: clientOrigin() },
+  });
   if (error) {
     log("warn", "Register failed", { email, error: error.message });
     return { data: null, error: { message: error.message, code: error.code } };
