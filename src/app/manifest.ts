@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
-const APP_NAME = "ColorfulMemories";
-const THEME_COLOR = "#564fd0";
+const APP_NAME = "Colorful Memories";
+const THEME_COLOR = "#7446f0";
 const BACKGROUND_COLOR = "#fbfbfc";
 
 export default function manifest(): MetadataRoute.Manifest {

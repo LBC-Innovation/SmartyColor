@@ -1,25 +1,32 @@
-/* Lulu-inspired palette: purple CTAs, navy text, clean neutrals, pill buttons */
+/* Palette follows the Colorful Memories logo: violet CTAs, navy text, clean neutrals, pill buttons */
 @theme inline {
   --color-v2-bg: #fbfbfc;
   --color-v2-bg-subtle: #f3f4f6;
   --color-v2-surface: #ffffff;
   --color-v2-ink: #0a101a;
   --color-v2-muted: #5c6478;
-  --color-v2-primary: #564fd0;
-  --color-v2-primary-dark: #4540a8;
-  --color-v2-primary-light: #f0effa;
+  /* Logo violet, deepened one step so white-on-primary and primary-on-white both pass AA */
+  --color-v2-primary: #7446f0;
+  --color-v2-primary-dark: #5f33d6;
+  --color-v2-primary-light: #f2edff;
   --color-v2-navy: #303a4d;
   --color-v2-link: #000083;
-  --color-v2-accent: #564fd0;
+  --color-v2-accent: #7446f0;
   --color-v2-success-bg: #ecfdf5;
   --color-v2-success-border: #a7f3d0;
   --color-v2-success-text: #047857;
-  --font-v2: var(--font-dm-sans);
-  --font-v2-display: var(--font-calistoga);
+  --font-v2-display: var(--font-fredoka);
+  /* The five logo colors, exactly as drawn — for decoration, not body text */
+  --color-brand-coral: #fb513b;
+  --color-brand-amber: #fca406;
+  --color-brand-pink: #fb267d;
+  --color-brand-violet: #794df9;
+  --color-brand-blue: #149dfb;
 }
 
 .v2-shell {
-  font-family: var(--font-v2), ui-sans-serif, system-ui, sans-serif;
+  /* Read the next/font variable directly: it is set on this element, so a :root theme token can't see it. */
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   color: var(--color-v2-ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -80,12 +87,12 @@ html.has-session .v2-landing {
   }
 
   .v2-brand-title {
-    font-family: var(--font-v2-display), ui-serif, Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.02em;
+    font-family: var(--font-v2-display), ui-rounded, "Nunito", system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.015em;
   }
 
-  /* Logo wordmark: round, heavy, tight — playful but confident */
+  /* Same round face as the logo wordmark, for short brand-voiced labels */
   .v2-wordmark {
     font-family: var(--font-fredoka), ui-rounded, "Nunito", system-ui, sans-serif;
     font-weight: 600;
@@ -167,7 +174,7 @@ html.has-session .v2-landing {
     transition:
       background-color 0.15s ease,
       box-shadow 0.15s ease;
-    box-shadow: 0 1px 2px rgb(86 79 208 / 0.25);
+    box-shadow: 0 1px 2px rgb(116 70 240 / 0.25);
   }
 
   .v2-btn-primary:hover:not(:disabled) {
@@ -185,7 +192,7 @@ html.has-session .v2-landing {
     justify-content: center;
     gap: 0.5rem;
     border-radius: 9999px;
-    border: 1px solid rgb(86 79 208 / 0.35);
+    border: 1px solid rgb(116 70 240 / 0.35);
     background-color: var(--color-v2-surface);
     padding: 0.625rem 1.25rem;
     font-size: 0.875rem;
@@ -197,7 +204,7 @@ html.has-session .v2-landing {
   }
 
   .v2-btn-outline:hover:not(:disabled) {
-    border-color: rgb(86 79 208 / 0.55);
+    border-color: rgb(116 70 240 / 0.55);
     background-color: var(--color-v2-primary-light);
   }
 
@@ -213,7 +220,7 @@ html.has-session .v2-landing {
       rgb(255 255 255) 0%,
       rgb(248 247 252) 100%
     );
-    box-shadow: 0 1px 0 rgb(86 79 208 / 0.06);
+    box-shadow: 0 1px 0 rgb(116 70 240 / 0.06);
   }
 
   .v2-studio-toolbar-grid {
@@ -313,7 +320,7 @@ html.has-session .v2-landing {
 
   .v2-studio-toolbar-btn:hover:not(:disabled) {
     color: var(--color-v2-primary);
-    background: rgb(86 79 208 / 0.06);
+    background: rgb(116 70 240 / 0.06);
   }
 
   .v2-studio-toolbar-btn:disabled {
@@ -327,7 +334,7 @@ html.has-session .v2-landing {
 
   .v2-studio-toolbar-btn--primary:hover:not(:disabled) {
     color: var(--color-v2-primary-dark);
-    background: rgb(86 79 208 / 0.08);
+    background: rgb(116 70 240 / 0.08);
   }
 
   .v2-studio-toolbar-btn--danger {
@@ -341,7 +348,7 @@ html.has-session .v2-landing {
 
   .v2-studio-toolbar-btn .v2-studio-toolbar-badge {
     border-radius: 9999px;
-    background: rgb(86 79 208 / 0.12);
+    background: rgb(116 70 240 / 0.12);
     padding: 0.0625rem 0.375rem;
     font-size: 0.625rem;
     font-weight: 700;
@@ -432,7 +439,7 @@ html.has-session .v2-landing {
     line-height: 1.25;
     color: white;
     box-shadow:
-      0 4px 14px rgb(86 79 208 / 0.35),
+      0 4px 14px rgb(116 70 240 / 0.35),
       0 1px 2px rgb(10 16 26 / 0.08);
     transition:
       background-color 0.15s ease,
@@ -443,7 +450,7 @@ html.has-session .v2-landing {
   .v2-photo-list-dock-cta:hover:not(:disabled) {
     background: var(--color-v2-primary-dark);
     box-shadow:
-      0 6px 18px rgb(86 79 208 / 0.4),
+      0 6px 18px rgb(116 70 240 / 0.4),
       0 1px 2px rgb(10 16 26 / 0.08);
   }
 
@@ -462,7 +469,7 @@ html.has-session .v2-landing {
     padding-inline: 1rem;
     background: var(--color-v2-surface);
     color: var(--color-v2-link);
-    border: 1px solid rgb(86 79 208 / 0.3);
+    border: 1px solid rgb(116 70 240 / 0.3);
     box-shadow: 0 1px 2px rgb(10 16 26 / 0.06);
   }
 
@@ -566,8 +573,8 @@ html.has-session .v2-landing {
   }
 
   .v2-input:focus {
-    border-color: rgb(86 79 208 / 0.55);
-    box-shadow: 0 0 0 3px rgb(86 79 208 / 0.12);
+    border-color: rgb(116 70 240 / 0.55);
+    box-shadow: 0 0 0 3px rgb(116 70 240 / 0.12);
     outline: none;
   }
 
@@ -621,12 +628,12 @@ html.has-session .v2-landing {
   .v2-btn-sm-primary {
     background-color: var(--color-v2-primary-light);
     color: var(--color-v2-link);
-    border: 1px solid rgb(86 79 208 / 0.25);
+    border: 1px solid rgb(116 70 240 / 0.25);
   }
 
   .v2-btn-sm-primary:hover:not(:disabled) {
-    background-color: rgb(86 79 208 / 0.12);
-    border-color: rgb(86 79 208 / 0.4);
+    background-color: rgb(116 70 240 / 0.12);
+    border-color: rgb(116 70 240 / 0.4);
   }
 
   .v2-btn-sm-danger {
@@ -649,7 +656,7 @@ html.has-session .v2-landing {
     background: linear-gradient(180deg, #ffffff 0%, #f8f7fc 100%);
     box-shadow:
       0 1px 2px rgb(10 16 26 / 0.04),
-      0 12px 40px rgb(86 79 208 / 0.08);
+      0 12px 40px rgb(116 70 240 / 0.08);
   }
 }
 
@@ -657,13 +664,13 @@ html.has-session .v2-landing {
   0%,
   100% {
     box-shadow:
-      0 0 0 0 rgba(86, 79, 208, 0.4),
-      inset 0 0 0 0 rgba(86, 79, 208, 0.12);
+      0 0 0 0 rgba(116, 70, 240, 0.4),
+      inset 0 0 0 0 rgba(116, 70, 240, 0.12);
   }
   50% {
     box-shadow:
-      0 0 0 10px rgba(86, 79, 208, 0),
-      inset 0 0 0 4px rgba(86, 79, 208, 0.2);
+      0 0 0 10px rgba(116, 70, 240, 0),
+      inset 0 0 0 4px rgba(116, 70, 240, 0.2);
   }
 }
 
@@ -726,11 +733,11 @@ html.has-session .v2-landing {
   mix-blend-mode: soft-light;
   background: linear-gradient(
     125deg,
-    rgb(86 79 208 / 0.55),
+    rgb(116 70 240 / 0.55),
     rgb(153 246 228 / 0.45),
     rgb(196 181 253 / 0.5),
     rgb(99 102 241 / 0.45),
-    rgb(86 79 208 / 0.55)
+    rgb(116 70 240 / 0.55)
   );
   background-size: 320% 320%;
   animation: v2-sheet-color-flow 4.5s ease-in-out infinite;
@@ -753,7 +760,7 @@ html.has-session .v2-landing {
   background: radial-gradient(
     ellipse at 30% 40%,
     rgb(153 246 228 / 0.75),
-    rgb(86 79 208 / 0.15) 55%,
+    rgb(116 70 240 / 0.15) 55%,
     transparent 72%
   );
   animation: v2-sheet-wave-shift 5.5s ease-in-out infinite;
@@ -781,14 +788,14 @@ html.has-session .v2-landing {
   100% {
     transform: scale(1);
     box-shadow:
-      0 4px 12px rgb(86 79 208 / 0.25),
-      0 0 0 0 rgb(86 79 208 / 0.45);
+      0 4px 12px rgb(116 70 240 / 0.25),
+      0 0 0 0 rgb(116 70 240 / 0.45);
   }
   50% {
     transform: scale(1.1);
     box-shadow:
-      0 14px 30px rgb(86 79 208 / 0.4),
-      0 0 0 10px rgb(86 79 208 / 0);
+      0 14px 30px rgb(116 70 240 / 0.4),
+      0 0 0 10px rgb(116 70 240 / 0);
   }
 }
 

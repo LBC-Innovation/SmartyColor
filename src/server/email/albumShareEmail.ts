@@ -38,8 +38,8 @@ export function albumShareEmail(input: {
     ? `“${albumName}”: ${inviterName} shared this album with you`
     : `“${albumName}”: ${inviterName} invited you to add photos`;
   const lead = input.existingUser
-    ? `${inviter} shared an album with you on ColorfulMemories. It is already in your album list, ready for your photos.`
-    : `${inviter} would like you to join their album on ColorfulMemories and add your own photos to it. Would you like to join?`;
+    ? `${inviter} shared an album with you on Colorful Memories. It is already in your album list, ready for your photos.`
+    : `${inviter} would like you to join their album on Colorful Memories and add your own photos to it. Would you like to join?`;
   const detail = input.existingUser
     ? "Open it to see the photos so far, add yours, and turn any of them into coloring pages."
     : "Create a free account with this email address and the album will be waiting for you. If you'd rather not, you can ignore this message.";
@@ -66,16 +66,16 @@ export function albumShareEmail(input: {
             </tr>
             <tr>
               <td style="padding:28px 32px 8px;">
-                <a href="${url}" style="display:inline-block;background:#564fd0;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:13px 24px;border-radius:999px;">${cta}</a>
+                <a href="${url}" style="display:inline-block;background:#7446f0;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:13px 24px;border-radius:999px;">${cta}</a>
               </td>
             </tr>
             <tr>
               <td style="padding:16px 32px 32px;font-size:13px;line-height:1.5;color:#64748b;">
-                <p style="margin:0;">Or paste this link into your browser:<br /><a href="${url}" style="color:#564fd0;word-break:break-all;">${url}</a></p>
+                <p style="margin:0;">Or paste this link into your browser:<br /><a href="${url}" style="color:#7446f0;word-break:break-all;">${url}</a></p>
               </td>
             </tr>
           </table>
-          <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">ColorfulMemories · Sent because ${inviter} entered your email address.</p>
+          <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;">Colorful Memories · Sent because ${inviter} entered your email address.</p>
         </td>
       </tr>
     </table>
@@ -86,8 +86,8 @@ export function albumShareEmail(input: {
     `Shared album: ${albumName}`,
     "",
     input.existingUser
-      ? `${inviterName} shared an album with you on ColorfulMemories. It is already in your album list, ready for your photos.`
-      : `${inviterName} would like you to join their album on ColorfulMemories and add your own photos to it. Would you like to join?`,
+      ? `${inviterName} shared an album with you on Colorful Memories. It is already in your album list, ready for your photos.`
+      : `${inviterName} would like you to join their album on Colorful Memories and add your own photos to it. Would you like to join?`,
     "",
     detail,
     "",

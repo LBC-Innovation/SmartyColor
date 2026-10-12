@@ -17,7 +17,7 @@ export function emailConfigured(): boolean {
 }
 
 function fromAddress(): string {
-  return process.env.EMAIL_FROM?.trim() || "ColorfulMemories <onboarding@resend.dev>";
+  return process.env.EMAIL_FROM?.trim() || "Colorful Memories <onboarding@resend.dev>";
 }
 
 /** Returns false (and logs) when the message could not be handed to Resend. */
