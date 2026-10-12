@@ -3,6 +3,7 @@ import {
   BookOpen,
   CircleDollarSign,
   ClipboardList,
+  Gift,
   Home,
   Package,
   Users,
@@ -14,6 +15,8 @@ export type V2NavItem = {
   icon: LucideIcon;
   /** When set, the item navigates to this route. */
   href?: string;
+  /** When set, only admins and users with this permission see the item. */
+  permission?: string;
 };
 
 export const STUDIO_HOME = "/studio";
@@ -39,6 +42,13 @@ export const v2AdminNav: V2NavItem[] = [
     label: "Vision costs",
     icon: CircleDollarSign,
     href: "/admin/vision-costs",
+  },
+  {
+    id: "promo-credits",
+    label: "Promo credits",
+    icon: Gift,
+    href: "/admin/promo-credits",
+    permission: "usermanage:adjustcredits",
   },
 ];
 
