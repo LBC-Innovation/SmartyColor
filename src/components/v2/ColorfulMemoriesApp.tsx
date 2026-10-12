@@ -11,7 +11,6 @@ import {
   ImageIcon,
   Loader2,
   PencilLine,
-  Printer,
   RefreshCw,
   Sparkles,
   Square,
@@ -119,7 +118,6 @@ export function ColorfulMemoriesApp() {
     trackPreviewUrl,
   } = useV2Studio();
   const [downloading, setDownloading] = useState(false);
-  const [printingBook, setPrintingBook] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const generateAllRunRef = useRef(false);
@@ -762,47 +760,6 @@ export function ColorfulMemoriesApp() {
     }
   }
 
-  async function downloadPrintBook() {
-    const withSheets = photos.filter((entry) => entry.sheet);
-    const pages = withSheets.map((entry) => ({
-      imageDataUrl: entry.sheet!.imageDataUrl,
-      printPrefs: photoPrintPrefs(entry),
-    }));
-    const revisions = withSheets
-      .filter((entry) => entry.remote && entry.activeRevisionId)
-      .map((entry) => ({ revisionId: entry.activeRevisionId!, printPrefs: photoPrintPrefs(entry) }));
-
-    if (pages.length === 0) {
-      toast.error(
-        "Generate at least one coloring sheet to build your print book.",
-      );
-      return;
-    }
-
-    setPrintingBook(true);
-    try {
-      const response = await authedFetch("/api/pdf/book", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cloud ? { revisions } : { pages }),
-      }, { withAuth: Boolean(cloud) });
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error ?? "Could not make the print book PDF.");
-      }
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "colorful-memories-print-book.pdf";
-      link.click();
-      URL.revokeObjectURL(link.href);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Print book failed.");
-    } finally {
-      setPrintingBook(false);
-    }
-  }
-
   const anyGenerating = photos.some(
     (entry) => entry.generating || entry.correcting,
   );
@@ -825,7 +782,7 @@ export function ColorfulMemoriesApp() {
   function buyBook() {
     if (!hasAnySheet) {
       toast.error(
-        "Generate at least one coloring sheet before ordering your book.",
+        "Generate at least one coloring sheet before creating your book.",
       );
       return;
     }
@@ -1201,31 +1158,15 @@ export function ColorfulMemoriesApp() {
                     />
                   </div>
                   <div className="v2-photo-list-dock-bar">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={!hasAnySheet || printingBook || busy || anyGenerating}
-                        onClick={() => void downloadPrintBook()}
-                        className="v2-photo-list-dock-cta v2-photo-list-dock-cta--secondary"
-                        title="Download a print-ready PDF"
-                      >
-                        {printingBook ? (
-                          <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
-                        ) : (
-                          <Printer className="h-5 w-5 shrink-0" aria-hidden />
-                        )}
-                        Print
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!canBuyBook}
-                        onClick={buyBook}
-                        className="v2-photo-list-dock-cta"
-                      >
-                        <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
-                        Buy book
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      disabled={!canBuyBook}
+                      onClick={buyBook}
+                      className="v2-photo-list-dock-cta"
+                    >
+                      <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
+                      Create Book
+                    </button>
                   </div>
                 </div>
               ) : null}

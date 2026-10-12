@@ -12,6 +12,8 @@ type Props = {
   busy?: boolean;
   projectTitle: string;
   binding: BookBindingSpec;
+  /** Print-at-home PDF: no shipping, paid and downloaded in one step. */
+  digital?: boolean;
   pageCount: number;
   photoCount: number;
   totalCents: number | null;
@@ -26,6 +28,7 @@ export function BookOrderConfirmModal({
   busy,
   projectTitle,
   binding,
+  digital = false,
   pageCount,
   photoCount,
   totalCents,
@@ -64,11 +67,12 @@ export function BookOrderConfirmModal({
           </span>
           <div className="min-w-0 flex-1">
             <h2 id="book-order-confirm-title" className="text-lg font-semibold text-v2-ink">
-              Confirm your book order?
+              {digital ? "Buy your print-at-home book?" : "Confirm your book order?"}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">
-              We&apos;ll set up the print job and take you to payment. Nothing is charged until
-              you pay on the next screen.
+              {digital
+                ? "Your credits are charged now and the PDF downloads right away. You can download it again anytime from My orders."
+                : "We'll set up the print job and take you to payment. Nothing is charged until you pay on the next screen."}
             </p>
           </div>
         </div>
@@ -90,7 +94,7 @@ export function BookOrderConfirmModal({
               {pageCount} ({photoCount} coloring)
             </dd>
           </div>
-          {addressLine ? (
+          {digital ? null : addressLine ? (
             <div className="flex justify-between gap-3">
               <dt className="shrink-0 text-v2-muted">Ship to</dt>
               <dd className="text-right text-xs font-semibold leading-snug text-v2-ink sm:text-sm">
@@ -104,7 +108,7 @@ export function BookOrderConfirmModal({
             </div>
           ) : null}
           <div className="flex justify-between gap-3 border-t border-gray-200/80 pt-2">
-            <dt className="font-semibold text-v2-ink">Estimated total</dt>
+            <dt className="font-semibold text-v2-ink">{digital ? "Total" : "Estimated total"}</dt>
             <dd className="font-bold tabular-nums text-v2-ink">
               {totalCents != null ? formatCredits(totalCents) : "—"}
             </dd>
@@ -127,7 +131,7 @@ export function BookOrderConfirmModal({
             className="v2-btn-primary min-h-11 text-sm disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Continue to payment
+            {digital ? "Pay & download" : "Continue to payment"}
           </button>
         </div>
       </div>

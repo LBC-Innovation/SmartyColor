@@ -10,6 +10,7 @@ import type {
   BookOrderEvent,
   BookOrderStatus,
   BookOrderSummary,
+  BookFulfillment,
   BookPaymentMethod,
   ShippingAddress,
 } from "@/lib/orders/types";
@@ -31,6 +32,7 @@ type OrderRow = {
   project_title: string | null;
   page_count: number;
   status: BookOrderStatus;
+  fulfillment?: BookFulfillment | null;
   payment_method: BookPaymentMethod | null;
   total_cents: number | null;
   shipping_level: string;
@@ -77,6 +79,7 @@ function mapSummary(row: OrderRow): BookOrderSummary {
     productName: productName(row),
     pageCount: row.page_count,
     status: row.status,
+    fulfillment: row.fulfillment ?? "print",
     luluStatusName: row.lulu_status_name,
     shippingLevel: row.shipping_level,
     totalCents: row.total_cents,
@@ -462,7 +465,7 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
     .from("book_orders")
     .select(
       `
-      id, user_id, product_id, project_title, page_count, status, payment_method,
+      id, user_id, product_id, project_title, page_count, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, tracking_number, tracking_urls,
       estimated_delivery_min, estimated_delivery_max, created_at, updated_at,
       print_products ( name )
@@ -498,7 +501,7 @@ export async function getOrderForUser(
     .from("book_orders")
     .select(
       `
-      id, user_id, product_id, project_title, page_count, status, payment_method,
+      id, user_id, product_id, project_title, page_count, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, lulu_status_message,
       lulu_print_job_id, tracking_number, tracking_urls, carrier,
       estimated_delivery_min, estimated_delivery_max, estimated_dispatch_min,

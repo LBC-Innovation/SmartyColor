@@ -32,7 +32,7 @@ export function BookOrderPriceBar({
   onBack,
   onNext,
 }: Props) {
-  const showPrice = step !== "pages";
+  const showPrice = step !== "book";
 
   return (
     <div className="shrink-0 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
@@ -63,7 +63,7 @@ export function BookOrderPriceBar({
               </p>
               <p className="text-sm font-semibold leading-tight tabular-nums text-v2-ink">
                 {photoCount === 0
-                  ? "No pages yet"
+                  ? "Choose a format to start"
                   : `${photoCount} coloring page${photoCount === 1 ? "" : "s"}`}
                 {pageCount > photoCount && photoCount > 0 ? (
                   <span className="font-medium text-v2-muted"> · {pageCount} printed</span>

@@ -1,5 +1,5 @@
 import { statusLabel } from "@/lib/orders/fulfillmentTimeline";
-import type { BookOrderStatus } from "@/lib/orders/types";
+import type { BookFulfillment, BookOrderStatus } from "@/lib/orders/types";
 import { cn } from "@/lib/cn";
 
 const TONE: Partial<Record<BookOrderStatus, string>> = {
@@ -10,7 +10,21 @@ const TONE: Partial<Record<BookOrderStatus, string>> = {
   canceled: "bg-gray-100 text-gray-700",
 };
 
-export function V2OrderStatusBadge({ status }: { status: BookOrderStatus }) {
+export function V2OrderStatusBadge({
+  status,
+  fulfillment = "print",
+}: {
+  status: BookOrderStatus;
+  fulfillment?: BookFulfillment;
+}) {
+  // A paid digital order is done: there is nothing to ship.
+  if (fulfillment === "digital" && status === "paid") {
+    return (
+      <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900">
+        Ready to print
+      </span>
+    );
+  }
   return (
     <span
       className={cn(

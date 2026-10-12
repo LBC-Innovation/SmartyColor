@@ -15,6 +15,14 @@ export const BOOK_ORDER_STATUSES = [
 
 export type BookOrderStatus = (typeof BOOK_ORDER_STATUSES)[number];
 
+/** print = shipped by the printer; digital = print-at-home PDF. */
+export type BookFulfillment = "print" | "digital";
+
+/** One page of a digital book, in order. Rotation is the final on-page rotation. */
+export type DigitalBookPage =
+  | { kind: "photo"; revisionId: string; rotation: 0 | 90 | 180 | 270; mirrored?: boolean }
+  | { kind: "blank"; variant: "plain" | "lined" };
+
 export type BookPaymentMethod = "stripe" | "credits" | "mixed";
 
 export type ShippingAddress = {
@@ -35,6 +43,7 @@ export type BookOrderSummary = {
   productName: string;
   pageCount: number;
   status: BookOrderStatus;
+  fulfillment: BookFulfillment;
   luluStatusName: string | null;
   shippingLevel: string;
   totalCents: number | null;

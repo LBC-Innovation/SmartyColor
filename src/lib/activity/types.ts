@@ -27,6 +27,7 @@ export const ACTIVITY_TYPES = {
   ],
   orders: [
     { id: "book_ordered", label: "Book ordered" },
+    { id: "digital_book_ordered", label: "Digital book" },
     { id: "order_canceled", label: "Order canceled" },
   ],
   wallet: [
