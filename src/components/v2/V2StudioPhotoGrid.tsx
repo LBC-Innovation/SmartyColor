@@ -24,6 +24,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ChevronLeft, ChevronRight, GripVertical, Loader2, Sparkles } from "lucide-react";
 import type { V2PhotoEntry } from "@/lib/v2/studioTypes";
 import { photoThumbObjectPosition } from "@/lib/v2/studioTypes";
+import { useThumbUrl } from "@/lib/v2/thumbnail";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -53,6 +54,8 @@ function Tile({
   dragHandle?: React.HTMLAttributes<HTMLButtonElement>;
   isOverlay?: boolean;
 }) {
+  const photoThumb = useThumbUrl(photo.previewUrl);
+  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl);
   return (
     <div
       className={cn(
@@ -67,7 +70,7 @@ function Tile({
           aria-label=""
           className="absolute inset-0 bg-cover bg-no-repeat"
           style={{
-            backgroundImage: `url("${photo.previewUrl}")`,
+            backgroundImage: photoThumb ? `url("${photoThumb}")` : undefined,
             backgroundPosition: photoThumbObjectPosition(photo) === "top" ? "center top" : "center center",
           }}
         />
@@ -81,7 +84,7 @@ function Tile({
               role="img"
               aria-label=""
               className="absolute -inset-[3%] bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: `url("${photo.sheet.imageDataUrl}")` }}
+              style={{ backgroundImage: sheetThumb ? `url("${sheetThumb}")` : undefined }}
             />
           </span>
         ) : photo.generating ? (

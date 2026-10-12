@@ -22,6 +22,8 @@ const luckiest = Luckiest_Guy({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-luckiest",
+  // Legacy routes only: still loads on demand there, just not preloaded on every page.
+  preload: false,
 });
 
 const APP_NAME = "ColorfulMemories";
@@ -83,6 +85,8 @@ export default function RootLayout({
             alt=""
             width={96}
             height={96}
+            // Only fetched when the splash is actually shown (installed app).
+            loading="lazy"
             decoding="sync"
           />
           <span className="pwa-splash-title">

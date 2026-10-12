@@ -7,6 +7,8 @@
  * for the life of the page.
  */
 
+import { clearThumbnails } from "@/lib/v2/thumbnail";
+
 const DB_NAME = "colorfulmoments-image-cache";
 const DB_VERSION = 1;
 const STORE = "images";
@@ -140,6 +142,7 @@ export async function clearImageCache(): Promise<void> {
   for (const url of objectUrls.values()) URL.revokeObjectURL(url);
   objectUrls.clear();
   inflight.clear();
+  clearThumbnails();
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {

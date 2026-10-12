@@ -31,6 +31,7 @@ import { cn } from "@/lib/cn";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { PrintPrefs } from "@/lib/print/settings";
 import { photoThumbObjectPosition, type V2PhotoImageMeta } from "@/lib/v2/studioTypes";
+import { useThumbUrl } from "@/lib/v2/thumbnail";
 
 export type V2LibraryPhoto = {
   id: string;
@@ -112,6 +113,8 @@ function PhotoLibraryRow({
   deleteSelectDisabled,
   isOverlay,
 }: PhotoRowProps) {
+  const photoThumb = useThumbUrl(photo.previewUrl);
+  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl);
   const rowSelect =
     deleteMode && !deleteSelectDisabled ? onToggleDeleteSelect : onSelect;
 
@@ -198,7 +201,7 @@ function PhotoLibraryRow({
             aria-label=""
             className="aspect-[4/3] rounded-lg bg-v2-bg-subtle bg-cover bg-no-repeat"
             style={{
-              backgroundImage: `url("${photo.previewUrl}")`,
+              backgroundImage: photoThumb ? `url("${photoThumb}")` : undefined,
               backgroundPosition:
                 photoThumbObjectPosition(photo) === "top" ? "center top" : "center center",
             }}
@@ -211,7 +214,7 @@ function PhotoLibraryRow({
                 role="img"
                 aria-label=""
                 className="absolute -inset-[3%] bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: `url("${photo.sheet.imageDataUrl}")` }}
+                style={{ backgroundImage: sheetThumb ? `url("${sheetThumb}")` : undefined }}
               />
               {photo.generating ? (
                 <V2SheetGeneratingPlaceholder
