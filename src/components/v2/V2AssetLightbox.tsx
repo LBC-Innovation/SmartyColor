@@ -67,7 +67,7 @@ function V2LightboxViewToggle({
             title={option.label}
             onClick={() => onChange(option.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition sm:px-2.5 sm:text-sm",
+              "v2-hit inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-semibold transition sm:py-1.5 sm:text-sm",
               active
                 ? "bg-v2-primary text-white shadow-sm"
                 : "text-white/75 hover:bg-white/10 hover:text-white",
@@ -97,19 +97,20 @@ function LightboxPanel({
   return (
     <figure
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col",
+        "flex min-h-0 w-full min-w-0 flex-1 flex-col",
         emphasized && "ring-2 ring-v2-primary/80 ring-offset-2 ring-offset-slate-950 rounded-xl",
       )}
     >
       <figcaption className="mb-2 shrink-0 text-center text-xs font-semibold uppercase tracking-wide text-white/70">
         {label}
       </figcaption>
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-black/40 p-2">
+      {/* Image is absolutely sized to the cell so it always fits, toolbars or not */}
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-black/40">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt={alt}
-          className="max-h-[min(78vh,900px)] w-full object-contain"
+          className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] object-contain"
         />
       </div>
     </figure>
@@ -133,12 +134,12 @@ function LightboxOverlayPanel({
         Overlay comparison
       </figcaption>
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-black/40 p-2">
-        <div className="relative inline-block max-h-[min(78vh,900px)] max-w-full">
+        <div className="relative inline-block max-h-[min(68dvh,900px)] max-w-full">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={originalSrc}
             alt="Original photo"
-            className="block max-h-[min(78vh,900px)] max-w-full object-contain"
+            className="block max-h-[min(68dvh,900px)] max-w-full object-contain"
           />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -190,7 +191,7 @@ export function V2AssetLightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-sm"
+      className="v2-safe-overlay fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="v2-lightbox-title"
@@ -265,7 +266,7 @@ export function V2AssetLightbox({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
+            className="v2-hit rounded-lg p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
             aria-label="Close full screen view"
           >
             <X className="h-5 w-5" />

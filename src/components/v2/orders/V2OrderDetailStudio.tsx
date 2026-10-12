@@ -134,7 +134,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     type="button"
                     onClick={() => void load(true)}
                     disabled={loading}
-                    className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-v2-ink"
+                    className="v2-hit inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-v2-ink"
                   >
                     <RefreshCw
                       className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"}
@@ -279,7 +279,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     <button
                       type="button"
                       onClick={() => setEditingAddress(true)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-v2-link hover:bg-v2-primary-light"
+                      className="v2-hit inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-v2-link hover:bg-v2-primary-light"
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       {isShippingAddressComplete(order.shippingAddress) ? "Edit" : "Add address"}

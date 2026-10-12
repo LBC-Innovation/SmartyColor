@@ -31,6 +31,8 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
   const [shares, setShares] = useState<AlbumShare[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
+  // Removing access is immediate, so the first tap only arms the button.
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +76,7 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
   }
 
   async function onResend(share: AlbumShare) {
+    setConfirmRemoveId(null);
     setBusyShareId(share.id);
     const res = await library.resendShare(projectId, share.id);
     setBusyShareId(null);
@@ -82,6 +85,7 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
   }
 
   async function onRemove(share: AlbumShare) {
+    setConfirmRemoveId(null);
     setBusyShareId(share.id);
     const res = await library.removeShare(projectId, share.id);
     setBusyShareId(null);
@@ -120,6 +124,11 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="send"
                 id={inputId}
                 type="email"
                 required
@@ -188,7 +197,7 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
                   <tr>
                     <th scope="col" className="px-3 py-2">Email</th>
                     <th scope="col" className="hidden w-28 px-3 py-2 sm:table-cell">Invited</th>
-                    <th scope="col" className="w-[7.5rem] px-3 py-2 text-right">
+                    <th scope="col" className="w-[9.5rem] px-3 py-2 text-right sm:w-[8.5rem]">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>
@@ -215,20 +224,35 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
                               type="button"
                               disabled={busy}
                               onClick={() => void onResend(share)}
-                              className="rounded-lg px-2 py-1.5 text-xs font-semibold text-v2-link transition hover:bg-v2-primary-light disabled:cursor-not-allowed disabled:opacity-50"
+                              className="min-h-11 rounded-lg px-2 py-1.5 text-xs font-semibold text-v2-link transition hover:bg-v2-primary-light disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
                             >
                               Resend
                             </button>
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => void onRemove(share)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-v2-muted transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                              aria-label={`Stop sharing with ${share.email}`}
+                              onClick={() =>
+                                confirmRemoveId === share.id
+                                  ? void onRemove(share)
+                                  : setConfirmRemoveId(share.id)
+                              }
+                              onBlur={() => setConfirmRemoveId(null)}
+                              className={
+                                confirmRemoveId === share.id
+                                  ? "inline-flex h-11 items-center justify-center rounded-lg bg-red-50 px-2 text-xs font-semibold text-red-700 sm:h-8"
+                                  : "inline-flex h-11 w-11 items-center justify-center rounded-lg text-v2-muted transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:w-8"
+                              }
+                              aria-label={
+                                confirmRemoveId === share.id
+                                  ? `Confirm: stop sharing with ${share.email}`
+                                  : `Stop sharing with ${share.email}`
+                              }
                               title="Stop sharing"
                             >
                               {busy ? (
                                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                              ) : confirmRemoveId === share.id ? (
+                                "Remove?"
                               ) : (
                                 <Trash2 className="h-4 w-4" aria-hidden />
                               )}

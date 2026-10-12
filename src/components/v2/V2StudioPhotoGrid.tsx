@@ -111,7 +111,7 @@ function Tile({
             type="button"
             disabled={index === 0}
             onClick={() => onMove(-1)}
-            className="inline-flex h-8 w-9 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+            className="inline-flex h-10 w-11 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
             aria-label={`Move photo ${index + 1} earlier`}
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
@@ -120,7 +120,7 @@ function Tile({
             type="button"
             disabled={index === count - 1}
             onClick={() => onMove(1)}
-            className="inline-flex h-8 w-9 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+            className="inline-flex h-10 w-11 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
             aria-label={`Move photo ${index + 1} later`}
           >
             <ChevronRight className="h-4 w-4" aria-hidden />
@@ -141,7 +141,7 @@ function SortableTile(props: Omit<Parameters<typeof Tile>[0], "dragHandle" | "is
       style={style}
       {...attributes}
       {...listeners}
-      className={cn("select-none", isDragging && "opacity-40")}
+      className={cn("select-none [-webkit-touch-callout:none]", isDragging && "opacity-40")}
     >
       <Tile {...props} dragHandle={{}} />
     </div>

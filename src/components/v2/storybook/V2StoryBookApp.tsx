@@ -504,8 +504,9 @@ export function V2StoryBookApp() {
       />
 
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-          <div className="v2-photo-list-column flex max-h-[min(52dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:gap-0 lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-gray-200 lg:bg-white xl:w-80">
+        {/* Phones: one page scroller (photos, then editor). Desktop: two independent columns. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:flex-row lg:overflow-hidden">
+          <div className="v2-photo-list-column flex max-h-[min(50dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:gap-0 lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-gray-200 lg:bg-white xl:w-80">
             <div
               className="v2-studio-toolbar v2-studio-toolbar-zone v2-studio-toolbar-zone--library shrink-0 rounded-xl border lg:rounded-none lg:border-x-0 lg:border-t-0"
               role="toolbar"
@@ -603,7 +604,7 @@ export function V2StoryBookApp() {
             </section>
           </div>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 sm:p-6">
+          <div className="flex min-w-0 shrink-0 flex-col p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <Link
                 href="/"
@@ -629,7 +630,7 @@ export function V2StoryBookApp() {
             </div>
 
             <nav
-              className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-v2-bg-subtle p-1"
+              className="mb-4 flex shrink-0 snap-x gap-1 overflow-x-auto overscroll-x-contain rounded-xl bg-v2-bg-subtle p-1"
               aria-label="Story book steps"
             >
               {PHASE_TABS.map((tab) => (
@@ -638,7 +639,7 @@ export function V2StoryBookApp() {
                   type="button"
                   onClick={() => setStoryPhase(tab.id)}
                   className={cn(
-                    "shrink-0 rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm",
+                    "min-h-11 shrink-0 snap-start rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm lg:min-h-0",
                     storyPhase === tab.id
                       ? "bg-white text-v2-link shadow-sm"
                       : "text-v2-muted hover:text-v2-ink",
@@ -649,7 +650,7 @@ export function V2StoryBookApp() {
               ))}
             </nav>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
               {storyPhase === "setup" ? (
                 <div className="mx-auto flex max-w-2xl flex-col gap-4">
                   <p className="text-sm text-v2-muted">
@@ -669,7 +670,7 @@ export function V2StoryBookApp() {
                       onChange={(e) => setFamilyContext(e.target.value)}
                       rows={3}
                       placeholder="Wife Sarah, Emma (8, 3rd grade), Noah (5, kindergarten)…"
-                      className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none ring-v2-primary focus:ring-2"
+                      className="rounded-xl border border-gray-200 px-3 py-2.5 text-base outline-none ring-v2-primary focus:ring-2 lg:text-sm"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
@@ -681,7 +682,7 @@ export function V2StoryBookApp() {
                       onChange={(e) => setTripNarrative(e.target.value)}
                       rows={5}
                       placeholder="We flew to Orlando in July 2026…"
-                      className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none ring-v2-primary focus:ring-2"
+                      className="rounded-xl border border-gray-200 px-3 py-2.5 text-base outline-none ring-v2-primary focus:ring-2 lg:text-sm"
                     />
                   </label>
                   <button
@@ -717,7 +718,7 @@ export function V2StoryBookApp() {
                           updatePhoto(selected.id, { userCaption: e.target.value })
                         }
                         rows={3}
-                        className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none ring-v2-primary focus:ring-2"
+                        className="rounded-xl border border-gray-200 px-3 py-2 text-base outline-none ring-v2-primary focus:ring-2 lg:text-sm"
                       />
                     </label>
                     {selected.photoSummary ? (

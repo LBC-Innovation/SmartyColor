@@ -42,6 +42,11 @@ function Field({
   );
 }
 
+/** The numeric keypad has no hyphen, so add the ZIP+4 one once a sixth digit is typed. */
+function formatUsZip(raw: string): string {
+  return /^\d{6,9}$/.test(raw) ? `${raw.slice(0, 5)}-${raw.slice(5)}` : raw;
+}
+
 /** Lulu-ready shipping address; US-first, with a country select for the rest. */
 export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix = "ship", className }: Props) {
   const set = (key: FieldKey, v: string) => onChange({ ...value, [key]: v });
@@ -53,6 +58,8 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
     <div className={cn("grid gap-3 sm:grid-cols-2", className)}>
       <Field id={`${idPrefix}-name`} label="Full name" error={errors.name} className="sm:col-span-2">
         <input
+          autoCapitalize="words"
+          enterKeyHint="next"
           id={`${idPrefix}-name`}
           className={inputClass("name")}
           autoComplete="shipping name"
@@ -63,6 +70,8 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
 
       <Field id={`${idPrefix}-street1`} label="Street address" error={errors.street1} className="sm:col-span-2">
         <input
+          autoCapitalize="words"
+          enterKeyHint="next"
           id={`${idPrefix}-street1`}
           className={inputClass("street1")}
           autoComplete="shipping address-line1"
@@ -73,6 +82,8 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
 
       <Field id={`${idPrefix}-street2`} label="Apt, suite, etc. (optional)" className="sm:col-span-2">
         <input
+          autoCapitalize="words"
+          enterKeyHint="next"
           id={`${idPrefix}-street2`}
           className="v2-input"
           autoComplete="shipping address-line2"
@@ -83,6 +94,8 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
 
       <Field id={`${idPrefix}-city`} label="City" error={errors.city}>
         <input
+          autoCapitalize="words"
+          enterKeyHint="next"
           id={`${idPrefix}-city`}
           className={inputClass("city")}
           autoComplete="shipping address-level2"
@@ -128,7 +141,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           autoComplete="shipping postal-code"
           maxLength={12}
           value={value.postcode}
-          onChange={(e) => set("postcode", e.target.value)}
+          onChange={(e) => set("postcode", isUs ? formatUsZip(e.target.value) : e.target.value)}
         />
       </Field>
 

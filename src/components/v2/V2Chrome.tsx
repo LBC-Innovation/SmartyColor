@@ -71,7 +71,7 @@ function CreditsChip() {
   return (
     <Link
       href="/account"
-      className="inline-flex max-w-[9rem] items-center gap-1.5 rounded-full border border-v2-success-border bg-v2-success-bg px-2 py-0.5 text-xs font-semibold text-v2-success-text transition hover:border-emerald-400 sm:px-2.5 sm:py-1"
+      className="v2-hit inline-flex max-w-[9rem] items-center gap-1.5 rounded-full border border-v2-success-border bg-v2-success-bg px-2 py-0.5 text-xs font-semibold text-v2-success-text transition hover:border-emerald-400 sm:px-2.5 sm:py-1"
       title={`Credit balance ${formatCredits(user.creditsBalanceCents)} — tap to add credit or view transactions`}
     >
       <CircleDollarSign className="h-3.5 w-3.5 shrink-0" aria-hidden />

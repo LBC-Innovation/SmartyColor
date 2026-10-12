@@ -53,7 +53,7 @@ export function V2StudioLayoutToggle({
             aria-label={option.label}
             onClick={() => onChange(option.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md font-semibold transition",
+              "v2-hit inline-flex items-center gap-1.5 rounded-md font-semibold transition",
               isToolbar
                 ? "px-2 py-1 text-[11px] sm:text-xs"
                 : "px-2.5 text-xs sm:px-3 sm:text-sm",

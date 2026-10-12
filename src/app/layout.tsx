@@ -53,6 +53,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: THEME_COLOR,
   viewportFit: "cover",
+  // Android: shrink the layout when the keyboard opens so bottom sheets and composers stay visible.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

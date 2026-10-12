@@ -155,6 +155,11 @@ export function V2SignUpStudio() {
                     Email
                   </label>
                   <input
+                    name="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="next"
                     id="signup-email"
                     type="email"
                     required
@@ -175,6 +180,8 @@ export function V2SignUpStudio() {
                     Password
                   </label>
                   <input
+                    name="password"
+                    enterKeyHint="next"
                     id="signup-password"
                     type="password"
                     required
@@ -190,6 +197,8 @@ export function V2SignUpStudio() {
                     Confirm password
                   </label>
                   <input
+                    name="confirmPassword"
+                    enterKeyHint="go"
                     id="signup-confirm"
                     type="password"
                     required

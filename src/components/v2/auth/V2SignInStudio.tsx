@@ -59,6 +59,11 @@ export function V2SignInStudio() {
                 Email
               </label>
               <input
+                name="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="next"
                 id="email"
                 type="email"
                 required
@@ -73,6 +78,8 @@ export function V2SignInStudio() {
                 Password
               </label>
               <input
+                name="password"
+                enterKeyHint="go"
                 id="password"
                 type="password"
                 required

@@ -1229,7 +1229,7 @@ export function ColorfulMemoriesApp() {
           <main
             className={cn(
               "flex-col bg-v2-bg",
-              studioOpen ? "fixed inset-0 z-[45] flex" : "hidden",
+              studioOpen ? "v2-safe-overlay fixed inset-0 z-[45] flex" : "hidden",
               "lg:static lg:z-auto lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:overflow-hidden lg:p-4 xl:p-6",
             )}
             aria-label="Studio"
@@ -1266,7 +1266,7 @@ export function ColorfulMemoriesApp() {
                       title={gridView ? "Switch to sheet view" : "Switch to grid view"}
                       onClick={() => setGridView((v) => !v)}
                       className={cn(
-                        "relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
+                        "v2-hit relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
                         gridView ? "border-v2-primary bg-v2-primary" : "border-v2-primary/40 bg-v2-primary-light",
                       )}
                     >

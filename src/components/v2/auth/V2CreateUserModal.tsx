@@ -51,6 +51,10 @@ export function V2CreateUserModal({
             Email
           </label>
           <input
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             id="new-email"
             type="email"
             required
@@ -64,6 +68,7 @@ export function V2CreateUserModal({
             Password
           </label>
           <input
+            autoComplete="new-password"
             id="new-password"
             type="password"
             required

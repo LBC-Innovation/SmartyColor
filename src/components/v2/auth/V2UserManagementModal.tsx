@@ -152,6 +152,8 @@ export function V2UserManagementModal({
                 Display name
               </label>
               <input
+                autoComplete="off"
+                autoCapitalize="words"
                 id="displayName"
                 className="v2-input"
                 value={displayName}
@@ -239,6 +241,10 @@ export function V2UserManagementModal({
                   Email
                 </label>
                 <input
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   id="admin-email"
                   type="email"
                   required
@@ -304,6 +310,7 @@ export function V2UserManagementModal({
                 Reset password
               </p>
               <input
+                autoComplete="new-password"
                 type="password"
                 minLength={6}
                 required

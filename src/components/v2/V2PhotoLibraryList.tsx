@@ -148,9 +148,9 @@ function PhotoLibraryRow({
             />
           </div>
         ) : (
-          <div className="flex w-7 shrink-0 flex-col items-center justify-center">
+          <div className="flex w-10 shrink-0 flex-col items-center justify-center lg:w-7">
             {onMove ? (
-              <div className="flex flex-col gap-1 lg:hidden">
+              <div className="flex flex-col gap-0.5 lg:hidden">
                 <button
                   type="button"
                   disabled={isFirst}
@@ -158,7 +158,7 @@ function PhotoLibraryRow({
                     event.stopPropagation();
                     onMove(-1);
                   }}
-                  className="inline-flex h-8 w-7 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
                   aria-label="Move photo up"
                 >
                   <ChevronUp className="h-4 w-4" />
@@ -170,7 +170,7 @@ function PhotoLibraryRow({
                     event.stopPropagation();
                     onMove(1);
                   }}
-                  className="inline-flex h-8 w-7 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
                   aria-label="Move photo down"
                 >
                   <ChevronDown className="h-4 w-4" />
