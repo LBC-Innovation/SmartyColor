@@ -1,7 +1,7 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
-import type { BookOrderDetail, BookOrderSummary, ShippingAddress } from "@/lib/orders/types";
+import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import type { CreditLedgerEntry, PromoCreditSettings } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 
@@ -480,6 +480,43 @@ export function placeBookOrder(orderId: string): Promise<
   return request(`/orders/${orderId}/place`, {
     method: "POST",
   });
+}
+
+/** Buy a print-at-home book; the wallet is charged and the order is created paid. */
+export function createDigitalBookOrder(input: {
+  projectTitle: string;
+  pages: DigitalBookPage[];
+}): Promise<ApiResult<{ orderId: string; creditsBalanceCents: number; creditsAppliedCents: number }>> {
+  return request("/orders/digital", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Save a paid digital order's PDF to the user's device. Free to repeat. */
+export async function downloadOrderPdf(orderId: string, fileName = "colorful-memories-book"): Promise<ApiResult<true>> {
+  try {
+    const res = await authedFetch(`/api/orders/${orderId}/pdf`);
+    if (!res.ok) {
+      let message = "Could not download the PDF.";
+      try {
+        const body = (await res.json()) as ApiResult<never>;
+        if (body.error?.message) message = body.error.message;
+      } catch {
+        /* keep default */
+      }
+      return { data: null, error: { message } };
+    }
+    const blob = await res.blob();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${fileName.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "colorful-memories-book"}.pdf`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    return { data: true, error: null };
+  } catch {
+    return { data: null, error: { message: "Network error", code: "UNAVAILABLE" } };
+  }
 }
 
 export function createCreditTopUpCheckout(input: {

@@ -111,17 +111,17 @@ const STEPS: Step[] = [
   },
   {
     icon: BookOpen,
-    title: "Arrange and order a book",
+    title: "Arrange and create a book",
     body: (
       <>
         <p>
-          Tap <strong>Buy book</strong>. Pick which albums go in, then drag pages into order,
-          rotate or remove any you don&apos;t want.
+          Tap <strong>Create Book</strong>. Choose how you want it first, then pick which albums
+          go in, drag pages into order, flip or remove any you don&apos;t want.
         </p>
         <p className="mt-2">
-          Choose a <strong>stapled booklet</strong> or <strong>paperback</strong>, see the exact
-          printing and shipping price, and place your order. Prefer to print at home?{" "}
-          <strong>Print</strong> gives you a PDF.
+          Pick a <strong>stapled booklet</strong> or <strong>paperback</strong> and we&apos;ll mail
+          it, or a <strong>print-at-home PDF</strong> for $1 you can download again anytime from
+          My orders.
         </p>
       </>
     ),

@@ -1,7 +1,9 @@
 export type BookBindingId = "perfect_bound" | "saddle_stitch";
+/** A way to get the book: a print binding, or the print-at-home PDF. */
+export type BookFormatId = BookBindingId | "digital";
 
 export type BookBindingSpec = {
-  id: BookBindingId;
+  id: BookFormatId;
   productId: string;
   label: string;
   description: string;
@@ -54,4 +56,30 @@ export function getBookBinding(id: BookBindingId): BookBindingSpec {
 /** Best default for a given number of coloring pages. */
 export function recommendBinding(photoCount: number): BookBindingId {
   return photoCount <= BOOK_BINDINGS.saddle_stitch.maxPages ? "saddle_stitch" : "perfect_bound";
+}
+
+/**
+ * Print-at-home PDF. Not a printer binding: no minimum, no multiple, so a book
+ * is exactly the pages the user arranges. Priced flat from the wallet.
+ */
+export const DIGITAL_FORMAT: BookBindingSpec = {
+  id: "digital",
+  productId: "coloring-book-digital-pdf",
+  label: "Digital download",
+  description: "A PDF of your arranged pages to print at home.",
+  shortLabel: "Print at home",
+  blurb: "Instant PDF to print on your own printer. Download it again anytime from My Orders.",
+  podPackageId: "digital",
+  minPages: 1,
+  maxPages: 800,
+  pageMultiple: 1,
+  requiredOrientation: "portrait",
+};
+
+export function isDigitalFormat(id: BookFormatId): id is "digital" {
+  return id === "digital";
+}
+
+export function getBookFormat(id: BookFormatId): BookBindingSpec {
+  return id === "digital" ? DIGITAL_FORMAT : BOOK_BINDINGS[id];
 }

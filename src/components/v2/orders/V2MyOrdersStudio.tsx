@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Package, RefreshCw } from "lucide-react";
+import { useV2Toast } from "@/components/v2/V2Toast";
+import { Download, Loader2, Package, RefreshCw } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { useAuth } from "@/context/AuthContext";
@@ -27,6 +28,15 @@ export function V2MyOrdersStudio() {
   const [orders, setOrders] = useState<BookOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const toast = useV2Toast();
+
+  async function downloadPdf(order: BookOrderSummary) {
+    setDownloadingId(order.id);
+    const result = await api.downloadOrderPdf(order.id, orderTitle(order));
+    setDownloadingId(null);
+    if (api.isError(result)) toast.error(result.error.message);
+  }
 
   const load = useCallback(async () => {
     if (!api.hasSessionToken()) {
@@ -59,8 +69,8 @@ export function V2MyOrdersStudio() {
                 My orders
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-v2-muted sm:text-base">
-                Track print books from payment through delivery. Status updates sync with our
-                print partner when your order is in fulfillment.
+                Track printed books from payment through delivery, and re-download your
+                print-at-home PDFs any time.
               </p>
             </div>
             <button
@@ -113,24 +123,23 @@ export function V2MyOrdersStudio() {
           ) : (
             <ul className="space-y-3">
               {orders.map((order) => (
-                <li key={order.id}>
-                  <Link
-                    href={`/orders/${order.id}`}
-                    className="v2-panel block p-4 transition hover:ring-2 hover:ring-v2-primary/20 sm:p-5"
-                  >
+                <li key={order.id} className="v2-panel transition hover:ring-2 hover:ring-v2-primary/20">
+                  <Link href={`/orders/${order.id}`} className="block p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-base font-semibold text-v2-ink">
                           {orderTitle(order)}
                         </p>
                         <p className="mt-0.5 text-xs text-v2-muted">
+                          {order.fulfillment === "digital" ? "Print at home · " : ""}
                           {order.pageCount} pages · {formatMoney(order.totalCents)} ·{" "}
                           {new Date(order.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                      <V2OrderStatusBadge status={order.status} />
+                      <V2OrderStatusBadge status={order.status} fulfillment={order.fulfillment} />
                     </div>
-                    {formatDeliveryExpectation(
+                    {order.fulfillment !== "digital" &&
+                    formatDeliveryExpectation(
                       order.estimatedDeliveryMin,
                       order.estimatedDeliveryMax,
                       order.status,
@@ -144,6 +153,23 @@ export function V2MyOrdersStudio() {
                       </p>
                     ) : null}
                   </Link>
+                  {order.fulfillment === "digital" && order.status === "paid" ? (
+                    <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
+                      <button
+                        type="button"
+                        onClick={() => void downloadPdf(order)}
+                        disabled={downloadingId === order.id}
+                        className="v2-btn-outline h-10 text-sm"
+                      >
+                        {downloadingId === order.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        ) : (
+                          <Download className="h-4 w-4" aria-hidden />
+                        )}
+                        Download PDF
+                      </button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

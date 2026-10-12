@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, ExternalLink, Loader2, Pencil, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, ExternalLink, Loader2, Pencil, RefreshCw } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
@@ -44,6 +44,16 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmingCheckout, setConfirmingCheckout] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const purchased = searchParams.get("purchased") === "1";
+
+  async function downloadPdf(title: string) {
+    setDownloading(true);
+    setError(null);
+    const result = await api.downloadOrderPdf(orderId, title);
+    setDownloading(false);
+    if (api.isError(result)) setError(result.error.message);
+  }
 
   const load = useCallback(
     async (sync = true) => {
@@ -129,7 +139,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <V2OrderStatusBadge status={order.status} />
+                  <V2OrderStatusBadge status={order.status} fulfillment={order.fulfillment} />
                   <button
                     type="button"
                     onClick={() => void load(true)}
@@ -144,6 +154,36 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   </button>
                 </div>
               </header>
+
+              {order.fulfillment === "digital" ? (
+                <section className="v2-panel mb-4 border-emerald-200 bg-emerald-50/70 p-4 sm:p-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                    Print at home
+                  </h2>
+                  <p className="mt-2 text-sm text-v2-ink">
+                    {purchased
+                      ? "Your book is ready and the PDF is downloading. "
+                      : "Your book is ready as a PDF. "}
+                    Print it on US Letter paper at 100% scale. You can download it again whenever
+                    you like — it won&apos;t cost anything.
+                  </p>
+                  {order.status === "paid" ? (
+                    <button
+                      type="button"
+                      onClick={() => void downloadPdf(order.projectTitle?.trim() || order.productName)}
+                      disabled={downloading}
+                      className="v2-btn-primary mt-4 text-sm"
+                    >
+                      {downloading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Download className="h-4 w-4" aria-hidden />
+                      )}
+                      Download PDF
+                    </button>
+                  ) : null}
+                </section>
+              ) : null}
 
               {justConfirmed && order.status === "awaiting_payment" ? (
                 <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
@@ -206,7 +246,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                 <BookOrderCheckoutPanel order={order} onOrderUpdated={() => load(false)} />
               ) : null}
 
-              {order.deliveryExpectation ? (
+              {order.fulfillment !== "digital" && order.deliveryExpectation ? (
                 <section className="v2-panel mb-4 border-v2-primary/20 bg-v2-primary-light/40 p-4 sm:p-5">
                   <p className="text-xs font-semibold uppercase tracking-wider text-v2-muted">
                     Delivery expectation
@@ -227,6 +267,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                 </section>
               ) : null}
 
+              {order.fulfillment !== "digital" ? (
               <section className="v2-panel mb-4 p-4 sm:p-6">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
                   Fulfillment
@@ -240,8 +281,9 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   </p>
                 ) : null}
               </section>
+              ) : null}
 
-              {(order.trackingNumber || order.trackingUrls.length > 0) && (
+              {order.fulfillment !== "digital" && (order.trackingNumber || order.trackingUrls.length > 0) && (
                 <section className="v2-panel mb-4 p-4 sm:p-5">
                   <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
                     Tracking
@@ -270,6 +312,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                 </section>
               )}
 
+              {order.fulfillment !== "digital" ? (
               <section className="v2-panel mb-4 p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
@@ -297,6 +340,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   </p>
                 )}
               </section>
+              ) : null}
 
               {order.events.length > 0 ? (
                 <section className="v2-panel p-4 sm:p-5">

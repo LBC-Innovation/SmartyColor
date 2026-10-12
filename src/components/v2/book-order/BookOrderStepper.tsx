@@ -6,8 +6,8 @@ import { cn } from "@/lib/cn";
 export type BookOrderStep = "pages" | "book" | "review";
 
 const LABEL: Record<BookOrderStep, string> = {
-  pages: "Pages",
   book: "Binding",
+  pages: "Pages",
   review: "Review",
 };
 
