@@ -6,7 +6,15 @@ import {
   buildPhotoCorrectionPrompt,
 } from "@/lib/ai/prompts";
 import { parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
-import { inferPhotoLayout, type PhotoLayout } from "@/lib/photo/orientation";
+import {
+  displayedSize,
+  inferPhotoLayout,
+  layoutRatio,
+  photoLayoutRetryNote,
+  sheetOrientationMismatch,
+  type PhotoLayout,
+} from "@/lib/photo/orientation";
+import type { ParsedPhoto } from "@/lib/ai/photoDataUrl";
 import type { ColoringAI } from "@/lib/ai/types";
 import { toPhotoLineArtPng } from "@/lib/print/lineArt";
 import type { PrintPrefs } from "@/lib/print/settings";
@@ -53,7 +61,9 @@ async function layoutForPhotoBytes(
   try {
     const meta = await sharp(bytes).metadata();
     if (meta.width && meta.height) {
-      return inferPhotoLayout(meta.width, meta.height);
+      // Measure the photo as a person sees it (EXIF rotation applied).
+      const size = displayedSize(meta.width, meta.height, meta.orientation);
+      return inferPhotoLayout(size.width, size.height);
     }
   } catch {
     /* fall through */
@@ -64,6 +74,45 @@ async function layoutForPhotoBytes(
     printPrefs.orientation === "landscape" ? 1600 : 1200,
     printPrefs.orientation === "landscape" ? 900 : 1600,
   );
+}
+
+/**
+ * Bake EXIF rotation into the pixels so the model sees the same upright photo
+ * the layout was measured from. Anything sharp cannot decode passes through.
+ */
+async function uprightPhoto(photo: ParsedPhoto): Promise<ParsedPhoto> {
+  try {
+    const meta = await sharp(photo.bytes).metadata();
+    if (!meta.orientation || meta.orientation === 1) return photo;
+    const bytes = await sharp(photo.bytes)
+      .rotate()
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+    return { bytes, base64: bytes.toString("base64"), mediaType: "image/jpeg" };
+  } catch {
+    return photo;
+  }
+}
+
+/**
+ * Last resort when the model keeps drawing the wrong way round: seat the whole
+ * drawing on a white canvas of the photo's shape rather than hand back a sheet
+ * that would print sideways.
+ */
+async function fitToLayout(
+  file: { base64: string; mediaType: string },
+  layout: PhotoLayout,
+): Promise<{ base64: string; mediaType: string }> {
+  const ratio = layoutRatio(layout);
+  const meta = await sharp(Buffer.from(file.base64, "base64")).metadata();
+  const longEdge = Math.max(meta.width ?? 0, meta.height ?? 0, 1024);
+  const width = Math.round(ratio >= 1 ? longEdge : longEdge * ratio);
+  const height = Math.round(ratio >= 1 ? longEdge / ratio : longEdge);
+  const bytes = await sharp(Buffer.from(file.base64, "base64"))
+    .resize(width, height, { fit: "contain", background: "#ffffff" })
+    .png()
+    .toBuffer();
+  return { base64: bytes.toString("base64"), mediaType: "image/png" };
 }
 
 async function toSheet(
@@ -199,6 +248,20 @@ async function generateImageFileFromReferences(
   }
 }
 
+async function isWrongWayRound(
+  file: { base64: string },
+  layout: PhotoLayout,
+): Promise<boolean> {
+  try {
+    const meta = await sharp(Buffer.from(file.base64, "base64")).metadata();
+    if (!meta.width || !meta.height) return false;
+    const size = displayedSize(meta.width, meta.height, meta.orientation);
+    return sheetOrientationMismatch(layout, size.width, size.height);
+  } catch {
+    return false;
+  }
+}
+
 async function drawFromReferences(
   operation: VisionCostOperation,
   prompt: string,
@@ -223,7 +286,25 @@ async function drawFromReferences(
   }
   content.push({ type: "text", text: prompt });
 
-  const file = await generateImageFileFromReferences(operation, content, layout);
+  let file = await generateImageFileFromReferences(operation, content, layout);
+
+  // The model sometimes ignores the requested aspect ratio. Check, retry once
+  // with a firm correction, then fit onto the right canvas as a last resort.
+  if (await isWrongWayRound(file, layout)) {
+    try {
+      const retried = await generateImageFileFromReferences(
+        operation,
+        [...content, { type: "text", text: photoLayoutRetryNote(layout) }],
+        layout,
+      );
+      file = retried;
+    } catch {
+      /* keep the first image; it is fitted below */
+    }
+    if (await isWrongWayRound(file, layout)) {
+      file = await fitToLayout(file, layout);
+    }
+  }
 
   return toSheet(file, printPrefs.showTitle, weightReferenceBase64);
 }
@@ -234,7 +315,7 @@ export function createPhotoGeminiHandlers(): Pick<
 > {
   return {
     async photoToColoring(input: PhotoColoringGenerateRequest) {
-      const photo = parsePhotoDataUrl(input.photoDataUrl);
+      const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const prompt = buildPhotoColoringPrompt(input.printPrefs, layout);
 
@@ -256,7 +337,7 @@ export function createPhotoGeminiHandlers(): Pick<
     },
 
     async correctPhotoColoring(input: PhotoColoringCorrectRequest) {
-      const photo = parsePhotoDataUrl(input.photoDataUrl);
+      const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
       const sheet = parsePhotoDataUrl(input.sheetDataUrl);
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const prompt = buildPhotoCorrectionPrompt(
