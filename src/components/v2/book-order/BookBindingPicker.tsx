@@ -27,7 +27,7 @@ type Props = {
 
 /** Binding cards with live price; unaffordable ones are disabled with a one-tap top-up. */
 export function BookBindingPicker({ photoCount, value, onChange, quotes, balanceCents, onAddCredit }: Props) {
-  const stub = Array.from({ length: photoCount }, (_, i) => ({ id: String(i) })) as BookWizardPhotoPage[];
+  const stub = Array.from({ length: photoCount }, (_, i) => ({ id: String(i), kind: "photo" })) as BookWizardPhotoPage[];
 
   return (
     <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Binding">
