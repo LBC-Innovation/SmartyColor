@@ -271,6 +271,7 @@ html.has-session .v2-landing {
   }
 
   .v2-studio-toolbar-zone--library {
+    position: relative;
     flex-wrap: nowrap;
     gap: 0.25rem;
   }
