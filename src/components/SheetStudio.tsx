@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { KidButton } from "@/components/KidButton";
+import { PRINT_MARGIN_IN } from "@/lib/print/pageLayout";
 import { loadLocalSession } from "@/lib/session/local";
 import type { ColoringSession } from "@/lib/session/types";
 
@@ -67,6 +68,7 @@ export function SheetStudio({ sessionId }: { sessionId: string }) {
             className={`print-sheet mx-auto w-full rounded-lg border-[3px] border-ink bg-white p-6 shadow-crayon-lg ${
               landscape ? "max-w-xl" : "max-w-sm"
             }`}
+            style={{ "--print-margin": `${PRINT_MARGIN_IN}in` } as React.CSSProperties}
           >
             {session.printPrefs.showTitle ? (
               <h2 className="mb-4 text-center font-display text-xl font-bold">

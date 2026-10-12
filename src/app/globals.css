@@ -130,6 +130,12 @@ html.standalone.pwa-splash-done #pwa-splash {
   height: auto;
 }
 
+/* Margin comes from the --print-margin var, which SheetStudio sets from
+   PRINT_MARGIN_IN in src/lib/print/pageLayout.ts (the print engine). */
+@page {
+  margin: 0;
+}
+
 @media print {
   body * {
     visibility: hidden;
@@ -143,8 +149,27 @@ html.standalone.pwa-splash-done #pwa-splash {
   .print-sheet {
     position: absolute;
     inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
     margin: 0;
+    padding: var(--print-margin, 0.5in);
     box-shadow: none;
     border: none;
+    border-radius: 0;
+  }
+
+  .print-sheet img {
+    width: auto;
+    max-width: 100%;
+    min-height: 0;
+    max-height: 100%;
+    object-fit: contain;
+    border: none;
+    border-radius: 0;
   }
 }

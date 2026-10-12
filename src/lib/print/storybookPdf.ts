@@ -1,15 +1,13 @@
-import { PDFDocument, PageSizes, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import {
+  PRINT_MARGIN_PT,
+  paperSizePt,
+  pdfDrawOptions,
+  placeImageInBox,
+} from "@/lib/print/pageLayout";
 import type { PrintPrefs } from "@/lib/print/settings";
 
-function pageSize(prefs: PrintPrefs): [number, number] {
-  const letter = PageSizes.Letter;
-  const a4 = PageSizes.A4;
-  const size = prefs.paper === "a4" ? a4 : letter;
-  if (prefs.orientation === "landscape") {
-    return [size[1], size[0]];
-  }
-  return size;
-}
+const pageSize = paperSizePt;
 
 function wrapText(text: string, maxChars: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
@@ -56,22 +54,31 @@ export async function storybookToPdf(pages: StorybookPdfPage[]) {
   for (const storyPage of pages) {
     const [width, height] = pageSize(storyPage.printPrefs);
     const page = pdf.addPage([width, height]);
-    const margin = 40;
+    const margin = PRINT_MARGIN_PT;
     const textBlockHeight = height * 0.28;
-    const imageTop = height - margin;
     const imageBottom = margin + textBlockHeight + 16;
-    const maxW = width - margin * 2;
-    const maxH = imageTop - imageBottom;
 
     const image = await embedImage(pdf, storyPage.imageDataUrl);
-    const scale = Math.min(maxW / image.width, maxH / image.height);
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
+    const placement = placeImageInBox({
+      box: {
+        x: margin,
+        y: margin,
+        width: width - margin * 2,
+        height: height - margin - imageBottom,
+      },
+      imageWidth: image.width,
+      imageHeight: image.height,
+      valign: "bottom",
+    });
+    const draw = pdfDrawOptions(
+      placement,
+      height,
+    );
     page.drawImage(image, {
-      x: (width - drawW) / 2,
-      y: imageBottom,
-      width: drawW,
-      height: drawH,
+      x: draw.x,
+      y: draw.y,
+      width: draw.width,
+      height: draw.height,
     });
 
     const lines = wrapText(storyPage.text, 72);
@@ -102,7 +109,7 @@ export async function storybookTitlePagePdf(input: {
   const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const [width, height] = pageSize(input.printPrefs);
   const page = pdf.addPage([width, height]);
-  const margin = 48;
+  const margin = PRINT_MARGIN_PT;
 
   page.drawText(input.title, {
     x: margin,

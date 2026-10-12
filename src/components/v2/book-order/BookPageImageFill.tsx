@@ -2,11 +2,15 @@
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
-import {
-  computeBookPageContainScale,
-  printRotationForBookPage,
-} from "@/lib/print/bookPageImageFit";
+import { printRotationForBookPage } from "@/lib/print/bookPageImageFit";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import {
+  BOOK_TRIM_HEIGHT_IN,
+  BOOK_TRIM_WIDTH_IN,
+  POINTS_PER_INCH,
+  layoutImageOnPage,
+  type PageRotation,
+} from "@/lib/print/pageLayout";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -16,18 +20,25 @@ type Props = {
   alt?: string;
 };
 
-/** Largest uniform scale that fits the full image on the page (letterboxed, never clipped or squished). */
+const PAGE_W_PT = BOOK_TRIM_WIDTH_IN * POINTS_PER_INCH;
+const PAGE_H_PT = BOOK_TRIM_HEIGHT_IN * POINTS_PER_INCH;
+
+/**
+ * Shows the page exactly as the print engine lays it out: the whole image fitted
+ * inside the print margin, centred, never clipped or squished. The geometry comes
+ * from `layoutImageOnPage`, the same function the PDF builder uses.
+ */
 export function BookPageImageFill({ page, binding, className, alt = "" }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
-  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
 
-  const rotation = printRotationForBookPage(page, binding);
+  const rotation = printRotationForBookPage(page, binding) as PageRotation;
 
   const measureContainer = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+    setContainerWidth(el.clientWidth);
   }, []);
 
   useLayoutEffect(() => {
@@ -39,16 +50,18 @@ export function BookPageImageFill({ page, binding, className, alt = "" }: Props)
     return () => ro.disconnect();
   }, [measureContainer]);
 
-  const scale =
-    naturalSize && containerSize
-      ? computeBookPageContainScale({
-          containerWidth: containerSize.w,
-          containerHeight: containerSize.h,
+  const placement =
+    naturalSize && containerWidth
+      ? layoutImageOnPage({
+          pageWidth: PAGE_W_PT,
+          pageHeight: PAGE_H_PT,
           imageWidth: naturalSize.w,
           imageHeight: naturalSize.h,
           rotationDeg: rotation,
         })
       : null;
+  // Page points -> screen pixels for the current preview size.
+  const pxPerPt = containerWidth ? containerWidth / PAGE_W_PT : 0;
 
   return (
     <div
@@ -59,14 +72,15 @@ export function BookPageImageFill({ page, binding, className, alt = "" }: Props)
       <img
         src={page.imageDataUrl}
         alt={alt || page.title}
-        className="absolute left-1/2 top-1/2 max-h-none max-w-none"
+        className="absolute max-h-none max-w-none"
         style={{
+          left: placement ? `${(placement.centerX / PAGE_W_PT) * 100}%` : "50%",
+          top: placement ? `${(placement.centerY / PAGE_H_PT) * 100}%` : "50%",
           transformOrigin: "center center",
-          transform:
-            scale != null
-              ? `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`
-              : `translate(-50%, -50%) rotate(${rotation}deg)`,
-          opacity: scale != null ? 1 : 0,
+          transform: placement
+            ? `translate(-50%, -50%) rotate(${rotation}deg) scale(${placement.scale * pxPerPt})`
+            : `translate(-50%, -50%) rotate(${rotation}deg)`,
+          opacity: placement ? 1 : 0,
         }}
         onLoad={(e) => {
           const img = e.currentTarget;
