@@ -112,6 +112,7 @@ export default function TermsPage() {
           <Table
             rows={[
               ["cm_access_token", "Local storage", "Keeps you signed in. Removed when you sign out."],
+              ["cm_refresh_token", "Local storage", "Renews your sign-in quietly so a long visit doesn’t log you out. Removed when you sign out."],
               ["cm_session_hint", "Local storage", "Your name and email, so the app can show them before it finishes loading."],
               ["cm_shipping_address", "Local storage", "The last shipping address you typed, so you don’t re-enter it."],
               ["cm_quote_shipping_zip", "Local storage", "The ZIP used for a price estimate."],

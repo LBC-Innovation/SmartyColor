@@ -36,7 +36,7 @@ import {
   type SheetEditMessage,
 } from "@/components/v2/V2SheetEditChat";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
-import { authHeaders } from "@/lib/api/client";
+import { authedFetch } from "@/lib/api/client";
 import {
   entryFromLibraryPhoto,
   uploadPhotoToLibrary,
@@ -372,12 +372,9 @@ export function ColorfulMemoriesApp() {
     );
 
     try {
-      const response = await fetch("/api/photo-coloring", {
+      const response = await authedFetch("/api/photo-coloring", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(photo.remote ? authHeaders() : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           photo.remote
             ? { mode: "generate-library", photoId: photo.remote.photoId }
@@ -388,7 +385,7 @@ export function ColorfulMemoriesApp() {
                 image: photo.image,
               },
         ),
-      });
+      }, { withAuth: Boolean(photo.remote) });
       const rawBody = await response.text();
       let payload: {
         sheet?: GeneratedSheet;
@@ -557,14 +554,11 @@ export function ColorfulMemoriesApp() {
           image: photo.image,
         };
       }
-      const response = await fetch("/api/photo-coloring", {
+      const response = await authedFetch("/api/photo-coloring", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(photo.remote ? authHeaders() : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      });
+      }, { withAuth: Boolean(photo.remote) });
       const payload = (await response.json()) as {
         sheet?: GeneratedSheet;
         photo?: LibraryPhoto;
@@ -742,18 +736,15 @@ export function ColorfulMemoriesApp() {
     if (!selected?.sheet) return;
     setDownloading(true);
     try {
-      const response = await fetch("/api/pdf", {
+      const response = await authedFetch("/api/pdf", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(selected.remote ? authHeaders() : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           selected.remote
             ? { revisionId: selected.activeRevisionId, printPrefs: photoPrintPrefs(selected) }
             : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: photoPrintPrefs(selected) },
         ),
-      });
+      }, { withAuth: Boolean(selected.remote) });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
         throw new Error(payload.error ?? "Could not make a PDF.");
@@ -790,14 +781,11 @@ export function ColorfulMemoriesApp() {
 
     setPrintingBook(true);
     try {
-      const response = await fetch("/api/pdf/book", {
+      const response = await authedFetch("/api/pdf/book", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(cloud ? authHeaders() : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cloud ? { revisions } : { pages }),
-      });
+      }, { withAuth: Boolean(cloud) });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
         throw new Error(payload.error ?? "Could not make the print book PDF.");

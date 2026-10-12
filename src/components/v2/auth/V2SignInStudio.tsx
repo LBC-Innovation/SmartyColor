@@ -19,6 +19,7 @@ export function V2SignInStudio() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
+  const sessionExpired = searchParams.get("reason") === "expired";
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +49,18 @@ export function V2SignInStudio() {
 
       <main className="flex flex-1 flex-col items-center justify-center px-5 py-8 sm:py-12">
         <form onSubmit={onSubmit} className="v2-auth-card w-full max-w-md p-6 sm:p-8">
+          {sessionExpired ? (
+            <div
+              role="status"
+              className="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm leading-relaxed text-sky-900"
+            >
+              <p className="font-semibold">You’ve been signed out</p>
+              <p>
+                Your session timed out after a while away. Sign in again to pick up where you left
+                off.
+              </p>
+            </div>
+          ) : null}
           <h1 className="v2-brand-title text-2xl text-v2-ink">Welcome back</h1>
           <p className="mt-2 text-sm leading-relaxed text-v2-muted">
             Sign in to open the studio and access saved projects.

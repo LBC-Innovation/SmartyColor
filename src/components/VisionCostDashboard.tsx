@@ -7,7 +7,7 @@ import type {
   VisionErrorKind,
 } from "@/lib/visionCost/types";
 import type { VisionPersistedSummary, VisionPeriodTotals } from "@/lib/visionCost/store";
-import { authHeaders } from "@/lib/api/client";
+import { authedFetch } from "@/lib/api/client";
 
 type ApiPayload = VisionCostSessionSnapshot & { logTail: string; persisted?: VisionPersistedSummary };
 
@@ -52,7 +52,7 @@ export function VisionCostDashboard({
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/vision-costs", { cache: "no-store", headers: authHeaders() });
+      const response = await authedFetch("/api/vision-costs", { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Could not load costs (${response.status})`);
       }

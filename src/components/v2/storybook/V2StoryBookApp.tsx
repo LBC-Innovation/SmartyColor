@@ -18,7 +18,7 @@ import { V2PhotoLibraryList } from "@/components/v2/V2PhotoLibraryList";
 import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
-import { authHeaders } from "@/lib/api/client";
+import { authedFetch } from "@/lib/api/client";
 import { entryFromLibraryPhoto, uploadPhotoToLibrary } from "@/lib/v2/cloudLibrary";
 import type { LibraryPhoto } from "@/lib/library/types";
 import { blobToDataUrl } from "@/lib/photo/dataUrlBlob";
@@ -255,18 +255,15 @@ export function V2StoryBookApp() {
     coloringApiLockRef.current = true;
     updatePhoto(id, { generating: true });
     try {
-      const res = await fetch("/api/photo-coloring", {
+      const res = await authedFetch("/api/photo-coloring", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(photo.remote ? authHeaders() : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           photo.remote
             ? { mode: "generate-library", photoId: photo.remote.photoId }
             : { mode: "generate", photoDataUrl: photo.photoDataUrl, printPrefs: photo.printPrefs },
         ),
-      });
+      }, { withAuth: Boolean(photo.remote) });
       const data = (await res.json()) as {
         error?: string;
         sheet?: GeneratedSheet;
@@ -312,12 +309,9 @@ export function V2StoryBookApp() {
     setChatBusy(true);
 
     try {
-      const res = await fetch("/api/storybook/photo-chat", {
+      const res = await authedFetch("/api/storybook/photo-chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(selected.remote ? authHeaders() : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           albumTitle,
           tripNarrative,
@@ -328,7 +322,7 @@ export function V2StoryBookApp() {
           userMessage: text,
           ...(selected.remote ? { photoId: selected.remote.photoId } : { photoDataUrl: selected.photoDataUrl }),
         }),
-      });
+      }, { withAuth: Boolean(selected.remote) });
       const data = (await res.json()) as {
         error?: string;
         assistantMessage?: string;
