@@ -61,8 +61,10 @@ html.has-session .v2-landing {
     font-size: max(1rem, 16px);
   }
 
-  /* Extend small controls to a 44px touch target without changing their look. */
-  .v2-hit {
+  /* Extend small controls to a 44px touch target without changing their look.
+     Already-positioned controls anchor the ::after themselves; overriding them
+     would drop them back into the flow. */
+  .v2-hit:not(.absolute, .fixed, .sticky) {
     position: relative;
   }
 
