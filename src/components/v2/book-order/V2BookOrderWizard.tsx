@@ -18,8 +18,13 @@ import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
 import { BOOK_BINDINGS, getBookBinding, recommendBinding, type BookBindingId } from "@/lib/print/bookBindings";
-import { computeBookPagePlan, explainBookPagePadding, nextRotation } from "@/lib/print/bookPagePlan";
-import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import {
+  computeBookPagePlan,
+  contentPageCount,
+  explainBookPagePadding,
+  insertAfterContent,
+} from "@/lib/print/bookPagePlan";
+import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import {
@@ -71,8 +76,9 @@ export function V2BookOrderWizard() {
   const [sheetCounts, setSheetCounts] = useState<Record<string, number>>({});
   const [loadingAlbums, setLoadingAlbums] = useState(true);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
-  const [photoPages, setPhotoPages] = useState<BookWizardPhotoPage[]>([]);
-  /** Album selection the current photoPages were collected for. */
+  /** Every page in book order: photos plus any blank or lined pages the user placed. */
+  const [bookPages, setBookPages] = useState<BookWizardPage[]>([]);
+  /** Album selection the current bookPages were collected for. */
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const removedIdsRef = useRef<Set<string>>(new Set());
 
@@ -95,7 +101,8 @@ export function V2BookOrderWizard() {
   const savedDraftIdRef = useRef<string | null>(null);
 
   const binding = getBookBinding(bindingId);
-  const plan = useMemo(() => computeBookPagePlan(photoPages, binding), [photoPages, binding]);
+  const plan = useMemo(() => computeBookPagePlan(bookPages, binding), [bookPages, binding]);
+  const contentCount = contentPageCount(bookPages);
   const selectedQuote = bindingQuotes[bindingId];
   const quoteCents = selectedQuote?.totalCents ?? null;
   const printCents = selectedQuote?.printCents ?? null;
@@ -105,7 +112,10 @@ export function V2BookOrderWizard() {
   const balanceCents = user?.creditsBalanceCents ?? null;
   const selectedAffordable =
     balanceCents == null || quoteCents == null || balanceCents >= quoteCents;
-  const paddingNote = explainBookPagePadding(plan.photoCount, binding, plan);
+  const paddingNote = explainBookPagePadding(contentCount, binding, {
+    totalPages: plan.totalPages,
+    blankCount: plan.paddingCount,
+  });
 
   const selectedProjects = useMemo(
     () => projects.filter((p) => selectedProjectIds.includes(p.id)),
@@ -188,14 +198,15 @@ export function V2BookOrderWizard() {
     void collectPhotoPagesFromProjects({ projectIds: selectedProjectIds, projects, cloud }).then(
       ({ pages: collected }) => {
         if (cancelled) return;
-        setPhotoPages((prev) => {
+        setBookPages((prev) => {
           const byId = new Map(collected.map((p) => [p.id, p]));
-          const kept = prev.filter((p) => byId.has(p.id));
+          // Blank and lined pages stay put; photos stay only while their album is selected.
+          const kept = prev.filter((p) => p.kind === "blank" || byId.has(p.id));
           const keptIds = new Set(kept.map((p) => p.id));
           const added = collected.filter(
             (p) => !keptIds.has(p.id) && !removedIdsRef.current.has(p.id),
           );
-          return [...kept, ...added];
+          return insertAfterContent(kept, added);
         });
         setLoadedKey(selectionKey);
         // Coming back from payment: resume on the binding step.
@@ -216,6 +227,11 @@ export function V2BookOrderWizard() {
     setSelectedProjectIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+  }
+
+  function insertBlank(variant: "plain" | "lined") {
+    const id = `${variant === "lined" ? "lined" : "blank"}-${crypto.randomUUID()}`;
+    setBookPages((prev) => insertAfterContent(prev, [{ id, kind: "blank", variant }]));
   }
 
   // ---- quote -------------------------------------------------------------
@@ -252,14 +268,14 @@ export function V2BookOrderWizard() {
       void Promise.all(
         ids.map(async (id) => {
           const spec = BOOK_BINDINGS[id];
-          if (photoPages.length > spec.maxPages) {
+          if (contentPageCount(bookPages) > spec.maxPages) {
             setBindingQuotes((prev) => ({
               ...prev,
               [id]: { totalCents: null, printCents: null, shippingCents: null, loading: false, error: null },
             }));
             return;
           }
-          const pageCount = computeBookPagePlan(photoPages, spec).totalPages;
+          const pageCount = computeBookPagePlan(bookPages, spec).totalPages;
           const result = await api.fetchOrderQuote({ bindingId: id, pageCount, ...shipping });
           setBindingQuotes((prev) => ({
             ...prev,
@@ -277,7 +293,7 @@ export function V2BookOrderWizard() {
       );
     }, 350);
     return () => window.clearTimeout(t);
-  }, [quoteActive, photoPages, shippingZip, addressComplete, address.city, address.state_code, address.postcode, address.country_code]);
+  }, [quoteActive, bookPages, shippingZip, addressComplete, address.city, address.state_code, address.postcode, address.country_code]);
 
   function updateAddress(next: ShippingAddress) {
     setAddress(next);
@@ -294,7 +310,7 @@ export function V2BookOrderWizard() {
         setError("Pick at least one album with a generated coloring sheet.");
         return;
       }
-      if (!bindingTouched) setBindingId(recommendBinding(plan.photoCount));
+      if (!bindingTouched) setBindingId(recommendBinding(contentCount));
       setStep("book");
     } else if (step === "book") {
       setStep("review");
@@ -308,7 +324,7 @@ export function V2BookOrderWizard() {
       }
       setConfirmOpen(true);
     }
-  }, [step, plan.photoCount, bindingTouched, address]);
+  }, [step, plan.photoCount, contentCount, bindingTouched, address]);
 
   function goBack() {
     setError(null);
@@ -442,26 +458,24 @@ export function V2BookOrderWizard() {
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                         Loading pages…
                       </p>
-                    ) : photoPages.length > 0 ? (
+                    ) : plan.photoCount > 0 ? (
                       <BookPageThumbnailGrid
                         binding={binding}
-                        pages={photoPages}
-                        onReorder={(next) => {
-                          setPhotoPages(
-                            next.filter((p): p is BookWizardPhotoPage => p.kind === "photo"),
-                          );
-                        }}
-                        onFlipPhoto={(id) =>
-                          setPhotoPages((prev) =>
+                        pages={plan.allPages}
+                        onReorder={setBookPages}
+                        onMirrorPhoto={(id) =>
+                          setBookPages((prev) =>
                             prev.map((p) =>
-                              p.id === id ? { ...p, rotation: nextRotation(p.rotation) } : p,
+                              p.kind === "photo" && p.id === id ? { ...p, mirrored: !p.mirrored } : p,
                             ),
                           )
                         }
-                        onRemovePhoto={(id) => {
+                        onRemovePage={(id) => {
                           removedIdsRef.current.add(id);
-                          setPhotoPages((prev) => prev.filter((p) => p.id !== id));
+                          setBookPages((prev) => prev.filter((p) => p.id !== id));
                         }}
+                        onInsertBlank={() => insertBlank("plain")}
+                        onInsertLined={() => insertBlank("lined")}
                       />
                     ) : selectedProjectIds.length > 0 ? (
                       <div className="v2-panel p-5 text-sm text-v2-muted">
@@ -482,7 +496,7 @@ export function V2BookOrderWizard() {
                       </p>
                     </div>
                     <BookBindingPicker
-                      photoCount={plan.photoCount}
+                      photoCount={contentCount}
                       value={bindingId}
                       onChange={(id) => {
                         setBindingTouched(true);

@@ -7,42 +7,81 @@ import type {
   BookWizardPhotoPage,
 } from "@/lib/print/bookWizardTypes";
 
-function blankPage(index: number): BookWizardBlankPage {
-  return { id: `blank-${index}`, kind: "blank" };
+export function isAutoBlank(page: BookWizardPage): page is BookWizardBlankPage {
+  return page.kind === "blank" && page.auto === true;
 }
 
-export function computeBookPagePlan(
-  photos: BookWizardPhotoPage[],
-  binding: BookBindingSpec,
-): BookPagePlan {
-  const contentPages = [...photos];
-  let total = contentPages.length;
+/** Pages the user chose: photos plus any blank or lined pages they inserted. */
+export function contentPageCount(pages: BookWizardPage[]): number {
+  return pages.filter((p) => !isAutoBlank(p)).length;
+}
 
-  if (total < binding.minPages) {
-    total = binding.minPages;
-  }
-  if (total > binding.maxPages) {
-    total = binding.maxPages;
-  }
+function targetPageCount(count: number, binding: BookBindingSpec): number {
+  let total = Math.max(count, binding.minPages);
+  total = Math.min(total, Math.max(binding.maxPages, count));
   if (binding.pageMultiple > 1) {
     const remainder = total % binding.pageMultiple;
-    if (remainder !== 0) {
-      total += binding.pageMultiple - remainder;
+    if (remainder !== 0) total += binding.pageMultiple - remainder;
+  }
+  return total;
+}
+
+/**
+ * Lay the book out. Padding blanks sit in the page list like any other page, so
+ * the user can drag them where they want; this only adds or trims them (from the
+ * end) so the total satisfies the binding.
+ */
+export function computeBookPagePlan(
+  pages: BookWizardPage[],
+  binding: BookBindingSpec,
+): BookPagePlan {
+  const needed = Math.max(
+    0,
+    targetPageCount(contentPageCount(pages), binding) - contentPageCount(pages),
+  );
+
+  const allPages: BookWizardPage[] = [];
+  const usedIds = new Set(pages.map((p) => p.id));
+  let autoKept = 0;
+  for (const page of pages) {
+    if (isAutoBlank(page)) {
+      if (autoKept >= needed) continue;
+      autoKept += 1;
     }
+    allPages.push(page);
+  }
+  let nextAutoId = 1;
+  while (autoKept < needed) {
+    while (usedIds.has(`auto-blank-${nextAutoId}`)) nextAutoId += 1;
+    const id = `auto-blank-${nextAutoId}`;
+    usedIds.add(id);
+    allPages.push({ id, kind: "blank", auto: true });
+    autoKept += 1;
   }
 
-  const blankCount = Math.max(0, total - contentPages.length);
-  const blankPages = Array.from({ length: blankCount }, (_, i) => blankPage(i + 1));
-  const allPages: BookWizardPage[] = [...contentPages, ...blankPages];
-
+  const contentPages = allPages.filter((p): p is BookWizardPhotoPage => p.kind === "photo");
+  const blankPages = allPages.filter((p): p is BookWizardBlankPage => p.kind === "blank");
   return {
     contentPages,
     blankPages,
     allPages,
     totalPages: allPages.length,
     photoCount: contentPages.length,
-    blankCount,
+    blankCount: blankPages.length,
+    paddingCount: needed,
   };
+}
+
+/** Insert pages after the last user-chosen page, ahead of any trailing padding. */
+export function insertAfterContent(
+  pages: BookWizardPage[],
+  inserted: BookWizardPage[],
+): BookWizardPage[] {
+  let at = 0;
+  pages.forEach((p, i) => {
+    if (!isAutoBlank(p)) at = i + 1;
+  });
+  return [...pages.slice(0, at), ...inserted, ...pages.slice(at)];
 }
 
 /** Human-readable reason blank pages were added (for UI copy). */
@@ -70,32 +109,12 @@ export function explainBookPagePadding(
   return `${plan.blankCount} blank ${plan.blankCount === 1 ? "page" : "pages"} added for this binding`;
 }
 
-export function reorderWizardPages(
-  pages: BookWizardPage[],
-  binding: BookBindingSpec,
-): BookPagePlan {
-  const contentPages = pages.filter((p): p is BookWizardPhotoPage => p.kind === "photo");
-  const trailingBlanks = pages.filter((p) => p.kind === "blank");
-  const plan = computeBookPagePlan(contentPages, binding);
-  if (trailingBlanks.length === plan.blankCount) {
-    return {
-      ...plan,
-      allPages: [...contentPages, ...plan.blankPages],
-    };
-  }
-  return plan;
-}
-
 export function effectiveOrientation(page: BookWizardPhotoPage): Orientation {
   const rotated = page.rotation === 90 || page.rotation === 270;
   if (rotated) {
     return page.sheetOrientation === "portrait" ? "landscape" : "portrait";
   }
   return page.sheetOrientation;
-}
-
-export function nextRotation(current: BookWizardPhotoPage["rotation"]): BookWizardPhotoPage["rotation"] {
-  return ((current + 90) % 360) as BookWizardPhotoPage["rotation"];
 }
 
 /** Rotation to preview how art will appear on a portrait book page (may differ from grid if not yet rotated). */

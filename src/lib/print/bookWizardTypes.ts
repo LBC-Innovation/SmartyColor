@@ -15,11 +15,20 @@ export type BookWizardPhotoPage = {
   imageDataUrl: string;
   sheetOrientation: Orientation;
   rotation: PrintRotation;
+  /** Mirrored left-to-right on the printed (portrait) page. */
+  mirrored?: boolean;
 };
 
 export type BookWizardBlankPage = {
   id: string;
   kind: "blank";
+  /** "lined" is a ruled writing page; anything else is an empty page. */
+  variant?: "plain" | "lined";
+  /**
+   * Added automatically to meet the binding's page count. These come and go as
+   * the book changes; pages the user inserts are never auto.
+   */
+  auto?: boolean;
 };
 
 export type BookWizardPage = BookWizardPhotoPage | BookWizardBlankPage;
@@ -27,10 +36,14 @@ export type BookWizardPage = BookWizardPhotoPage | BookWizardBlankPage;
 export type BookPagePlan = {
   contentPages: BookWizardPhotoPage[];
   blankPages: BookWizardBlankPage[];
+  /** Every printed page, in order, including blank and lined ones. */
   allPages: BookWizardPage[];
   totalPages: number;
   photoCount: number;
+  /** All non-photo pages: auto padding plus any the user inserted. */
   blankCount: number;
+  /** Blank pages added automatically to satisfy the binding. */
+  paddingCount: number;
 };
 
 export type BookWizardDraft = {

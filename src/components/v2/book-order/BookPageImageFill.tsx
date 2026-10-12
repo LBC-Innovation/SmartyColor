@@ -34,6 +34,8 @@ export function BookPageImageFill({ page, binding, className, alt = "" }: Props)
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
 
   const rotation = printRotationForBookPage(page, binding) as PageRotation;
+  // Mirror is applied after the rotation, so it flips the page as the reader sees it.
+  const mirror = page.mirrored ? "scaleX(-1) " : "";
 
   const measureContainer = useCallback(() => {
     const el = containerRef.current;
@@ -78,8 +80,8 @@ export function BookPageImageFill({ page, binding, className, alt = "" }: Props)
           top: placement ? `${(placement.centerY / PAGE_H_PT) * 100}%` : "50%",
           transformOrigin: "center center",
           transform: placement
-            ? `translate(-50%, -50%) rotate(${rotation}deg) scale(${placement.scale * pxPerPt})`
-            : `translate(-50%, -50%) rotate(${rotation}deg)`,
+            ? `translate(-50%, -50%) ${mirror}rotate(${rotation}deg) scale(${placement.scale * pxPerPt})`
+            : `translate(-50%, -50%) ${mirror}rotate(${rotation}deg)`,
           opacity: placement ? 1 : 0,
         }}
         onLoad={(e) => {

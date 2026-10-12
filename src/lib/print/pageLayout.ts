@@ -141,3 +141,54 @@ export function pdfDrawOptions(placement: ImagePlacement, pageHeight: number) {
     rotateDeg: -rotationDeg,
   };
 }
+
+/**
+ * Transformation matrix `[a b c d e f]` that draws a unit-sized image box
+ * (x 0..width, y 0..height) at its placement, rotated, then mirrored
+ * left-to-right about the image's own vertical centre line on the page.
+ * pdf-lib's `drawImage` can't mirror, so the PDF builder applies this
+ * to the graphics state instead.
+ */
+export function pdfMirroredMatrix(
+  placement: ImagePlacement,
+  pageHeight: number,
+): [number, number, number, number, number, number] {
+  const { centerX, drawWidth: w, drawHeight: h, rotationDeg } = placement;
+  const centerY = pageHeight - placement.centerY;
+  const theta = (-rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  // translate(center) · mirrorX · rotate(theta) · translate(-w/2, -h/2)
+  return [
+    -cos,
+    sin,
+    sin,
+    cos,
+    centerX + (cos * w) / 2 - (sin * h) / 2,
+    centerY - (sin * w) / 2 - (cos * h) / 2,
+  ];
+}
+
+/** Wide-ruled notebook paper: 11/32″ between rules. */
+export const LINED_RULE_SPACING_IN = 11 / 32;
+/** Header space above the first rule, measured from the top of the page. */
+export const LINED_FIRST_RULE_IN = 1;
+
+/**
+ * Rules of a lined writing page, in page points from the top-left. Rules run
+ * between the print margins, from the header space down to the bottom margin.
+ */
+export function linedPageRules(pageWidth: number, pageHeight: number) {
+  const box = printableBox(pageWidth, pageHeight);
+  const spacing = LINED_RULE_SPACING_IN * POINTS_PER_INCH;
+  const bottom = box.y + box.height;
+  const ys: number[] = [];
+  for (
+    let y = Math.max(box.y, LINED_FIRST_RULE_IN * POINTS_PER_INCH);
+    y <= bottom + 0.01;
+    y += spacing
+  ) {
+    ys.push(y);
+  }
+  return { x1: box.x, x2: box.x + box.width, ys };
+}

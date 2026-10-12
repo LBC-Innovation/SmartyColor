@@ -1,5 +1,6 @@
 "use client";
 
+import { BookLinedPageArt } from "@/components/v2/book-order/BookLinedPageArt";
 import { BookPageImageFill } from "@/components/v2/book-order/BookPageImageFill";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
@@ -29,6 +30,8 @@ export function BookPrintPagePreview({
         <div className="relative flex h-full max-h-full w-full max-w-full items-center justify-center overflow-hidden rounded-md bg-v2-bg-subtle aspect-[8.5/11]">
           {!page ? (
             <span className="text-xs text-v2-muted">—</span>
+          ) : page.kind === "blank" && page.variant === "lined" ? (
+            <BookLinedPageArt />
           ) : page.kind === "blank" ? (
             <div className="flex h-full w-full flex-col items-center justify-center border border-dashed border-gray-300 bg-white text-v2-muted">
               <p className="text-xs font-semibold">Blank</p>
