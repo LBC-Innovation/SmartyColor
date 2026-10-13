@@ -8,7 +8,9 @@ import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
 import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
 import { BookPageFitPicker } from "@/components/v2/book-order/BookPageFitPicker";
+import { BookPrintQualityNotice } from "@/components/v2/book-order/BookPrintQualityNotice";
 import { BookProofStep } from "@/components/v2/book-order/BookProofStep";
+import { useSoftPrintPages } from "@/components/v2/book-order/useSoftPrintPages";
 import {
   coverSourcesFor,
   hasOriginalPhotos,
@@ -173,6 +175,7 @@ export function V2BookOrderWizard() {
   const isDigital = isDigitalFormat(bindingId);
   const binding = getBookFormat(bindingId);
   const plan = useMemo(() => computeBookPagePlan(fittedPages, binding), [fittedPages, binding]);
+  const softPrintPages = useSoftPrintPages(plan.allPages, binding);
   const contentCount = contentPageCount(bookPages);
   const selectedQuote: BindingQuote | null = isDigital
     ? { totalCents: DIGITAL_BOOK_CENTS, printCents: null, shippingCents: null, loading: false, error: null }
@@ -764,6 +767,7 @@ export function V2BookOrderWizard() {
                         sample={plan.contentPages[0]}
                         binding={binding}
                       />
+                      <BookPrintQualityNotice pageNumbers={softPrintPages} fit={pageFit} />
                       <BookPageThumbnailGrid
                         binding={binding}
                         pages={plan.allPages}
@@ -840,6 +844,7 @@ export function V2BookOrderWizard() {
                         go back a step to change anything.
                       </p>
                     </div>
+                    <BookPrintQualityNotice pageNumbers={softPrintPages} fit={pageFit} />
                     <BookProofStep
                       pages={plan.allPages}
                       binding={binding}

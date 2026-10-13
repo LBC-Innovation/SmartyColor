@@ -13,6 +13,8 @@ import { getObjectBytes, putObject, removeObjects } from "@/server/storage/libra
 const BOOK_PREFS: PrintPrefs = { ...defaultPrintPrefs, paper: "letter", orientation: "portrait" };
 const ROTATIONS = [0, 90, 180, 270];
 
+type PhotoBookPage = Extract<DigitalBookPage, { kind: "photo" }>;
+
 function log(level: string, message: string, ctx: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ level, message, ...ctx }));
 }
@@ -48,7 +50,12 @@ export function parsePages(input: unknown, maxPages = DIGITAL_FORMAT.maxPages): 
 export async function buildPdf(
   userId: string,
   pages: DigitalBookPage[],
-  options: { gutterIn?: number; bleedIn?: number; prepareSheet?: (dataUrl: string) => Promise<string> } = {},
+  options: {
+    gutterIn?: number;
+    bleedIn?: number;
+    /** Re-encode a sheet for the page it sits on (print orders resample it to print resolution). */
+    prepareSheet?: (dataUrl: string, page: PhotoBookPage) => Promise<string>;
+  } = {},
 ): Promise<ApiResult<Uint8Array>> {
   const cache = new Map<string, string>();
   const sheets: Array<PdfSheetPage | PdfBlankPage> = [];
@@ -57,7 +64,9 @@ export async function buildPdf(
       sheets.push({ pageKind: page.variant === "lined" ? "lined" : "blank", printPrefs: BOOK_PREFS });
       continue;
     }
-    let dataUrl = cache.get(page.revisionId);
+    // A sheet is prepared for its placement, so the same sheet turned or fitted differently is a new entry.
+    const cacheKey = `${page.revisionId}:${page.rotation % 180}:${page.fit ?? "framed"}`;
+    let dataUrl = cache.get(cacheKey);
     if (!dataUrl) {
       const rev = await revisionDataUrlById(userId, page.revisionId);
       if (rev.error) {
@@ -67,11 +76,11 @@ export async function buildPdf(
         };
       }
       try {
-        dataUrl = options.prepareSheet ? await options.prepareSheet(rev.data!.dataUrl) : rev.data!.dataUrl;
+        dataUrl = options.prepareSheet ? await options.prepareSheet(rev.data!.dataUrl, page) : rev.data!.dataUrl;
       } catch {
         return { data: null, error: { message: "One of the pages in this book couldn't be prepared for print." } };
       }
-      cache.set(page.revisionId, dataUrl);
+      cache.set(cacheKey, dataUrl);
     }
     sheets.push({
       imageDataUrl: dataUrl,

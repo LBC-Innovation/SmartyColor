@@ -206,6 +206,14 @@ function renderSmoothInk(gray: Uint8Array, midpoint: number): Uint8Array {
   return out;
 }
 
+/**
+ * Sharpen the soft edges that enlarging a finished sheet leaves behind, without
+ * making its strokes any thicker or thinner.
+ */
+export function crispInkEdges(gray: Uint8Array): Uint8Array {
+  return renderSmoothInk(gray, NEUTRAL_MIDPOINT);
+}
+
 async function encodeGrayPng(data: Uint8Array, width: number, height: number) {
   const png = await sharp(Buffer.from(data), {
     raw: { width, height, channels: 1 },
