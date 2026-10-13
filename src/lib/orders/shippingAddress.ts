@@ -66,6 +66,14 @@ export function validateShippingAddress(input: Partial<ShippingAddress> | null |
   return errors;
 }
 
+/** A billing address needs no phone: nothing is delivered to it. */
+export function validateBillingAddress(input: Partial<ShippingAddress> | null | undefined): ShippingAddressErrors {
+  const errors = validateShippingAddress(input);
+  delete errors.phone_number;
+  delete errors.email;
+  return errors;
+}
+
 export function isShippingAddressComplete(input: Partial<ShippingAddress> | null | undefined): boolean {
   return Object.keys(validateShippingAddress(input)).length === 0;
 }

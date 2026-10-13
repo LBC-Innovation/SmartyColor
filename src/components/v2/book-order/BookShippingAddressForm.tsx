@@ -10,6 +10,10 @@ type Props = {
   errors?: ShippingAddressErrors;
   idPrefix?: string;
   className?: string;
+  /** Autofill group: a billing form must not be filled with the shipping address. */
+  section?: "shipping" | "billing";
+  /** Leave out phone and email (a billing address nothing is delivered to). */
+  hideContact?: boolean;
 };
 
 type FieldKey = keyof ShippingAddress;
@@ -48,7 +52,15 @@ function formatUsZip(raw: string): string {
 }
 
 /** Lulu-ready shipping address; US-first, with a country select for the rest. */
-export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix = "ship", className }: Props) {
+export function BookShippingAddressForm({
+  value,
+  onChange,
+  errors = {},
+  idPrefix = "ship",
+  className,
+  section = "shipping",
+  hideContact = false,
+}: Props) {
   const set = (key: FieldKey, v: string) => onChange({ ...value, [key]: v });
   const inputClass = (key: FieldKey) =>
     cn("v2-input", errors[key] && "border-red-400 focus:border-red-500");
@@ -62,7 +74,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           enterKeyHint="next"
           id={`${idPrefix}-name`}
           className={inputClass("name")}
-          autoComplete="shipping name"
+          autoComplete={`${section} name`}
           value={value.name}
           onChange={(e) => set("name", e.target.value)}
         />
@@ -74,7 +86,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           enterKeyHint="next"
           id={`${idPrefix}-street1`}
           className={inputClass("street1")}
-          autoComplete="shipping address-line1"
+          autoComplete={`${section} address-line1`}
           value={value.street1}
           onChange={(e) => set("street1", e.target.value)}
         />
@@ -86,7 +98,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           enterKeyHint="next"
           id={`${idPrefix}-street2`}
           className="v2-input"
-          autoComplete="shipping address-line2"
+          autoComplete={`${section} address-line2`}
           value={value.street2 ?? ""}
           onChange={(e) => set("street2", e.target.value)}
         />
@@ -98,7 +110,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           enterKeyHint="next"
           id={`${idPrefix}-city`}
           className={inputClass("city")}
-          autoComplete="shipping address-level2"
+          autoComplete={`${section} address-level2`}
           value={value.city}
           onChange={(e) => set("city", e.target.value)}
         />
@@ -109,7 +121,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           <select
             id={`${idPrefix}-state`}
             className={inputClass("state_code")}
-            autoComplete="shipping address-level1"
+            autoComplete={`${section} address-level1`}
             value={value.state_code ?? ""}
             onChange={(e) => set("state_code", e.target.value)}
           >
@@ -126,7 +138,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           <input
             id={`${idPrefix}-state`}
             className="v2-input"
-            autoComplete="shipping address-level1"
+            autoComplete={`${section} address-level1`}
             value={value.state_code ?? ""}
             onChange={(e) => set("state_code", e.target.value)}
           />
@@ -138,7 +150,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           id={`${idPrefix}-postcode`}
           className={cn(inputClass("postcode"), "tabular-nums")}
           inputMode={isUs ? "numeric" : "text"}
-          autoComplete="shipping postal-code"
+          autoComplete={`${section} postal-code`}
           maxLength={12}
           value={value.postcode}
           onChange={(e) => set("postcode", isUs ? formatUsZip(e.target.value) : e.target.value)}
@@ -149,7 +161,7 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
         <select
           id={`${idPrefix}-country`}
           className={inputClass("country_code")}
-          autoComplete="shipping country"
+          autoComplete={`${section} country`}
           value={value.country_code || "US"}
           onChange={(e) => set("country_code", e.target.value)}
         >
@@ -160,12 +172,14 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
         </select>
       </Field>
 
+      {hideContact ? null : (
+      <>
       <Field id={`${idPrefix}-phone`} label="Phone" error={errors.phone_number}>
         <input
           id={`${idPrefix}-phone`}
           type="tel"
           className={inputClass("phone_number")}
-          autoComplete="shipping tel"
+          autoComplete={`${section} tel`}
           value={value.phone_number}
           onChange={(e) => set("phone_number", e.target.value)}
         />
@@ -181,6 +195,8 @@ export function BookShippingAddressForm({ value, onChange, errors = {}, idPrefix
           onChange={(e) => set("email", e.target.value)}
         />
       </Field>
+      </>
+      )}
     </div>
   );
 }

@@ -17,8 +17,9 @@ function log(level: string, message: string, ctx: Record<string, unknown> = {}) 
   console.log(JSON.stringify({ level, message, ...ctx }));
 }
 
-function parsePages(input: unknown): DigitalBookPage[] | null {
-  if (!Array.isArray(input) || input.length < 1 || input.length > DIGITAL_FORMAT.maxPages) return null;
+/** Validate a page manifest from untrusted input; null when it isn't a usable book. */
+export function parsePages(input: unknown, maxPages = DIGITAL_FORMAT.maxPages): DigitalBookPage[] | null {
+  if (!Array.isArray(input) || input.length < 1 || input.length > maxPages) return null;
   const pages: DigitalBookPage[] = [];
   for (const raw of input) {
     if (!raw || typeof raw !== "object") return null;
@@ -34,6 +35,7 @@ function parsePages(input: unknown): DigitalBookPage[] | null {
         revisionId: p.revisionId,
         rotation: rotation as 0 | 90 | 180 | 270,
         mirrored: p.mirrored === true,
+        ...(p.fit === "full" ? { fit: "full" as const } : {}),
       });
     } else {
       return null;
@@ -43,7 +45,11 @@ function parsePages(input: unknown): DigitalBookPage[] | null {
 }
 
 /** Build the book PDF from a manifest, reading each sheet the user owns from storage. */
-async function buildPdf(userId: string, pages: DigitalBookPage[]): Promise<ApiResult<Uint8Array>> {
+export async function buildPdf(
+  userId: string,
+  pages: DigitalBookPage[],
+  options: { gutterIn?: number; bleedIn?: number; prepareSheet?: (dataUrl: string) => Promise<string> } = {},
+): Promise<ApiResult<Uint8Array>> {
   const cache = new Map<string, string>();
   const sheets: Array<PdfSheetPage | PdfBlankPage> = [];
   for (const page of pages) {
@@ -60,7 +66,11 @@ async function buildPdf(userId: string, pages: DigitalBookPage[]): Promise<ApiRe
           error: { message: "One of the pages in this book is no longer available.", code: "NOT_FOUND" },
         };
       }
-      dataUrl = rev.data!.dataUrl;
+      try {
+        dataUrl = options.prepareSheet ? await options.prepareSheet(rev.data!.dataUrl) : rev.data!.dataUrl;
+      } catch {
+        return { data: null, error: { message: "One of the pages in this book couldn't be prepared for print." } };
+      }
       cache.set(page.revisionId, dataUrl);
     }
     sheets.push({
@@ -68,10 +78,11 @@ async function buildPdf(userId: string, pages: DigitalBookPage[]): Promise<ApiRe
       printPrefs: BOOK_PREFS,
       rotation: page.rotation,
       mirrored: page.mirrored,
+      fit: page.fit,
     });
   }
   try {
-    return { data: await sheetsToPdf(sheets), error: null };
+    return { data: await sheetsToPdf(sheets, { gutterIn: options.gutterIn, bleedIn: options.bleedIn }), error: null };
   } catch (e) {
     return { data: null, error: { message: e instanceof Error ? e.message : "Could not make the PDF." } };
   }

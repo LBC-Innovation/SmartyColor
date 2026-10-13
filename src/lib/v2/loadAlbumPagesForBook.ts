@@ -39,6 +39,7 @@ async function collectCloudPages(projectIds: string[], nameById: Map<string, str
         revisionId: active.id,
         title: active.title,
         imageDataUrl: await cachedImageUrl(active.storagePath, active.url),
+        photoSource: { storagePath: photo.storagePath, url: photo.url },
         sheetOrientation: (photo.orientation as BookWizardPhotoPage["sheetOrientation"]) ?? photo.printPrefs.orientation,
         rotation: 0,
       });

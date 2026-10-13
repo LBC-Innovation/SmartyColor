@@ -18,9 +18,16 @@ export type BookOrderStatus = (typeof BOOK_ORDER_STATUSES)[number];
 /** print = shipped by the printer; digital = print-at-home PDF. */
 export type BookFulfillment = "print" | "digital";
 
-/** One page of a digital book, in order. Rotation is the final on-page rotation. */
+/** One page of a book (print-at-home or printed), in order. Rotation is the final on-page rotation. */
 export type DigitalBookPage =
-  | { kind: "photo"; revisionId: string; rotation: 0 | 90 | 180 | 270; mirrored?: boolean }
+  | {
+      kind: "photo";
+      revisionId: string;
+      rotation: 0 | 90 | 180 | 270;
+      mirrored?: boolean;
+      /** "full" fills the page edge to edge; otherwise the sheet is framed inside the margin. */
+      fit?: "framed" | "full";
+    }
   | { kind: "blank"; variant: "plain" | "lined" };
 
 export type BookPaymentMethod = "stripe" | "credits" | "mixed";
@@ -75,6 +82,10 @@ export type FulfillmentStep = {
 export type BookOrderDetail = BookOrderSummary & {
   contactEmail: string;
   shippingAddress: ShippingAddress;
+  /** Null when the customer bills and ships to the same address. */
+  billingAddress: ShippingAddress | null;
+  /** Print orders: the interior and cover PDFs have been built. */
+  hasPrintFiles: boolean;
   carrier: string | null;
   estimatedDispatchMin: string | null;
   estimatedDispatchMax: string | null;

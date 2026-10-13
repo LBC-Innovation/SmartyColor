@@ -31,6 +31,16 @@ export function paperSizePt(prefs: {
 
 export type PageRotation = 0 | 90 | 180 | 270;
 
+/**
+ * How a coloring sheet sits on its page. "framed" shows the whole picture
+ * inside the margin; "full" scales it to fill the page edge to edge, cropping
+ * whatever overflows.
+ */
+export type PageFit = "framed" | "full";
+
+/** A printed book page that runs to the edge is printed this much oversize, then trimmed. */
+export const BOOK_BLEED_IN = 0.125;
+
 export type LayoutBox = { x: number; y: number; width: number; height: number };
 
 export type ImagePlacement = {
@@ -76,17 +86,42 @@ export function containScale(input: {
   return quarter ? Math.min(bw / ih, bh / iw) : Math.min(bw / iw, bh / ih);
 }
 
-/** Fit an image inside a box, centred (or bottom-aligned when `valign` says so). */
+/** Uniform scale so the image covers a box after rotation (no gaps; the overflow is cropped). */
+export function coverScale(input: {
+  boxWidth: number;
+  boxHeight: number;
+  imageWidth: number;
+  imageHeight: number;
+  rotationDeg?: number;
+}): number {
+  const { boxWidth: bw, boxHeight: bh, imageWidth: iw, imageHeight: ih } = input;
+  if (bw <= 0 || bh <= 0 || iw <= 0 || ih <= 0) return 1;
+  const rotation = input.rotationDeg ?? 0;
+  const quarter = rotation === 90 || rotation === 270;
+  return quarter ? Math.max(bw / ih, bh / iw) : Math.max(bw / iw, bh / ih);
+}
+
+/**
+ * The area an edge-to-edge sheet fills, in trim-page coordinates: the page
+ * plus the bleed that is printed and cut away (zero for a print-at-home page).
+ */
+export function fullBleedBox(pageWidth: number, pageHeight: number, bleed: number): LayoutBox {
+  return { x: -bleed, y: -bleed, width: pageWidth + bleed * 2, height: pageHeight + bleed * 2 };
+}
+
+/** Fit an image inside a box, centred (or bottom-aligned when `valign` says so), or fill it. */
 export function placeImageInBox(input: {
   box: LayoutBox;
   imageWidth: number;
   imageHeight: number;
   rotationDeg?: PageRotation;
   valign?: "center" | "bottom";
+  /** "cover" fills the box and crops the overflow; the default shows the whole image. */
+  fit?: "contain" | "cover";
 }): ImagePlacement {
   const { box, imageWidth, imageHeight } = input;
   const rotationDeg = input.rotationDeg ?? 0;
-  const scale = containScale({
+  const scale = (input.fit === "cover" ? coverScale : containScale)({
     boxWidth: box.width,
     boxHeight: box.height,
     imageWidth,
@@ -105,6 +140,38 @@ export function placeImageInBox(input: {
   return { centerX, centerY, scale, drawWidth, drawHeight, rotationDeg, box };
 }
 
+/**
+ * Extra inside margin Lulu recommends on the spine side of a glued paperback,
+ * where part of the page disappears into the binding. Coil bound and saddle
+ * stitch books open flat and need none.
+ */
+export function bookGutterIn(bindingId: string, pageCount: number): number {
+  if (bindingId !== "perfect_bound" || pageCount <= 60) return 0;
+  if (pageCount <= 150) return 0.125;
+  if (pageCount <= 400) return 0.5;
+  if (pageCount <= 600) return 0.625;
+  return 0.75;
+}
+
+/**
+ * The artwork area of a book page: the printable box, narrowed by the gutter on
+ * the spine side. Page 1 is a right-hand page, so odd pages have the spine on
+ * their left and even pages on their right.
+ */
+export function bookPageBox(
+  pageWidth: number,
+  pageHeight: number,
+  pageNumber: number,
+  gutter: number,
+): LayoutBox {
+  const box = printableBox(pageWidth, pageHeight);
+  const g = Math.max(0, Math.min(gutter, box.width / 2));
+  if (g === 0) return box;
+  return pageNumber % 2 === 1
+    ? { ...box, x: box.x + g, width: box.width - g }
+    : { ...box, width: box.width - g };
+}
+
 /** Fit a whole-page image inside the page's printable area. */
 export function layoutImageOnPage(input: {
   pageWidth: number;
@@ -113,12 +180,16 @@ export function layoutImageOnPage(input: {
   imageHeight: number;
   rotationDeg?: PageRotation;
   margin?: number;
+  /** Fit into this area instead of the default printable box (book pages with a gutter). */
+  box?: LayoutBox;
+  fit?: "contain" | "cover";
 }): ImagePlacement {
   return placeImageInBox({
-    box: printableBox(input.pageWidth, input.pageHeight, input.margin),
+    box: input.box ?? printableBox(input.pageWidth, input.pageHeight, input.margin),
     imageWidth: input.imageWidth,
     imageHeight: input.imageHeight,
     rotationDeg: input.rotationDeg,
+    fit: input.fit,
   });
 }
 
@@ -178,8 +249,11 @@ export const LINED_FIRST_RULE_IN = 1;
  * Rules of a lined writing page, in page points from the top-left. Rules run
  * between the print margins, from the header space down to the bottom margin.
  */
-export function linedPageRules(pageWidth: number, pageHeight: number) {
-  const box = printableBox(pageWidth, pageHeight);
+export function linedPageRules(
+  pageWidth: number,
+  pageHeight: number,
+  box: LayoutBox = printableBox(pageWidth, pageHeight),
+) {
   const spacing = LINED_RULE_SPACING_IN * POINTS_PER_INCH;
   const bottom = box.y + box.height;
   const ys: number[] = [];
