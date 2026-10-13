@@ -9,6 +9,8 @@ type V2SheetRevisionStripProps = {
   revisions: SheetVersion[];
   activeRevisionId: string | null;
   onSelect: (revisionId: string) => void;
+  /** The uploaded photo, listed first so it can be recalled once it has portrait versions. */
+  original?: { src: string; selected: boolean; onSelect: () => void };
   onEditSheet?: () => void;
   editDisabled?: boolean;
   disabled?: boolean;
@@ -35,6 +37,7 @@ export function V2SheetRevisionStrip({
   revisions,
   activeRevisionId,
   onSelect,
+  original,
   onEditSheet,
   editDisabled,
   disabled,
@@ -44,6 +47,19 @@ export function V2SheetRevisionStrip({
   if (revisions.length === 0) return null;
 
   const isSidebar = variant === "sidebar";
+  const tileClass = cn(
+    "relative shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-white transition",
+    isSidebar
+      ? "aspect-[3/4] w-full max-h-[5.5rem] sm:max-h-[6.25rem]"
+      : "aspect-[3/4] h-14 w-11 sm:h-16 sm:w-12",
+    disabled && "cursor-not-allowed opacity-60",
+  );
+  const selectedClass = (selected: boolean) =>
+    selected ? "border-v2-primary ring-2 ring-v2-primary/20" : "hover:border-v2-primary/50";
+  const badgeClass =
+    "absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-white/90 text-v2-primary shadow-sm";
+  const labelClass =
+    "absolute inset-x-0 bottom-0 py-0.5 text-center text-[9px] font-semibold text-white";
 
   return (
     <aside
@@ -92,6 +108,26 @@ export function V2SheetRevisionStrip({
             : "flex-row overflow-x-auto py-0.5",
         )}
       >
+        {original ? (
+          <button
+            type="button"
+            role="option"
+            aria-selected={original.selected}
+            disabled={disabled}
+            onClick={original.onSelect}
+            className={cn(tileClass, selectedClass(original.selected))}
+            aria-label={`Original photo${original.selected ? ", selected" : ""}`}
+            title="Original photo"
+          >
+            <RevisionThumb src={original.src} />
+            <span className={badgeClass}>
+              <ImageIcon className="h-3 w-3" aria-hidden />
+            </span>
+            <span className={cn(labelClass, original.selected ? "bg-v2-primary/90" : "bg-slate-900/70")}>
+              Original
+            </span>
+          </button>
+        ) : null}
         {revisions.map((revision, index) => {
           const selected = revision.id === activeRevisionId;
           const isPhoto = revision.kind === "photo";
@@ -103,30 +139,18 @@ export function V2SheetRevisionStrip({
               aria-selected={selected}
               disabled={disabled}
               onClick={() => onSelect(revision.id)}
-              className={cn(
-                "relative shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-white transition",
-                isSidebar
-                  ? "aspect-[3/4] w-full max-h-[5.5rem] sm:max-h-[6.25rem]"
-                  : "aspect-[3/4] h-14 w-11 sm:h-16 sm:w-12",
-                selected
-                  ? "border-v2-primary ring-2 ring-v2-primary/20"
-                  : "hover:border-v2-primary/50",
-                disabled && "cursor-not-allowed opacity-60",
-              )}
+              className={cn(tileClass, selectedClass(selected))}
               aria-label={`Version ${index + 1}${isPhoto ? ", portrait photo" : ""}${selected ? ", selected" : ""}`}
               title={isPhoto ? "Portrait photo" : undefined}
             >
               <RevisionThumb src={revision.sheet.imageDataUrl} />
               {isPhoto ? (
-                <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-white/90 text-v2-primary shadow-sm">
+                <span className={badgeClass}>
                   <ImageIcon className="h-3 w-3" aria-hidden />
                 </span>
               ) : null}
               <span
-                className={cn(
-                  "absolute inset-x-0 bottom-0 py-0.5 text-center text-[9px] font-semibold text-white",
-                  selected ? "bg-v2-primary/90" : "bg-slate-900/70",
-                )}
+                className={cn(labelClass, selected ? "bg-v2-primary/90" : "bg-slate-900/70")}
               >
                 {index + 1}
               </span>

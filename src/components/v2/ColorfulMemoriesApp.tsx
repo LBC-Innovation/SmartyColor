@@ -114,20 +114,36 @@ export function ColorfulMemoriesApp() {
   const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
   /** Studio shows every photo as a sortable grid instead of the photo/sheet panes. */
   const [gridView, setGridView] = useState(false);
+  /** Set while the rail's "Original" entry is selected; see originalViewKey. */
+  const [originalViewFor, setOriginalViewFor] = useState<string | null>(null);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
   const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];
   const selectedVersions = selected ? { ...selected, sheetRevisions: selectedRevisions } : null;
-  const activeVersion = selectedVersions ? activeSheetVersion(selectedVersions) : null;
+  const storedActiveVersion = selectedVersions ? activeSheetVersion(selectedVersions) : null;
+  // Looking at the uploaded photo again lasts until the photo or its versions change.
+  const originalViewKey = selected
+    ? `${selected.id}:${storedActiveVersion?.id ?? ""}:${selectedRevisions.length}`
+    : null;
+  const viewingOriginal = originalViewKey !== null && originalViewFor === originalViewKey;
+  /** Null while the uploaded photo is on show from the rail's "Original" entry. */
+  const activeVersion = viewingOriginal ? null : storedActiveVersion;
   /** The portrait version on show, or the one the sheet on show was drawn from. */
-  const sourceVersion = selectedVersions ? activeSourceVersion(selectedVersions) : null;
+  const sourceVersion =
+    selectedVersions && !viewingOriginal ? activeSourceVersion(selectedVersions) : null;
+  /** Once a photo has portrait versions, the rail lists the uploaded photo too so it can be recalled. */
+  const railOriginal =
+    selected && selectedRevisions.some((revision) => revision.kind === "photo")
+      ? {
+          src: selected.previewUrl,
+          selected: viewingOriginal,
+          onSelect: () => setOriginalViewFor(originalViewKey),
+        }
+      : undefined;
   const sourcePhotoSrc = sourceVersion?.sheet.imageDataUrl ?? selected?.previewUrl ?? "";
-  /** Null while a portrait photo version is on show: it has no coloring sheet yet. */
-  const activeSheet = activeVersion?.kind === "photo" ? null : selected?.sheet ?? null;
-  /** A sheet of the uploaded photo already exists somewhere in the rail. */
-  const hasSheetOfOriginal = selectedRevisions.some(
-    (revision) => revision.kind !== "photo" && !revision.sourceRevisionId,
-  );
+  /** Null while a photo (the upload or a portrait version) is on show rather than a sheet. */
+  const activeSheet =
+    viewingOriginal || activeVersion?.kind === "photo" ? null : selected?.sheet ?? null;
 
   function openPhoto(id: string) {
     setSelectedId(id);
@@ -306,6 +322,10 @@ export function ColorfulMemoriesApp() {
   async function generateForSelected() {
     if (!selected) {
       toast.error("Upload and select a photo first.");
+      return;
+    }
+    if (viewingOriginal) {
+      await generateForPhoto(selected.id, { addVersion: true });
       return;
     }
     await generateForPhoto(selected.id, activeVersion?.kind === "photo" ? { source: activeVersion } : undefined);
@@ -518,6 +538,7 @@ export function ColorfulMemoriesApp() {
     const revisions = normalizeV2SheetRevisions(entry);
     const picked = revisions.find((item) => item.id === revisionId);
     if (!picked) return;
+    setOriginalViewFor(null);
     updatePhoto(photoId, { sheetRevisions: revisions, activeRevisionId: revisionId, sheet: picked.sheet });
   }
 
@@ -804,8 +825,10 @@ export function ColorfulMemoriesApp() {
           <p className="max-w-xs text-sm text-v2-muted">
             {!selected
               ? "Select a photo from your library to get started."
-              : activeVersion?.kind === "photo"
-                ? "This portrait version doesn’t have a coloring sheet yet."
+              : viewingOriginal
+                ? "This is your original photo. Generate a coloring sheet from it, or pick a version."
+                : activeVersion?.kind === "photo"
+                  ? "This portrait version doesn’t have a coloring sheet yet."
                 : "This photo doesn’t have a coloring sheet yet."}
           </p>
           <button
@@ -817,16 +840,6 @@ export function ColorfulMemoriesApp() {
             <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
             Generate coloring sheet
           </button>
-          {selected && activeVersion?.kind === "photo" && !hasSheetOfOriginal ? (
-            <button
-              type="button"
-              disabled={generatingAll || busy}
-              onClick={() => void generateForPhoto(selected.id, { addVersion: true })}
-              className="text-xs font-semibold text-v2-link underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Use the original landscape photo instead
-            </button>
-          ) : null}
         </div>
       )}
     </div>
@@ -992,6 +1005,7 @@ export function ColorfulMemoriesApp() {
                     className="shrink-0 border-t border-gray-100 px-3 py-2 lg:hidden"
                     revisions={selectedRevisions}
                     activeRevisionId={activeRevisionId}
+                    original={railOriginal}
                     onSelect={(revisionId) =>
                       selectSheetRevision(selected.id, revisionId)
                     }
@@ -1041,6 +1055,7 @@ export function ColorfulMemoriesApp() {
                   className="hidden min-h-0 self-stretch lg:flex"
                   revisions={selectedRevisions}
                   activeRevisionId={activeRevisionId}
+                  original={railOriginal}
                   onSelect={(revisionId) =>
                     selectSheetRevision(selected.id, revisionId)
                   }
