@@ -27,7 +27,18 @@ export type V2GeneratedStory = {
   generatedAt: string;
 };
 
+/**
+ * Persisted step of the story flow. "review" is a legacy value from when the
+ * reader had its own tab; it now opens the Story tab, see storyTabFromPhase.
+ */
 export type V2StoryBookPhase = "setup" | "photos" | "story" | "review";
+
+/** The three tabs of the story pane: trip setup, notes on one photo, the story itself. */
+export type V2StoryBookTab = "setup" | "photos" | "story";
+
+export function storyTabFromPhase(phase: V2StoryBookPhase): V2StoryBookTab {
+  return phase === "review" ? "story" : phase;
+}
 
 export function defaultStoryFields() {
   return {

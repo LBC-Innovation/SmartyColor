@@ -1,63 +1,60 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useRef, useState } from "react";
 import {
   ArrowDownUp,
   BookOpen,
-  CloudUpload,
-  Crop,
+  ChevronLeft,
   Download,
   ImageIcon,
   Loader2,
-  MessageCircle,
+  Luggage,
+  MessageSquareText,
   Sparkles,
 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
-import { V2PhotoLibraryList } from "@/components/v2/V2PhotoLibraryList";
-import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
-import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
-import { authedFetch } from "@/lib/api/client";
-import { entryFromLibraryPhoto, uploadPhotoToLibrary } from "@/lib/v2/cloudLibrary";
-import type { LibraryPhoto } from "@/lib/library/types";
-import { blobToDataUrl } from "@/lib/photo/dataUrlBlob";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
+import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
+import { V2LibraryRefreshButton } from "@/components/v2/library/V2LibraryRefreshButton";
+import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
+import { useV2PhotoIngest } from "@/components/v2/library/useV2PhotoIngest";
+import { V2StoryModeReader } from "@/components/v2/storybook/V2StoryModeReader";
+import { V2StoryPhotoCropModal } from "@/components/v2/storybook/V2StoryPhotoCropModal";
+import { V2StoryPhotoNotes } from "@/components/v2/storybook/V2StoryPhotoNotes";
+import { useStoryArt } from "@/components/v2/storybook/useStoryArt";
+import { authedFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
-import { applyPhotoCropDataUrl } from "@/lib/photo/applyPhotoCrop";
-import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
-import { isAllowedPhotoFile } from "@/lib/photo/heicFile";
-import { inferPhotoLayout } from "@/lib/photo/orientation";
-import { readBlobImageSize } from "@/lib/photo/readImageSize";
-import { readPhotoCapturedAt } from "@/lib/photo/readPhotoCapturedAt";
-import { preparePhotoFileForApi } from "@/lib/photo/preparePhotoUpload";
-import {
-  formatPhotoSizeLimit,
-  PHOTO_UPLOAD_MAX_BYTES,
-} from "@/lib/photo/payloadBudget";
-import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
+import type { LibraryPhoto } from "@/lib/library/types";
+import { downscaleImageToDataUrl } from "@/lib/photo/downscaleImage";
 import type { GeneratedSheet } from "@/lib/session/types";
+import { entryFromLibraryPhoto } from "@/lib/v2/cloudLibrary";
 import {
+  photoStoryNotesComplete,
   sortPhotosByCapturedAt,
+  storyTabFromPhase,
   type StoryChatMessage,
   type StoryPrintArtMode,
+  type V2GeneratedStory,
+  type V2StoryBookTab,
 } from "@/lib/v2/storybookTypes";
-import { photoImageMeta, type V2PhotoEntry } from "@/lib/v2/studioTypes";
-import { V2StoryPhotoChat } from "@/components/v2/storybook/V2StoryPhotoChat";
-import { V2StoryPhotoCropModal } from "@/components/v2/storybook/V2StoryPhotoCropModal";
-import { V2StoryModeReader } from "@/components/v2/storybook/V2StoryModeReader";
+import { photoPrintPrefs } from "@/lib/v2/studioTypes";
 
-function newId() {
-  return crypto.randomUUID();
-}
-
-const PHASE_TABS = [
-  { id: "setup" as const, label: "Trip setup" },
-  { id: "photos" as const, label: "Photo notes" },
-  { id: "story" as const, label: "Write story" },
-  { id: "review" as const, label: "Story mode" },
+const TABS: { id: V2StoryBookTab; label: string; icon: typeof BookOpen }[] = [
+  { id: "setup", label: "Trip", icon: Luggage },
+  { id: "photos", label: "Photo notes", icon: MessageSquareText },
+  { id: "story", label: "Story", icon: BookOpen },
 ];
+
+const PRINT_MODES: { id: StoryPrintArtMode; label: string; hint: string }[] = [
+  { id: "photos", label: "Photos", hint: "Full-color pictures" },
+  { id: "coloring", label: "Coloring book", hint: "Line art — needs a sheet per photo" },
+  { id: "blended", label: "Blended", hint: "Photo under light line art" },
+];
+
+/** Long edge, in px, of each picture embedded in the PDF (≈150 dpi on letter paper). */
+const PDF_ART_MAX_PX = 1600;
 
 export function V2StoryBookApp() {
   const toast = useV2Toast();
@@ -65,16 +62,14 @@ export function V2StoryBookApp() {
   const {
     hydrated,
     cloud,
-    activeProjectId: activeLibraryProjectId,
     activeProject,
     photos,
+    photosRef,
     pendingUploads,
     selectedId,
     setSelectedId,
-    setPendingUploads,
     replacePhotos,
     updatePhoto,
-    trackPreviewUrl,
     tripNarrative,
     setTripNarrative,
     familyContext,
@@ -86,184 +81,96 @@ export function V2StoryBookApp() {
     storyPhase,
     setStoryPhase,
   } = useV2Studio();
+  const deletion = useV2LibraryDeletion();
+  const ingestFiles = useV2PhotoIngest({
+    onAdded: (added) => {
+      // A first batch lands in capture order; later ones append so a hand-arranged album stays put.
+      const firstBatch = added.length === photosRef.current.length;
+      if (firstBatch) replacePhotos(sortPhotosByCapturedAt(photosRef.current));
+      const count = `${added.length} photo${added.length === 1 ? "" : "s"}`;
+      toast.success({
+        message: firstBatch ? `Added ${count} — sorted by date taken.` : `Added ${count}.`,
+      });
+    },
+  });
+  const art = useStoryArt(printArtMode);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const coloringApiLockRef = useRef(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatBusy, setChatBusy] = useState(false);
+  /** Below lg the story pane is a full-screen view opened from the list or the dock. */
+  const [paneOpen, setPaneOpen] = useState(false);
+  const [chatBusyFor, setChatBusyFor] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [generatingStory, setGeneratingStory] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [readerPage, setReaderPage] = useState(0);
-  const [artUrlCache, setArtUrlCache] = useState<Record<string, string>>({});
 
+  const tab = storyTabFromPhase(storyPhase);
   const selected = photos.find((p) => p.id === selectedId) ?? null;
-  const libraryPhotoCount = photos.length + pendingUploads.length;
+  const selectedIndex = selected ? photos.indexOf(selected) : -1;
   const uploading = pendingUploads.length > 0;
   const albumTitle = activeProject?.name ?? "Story album";
+  const notesCount = photos.filter(photoStoryNotesComplete).length;
+  const canGenerate = photos.length > 0 && tripNarrative.trim().length > 0;
+  const anyGenerating = photos.some((p) => p.generating);
 
-  useEffect(() => {
-    setChatOpen(false);
+  function showTab(next: V2StoryBookTab) {
+    setStoryPhase(next);
+  }
+
+  function selectPhoto(id: string) {
     setCropOpen(false);
-  }, [selectedId]);
+    setSelectedId(id);
+  }
 
-  useEffect(() => {
-    if (storyPhase === "review" && generatedStory) {
-      setReaderPage(0);
-    }
-  }, [storyPhase, generatedStory]);
+  function openPhoto(id: string) {
+    selectPhoto(id);
+    showTab("photos");
+    setPaneOpen(true);
+  }
 
-  const resolveArtUrl = useCallback(
-    async (photo: V2PhotoEntry): Promise<string> => {
-      if (artUrlCache[photo.id]) return artUrlCache[photo.id];
+  function stepPhoto(delta: -1 | 1) {
+    const next = photos[selectedIndex + delta];
+    if (next) selectPhoto(next.id);
+  }
 
-      let base = await applyPhotoCropDataUrl(
-        photo.photoDataUrl || photo.previewUrl,
-        photo.crop ?? null,
-      );
+  function openStoryPane() {
+    if (tab === "photos" && !selected) showTab("setup");
+    setPaneOpen(true);
+  }
 
-      if (printArtMode === "coloring" && photo.sheet) {
-        base = photo.sheet.imageDataUrl;
-      } else if (printArtMode === "blended" && photo.sheet) {
-        base = await compositeSheetOverlayDataUrl(
-          base,
-          photo.sheet.imageDataUrl,
-          45,
-        );
-      }
-      // The PDF route needs bytes inline; cloud sheets are cached object URLs.
-      if (base.startsWith("blob:")) {
-        base = await blobToDataUrl(await (await fetch(base)).blob());
-      }
-
-      setArtUrlCache((prev) => ({ ...prev, [photo.id]: base }));
-      return base;
-    },
-    [artUrlCache, printArtMode],
-  );
-
-  useEffect(() => {
-    setArtUrlCache({});
-  }, [printArtMode]);
-
-  async function ingestFiles(fileList: FileList | File[]) {
-    const files = Array.from(fileList);
-    if (files.length === 0) return;
-
-    const queue: { file: File; pendingId: string }[] = [];
-
-    for (const file of files) {
-      if (!isAllowedPhotoFile(file)) {
-        toast.error("Please choose photos only (JPG, PNG, WebP, or HEIC).");
-        continue;
-      }
-      if (file.size > PHOTO_UPLOAD_MAX_BYTES) {
-        toast.error(
-          `"${file.name}" is too large. Try one under ${formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES)}.`,
-        );
-        continue;
-      }
-      queue.push({ file, pendingId: newId() });
-    }
-
-    if (queue.length === 0) return;
-
-    setPendingUploads((prev) => [
-      ...prev,
-      ...queue.map(({ pendingId }) => ({ id: pendingId })),
-    ]);
-
-    const newEntries: V2PhotoEntry[] = [];
-    let firstAddedId: string | null = null;
-
-    for (const { file, pendingId } of queue) {
-      try {
-        const prepared = await preparePhotoFileForApi(file, 2);
-        const previewUrl = URL.createObjectURL(prepared.previewBlob);
-        trackPreviewUrl(previewUrl);
-
-        const size = await readBlobImageSize(prepared.previewBlob);
-        const layout = inferPhotoLayout(size.width, size.height);
-        const printPrefs: PrintPrefs = {
-          ...defaultPrintPrefs,
-          orientation: layout.orientation,
-        };
-        const capturedAt = await readPhotoCapturedAt(file);
-
-        if (cloud) {
-          if (!activeLibraryProjectId) throw new Error("No album selected.");
-          URL.revokeObjectURL(previewUrl);
-          const entry = await uploadPhotoToLibrary({
-            projectId: activeLibraryProjectId,
-            blob: prepared.previewBlob,
-            mimeType: prepared.previewBlob.type || "image/jpeg",
-            layout,
-            printPrefs,
-            fileName: file.name,
-            capturedAt,
-          });
-          firstAddedId ??= entry.id;
-          newEntries.push(entry);
-          continue;
-        }
-
-        const entry: V2PhotoEntry = {
-          id: newId(),
-          previewUrl,
-          photoDataUrl: prepared.photoDataUrl,
-          image: photoImageMeta(layout),
-          printPrefs,
-          capturedAt,
-          fileName: file.name,
-          userCaption: "",
-          chatMessages: [],
-          photoSummary: null,
-          crop: null,
-          sheet: null,
-          generating: false,
-          correcting: false,
-        };
-
-        firstAddedId ??= entry.id;
-        newEntries.push(entry);
-      } catch (err) {
-        const detail =
-          err instanceof Error ? err.message : "Could not read this photo.";
-        toast.error(`Could not add "${file.name}": ${detail}`);
-      } finally {
-        setPendingUploads((prev) => prev.filter((item) => item.id !== pendingId));
-      }
-    }
-
-    if (newEntries.length > 0) {
-      const merged = sortPhotosByCapturedAt([...photos, ...newEntries]);
-      replacePhotos(merged);
-      setSelectedId((current) => current ?? firstAddedId);
-      setStoryPhase("photos");
-      toast.success({
-        message: `Added ${newEntries.length} photo${newEntries.length === 1 ? "" : "s"} — sorted by date taken.`,
-      });
-    }
+  function sortByDate() {
+    replacePhotos(sortPhotosByCapturedAt(photosRef.current));
+    toast.success({ message: "Photos sorted by date taken." });
   }
 
   async function generateForPhoto(id: string) {
     if (coloringApiLockRef.current) return;
-    const photo = photos.find((p) => p.id === id);
-    if (!photo || photo.generating) return;
+    const photo = photosRef.current.find((p) => p.id === id);
+    if (!photo || photo.generating || photo.sheet) return;
     if (!sheetCredits.canAfford("generation", photo)) return;
 
     coloringApiLockRef.current = true;
     updatePhoto(id, { generating: true });
     try {
-      const res = await authedFetch("/api/photo-coloring", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          photo.remote
-            ? { mode: "generate-library", photoId: photo.remote.photoId }
-            : { mode: "generate", photoDataUrl: photo.photoDataUrl, printPrefs: photo.printPrefs },
-        ),
-      }, { withAuth: Boolean(photo.remote) });
+      const res = await authedFetch(
+        "/api/photo-coloring",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            photo.remote
+              ? { mode: "generate-library", photoId: photo.remote.photoId }
+              : {
+                  mode: "generate",
+                  photoDataUrl: photo.photoDataUrl,
+                  printPrefs: photoPrintPrefs(photo),
+                  image: photo.image,
+                },
+          ),
+        },
+        { withAuth: Boolean(photo.remote) },
+      );
       const data = (await res.json()) as {
         error?: string;
         sheet?: GeneratedSheet;
@@ -284,9 +191,7 @@ export function V2StoryBookApp() {
       } else {
         updatePhoto(id, { sheet: data.sheet, generating: false });
       }
-      toast.success({
-        message: "Coloring page ready for blended or coloring-book print.",
-      });
+      toast.success({ message: "Coloring page ready for blended or coloring-book print." });
     } catch (err) {
       updatePhoto(id, { generating: false });
       toast.error(err instanceof Error ? err.message : "Generation failed.");
@@ -295,34 +200,37 @@ export function V2StoryBookApp() {
     }
   }
 
-  async function sendPhotoChat(text: string) {
-    if (!selected) return;
+  async function sendPhotoChat(photoId: string, text: string) {
+    const photo = photosRef.current.find((p) => p.id === photoId);
+    if (!photo || chatBusyFor) return;
 
-    const prior = selected.chatMessages ?? [];
-    const userMessage: StoryChatMessage = {
-      id: newId(),
-      role: "user",
-      text,
-    };
+    const prior = photo.chatMessages ?? [];
+    const userMessage: StoryChatMessage = { id: crypto.randomUUID(), role: "user", text };
     const history = [...prior, userMessage];
-    updatePhoto(selected.id, { chatMessages: history });
-    setChatBusy(true);
+    updatePhoto(photoId, { chatMessages: history });
+    setChatBusyFor(photoId);
 
     try {
-      const res = await authedFetch("/api/storybook/photo-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          albumTitle,
-          tripNarrative,
-          familyContext,
-          userCaption: selected.userCaption ?? "",
-          photoSummary: selected.photoSummary ?? null,
-          history: prior,
-          userMessage: text,
-          ...(selected.remote ? { photoId: selected.remote.photoId } : { photoDataUrl: selected.photoDataUrl }),
-        }),
-      }, { withAuth: Boolean(selected.remote) });
+      const res = await authedFetch(
+        "/api/storybook/photo-chat",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            albumTitle,
+            tripNarrative,
+            familyContext,
+            userCaption: photo.userCaption ?? "",
+            photoSummary: photo.photoSummary ?? null,
+            history: prior,
+            userMessage: text,
+            ...(photo.remote
+              ? { photoId: photo.remote.photoId }
+              : { photoDataUrl: photo.photoDataUrl }),
+          }),
+        },
+        { withAuth: Boolean(photo.remote) },
+      );
       const data = (await res.json()) as {
         error?: string;
         assistantMessage?: string;
@@ -331,18 +239,18 @@ export function V2StoryBookApp() {
       if (!res.ok) throw new Error(data.error ?? "Chat failed.");
 
       const assistant: StoryChatMessage = {
-        id: newId(),
+        id: crypto.randomUUID(),
         role: "assistant",
         text: data.assistantMessage ?? "Got it!",
       };
-      updatePhoto(selected.id, {
+      updatePhoto(photoId, {
         chatMessages: [...history, assistant],
-        photoSummary: data.photoSummary ?? selected.photoSummary ?? null,
+        photoSummary: data.photoSummary ?? photo.photoSummary ?? null,
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Chat failed.");
     } finally {
-      setChatBusy(false);
+      setChatBusyFor(null);
     }
   }
 
@@ -352,14 +260,15 @@ export function V2StoryBookApp() {
       return;
     }
     if (!tripNarrative.trim()) {
-      toast.error("Describe the trip in Trip setup.");
-      setStoryPhase("setup");
+      toast.error("Describe the trip first.");
+      showTab("setup");
       return;
     }
 
     setGeneratingStory(true);
     try {
-      const timeline = sortPhotosByCapturedAt(photos);
+      // Pages follow the album order: drag to arrange, or use Sort by date.
+      const timeline = photosRef.current;
       const res = await fetch("/api/storybook/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -375,18 +284,14 @@ export function V2StoryBookApp() {
           })),
         }),
       });
-      const data = (await res.json()) as {
-        error?: string;
-        story?: NonNullable<typeof generatedStory>;
-      };
+      const data = (await res.json()) as { error?: string; story?: V2GeneratedStory };
       if (!res.ok || !data.story) {
         throw new Error(data.error ?? "Story generation failed.");
       }
       setGeneratedStory(data.story);
-      setStoryPhase("review");
-      toast.success({
-        message: "Your story is ready — open Story mode to read it.",
-      });
+      setReaderPage(0);
+      showTab("story");
+      toast.success({ message: "Your story is ready." });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not generate story.");
     } finally {
@@ -395,92 +300,55 @@ export function V2StoryBookApp() {
   }
 
   async function downloadStoryPdf() {
-    if (!generatedStory) return;
-
+    if (!generatedStory || downloadingPdf) return;
     setDownloadingPdf(true);
     try {
-      const pages = await Promise.all(
-        generatedStory.pages.map(async (page) => {
-          const photo = photos.find((p) => p.id === page.photoId);
-          if (!photo) throw new Error("Missing photo for a story page.");
-          const imageDataUrl = await resolveArtUrl(photo);
-          return {
-            imageDataUrl,
-            text: page.text,
-            printPrefs: photo.printPrefs,
-          };
-        }),
-      );
-
-      const res = await fetch("/api/pdf/storybook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: generatedStory.title,
-          introduction: generatedStory.introduction,
-          closing: generatedStory.closing,
-          pages,
-          printPrefs: photos[0]?.printPrefs ?? defaultPrintPrefs,
-        }),
-      });
-      if (!res.ok) {
-        const err = (await res.json()) as { error?: string };
-        throw new Error(err.error ?? "PDF failed.");
+      const { buildStorybookPdf } = await import("@/lib/print/storybookPdf");
+      const pages = [];
+      let missing = 0;
+      // One page at a time: compositing every photo at once can exhaust memory on a phone.
+      for (const page of generatedStory.pages) {
+        const photo = photosRef.current.find((p) => p.id === page.photoId);
+        if (!photo) {
+          missing += 1;
+          continue;
+        }
+        const source = await art.ensureArt(photo);
+        const imageDataUrl = await downscaleImageToDataUrl(source, PDF_ART_MAX_PX, {
+          format: printArtMode === "coloring" && photo.sheet ? "png" : "jpeg",
+        });
+        pages.push({ imageDataUrl, text: page.text, printPrefs: photoPrintPrefs(photo) });
       }
-      const blob = await res.blob();
+      if (pages.length === 0) {
+        throw new Error("None of this story's photos are in the album anymore. Generate it again.");
+      }
+      const bytes = await buildStorybookPdf({
+        title: generatedStory.title,
+        introduction: generatedStory.introduction,
+        closing: generatedStory.closing,
+        pages,
+        printPrefs: pages[0].printPrefs,
+      });
+      const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${generatedStory.title.replace(/\s+/g, "-").slice(0, 40) || "storybook"}.pdf`;
-      a.click();
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${generatedStory.title.replace(/\s+/g, "-").slice(0, 40) || "storybook"}.pdf`;
+      link.click();
       URL.revokeObjectURL(url);
       toast.success({ message: "Story PDF downloaded." });
+      if (missing > 0) {
+        toast.info(
+          missing === 1
+            ? "1 page was skipped because its photo was deleted."
+            : `${missing} pages were skipped because their photos were deleted.`,
+        );
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not download PDF.");
+      toast.error(err instanceof Error ? err.message : "Could not make the PDF.");
     } finally {
       setDownloadingPdf(false);
     }
-  }
-
-  function renderPrintModePicker() {
-    const modes: { id: StoryPrintArtMode; label: string; hint: string }[] = [
-      {
-        id: "photos",
-        label: "Original photos",
-        hint: "Full-color pictures on each page",
-      },
-      {
-        id: "coloring",
-        label: "Coloring book",
-        hint: "Line-art pages (use Generate on each photo)",
-      },
-      {
-        id: "blended",
-        label: "Blended",
-        hint: "Photo with a light coloring overlay",
-      },
-    ];
-
-    return (
-      <div className="grid gap-2 sm:grid-cols-3">
-        {modes.map((mode) => (
-          <button
-            key={mode.id}
-            type="button"
-            onClick={() => setPrintArtMode(mode.id)}
-            className={cn(
-              "rounded-xl border px-3 py-3 text-left transition",
-              printArtMode === mode.id
-                ? "border-v2-primary bg-v2-primary-light ring-1 ring-v2-primary/25"
-                : "border-gray-200 hover:border-gray-300",
-            )}
-          >
-            <p className="text-sm font-semibold text-v2-ink">{mode.label}</p>
-            <p className="mt-1 text-xs text-v2-muted">{mode.hint}</p>
-          </button>
-        ))}
-      </div>
-    );
   }
 
   if (!hydrated) {
@@ -488,7 +356,7 @@ export function V2StoryBookApp() {
       <V2StudioFrame>
         <div className="flex flex-1 items-center justify-center pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           <p className="flex items-center gap-2 text-sm text-v2-muted">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             Restoring your studio…
           </p>
         </div>
@@ -496,369 +364,326 @@ export function V2StoryBookApp() {
     );
   }
 
+  const printModePicker = (
+    <div className="grid grid-cols-3 gap-2" role="group" aria-label="Page art">
+      {PRINT_MODES.map((mode) => (
+        <button
+          key={mode.id}
+          type="button"
+          aria-pressed={printArtMode === mode.id}
+          onClick={() => setPrintArtMode(mode.id)}
+          className={cn(
+            "rounded-xl border px-2.5 py-2.5 text-left transition sm:px-3",
+            printArtMode === mode.id
+              ? "border-v2-primary bg-v2-primary-light ring-1 ring-v2-primary/25"
+              : "border-gray-200 bg-white hover:border-gray-300",
+          )}
+        >
+          <p className="text-xs font-semibold text-v2-ink sm:text-sm">{mode.label}</p>
+          <p className="mt-0.5 hidden text-[11px] leading-snug text-v2-muted sm:block">{mode.hint}</p>
+        </button>
+      ))}
+    </div>
+  );
+
+  const generateButton = (
+    <button
+      type="button"
+      disabled={generatingStory || photos.length === 0}
+      onClick={() => void generateStory()}
+      className={cn(
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        generatedStory
+          ? "border border-v2-primary/30 bg-white text-v2-link hover:bg-v2-primary-light"
+          : "bg-v2-primary text-white shadow-md shadow-v2-primary/20 hover:bg-v2-primary-dark",
+      )}
+    >
+      {generatingStory ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+      ) : (
+        <Sparkles className="h-4 w-4" aria-hidden />
+      )}
+      {generatingStory ? "Writing…" : generatedStory ? "Rewrite story" : "Write the story"}
+    </button>
+  );
+
+  const downloadButton = (className?: string) => (
+    <button
+      type="button"
+      disabled={!generatedStory || downloadingPdf}
+      onClick={() => void downloadStoryPdf()}
+      className={className}
+    >
+      {downloadingPdf ? (
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+      ) : (
+        <Download className="h-4 w-4 shrink-0" aria-hidden />
+      )}
+      Download PDF
+    </button>
+  );
+
   return (
-    <V2StudioFrame>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*,.heic,.heif"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files) void ingestFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
-        {/* Phones: one page scroller (photos, then editor). Desktop: two independent columns. */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:flex-row lg:overflow-hidden">
-          <div className="v2-photo-list-column flex max-h-[min(50dvh,32rem)] min-h-0 w-full min-w-0 shrink-0 flex-col gap-4 overflow-hidden sm:max-h-[min(48dvh,34rem)] lg:max-h-none lg:gap-0 lg:w-[min(100%,22rem)] lg:max-w-sm lg:shrink-0 lg:self-stretch lg:border-r lg:border-gray-200 lg:bg-white xl:w-80">
-            <div
-              className="v2-studio-toolbar v2-studio-toolbar-zone v2-studio-toolbar-zone--library shrink-0 rounded-xl border lg:rounded-none lg:border-x-0 lg:border-t-0"
-              role="toolbar"
-              aria-label="Photo library actions"
+    <V2StudioFrame pageScroll>
+      <V2LibraryWorkspace
+        fileInputRef={fileRef}
+        onFiles={(files) => void ingestFiles(files)}
+        onSelectPhoto={openPhoto}
+        onGenerateSheet={(id) => void generateForPhoto(id)}
+        generateDisabled={anyGenerating}
+        deletion={deletion}
+        deleteDisabled={uploading}
+        headerAction={cloud ? <V2LibraryRefreshButton disabled={uploading} /> : null}
+        uploadHint="Same library as My Projects — add trip photos here"
+        dock={
+          <button type="button" onClick={openStoryPane} className="v2-photo-list-dock-cta">
+            <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
+            {generatedStory ? "Read story" : "Write story"}
+          </button>
+        }
+        studioActions={
+          <>
+            <button
+              type="button"
+              disabled={photos.length < 2}
+              onClick={sortByDate}
+              className="v2-studio-toolbar-btn"
             >
-              <V2ProjectSwitcher />
-            </div>
-            <section className="v2-panel flex min-h-0 flex-1 flex-col overflow-hidden p-4 sm:p-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none lg:ring-0">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-v2-primary">
-                <BookOpen className="h-3.5 w-3.5" />
-                Story book
-              </p>
-              <div className="mb-3 shrink-0">
-                <h2 className="text-lg font-semibold tracking-tight text-v2-ink">
-                  Your Photos
-                  <span className="ml-1.5 text-base font-medium text-v2-muted">
-                    ({libraryPhotoCount})
-                  </span>
-                </h2>
-              </div>
-
-              {photos.length > 0 ? (
-                <div className="mb-2 flex shrink-0 flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-v2-ink"
-                  >
-                    {uploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ImageIcon className="h-4 w-4" />
-                    )}
-                    Upload
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      replacePhotos(sortPhotosByCapturedAt(photos));
-                      toast.success({ message: "Photos sorted by date taken." });
-                    }}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-v2-primary/30 bg-v2-primary-light px-4 py-2 text-sm font-semibold text-v2-link"
-                  >
-                    <ArrowDownUp className="h-4 w-4" />
-                    Sort by date
-                  </button>
-                </div>
-              ) : null}
-
-              {libraryPhotoCount === 0 ? (
-                <V2UploadDropzone
-                  className="mb-4 min-h-[16rem] lg:-mx-5 lg:mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0"
-                  onFiles={(files) => void ingestFiles(files)}
-                >
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="v2-dropzone-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-v2-primary shadow-sm">
-                      <CloudUpload className="h-7 w-7" strokeWidth={1.5} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-v2-ink">
-                        Upload Photos
-                      </p>
-                      <p className="mt-0.5 text-xs text-v2-muted">
-                        Same library as My Projects — add trip photos here
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      className="v2-breathe inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-v2-primary-dark"
-                    >
-                      Select Photos
-                    </button>
-                  </div>
-                </V2UploadDropzone>
-              ) : null}
-
-              {libraryPhotoCount > 0 ? (
-                <div className="v2-photo-list-dock min-h-0 flex-1">
-                  <div
-                    className="v2-photo-list-scroll v2-photo-list-dock-scroll overscroll-y-contain"
-                    aria-label="Uploaded photos"
-                  >
-                    <V2PhotoLibraryList
-                      photos={photos}
-                      pendingUploads={pendingUploads}
-                      selectedId={selectedId}
-                      onSelect={setSelectedId}
-                      onReorder={replacePhotos}
-                      onGenerateSheet={(id) => void generateForPhoto(id)}
-                    />
-                  </div>
-                </div>
-              ) : null}
-            </section>
-          </div>
-
-          <div className="flex min-w-0 shrink-0 flex-col p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <Link
-                href="/"
-                className="text-xs font-medium text-v2-link hover:underline"
+              <ArrowDownUp className="h-4 w-4 shrink-0" aria-hidden />
+              Sort by date
+            </button>
+            {downloadButton("v2-studio-toolbar-btn v2-studio-toolbar-btn--primary")}
+          </>
+        }
+      >
+        {/* Story pane — right column on desktop, full-screen view on phones */}
+        <main
+          className={cn(
+            "flex-col bg-v2-bg",
+            paneOpen ? "v2-safe-overlay fixed inset-0 z-[45] flex" : "hidden",
+            "lg:static lg:z-auto lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:overflow-hidden lg:p-4 xl:p-6",
+          )}
+          aria-label="Story book"
+        >
+          <section className="v2-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 shadow-none lg:rounded-2xl lg:border lg:shadow-[0_1px_2px_rgb(10_16_26/0.04),0_8px_24px_rgb(10_16_26/0.05)]">
+            <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-gray-100 px-3 py-2 sm:px-5 lg:px-6 lg:py-3">
+              <button
+                type="button"
+                onClick={() => setPaneOpen(false)}
+                className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-bg-subtle lg:hidden"
+                aria-label="Back to photos"
               >
-                ← Coloring studio
-              </Link>
-              {generatedStory ? (
-                <button
-                  type="button"
-                  disabled={downloadingPdf}
-                  onClick={() => void downloadStoryPdf()}
-                  className="inline-flex items-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {downloadingPdf ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  Download PDF
-                </button>
-              ) : null}
-            </div>
+                <ChevronLeft className="h-6 w-6" aria-hidden />
+              </button>
+              <h2 className="flex h-9 min-w-0 flex-1 items-center truncate text-base font-semibold tracking-tight text-v2-ink lg:flex-none lg:text-lg">
+                Story book
+              </h2>
+              <span className="hidden flex-1 lg:block" aria-hidden />
+              <nav
+                className="flex basis-full gap-1 rounded-xl bg-v2-bg-subtle p-1 lg:basis-auto"
+                aria-label="Story book steps"
+              >
+                {TABS.map((item) => {
+                  const active = tab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-current={active ? "step" : undefined}
+                      onClick={() => showTab(item.id)}
+                      className={cn(
+                        "inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition sm:px-3 sm:text-sm lg:min-h-9 lg:flex-none",
+                        active ? "bg-white text-v2-link shadow-sm" : "text-v2-muted hover:text-v2-ink",
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" aria-hidden />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </header>
 
-            <nav
-              className="mb-4 flex shrink-0 snap-x gap-1 overflow-x-auto overscroll-x-contain rounded-xl bg-v2-bg-subtle p-1"
-              aria-label="Story book steps"
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-3 sm:p-5 lg:p-6",
+                tab === "photos" && selected && "pb-0 sm:pb-0 lg:overflow-hidden lg:pb-6",
+              )}
             >
-              {PHASE_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setStoryPhase(tab.id)}
-                  className={cn(
-                    "min-h-11 shrink-0 snap-start rounded-lg px-3 py-2 text-xs font-semibold sm:text-sm lg:min-h-0",
-                    storyPhase === tab.id
-                      ? "bg-white text-v2-link shadow-sm"
-                      : "text-v2-muted hover:text-v2-ink",
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
-              {storyPhase === "setup" ? (
-                <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                  <p className="text-sm text-v2-muted">
-                    Use the project name above as your story title. Describe who
-                    traveled and what the trip was about — the same photos in{" "}
-                    <strong className="font-semibold text-v2-ink">
-                      Your Photos
-                    </strong>{" "}
-                    will become story pages.
+              {tab === "setup" ? (
+                <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+                  <p className="text-sm leading-relaxed text-v2-muted">
+                    Your story is titled{" "}
+                    <strong className="font-semibold text-v2-ink">{albumTitle}</strong> — rename
+                    the album to change it. Tell us who traveled and what the trip was about;
+                    every photo in Your Photos becomes a page.
                   </p>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-v2-ink">
-                      Family & travelers
-                    </span>
+                  <label className="block">
+                    <span className="v2-label">Family &amp; travelers</span>
                     <textarea
                       value={familyContext}
                       onChange={(e) => setFamilyContext(e.target.value)}
                       rows={3}
                       placeholder="Wife Sarah, Emma (8, 3rd grade), Noah (5, kindergarten)…"
-                      className="rounded-xl border border-gray-200 px-3 py-2.5 text-base outline-none ring-v2-primary focus:ring-2 lg:text-sm"
+                      className="v2-input"
                     />
                   </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-v2-ink">
-                      Trip narrative (brief)
-                    </span>
+                  <label className="block">
+                    <span className="v2-label">Trip narrative</span>
                     <textarea
                       value={tripNarrative}
                       onChange={(e) => setTripNarrative(e.target.value)}
                       rows={5}
                       placeholder="We flew to Orlando in July 2026…"
-                      className="rounded-xl border border-gray-200 px-3 py-2.5 text-base outline-none ring-v2-primary focus:ring-2 lg:text-sm"
+                      className="v2-input"
                     />
                   </label>
-                  <button
-                    type="button"
-                    className="self-start rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
-                    onClick={() =>
-                      photos.length > 0
-                        ? setStoryPhase("photos")
-                        : fileRef.current?.click()
-                    }
-                  >
-                    {photos.length > 0 ? "Continue to photo notes" : "Upload photos"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full bg-v2-primary px-5 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark"
+                      onClick={() => {
+                        if (photos.length === 0) {
+                          fileRef.current?.click();
+                          return;
+                        }
+                        if (!selected) selectPhoto(photos[0].id);
+                        showTab("photos");
+                      }}
+                    >
+                      {photos.length > 0 ? (
+                        <MessageSquareText className="h-4 w-4" aria-hidden />
+                      ) : (
+                        <ImageIcon className="h-4 w-4" aria-hidden />
+                      )}
+                      {photos.length > 0 ? "Continue to photo notes" : "Upload photos"}
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
-              {storyPhase === "photos" ? (
+              {tab === "photos" ? (
                 selected ? (
-                  <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={selected.previewUrl}
-                      alt=""
-                      className="max-h-72 w-full rounded-xl object-contain bg-v2-bg-subtle"
-                    />
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium text-v2-ink">
-                        Short caption
-                      </span>
-                      <textarea
-                        value={selected.userCaption ?? ""}
-                        onChange={(e) =>
-                          updatePhoto(selected.id, { userCaption: e.target.value })
-                        }
-                        rows={3}
-                        className="rounded-xl border border-gray-200 px-3 py-2 text-base outline-none ring-v2-primary focus:ring-2 lg:text-sm"
-                      />
-                    </label>
-                    {selected.photoSummary ? (
-                      <p className="rounded-lg bg-v2-bg-subtle px-3 py-2 text-xs text-v2-muted">
-                        <span className="font-semibold text-v2-ink">Story note: </span>
-                        {selected.photoSummary}
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setChatOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        Chat about this photo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCropOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium"
-                      >
-                        <Crop className="h-4 w-4" />
-                        Crop for print
-                      </button>
-                    </div>
-                  </div>
+                  <V2StoryPhotoNotes
+                    key={selected.id}
+                    photo={selected}
+                    index={selectedIndex}
+                    count={photos.length}
+                    onStep={stepPhoto}
+                    onCaptionChange={(text) => updatePhoto(selected.id, { userCaption: text })}
+                    onOpenCrop={() => setCropOpen(true)}
+                    onSend={(text) => void sendPhotoChat(selected.id, text)}
+                    busy={chatBusyFor === selected.id}
+                  />
                 ) : (
-                  <p className="text-sm text-v2-muted">
-                    Select a photo from Your Photos to add captions and chat notes.
-                  </p>
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center">
+                    <p className="max-w-xs text-sm text-v2-muted">
+                      {photos.length > 0
+                        ? "Pick a photo from Your Photos to add a caption and notes."
+                        : "Upload trip photos first — each one becomes a story page."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        photos.length > 0 ? setPaneOpen(false) : fileRef.current?.click()
+                      }
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-v2-primary/30 bg-white px-5 text-sm font-semibold text-v2-link lg:hidden"
+                    >
+                      <ImageIcon className="h-4 w-4" aria-hidden />
+                      {photos.length > 0 ? "Choose a photo" : "Upload photos"}
+                    </button>
+                  </div>
                 )
               ) : null}
 
-              {storyPhase === "story" ? (
-                <div className="mx-auto flex max-w-2xl flex-col gap-4">
-                  <p className="text-sm text-v2-muted">
-                    Timeline uses photo order in Your Photos — tap{" "}
-                    <strong className="font-semibold text-v2-ink">Sort by date</strong>{" "}
-                    if you want capture-time order.
-                  </p>
-                  <ul className="rounded-xl border border-gray-200 bg-white p-4 text-sm">
-                    <li>{photos.length} photos</li>
-                    <li>
-                      {
-                        photos.filter(
-                          (p) =>
-                            p.userCaption?.trim() ||
-                            p.photoSummary?.trim() ||
-                            (p.chatMessages?.length ?? 0) > 0,
-                        ).length
-                      }{" "}
-                      with story notes
-                    </li>
-                  </ul>
-                  {renderPrintModePicker()}
-                  <button
-                    type="button"
-                    disabled={generatingStory}
-                    onClick={() => void generateStory()}
-                    className="inline-flex w-fit items-center gap-2 rounded-full bg-v2-primary px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                  >
-                    {generatingStory ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    Generate story
-                  </button>
-                </div>
-              ) : null}
+              {tab === "story" ? (
+                <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+                  {!generatedStory ? (
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <p className="text-sm font-semibold text-v2-ink">Ready to write</p>
+                      <ul className="mt-1 space-y-0.5 text-sm text-v2-muted">
+                        <li>
+                          {photos.length} {photos.length === 1 ? "photo" : "photos"}, in the
+                          order shown in Your Photos
+                        </li>
+                        <li>{notesCount} with captions or notes</li>
+                      </ul>
+                      {!canGenerate ? (
+                        <p className="mt-3 text-xs text-amber-700">
+                          {photos.length === 0 ? (
+                            "Upload photos first."
+                          ) : (
+                            <>
+                              Describe the trip first —{" "}
+                              <button
+                                type="button"
+                                onClick={() => showTab("setup")}
+                                className="font-semibold underline"
+                              >
+                                open Trip
+                              </button>
+                              .
+                            </>
+                          )}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
-              {storyPhase === "review" && generatedStory ? (
-                <div className="flex min-h-[min(60dvh,520px)] flex-col gap-4">
-                  {renderPrintModePicker()}
-                  <V2StoryModeReader
-                    story={generatedStory}
-                    photos={photos}
-                    printArtMode={printArtMode}
-                    pageIndex={readerPage}
-                    onPageIndexChange={setReaderPage}
-                    resolveArtUrl={resolveArtUrl}
-                    artUrlCache={artUrlCache}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setStoryPhase("story")}
-                    className="self-start text-sm font-medium text-v2-link hover:underline"
-                  >
-                    Regenerate story
-                  </button>
+                  {printModePicker}
+
+                  {generatedStory ? (
+                    <V2StoryModeReader
+                      story={generatedStory}
+                      photos={photos}
+                      printArtMode={printArtMode}
+                      pageIndex={readerPage}
+                      onPageIndexChange={setReaderPage}
+                      getArt={art.getArt}
+                      ensureArt={art.ensureArt}
+                    />
+                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:pb-0">
+                    {generatedStory
+                      ? downloadButton(
+                          "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-v2-primary px-5 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:opacity-50 lg:hidden",
+                        )
+                      : null}
+                    {generateButton}
+                    {photos.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={sortByDate}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle lg:hidden"
+                      >
+                        <ArrowDownUp className="h-4 w-4" aria-hidden />
+                        Sort by date
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              ) : storyPhase === "review" ? (
-                <p className="text-sm text-v2-muted">
-                  Generate a story first, then read it here.
-                </p>
               ) : null}
             </div>
-          </div>
-        </div>
-      </div>
+          </section>
+        </main>
+      </V2LibraryWorkspace>
 
       {selected ? (
-        <>
-          <V2StoryPhotoChat
-            open={chatOpen}
-            previewUrl={selected.previewUrl}
-            messages={selected.chatMessages ?? []}
-            onClose={() => setChatOpen(false)}
-            onSend={(text) => void sendPhotoChat(text)}
-            busy={chatBusy}
-          />
-          <V2StoryPhotoCropModal
-            open={cropOpen}
-            previewUrl={selected.previewUrl}
-            initialCrop={selected.crop ?? null}
-            onClose={() => setCropOpen(false)}
-            onSave={(crop) => {
-              updatePhoto(selected.id, { crop });
-              setCropOpen(false);
-              setArtUrlCache((prev) => {
-                const next = { ...prev };
-                delete next[selected.id];
-                return next;
-              });
-              toast.success({
-                message: crop ? "Crop saved." : "Using full photo.",
-              });
-            }}
-          />
-        </>
+        <V2StoryPhotoCropModal
+          open={cropOpen}
+          previewUrl={selected.previewUrl}
+          initialCrop={selected.crop ?? null}
+          onClose={() => setCropOpen(false)}
+          onSave={(crop) => {
+            updatePhoto(selected.id, { crop });
+            setCropOpen(false);
+            toast.success({ message: crop ? "Crop saved." : "Using full photo." });
+          }}
+        />
       ) : null}
       {sheetCredits.addCreditModal}
+      {deletion.modal}
     </V2StudioFrame>
   );
 }

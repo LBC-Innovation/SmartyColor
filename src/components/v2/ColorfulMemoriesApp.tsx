@@ -4,32 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
-  CheckSquare,
   ChevronLeft,
-  CloudUpload,
   Download,
-  ImageIcon,
   Loader2,
   PencilLine,
-  RefreshCw,
   Sparkles,
-  Square,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
-import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import {
   V2AssetLightbox,
   type LightboxFocus,
   type LightboxViewMode,
 } from "@/components/v2/V2AssetLightbox";
-import { V2PhotoLibraryList } from "@/components/v2/V2PhotoLibraryList";
 import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
-import {
-  V2StudioLayoutToggle,
-  type StudioLayoutMode,
-} from "@/components/v2/V2StudioLayoutToggle";
+import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
+import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
+import { useV2PhotoIngest } from "@/components/v2/library/useV2PhotoIngest";
+import { V2LibraryRefreshButton } from "@/components/v2/library/V2LibraryRefreshButton";
+import { V2StudioLayoutToggle } from "@/components/v2/V2StudioLayoutToggle";
 import {
   V2SheetEditChat,
   type SheetEditMessage,
@@ -38,43 +31,22 @@ import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { authedFetch } from "@/lib/api/client";
 import {
   entryFromLibraryPhoto,
-  uploadPhotoToLibrary,
   uploadRevisionToLibrary,
 } from "@/lib/v2/cloudLibrary";
 import type { LibraryPhoto } from "@/lib/library/types";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
-import { V2DeletePagesConfirmModal } from "@/components/v2/V2DeletePagesConfirmModal";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
-import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
-import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
 import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
 import { Columns2, LayoutGrid } from "lucide-react";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
-import { withViewTransition } from "@/lib/v2/viewTransition";
-import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { cn } from "@/lib/cn";
 import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
-import { isAllowedPhotoFile } from "@/lib/photo/heicFile";
-import { inferPhotoLayout } from "@/lib/photo/orientation";
-import { readBlobImageSize } from "@/lib/photo/readImageSize";
-import { preparePhotoFileForApi } from "@/lib/photo/preparePhotoUpload";
-import { readPhotoCapturedAt } from "@/lib/photo/readPhotoCapturedAt";
-import {
-  defaultPrintPrefs,
-  type PrintPrefs,
-} from "@/lib/print/settings";
-import {
-  formatPhotoSizeLimit,
-  PHOTO_UPLOAD_MAX_BYTES,
-} from "@/lib/photo/payloadBudget";
 import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
 import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import {
   normalizeV2SheetRevisions,
-  type V2PhotoEntry,
-  photoImageMeta,
   photoPrintPrefs,
 } from "@/lib/v2/studioTypes";
 
@@ -100,7 +72,6 @@ export function ColorfulMemoriesApp() {
   const {
     hydrated,
     cloud,
-    refreshActiveProject,
     activeProjectId,
     photos,
     photosRef,
@@ -109,17 +80,14 @@ export function ColorfulMemoriesApp() {
     setSelectedId,
     studioLayout,
     setStudioLayout,
-    setPendingUploads,
     replacePhotos,
     mutatePhotos,
     updatePhoto,
-    appendPhoto,
-    removePhotosByIds,
-    trackPreviewUrl,
   } = useV2Studio();
+  const deletion = useV2LibraryDeletion();
+  const ingestFiles = useV2PhotoIngest();
   const [downloading, setDownloading] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const generateAllRunRef = useRef(false);
   const coloringApiLockRef = useRef(false);
   const generateRequestIdRef = useRef<Map<string, string>>(new Map());
@@ -132,16 +100,8 @@ export function ColorfulMemoriesApp() {
   const [editChatOpen, setEditChatOpen] = useState(false);
   const [editMessages, setEditMessages] = useState<SheetEditMessage[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [deletePagesMode, setDeletePagesMode] = useState(false);
-  const [deleteSelectedIds, setDeleteSelectedIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   /** Below lg the studio is a full-screen view opened by tapping a photo. */
   const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
-  /** While the project name is being edited the toolbar is given over to that. */
-  const [renamingProject, setRenamingProject] = useState(false);
   /** Studio shows every photo as a sortable grid instead of the photo/sheet panes. */
   const [gridView, setGridView] = useState(false);
 
@@ -169,182 +129,9 @@ export function ColorfulMemoriesApp() {
     setLightboxViewMode("single");
   }
 
-  async function ingestFiles(fileList: FileList | File[]) {
-    const files = Array.from(fileList);
-    if (files.length === 0) return;
-
-    const queue: { file: File; pendingId: string }[] = [];
-
-    for (const file of files) {
-      if (!isAllowedPhotoFile(file)) {
-        toast.error("Please choose photos only (JPG, PNG, WebP, or HEIC).");
-        continue;
-      }
-      if (file.size > PHOTO_UPLOAD_MAX_BYTES) {
-        toast.error(
-          `"${file.name}" is too large. Try one under ${formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES)}.`,
-        );
-        continue;
-      }
-      queue.push({ file, pendingId: newId() });
-    }
-
-    if (queue.length === 0) return;
-
-    setPendingUploads((prev) => [
-      ...prev,
-      ...queue.map(({ pendingId }) => ({ id: pendingId })),
-    ]);
-
-    let firstAddedId: string | null = null;
-
-    for (const { file, pendingId } of queue) {
-      try {
-        const prepared = await preparePhotoFileForApi(file, 2);
-        const previewUrl = URL.createObjectURL(prepared.previewBlob);
-        trackPreviewUrl(previewUrl);
-
-        const size = await readBlobImageSize(prepared.previewBlob);
-        const layout = inferPhotoLayout(size.width, size.height);
-        const printPrefs: PrintPrefs = {
-          ...defaultPrintPrefs,
-          orientation: layout.orientation,
-        };
-        const capturedAt = await readPhotoCapturedAt(file);
-
-        if (cloud) {
-          if (!activeProjectId) throw new Error("No album selected.");
-          URL.revokeObjectURL(previewUrl);
-          const entry = await uploadPhotoToLibrary({
-            projectId: activeProjectId,
-            blob: prepared.previewBlob,
-            mimeType: prepared.previewBlob.type || "image/jpeg",
-            layout,
-            printPrefs,
-            fileName: file.name,
-            capturedAt,
-          });
-          firstAddedId ??= entry.id;
-          appendPhoto(entry);
-          continue;
-        }
-
-        const entry: V2PhotoEntry = {
-          id: newId(),
-          previewUrl,
-          photoDataUrl: prepared.photoDataUrl,
-          image: photoImageMeta(layout),
-          printPrefs,
-          capturedAt,
-          fileName: file.name,
-          userCaption: "",
-          chatMessages: [],
-          photoSummary: null,
-          crop: null,
-          sheet: null,
-          generating: false,
-          correcting: false,
-        };
-
-        firstAddedId ??= entry.id;
-        appendPhoto(entry);
-      } catch (err) {
-        const detail =
-          err instanceof Error ? err.message : "Could not read this photo.";
-        toast.error(`Could not add "${file.name}": ${detail}`);
-      } finally {
-        setPendingUploads((prev) => prev.filter((item) => item.id !== pendingId));
-      }
-    }
-
-    if (firstAddedId) {
-      setSelectedId((current) => current ?? firstAddedId);
-    }
-  }
-
-  function exitDeletePagesMode() {
-    withViewTransition(() => {
-      setDeletePagesMode(false);
-      setDeleteSelectedIds(new Set());
-    });
-  }
-
-  function toggleDeletePagesSelection(id: string) {
-    setDeleteSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function requestDeletePages(ids: string[]) {
-    if (ids.length === 0) return;
-    setPendingDeleteIds(ids);
-    setDeleteConfirmOpen(true);
-  }
-
-  function confirmPermanentDelete() {
-    const locked = new Set(
-      photosRef.current.filter((entry) => entry.canDelete === false).map((entry) => entry.id),
-    );
-    const ids = pendingDeleteIds.filter((id) => !locked.has(id));
-    const skipped = pendingDeleteIds.length - ids.length;
-    if (ids.length === 0) {
-      setDeleteConfirmOpen(false);
-      setPendingDeleteIds([]);
-      if (skipped > 0) {
-        toast.error("Only the person who added a photo, or the album's owner, can delete it.");
-      }
-      return;
-    }
-    removePhotosByIds(ids);
-    setDeleteConfirmOpen(false);
-    setPendingDeleteIds([]);
-    exitDeletePagesMode();
-    toast.success({
-      message:
-        ids.length === 1
-          ? "Page permanently deleted."
-          : `${ids.length} pages permanently deleted.`,
-    });
-    if (skipped > 0) {
-      toast.info(
-        skipped === 1
-          ? "1 photo was added by someone else and was kept."
-          : `${skipped} photos were added by other people and were kept.`,
-      );
-    }
-  }
-
-  function cancelPermanentDelete() {
-    setDeleteConfirmOpen(false);
-    setPendingDeleteIds([]);
-  }
-
-  /** Pages that can be checked for deletion (generating ones are locked). */
-  const deletableIds = photos.filter((p) => !p.generating).map((p) => p.id);
-  const allDeletableSelected =
-    deletableIds.length > 0 && deletableIds.every((id) => deleteSelectedIds.has(id));
-
-  function toggleSelectAllForDelete() {
-    setDeleteSelectedIds(allDeletableSelected ? new Set() : new Set(deletableIds));
-  }
-
-  function openDeletePagesMode() {
-    withViewTransition(() => {
-      setDeleteSelectedIds(new Set());
-      setDeletePagesMode(true);
-    });
-  }
-
-  function submitBulkDeleteFromRail() {
-    requestDeletePages([...deleteSelectedIds]);
-  }
-
   function deleteSelectedPageFromStudio() {
     if (!selectedId) return;
-    requestDeletePages([selectedId]);
+    deletion.request([selectedId]);
   }
 
   async function generateForPhoto(
@@ -716,20 +503,6 @@ export function ColorfulMemoriesApp() {
     }
   }
 
-  /** Cloud albums: pull in photos and sheets added from other devices or by other people. */
-  async function refreshLibrary() {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      const result = await refreshActiveProject();
-      if (result === "gone") toast.info("That album is no longer available, so we opened another one.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not refresh this album.");
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
   async function downloadSelected() {
     if (!selected?.sheet) return;
     setDownloading(true);
@@ -773,7 +546,6 @@ export function ColorfulMemoriesApp() {
   const hasAnySheet = photos.some((entry) => entry.sheet);
   const needsSheetCount = photos.filter((entry) => !entry.sheet).length;
   const uploading = pendingUploads.length > 0;
-  const libraryPhotoCount = photos.length + pendingUploads.length;
   const canGenerateAll =
     needsSheetCount > 0 && !uploading && !generatingAll && !anyGenerating;
   const canBuyBook =
@@ -826,32 +598,8 @@ export function ColorfulMemoriesApp() {
 
   const studioOpen = mobileStudioOpen && Boolean(selected);
 
-  const fileInput = (
-    <input
-      ref={fileRef}
-      type="file"
-      accept="image/*,.heic,.heif"
-      multiple
-      className="sr-only"
-      onChange={(event) => {
-        const list = event.target.files;
-        if (list?.length) void ingestFiles(list);
-        event.target.value = "";
-      }}
-    />
-  );
-
   const refreshButton = (
-    <button
-      type="button"
-      disabled={refreshing || uploading || generatingAll || anyGenerating}
-      onClick={() => void refreshLibrary()}
-      title="Check for new photos"
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-v2-primary/30 bg-v2-primary-light px-3.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} aria-hidden />
-      Refresh
-    </button>
+    <V2LibraryRefreshButton disabled={uploading || generatingAll || anyGenerating} />
   );
 
   // Guests have nothing to refresh from, so they keep the batch generate shortcut.
@@ -968,211 +716,64 @@ export function ColorfulMemoriesApp() {
 
   return (
     <V2StudioFrame pageScroll>
-      {fileInput}
       {/* Phones: nothing here clips or scrolls — the frame scrolls the whole page. */}
-      <div className="flex w-full min-w-0 flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:overflow-hidden lg:pb-0">
-        <V2LibraryMigrationBanner />
-        <V2StudioToolbar
-          library={
-            deletePagesMode ? (
-              /* Delete mode owns the whole toolbar: count, Cancel, Delete. */
-              <>
-                <button
-                  type="button"
-                  onClick={toggleSelectAllForDelete}
-                  disabled={deletableIds.length === 0}
-                  className="v2-studio-toolbar-btn px-3"
-                  aria-pressed={allDeletableSelected}
-                >
-                  {allDeletableSelected ? (
-                    <CheckSquare className="h-4 w-4 shrink-0" aria-hidden />
-                  ) : (
-                    <Square className="h-4 w-4 shrink-0" aria-hidden />
-                  )}
-                  {allDeletableSelected ? "Deselect all" : "Select all"}
-                </button>
-                <span className="min-w-0 flex-1" aria-hidden />
-                <button
-                  type="button"
-                  onClick={exitDeletePagesMode}
-                  className="v2-studio-toolbar-btn px-3"
-                  style={{ viewTransitionName: "cm-toolbar-cancel" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={submitBulkDeleteFromRail}
-                  disabled={deleteSelectedIds.size === 0}
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-3.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ viewTransitionName: "cm-toolbar-trash" }}
-                >
-                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                  Delete
-                  {deleteSelectedIds.size > 0 ? (
-                    <span className="rounded-full bg-white/20 px-1.5 text-xs font-bold tabular-nums">
-                      {deleteSelectedIds.size}
-                    </span>
-                  ) : null}
-                </button>
-              </>
-            ) : (
-              <>
-                <V2ProjectSwitcher onEditingChange={setRenamingProject} />
-                {!renamingProject && libraryPhotoCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    className="v2-studio-toolbar-btn v2-studio-toolbar-btn--icon"
-                    title="Upload photos"
-                    aria-label="Upload photos"
-                  >
-                    {uploading ? (
-                      <Loader2 className="h-[18px] w-[18px] shrink-0 animate-spin" aria-hidden />
-                    ) : (
-                      <Upload className="h-[18px] w-[18px] shrink-0" aria-hidden />
-                    )}
-                  </button>
-                ) : null}
-                {!renamingProject && photos.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={openDeletePagesMode}
-                    disabled={uploading || generatingAll}
-                    className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger v2-studio-toolbar-btn--icon"
-                    style={{ viewTransitionName: "cm-toolbar-trash" }}
-                    title="Delete pages"
-                    aria-label="Delete pages"
-                  >
-                    <Trash2 className="h-[18px] w-[18px] shrink-0" aria-hidden />
-                  </button>
-                ) : null}
-              </>
-            )
-          }
-          studio={
-            <>
+      <V2LibraryWorkspace
+        fileInputRef={fileRef}
+        onFiles={(files) => void ingestFiles(files)}
+        onSelectPhoto={openPhoto}
+        onGenerateSheet={(id) => {
+          if (generatingAll || coloringApiLockRef.current) return;
+          void generateForPhoto(id);
+        }}
+        generateDisabled={generatingAll || anyGenerating}
+        deletion={deletion}
+        deleteDisabled={uploading || generatingAll}
+        headerAction={generateAllButton}
+        dock={
+          <button
+            type="button"
+            disabled={!canBuyBook}
+            onClick={buyBook}
+            className="v2-photo-list-dock-cta"
+          >
+            <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
+            Create Book
+          </button>
+        }
+        studioActions={
+          <>
+            <button
+              type="button"
+              disabled={!sheetReady || downloading || busy}
+              onClick={() => void downloadSelected()}
+              className="v2-studio-toolbar-btn"
+            >
+              <Download className="h-4 w-4 shrink-0" aria-hidden />
+              Download page
+            </button>
+            <button
+              type="button"
+              disabled={!sheetReady || busy}
+              onClick={openSheetEditChat}
+              className="v2-studio-toolbar-btn v2-studio-toolbar-btn--primary"
+            >
+              <PencilLine className="h-4 w-4 shrink-0" aria-hidden />
+              Edit sheet
+            </button>
+            {selected ? (
               <button
                 type="button"
-                disabled={!sheetReady || downloading || busy}
-                onClick={() => void downloadSelected()}
-                className="v2-studio-toolbar-btn"
+                onClick={deleteSelectedPageFromStudio}
+                disabled={busy || deletion.active}
+                className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
               >
-                <Download className="h-4 w-4 shrink-0" aria-hidden />
-                Download page
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                Delete page
               </button>
-              <button
-                type="button"
-                disabled={!sheetReady || busy}
-                onClick={openSheetEditChat}
-                className="v2-studio-toolbar-btn v2-studio-toolbar-btn--primary"
-              >
-                <PencilLine className="h-4 w-4 shrink-0" aria-hidden />
-                Edit sheet
-              </button>
-              {selected ? (
-                <button
-                  type="button"
-                  onClick={deleteSelectedPageFromStudio}
-                  disabled={busy || deletePagesMode}
-                  className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
-                >
-                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                  Delete page
-                </button>
-              ) : null}
-            </>
-          }
-        />
-
-        <div className="flex flex-1 lg:min-h-0 lg:overflow-hidden">
-          {/* Photo library — the whole page on phones, a fixed column on desktop */}
-          <div className="v2-photo-list-column flex w-full min-w-0 flex-1 flex-col bg-white lg:min-h-0 lg:overflow-hidden lg:w-[min(100%,22rem)] lg:max-w-sm lg:flex-none lg:border-r lg:border-gray-200 xl:w-80">
-            <section className="flex flex-1 flex-col px-4 pt-3 sm:px-5 lg:min-h-0 lg:overflow-hidden lg:pt-4">
-              <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-                <h2 className="text-base font-semibold tracking-tight text-v2-ink">
-                  Your Photos
-                  <span className="ml-1.5 font-medium text-v2-muted tabular-nums">
-                    {libraryPhotoCount}
-                  </span>
-                </h2>
-                {generateAllButton}
-              </div>
-
-              {libraryPhotoCount === 0 ? (
-                <V2UploadDropzone
-                  className="mb-4 min-h-[16rem] lg:-mx-5 lg:mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0"
-                  onFiles={(files) => void ingestFiles(files)}
-                >
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="v2-dropzone-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-v2-primary shadow-sm">
-                      <CloudUpload className="h-7 w-7" strokeWidth={1.5} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-v2-ink">
-                        Upload Photos
-                      </p>
-                      <p className="mt-0.5 text-xs text-v2-muted">
-                        Drag and drop, or select files
-                      </p>
-                      <p className="mt-1 text-[11px] text-v2-muted">
-                        JPG, PNG, HEIC up to 20MB each
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      className="v2-breathe inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-v2-primary-dark"
-                    >
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                      ) : (
-                        <ImageIcon className="h-4 w-4" aria-hidden />
-                      )}
-                      Select Photos
-                    </button>
-                  </div>
-                </V2UploadDropzone>
-              ) : null}
-
-              {libraryPhotoCount > 0 ? (
-                <div className="v2-photo-list-dock min-h-0 flex-1">
-                  <div
-                    className="v2-photo-list-scroll v2-photo-list-dock-scroll overscroll-y-contain"
-                    aria-label="Uploaded photos"
-                  >
-                    <V2PhotoLibraryList
-                      photos={photos}
-                      pendingUploads={pendingUploads}
-                      selectedId={selectedId}
-                      onSelect={openPhoto}
-                      onReorder={replacePhotos}
-                      onGenerateSheet={(id) => {
-                        if (generatingAll || coloringApiLockRef.current) return;
-                        void generateForPhoto(id);
-                      }}
-                      generateDisabled={generatingAll || anyGenerating}
-                      deleteMode={deletePagesMode}
-                      deleteSelectedIds={deleteSelectedIds}
-                      onToggleDeleteSelect={toggleDeletePagesSelection}
-                    />
-                  </div>
-                  <div className="v2-photo-list-dock-bar">
-                    <button
-                      type="button"
-                      disabled={!canBuyBook}
-                      onClick={buyBook}
-                      className="v2-photo-list-dock-cta"
-                    >
-                      <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
-                      Create Book
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </section>
-          </div>
-
+            ) : null}
+          </>
+        }
+      >
           {/* Studio — right column on desktop, full-screen view on phones */}
           <main
             className={cn(
@@ -1305,7 +906,7 @@ export function ColorfulMemoriesApp() {
                     </button>
                     <button
                       type="button"
-                      disabled={busy || deletePagesMode}
+                      disabled={busy || deletion.active}
                       onClick={deleteSelectedPageFromStudio}
                       className="v2-studio-action v2-studio-action--danger"
                     >
@@ -1332,8 +933,7 @@ export function ColorfulMemoriesApp() {
               ) : null}
             </section>
           </main>
-        </div>
-      </div>
+      </V2LibraryWorkspace>
 
       {selected?.sheet ? (
         <V2SheetEditChat
@@ -1362,13 +962,7 @@ export function ColorfulMemoriesApp() {
       ) : null}
 
       {sheetCredits.addCreditModal}
-
-      <V2DeletePagesConfirmModal
-        open={deleteConfirmOpen}
-        pageCount={pendingDeleteIds.length}
-        onConfirm={confirmPermanentDelete}
-        onCancel={cancelPermanentDelete}
-      />
+      {deletion.modal}
     </V2StudioFrame>
   );
 }
