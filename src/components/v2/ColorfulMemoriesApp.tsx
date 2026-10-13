@@ -6,8 +6,10 @@ import {
   BookOpen,
   ChevronLeft,
   Download,
+  FlipHorizontal2,
   Loader2,
   PencilLine,
+  RectangleVertical,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -21,6 +23,7 @@ import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
 import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
 import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
 import { useV2PhotoIngest } from "@/components/v2/library/useV2PhotoIngest";
+import { useV2PhotoTransforms } from "@/components/v2/library/useV2PhotoTransforms";
 import { V2LibraryRefreshButton } from "@/components/v2/library/V2LibraryRefreshButton";
 import { V2StudioLayoutToggle } from "@/components/v2/V2StudioLayoutToggle";
 import {
@@ -41,12 +44,18 @@ import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
 import { Columns2, LayoutGrid } from "lucide-react";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { cn } from "@/lib/cn";
+import { formatCredits } from "@/lib/credits/money";
+import { PHOTO_PORTRAIT_CENTS } from "@/lib/credits/pricing";
 import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
 import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
 import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import {
+  activeSheetVersion,
+  activeSourceVersion,
+  activeVersionPrintPrefs,
   normalizeV2SheetRevisions,
+  photoOrientation,
   photoPrintPrefs,
 } from "@/lib/v2/studioTypes";
 
@@ -91,6 +100,7 @@ export function ColorfulMemoriesApp() {
   const generateAllRunRef = useRef(false);
   const coloringApiLockRef = useRef(false);
   const generateRequestIdRef = useRef<Map<string, string>>(new Map());
+  const photoTransforms = useV2PhotoTransforms({ sheetCredits, lockRef: coloringApiLockRef });
   const [lightboxFocus, setLightboxFocus] = useState<LightboxFocus | null>(
     null,
   );
@@ -106,6 +116,18 @@ export function ColorfulMemoriesApp() {
   const [gridView, setGridView] = useState(false);
 
   const selected = photos.find((p) => p.id === selectedId) ?? null;
+  const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];
+  const selectedVersions = selected ? { ...selected, sheetRevisions: selectedRevisions } : null;
+  const activeVersion = selectedVersions ? activeSheetVersion(selectedVersions) : null;
+  /** The portrait version on show, or the one the sheet on show was drawn from. */
+  const sourceVersion = selectedVersions ? activeSourceVersion(selectedVersions) : null;
+  const sourcePhotoSrc = sourceVersion?.sheet.imageDataUrl ?? selected?.previewUrl ?? "";
+  /** Null while a portrait photo version is on show: it has no coloring sheet yet. */
+  const activeSheet = activeVersion?.kind === "photo" ? null : selected?.sheet ?? null;
+  /** A sheet of the uploaded photo already exists somewhere in the rail. */
+  const hasSheetOfOriginal = selectedRevisions.some(
+    (revision) => revision.kind !== "photo" && !revision.sourceRevisionId,
+  );
 
   function openPhoto(id: string) {
     setSelectedId(id);
@@ -136,10 +158,18 @@ export function ColorfulMemoriesApp() {
 
   async function generateForPhoto(
     photoId: string,
-    options?: { select?: boolean; batch?: boolean },
+    options?: {
+      select?: boolean;
+      batch?: boolean;
+      /** Draw from this portrait version instead of the uploaded photo. */
+      source?: SheetVersion;
+      /** Draw from the uploaded photo even though the photo already has versions. */
+      addVersion?: boolean;
+    },
   ): Promise<GenerateResult> {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
-    if (!photo || photo.sheet) return "skipped";
+    const source = options?.source ?? null;
+    if (!photo || (photo.sheet && !source && !options?.addVersion)) return "skipped";
     if (photo.generating || coloringApiLockRef.current) return "skipped";
 
     if (options?.select !== false) {
@@ -162,13 +192,23 @@ export function ColorfulMemoriesApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           photo.remote
-            ? { mode: "generate-library", photoId: photo.remote.photoId }
-            : {
-                mode: "generate",
-                photoDataUrl: photo.photoDataUrl,
-                printPrefs: photoPrintPrefs(photo),
-                image: photo.image,
-              },
+            ? {
+                mode: "generate-library",
+                photoId: photo.remote.photoId,
+                ...(source ? { sourceRevisionId: source.id } : {}),
+              }
+            : source
+              ? {
+                  mode: "generate",
+                  photoDataUrl: source.sheet.imageDataUrl,
+                  printPrefs: { ...photo.printPrefs, orientation: source.orientation ?? "portrait" },
+                }
+              : {
+                  mode: "generate",
+                  photoDataUrl: photo.photoDataUrl,
+                  printPrefs: photoPrintPrefs(photo),
+                  image: photo.image,
+                },
         ),
       }, { withAuth: Boolean(photo.remote) });
       const rawBody = await response.text();
@@ -207,14 +247,17 @@ export function ColorfulMemoriesApp() {
         if (!payload.sheet) {
           throw new Error("No coloring sheet came back.");
         }
-        const revision = createSheetRevision(payload.sheet);
+        const revision: SheetVersion = {
+          ...createSheetRevision(payload.sheet),
+          ...(source ? { orientation: source.orientation ?? "portrait", sourceRevisionId: source.id } : {}),
+        };
         mutatePhotos((prev) =>
           prev.map((entry) =>
             entry.id === photoId
               ? {
                   ...entry,
                   sheet: payload.sheet!,
-                  sheetRevisions: [revision],
+                  sheetRevisions: [...normalizeV2SheetRevisions(entry), revision],
                   activeRevisionId: revision.id,
                   generating: false,
                 }
@@ -265,11 +308,11 @@ export function ColorfulMemoriesApp() {
       toast.error("Upload and select a photo first.");
       return;
     }
-    await generateForPhoto(selected.id);
+    await generateForPhoto(selected.id, activeVersion?.kind === "photo" ? { source: activeVersion } : undefined);
   }
 
   function openSheetEditChat() {
-    if (!selected?.sheet) {
+    if (!activeSheet) {
       toast.error("Generate a coloring sheet before making edits.");
       return;
     }
@@ -289,7 +332,12 @@ export function ColorfulMemoriesApp() {
 
   async function applySheetEdit(note: string) {
     const photo = selected;
-    if (!photo?.sheet) return;
+    if (!photo?.sheet || !activeSheet) return;
+    // New versions of a sheet keep its shape and the photo version it was drawn from.
+    const lineage = {
+      ...(activeVersion?.orientation ? { orientation: activeVersion.orientation } : {}),
+      ...(activeVersion?.sourceRevisionId ? { sourceRevisionId: activeVersion.sourceRevisionId } : {}),
+    };
 
     const trimmed = note.trim();
     if (!trimmed) return;
@@ -332,11 +380,11 @@ export function ColorfulMemoriesApp() {
         const sheetDataUrl = await prepareSheetDataUrlForApi(photo.sheet.imageDataUrl, 2);
         body = {
           mode: "correct",
-          photoDataUrl: photo.photoDataUrl,
+          photoDataUrl: sourceVersion?.sheet.imageDataUrl ?? photo.photoDataUrl,
           sheetDataUrl,
           corrections: [trimmed],
-          printPrefs: photoPrintPrefs(photo),
-          image: photo.image,
+          printPrefs: activeVersionPrintPrefs(photo),
+          image: sourceVersion ? undefined : photo.image,
         };
       }
       const response = await authedFetch("/api/photo-coloring", {
@@ -365,7 +413,7 @@ export function ColorfulMemoriesApp() {
         }
         const prior = photosRef.current.find((entry) => entry.id === photo.id);
         const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
-        const revision = createSheetRevision(payload.sheet);
+        const revision = { ...createSheetRevision(payload.sheet), ...lineage };
         revisions.push(revision);
         updatePhoto(photo.id, {
           sheet: payload.sheet,
@@ -408,12 +456,16 @@ export function ColorfulMemoriesApp() {
 
   async function saveOverlaySheetRevision(opacityPercent: number) {
     const photo = selected;
-    if (!photo?.sheet || savingOverlayRevision) return;
+    if (!photo?.sheet || !activeSheet || savingOverlayRevision) return;
+    const lineage = {
+      ...(activeVersion?.orientation ? { orientation: activeVersion.orientation } : {}),
+      ...(activeVersion?.sourceRevisionId ? { sourceRevisionId: activeVersion.sourceRevisionId } : {}),
+    };
 
     setSavingOverlayRevision(true);
     try {
       const imageDataUrl = await compositeSheetOverlayDataUrl(
-        photo.photoDataUrl || photo.previewUrl,
+        sourceVersion?.sheet.imageDataUrl ?? (photo.photoDataUrl || photo.previewUrl),
         photo.sheet.imageDataUrl,
         opacityPercent,
       );
@@ -423,7 +475,11 @@ export function ColorfulMemoriesApp() {
         mimeType: "image/png",
       };
       if (photo.remote) {
-        const stored = await uploadRevisionToLibrary({ photoId: photo.remote.photoId, sheet: tintedSheet });
+        const stored = await uploadRevisionToLibrary({
+          photoId: photo.remote.photoId,
+          sheet: tintedSheet,
+          meta: lineage,
+        });
         const fresh = await entryFromLibraryPhoto(stored);
         updatePhoto(photo.id, fresh, { persist: false });
         toast.success({
@@ -434,7 +490,7 @@ export function ColorfulMemoriesApp() {
       }
       const prior = photosRef.current.find((entry) => entry.id === photo.id);
       const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
-      const revision = createSheetRevision(tintedSheet);
+      const revision = { ...createSheetRevision(tintedSheet), ...lineage };
       revisions.push(revision);
       updatePhoto(photo.id, {
         sheet: tintedSheet,
@@ -504,7 +560,7 @@ export function ColorfulMemoriesApp() {
   }
 
   async function downloadSelected() {
-    if (!selected?.sheet) return;
+    if (!selected?.sheet || !activeSheet) return;
     setDownloading(true);
     try {
       const response = await authedFetch("/api/pdf", {
@@ -512,8 +568,8 @@ export function ColorfulMemoriesApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           selected.remote
-            ? { revisionId: selected.activeRevisionId, printPrefs: photoPrintPrefs(selected) }
-            : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: photoPrintPrefs(selected) },
+            ? { revisionId: activeVersion?.id, printPrefs: activeVersionPrintPrefs(selected) }
+            : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: activeVersionPrintPrefs(selected) },
         ),
       }, { withAuth: Boolean(selected.remote) });
       if (!response.ok) {
@@ -540,9 +596,13 @@ export function ColorfulMemoriesApp() {
     (selected?.generating ?? false) ||
     (selected?.correcting ?? false) ||
     generatingAll;
-  const sheetBusy = (selected?.generating ?? false) && !selected?.sheet;
+  const mirroring = Boolean(selected) && photoTransforms.mirroringId === selected?.id;
+  const makingPortrait = Boolean(selected) && photoTransforms.portraitId === selected?.id;
+  const photoToolsDisabled =
+    busy || anyGenerating || photoTransforms.mirroringId !== null || photoTransforms.portraitId !== null;
+  const sheetBusy = (selected?.generating ?? false) && !activeSheet;
   const sheetCorrecting = selected?.correcting ?? false;
-  const sheetReady = Boolean(selected?.sheet);
+  const sheetReady = Boolean(activeSheet);
   const hasAnySheet = photos.some((entry) => entry.sheet);
   const needsSheetCount = photos.filter((entry) => !entry.sheet).length;
   const uploading = pendingUploads.length > 0;
@@ -568,15 +628,11 @@ export function ColorfulMemoriesApp() {
     );
   }
 
-  const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];
   const showRevisionSidebar =
     Boolean(selected?.sheet) && selectedRevisions.length > 0;
   const showPhotoPane = studioLayout === "photo" || studioLayout === "both";
   const showSheetPane = studioLayout === "sheet" || studioLayout === "both";
-  const activeRevisionId =
-    selected?.activeRevisionId ??
-    selectedRevisions[selectedRevisions.length - 1]?.id ??
-    null;
+  const activeRevisionId = activeVersion?.id ?? null;
 
   // First visit: walk new users through the workspace.
   useEffect(() => {
@@ -627,7 +683,7 @@ export function ColorfulMemoriesApp() {
     ) : null;
 
   const photoPane = (
-    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+    <div className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
       <button
         type="button"
         disabled={!selected}
@@ -643,7 +699,7 @@ export function ColorfulMemoriesApp() {
         {selected ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={selected.previewUrl}
+            src={sourcePhotoSrc}
             alt="Selected photo"
             className="pointer-events-none max-h-full max-w-full object-contain"
           />
@@ -653,12 +709,62 @@ export function ColorfulMemoriesApp() {
           </span>
         )}
       </button>
+      {selected ? (
+        <div className="absolute right-2 top-2 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-1.5">
+          <button
+            type="button"
+            disabled={photoToolsDisabled}
+            onClick={() => void photoTransforms.mirrorPhoto(selected.id)}
+            className="v2-photo-tool"
+            title={
+              selectedRevisions.length > 0
+                ? "Flip this photo and all its versions left to right"
+                : "Flip this photo left to right"
+            }
+          >
+            {mirroring ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <FlipHorizontal2 className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+            Mirror
+          </button>
+          {photoOrientation(selected) === "landscape" ? (
+            <button
+              type="button"
+              disabled={photoToolsDisabled}
+              onClick={() => void photoTransforms.makePortrait(selected.id)}
+              className="v2-photo-tool v2-photo-tool--ai"
+              title={
+                selected.remote
+                  ? `Add an AI portrait version of this photo (${formatCredits(PHOTO_PORTRAIT_CENTS)})`
+                  : "Add an AI portrait version of this photo"
+              }
+            >
+              <RectangleVertical className="h-4 w-4 shrink-0" aria-hidden />
+              Make portrait
+              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {makingPortrait ? (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-white/75 p-4 text-center backdrop-blur-[1px]"
+          aria-busy="true"
+        >
+          <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
+          <span className="text-sm font-medium text-v2-navy">
+            Making a portrait version…
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 
   const sheetPane = (
     <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-      {selected?.sheet ? (
+      {activeSheet ? (
         <div className="relative flex min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-v2-bg-subtle">
           <button
             type="button"
@@ -669,7 +775,7 @@ export function ColorfulMemoriesApp() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={selected.sheet.imageDataUrl}
+              src={activeSheet.imageDataUrl}
               alt="Generated coloring sheet"
               className="pointer-events-none max-h-full max-w-full object-contain"
             />
@@ -688,7 +794,7 @@ export function ColorfulMemoriesApp() {
         </div>
       ) : sheetBusy && selected ? (
         <V2SheetGeneratingPlaceholder
-          imageSrc={selected.previewUrl}
+          imageSrc={sourcePhotoSrc}
           imageAlt="Photo being traced"
           className="min-h-0 w-full flex-1 rounded-xl border border-gray-200"
           imageFit="contain"
@@ -696,9 +802,11 @@ export function ColorfulMemoriesApp() {
       ) : (
         <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-v2-primary/30 bg-v2-primary-light/60 p-6 text-center">
           <p className="max-w-xs text-sm text-v2-muted">
-            {selected
-              ? "This photo doesn’t have a coloring sheet yet."
-              : "Select a photo from your library to get started."}
+            {!selected
+              ? "Select a photo from your library to get started."
+              : activeVersion?.kind === "photo"
+                ? "This portrait version doesn’t have a coloring sheet yet."
+                : "This photo doesn’t have a coloring sheet yet."}
           </p>
           <button
             type="button"
@@ -709,6 +817,16 @@ export function ColorfulMemoriesApp() {
             <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
             Generate coloring sheet
           </button>
+          {selected && activeVersion?.kind === "photo" && !hasSheetOfOriginal ? (
+            <button
+              type="button"
+              disabled={generatingAll || busy}
+              onClick={() => void generateForPhoto(selected.id, { addVersion: true })}
+              className="text-xs font-semibold text-v2-link underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Use the original landscape photo instead
+            </button>
+          ) : null}
         </div>
       )}
     </div>
@@ -927,7 +1045,7 @@ export function ColorfulMemoriesApp() {
                     selectSheetRevision(selected.id, revisionId)
                   }
                   onEditSheet={openSheetEditChat}
-                  editDisabled={busy}
+                  editDisabled={busy || !sheetReady}
                   disabled={sheetCorrecting}
                 />
               ) : null}
@@ -935,12 +1053,12 @@ export function ColorfulMemoriesApp() {
           </main>
       </V2LibraryWorkspace>
 
-      {selected?.sheet ? (
+      {selected && activeSheet ? (
         <V2SheetEditChat
           open={editChatOpen}
           onClose={() => setEditChatOpen(false)}
-          originalPreviewUrl={selected.previewUrl}
-          sheetImageUrl={selected.sheet.imageDataUrl}
+          originalPreviewUrl={sourcePhotoSrc}
+          sheetImageUrl={activeSheet.imageDataUrl}
           messages={editMessages}
           onSend={(text) => void applySheetEdit(text)}
           busy={sheetCorrecting}
@@ -951,8 +1069,8 @@ export function ColorfulMemoriesApp() {
       {lightboxFocus && selected ? (
         <V2AssetLightbox
           focus={lightboxFocus}
-          originalSrc={selected.previewUrl}
-          sheetSrc={selected.sheet?.imageDataUrl ?? null}
+          originalSrc={sourcePhotoSrc}
+          sheetSrc={activeSheet?.imageDataUrl ?? null}
           viewMode={lightboxViewMode}
           onViewModeChange={setLightboxViewMode}
           onClose={closeLightbox}

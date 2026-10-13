@@ -12,6 +12,11 @@ export type PhotoCropRect = {
   height: number;
 };
 
+/** The same region after the image is flipped left-to-right. */
+export function mirrorPhotoCrop(crop: PhotoCropRect): PhotoCropRect {
+  return { ...crop, x: Math.min(1, Math.max(0, 1 - crop.x - crop.width)) };
+}
+
 export type StoryPrintArtMode = "photos" | "coloring" | "blended";
 
 export type V2StoryPage = {

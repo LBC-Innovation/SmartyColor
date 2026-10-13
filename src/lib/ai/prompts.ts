@@ -246,3 +246,25 @@ ${coloringSheetOutputRules(prefs, title)}
 
 Return an improved coloring sheet that addresses the issues while staying true to the photo.`;
 }
+
+/** Recomposing a landscape photo onto a portrait canvas; the result is still a photo. */
+export function buildPhotoPortraitPrompt(source: PhotoLayout, target: PhotoLayout) {
+  return `You are reframing a REAL photograph from landscape to portrait. The result must still be the same photograph — a photo, not a drawing.
+
+CANVAS (mandatory):
+- The reference photo is LANDSCAPE, about ${source.aspectRatio}.
+- The output MUST be PORTRAIT (taller than wide) at ${target.aspectRatio}.
+- Do NOT rotate the photo or turn the scene on its side. Up stays up.
+
+Keep everything that matters (most important):
+- Every person, pet, and key object in the reference must appear in the output — the same number of people, nobody removed, nobody added.
+- Keep each person exactly as photographed: same face, expression, hair, skin tone, clothing, pose, and proportions. Do not restyle, beautify, or redraw them.
+- Keep the same arrangement: who stands left, right, in front, and behind, and how far apart they are relative to each other.
+- Do NOT stretch, squash, or distort anything to make it fit.
+
+How to make it portrait:
+- Extend the scene naturally above and below the subjects (more sky, ceiling, wall, ground, floor) so it reads as the same place and the same moment.
+- You may trim empty background at the far left and right, but never cut off a person or a key object.
+- Match the reference's lighting, colors, focus, and camera look. The added areas must blend in seamlessly.
+- No borders, frames, text, captions, watermarks, or collage panels. One continuous photograph, edge to edge.`;
+}

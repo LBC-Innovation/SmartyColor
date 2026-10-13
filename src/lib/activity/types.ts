@@ -16,6 +16,7 @@ export const ACTIVITY_TYPES = {
   photos: [
     { id: "photo_uploaded", label: "Photo uploaded" },
     { id: "photo_deleted", label: "Photo deleted" },
+    { id: "photo_portrait", label: "Portrait version" },
   ],
   sheets: [
     { id: "sheet_generated", label: "Sheet generated" },

@@ -41,10 +41,17 @@ export type GeneratedSheet = {
   storagePath?: string;
 };
 
+/** One entry in a photo's version rail. */
 export type SheetVersion = {
   id: string;
   createdAt: string;
   sheet: GeneratedSheet;
+  /** "photo" is an AI portrait version of the photo itself; absent means a coloring sheet. */
+  kind?: "sheet" | "photo";
+  /** Shape of this version when it differs from the uploaded photo. */
+  orientation?: "portrait" | "landscape";
+  /** The photo version a sheet was drawn from; absent means the uploaded photo. */
+  sourceRevisionId?: string | null;
 };
 
 export type ColoringSession = {

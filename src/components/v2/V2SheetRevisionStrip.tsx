@@ -1,6 +1,6 @@
 "use client";
 
-import { Crop } from "lucide-react";
+import { Crop, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { SheetVersion } from "@/lib/session/types";
 import { useThumbUrl } from "@/lib/v2/thumbnail";
@@ -54,7 +54,7 @@ export function V2SheetRevisionStrip({
           : "flex-row items-center gap-2",
         className,
       )}
-      aria-label="Coloring sheet revisions"
+      aria-label="Photo and coloring sheet versions"
     >
       <p
         className={cn(
@@ -64,7 +64,7 @@ export function V2SheetRevisionStrip({
             : "text-[10px] text-v2-muted",
         )}
       >
-        Revisions
+        Versions
       </p>
       {isSidebar && onEditSheet ? (
         <div className="shrink-0 border-b border-gray-200 px-2 py-2">
@@ -84,7 +84,7 @@ export function V2SheetRevisionStrip({
       ) : null}
       <div
         role="listbox"
-        aria-label="Revision thumbnails"
+        aria-label="Version thumbnails"
         className={cn(
           "flex min-h-0 flex-1 gap-2 overscroll-contain",
           isSidebar
@@ -94,6 +94,7 @@ export function V2SheetRevisionStrip({
       >
         {revisions.map((revision, index) => {
           const selected = revision.id === activeRevisionId;
+          const isPhoto = revision.kind === "photo";
           return (
             <button
               key={revision.id}
@@ -112,9 +113,15 @@ export function V2SheetRevisionStrip({
                   : "hover:border-v2-primary/50",
                 disabled && "cursor-not-allowed opacity-60",
               )}
-              aria-label={`Revision ${index + 1}${selected ? ", selected" : ""}`}
+              aria-label={`Version ${index + 1}${isPhoto ? ", portrait photo" : ""}${selected ? ", selected" : ""}`}
+              title={isPhoto ? "Portrait photo" : undefined}
             >
               <RevisionThumb src={revision.sheet.imageDataUrl} />
+              {isPhoto ? (
+                <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-white/90 text-v2-primary shadow-sm">
+                  <ImageIcon className="h-3 w-3" aria-hidden />
+                </span>
+              ) : null}
               <span
                 className={cn(
                   "absolute inset-x-0 bottom-0 py-0.5 text-center text-[9px] font-semibold text-white",

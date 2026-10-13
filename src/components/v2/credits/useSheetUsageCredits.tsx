@@ -13,6 +13,12 @@ import type { V2PhotoEntry } from "@/lib/v2/studioTypes";
 
 type Shortfall = { cents: number; kind: SheetUsageKind };
 
+const SHORTFALL_FOR: Record<SheetUsageKind, string> = {
+  generation: "a coloring sheet",
+  edit: "this edit",
+  portrait: "a portrait version",
+};
+
 /** Fields of a /api/photo-coloring response that concern the wallet. */
 type UsagePayload = {
   code?: string;
@@ -22,7 +28,7 @@ type UsagePayload = {
 };
 
 /**
- * Wallet side of generating and editing sheets: blocks an action the balance
+ * Wallet side of the studio's AI actions: blocks an action the balance
  * can't cover by opening the add-credit modal, and keeps the shown balance in
  * step with what the server charged. Guests' local photos are not metered.
  */
@@ -57,7 +63,7 @@ export function useSheetUsageCredits(returnPath: string): {
       onClose={() => setShortfall(null)}
       returnPath={returnPath}
       shortfallCents={shortfall.cents}
-      shortfallFor={shortfall.kind === "edit" ? "this edit" : "a coloring sheet"}
+      shortfallFor={SHORTFALL_FOR[shortfall.kind]}
     />
   ) : null;
 

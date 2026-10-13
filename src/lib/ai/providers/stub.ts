@@ -1,8 +1,11 @@
+import sharp from "sharp";
 import type { ColoringAI } from "@/lib/ai/types";
 import { parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
 import type {
+  GeneratedPhoto,
   PhotoColoringCorrectRequest,
   PhotoColoringGenerateRequest,
+  PhotoPortraitRequest,
 } from "@/lib/session/photoTypes";
 import type { FeedbackTurn, GeneratedSheet } from "@/lib/session/types";
 
@@ -80,6 +83,27 @@ export function createStubProvider(): ColoringAI {
         input.printPrefs.orientation === "landscape",
         `Fix note: ${note}`,
       );
+    },
+
+    async photoToPortrait(input: PhotoPortraitRequest): Promise<GeneratedPhoto> {
+      // No model: fit the whole photo on a blurred 3:4 copy of itself.
+      const { bytes } = parsePhotoDataUrl(input.photoDataUrl);
+      const upright = await sharp(bytes).rotate().toBuffer();
+      const meta = await sharp(upright).metadata();
+      const height = Math.max(meta.width ?? 1200, meta.height ?? 900);
+      const width = Math.round(height * 0.75);
+      const backdrop = await sharp(upright).resize(width, height, { fit: "cover" }).blur(30).toBuffer();
+      const inset = await sharp(upright).resize(width, height, { fit: "inside" }).toBuffer();
+      const out = await sharp(backdrop)
+        .composite([{ input: inset, gravity: "center" }])
+        .jpeg({ quality: 90 })
+        .toBuffer();
+      return {
+        imageDataUrl: `data:image/jpeg;base64,${out.toString("base64")}`,
+        mimeType: "image/jpeg",
+        width,
+        height,
+      };
     },
 
     async refine(input) {

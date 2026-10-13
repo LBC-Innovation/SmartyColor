@@ -46,6 +46,12 @@ export type LibraryRevision = {
   storagePath: string;
   mimeType: string;
   title: string;
+  /** "photo" is an AI portrait version of the photo itself. */
+  kind: "sheet" | "photo";
+  /** Shape of this version when it differs from the uploaded photo. */
+  orientation: string | null;
+  /** The photo version a sheet was drawn from; null means the uploaded photo. */
+  sourceRevisionId: string | null;
   createdAt: string;
   /** Short-lived read URL; refresh via /photos when it expires. */
   url: string;

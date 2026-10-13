@@ -23,9 +23,13 @@ export async function photoDataUrlById(
 export async function revisionDataUrlById(
   userId: string,
   revisionId: string,
-): Promise<ApiResult<{ dataUrl: string; title: string }>> {
+): Promise<
+  ApiResult<
+    { dataUrl: string } & Omit<NonNullable<Awaited<ReturnType<typeof loadRevisionBytes>>["data"]>, "bytes" | "mime">
+  >
+> {
   const loaded = await loadRevisionBytes(userId, revisionId);
   if (loaded.error) return loaded;
-  const { bytes, mime, title } = loaded.data!;
-  return { data: { dataUrl: bytesToDataUrl(bytes, mime), title }, error: null };
+  const { bytes, mime, ...rest } = loaded.data!;
+  return { data: { dataUrl: bytesToDataUrl(bytes, mime), ...rest }, error: null };
 }

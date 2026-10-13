@@ -4,6 +4,7 @@ import sharp from "sharp";
 import {
   buildPhotoColoringPrompt,
   buildPhotoCorrectionPrompt,
+  buildPhotoPortraitPrompt,
 } from "@/lib/ai/prompts";
 import { parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
 import {
@@ -17,11 +18,14 @@ import {
 import type { ParsedPhoto } from "@/lib/ai/photoDataUrl";
 import type { ColoringAI } from "@/lib/ai/types";
 import { toPhotoLineArtPng } from "@/lib/print/lineArt";
-import type { PrintPrefs } from "@/lib/print/settings";
-import type {
-  PhotoColoringCorrectRequest,
-  PhotoColoringGenerateRequest,
-  PhotoImageSizeHint,
+import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
+import {
+  PHOTO_NOT_LANDSCAPE_MESSAGE,
+  type GeneratedPhoto,
+  type PhotoColoringCorrectRequest,
+  type PhotoColoringGenerateRequest,
+  type PhotoImageSizeHint,
+  type PhotoPortraitRequest,
 } from "@/lib/session/photoTypes";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
@@ -302,11 +306,73 @@ async function drawFromReferences(
   return toSheet(file, printPrefs.showTitle, weightReferenceBase64);
 }
 
+/** Portrait canvas for a landscape photo: 3:4 sits best on a printed page. */
+function portraitLayoutFor(source: PhotoLayout): PhotoLayout {
+  const longEdge = Math.max(source.width, source.height);
+  return {
+    orientation: "portrait",
+    aspectRatio: "3:4",
+    width: Math.round(longEdge * 0.75),
+    height: longEdge,
+  };
+}
+
 export function createPhotoGeminiHandlers(): Pick<
   ColoringAI,
-  "photoToColoring" | "correctPhotoColoring"
+  "photoToColoring" | "correctPhotoColoring" | "photoToPortrait"
 > {
   return {
+    async photoToPortrait(input: PhotoPortraitRequest): Promise<GeneratedPhoto> {
+      const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
+      const source = await layoutForPhotoBytes(
+        photo.bytes,
+        { ...defaultPrintPrefs, orientation: "landscape" },
+        input.image,
+      );
+      if (source.orientation !== "landscape") {
+        throw new Error(PHOTO_NOT_LANDSCAPE_MESSAGE);
+      }
+      const target = portraitLayoutFor(source);
+      const content: MessageContent = [
+        {
+          type: "text",
+          text: "REFERENCE PHOTOGRAPH — the people and key content here must all appear in the result, unchanged.",
+        },
+        { type: "file", data: photo.base64, mediaType: photo.mediaType },
+        { type: "text", text: buildPhotoPortraitPrompt(source, target) },
+      ];
+
+      let file = await generateImageFileFromReferences("photoToPortrait", content, target);
+      if (await isWrongWayRound(file, target)) {
+        file = await generateImageFileFromReferences(
+          "photoToPortrait",
+          [
+            ...content,
+            {
+              type: "text",
+              text: `CORRECTION: the previous attempt was not portrait. Produce the same photograph again on a PORTRAIT canvas (${target.aspectRatio}) that is taller than it is wide. Do not rotate the scene or turn it on its side.`,
+            },
+          ],
+          target,
+        );
+        // Padding a photo onto a white canvas is not a portrait photo; let the caller retry.
+        if (await isWrongWayRound(file, target)) {
+          throw new Error("Could not reframe this photo as a portrait. Please try again.");
+        }
+      }
+
+      const { data, info } = await sharp(Buffer.from(file.base64, "base64"))
+        .rotate()
+        .jpeg({ quality: 92, mozjpeg: true })
+        .toBuffer({ resolveWithObject: true });
+      return {
+        imageDataUrl: `data:image/jpeg;base64,${data.toString("base64")}`,
+        mimeType: "image/jpeg",
+        width: info.width,
+        height: info.height,
+      };
+    },
+
     async photoToColoring(input: PhotoColoringGenerateRequest) {
       const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
