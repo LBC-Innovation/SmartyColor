@@ -25,7 +25,11 @@ import type {
 } from "@/lib/session/photoTypes";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
-import { generateGeminiImageViaRest } from "@/lib/ai/geminiImageGenerateRest";
+import {
+  generateGeminiImageViaRest,
+  geminiImageAttempts,
+  type GeminiImageAttempt,
+} from "@/lib/ai/geminiImageGenerateRest";
 
 const googleSafety = {
   google: {
@@ -148,10 +152,7 @@ function isRetryableGeminiError(error: unknown): boolean {
 
 function buildImageProviderOptions(
   layout: PhotoLayout,
-  options: {
-    imageSize?: "1K" | "2K";
-    responseModalities?: Array<"TEXT" | "IMAGE">;
-  } = {},
+  options: GeminiImageAttempt = {},
 ) {
   const imageConfig: { aspectRatio: PhotoLayout["aspectRatio"]; imageSize?: string } =
     {
@@ -200,15 +201,7 @@ async function generateImageFileFromReferences(
   content: MessageContent,
   layout: PhotoLayout,
 ): Promise<{ base64: string; mediaType: string }> {
-  const attempts: Array<{
-    imageSize?: "1K" | "2K";
-    responseModalities?: Array<"TEXT" | "IMAGE">;
-  }> = [
-    { imageSize: "1K" },
-    { imageSize: "1K", responseModalities: ["IMAGE"] },
-    {},
-    { imageSize: "2K" },
-  ];
+  const attempts = geminiImageAttempts();
 
   let lastError: unknown;
   for (let index = 0; index < attempts.length; index++) {

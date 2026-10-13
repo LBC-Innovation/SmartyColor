@@ -6,10 +6,36 @@ type RestPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } };
 
-type RestAttempt = {
-  imageSize?: "1K" | "2K";
+export type GeminiImageSize = "1K" | "2K" | "4K";
+
+export type GeminiImageAttempt = {
+  imageSize?: GeminiImageSize;
   responseModalities?: Array<"TEXT" | "IMAGE">;
 };
+
+/**
+ * Size asked of the image model. A 1K sheet has only about 100 pixels per inch
+ * of real detail on a letter page; 2K gives a printed book over 200. Set
+ * GEMINI_IMAGE_SIZE=4K for more (at a higher cost per sheet).
+ */
+function preferredImageSize(): GeminiImageSize {
+  const raw = process.env.GEMINI_IMAGE_SIZE?.trim().toUpperCase();
+  return raw === "1K" || raw === "2K" || raw === "4K" ? raw : "2K";
+}
+
+/**
+ * What to try, in order: the print-quality size first, then smaller requests
+ * the model is more likely to answer, so a sheet still comes back.
+ */
+export function geminiImageAttempts(): GeminiImageAttempt[] {
+  const size = preferredImageSize();
+  return [
+    { imageSize: size },
+    { imageSize: size, responseModalities: ["IMAGE"] },
+    ...(size === "1K" ? [] : [{ imageSize: "1K" as const }]),
+    {},
+  ];
+}
 
 function apiKey(): string {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
@@ -96,12 +122,7 @@ export async function generateGeminiImageViaRest(
   layout: PhotoLayout,
   operation: VisionCostOperation = "photoToColoring",
 ): Promise<{ base64: string; mediaType: string }> {
-  const attempts: RestAttempt[] = [
-    { imageSize: "1K" },
-    { imageSize: "1K", responseModalities: ["IMAGE"] },
-    {},
-    { imageSize: "2K" },
-  ];
+  const attempts = geminiImageAttempts();
 
   const safetySettings = [
     {

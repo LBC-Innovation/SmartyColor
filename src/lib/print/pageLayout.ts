@@ -193,6 +193,44 @@ export function layoutImageOnPage(input: {
   });
 }
 
+/** Resolution a printed book's pages are sent to the printer at (Lulu asks for 300 PPI). */
+export const BOOK_PRINT_PPI = 300;
+/**
+ * A sheet with fewer of its own pixels per printed inch than this has to be
+ * enlarged so far that its lines print visibly soft, however it is resampled.
+ */
+export const BOOK_MIN_SHEET_PPI = 150;
+
+/**
+ * Pixels per printed inch a sheet of this size has once it is laid out on a
+ * book page. Edge-to-edge pages enlarge the sheet more than framed ones, and a
+ * sheet whose shape doesn't match the page is enlarged most of all.
+ */
+export function bookSheetPpi(input: {
+  imageWidth: number;
+  imageHeight: number;
+  rotationDeg?: PageRotation;
+  fit?: PageFit;
+  gutterIn?: number;
+  bleedIn?: number;
+}): number {
+  const pageWidth = BOOK_TRIM_WIDTH_IN * POINTS_PER_INCH;
+  const pageHeight = BOOK_TRIM_HEIGHT_IN * POINTS_PER_INCH;
+  const full = input.fit === "full";
+  const placement = layoutImageOnPage({
+    pageWidth,
+    pageHeight,
+    imageWidth: input.imageWidth,
+    imageHeight: input.imageHeight,
+    rotationDeg: input.rotationDeg,
+    box: full
+      ? fullBleedBox(pageWidth, pageHeight, (input.bleedIn ?? 0) * POINTS_PER_INCH)
+      : bookPageBox(pageWidth, pageHeight, 1, (input.gutterIn ?? 0) * POINTS_PER_INCH),
+    fit: full ? "cover" : "contain",
+  });
+  return POINTS_PER_INCH / placement.scale;
+}
+
 /**
  * pdf-lib `drawImage` options for a placement. pdf-lib rotates counter-clockwise
  * about the image's bottom-left corner, so the corner is solved for here.
