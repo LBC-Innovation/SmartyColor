@@ -20,8 +20,16 @@ export async function POST(request: Request, { params }: Params) {
   if (result.error?.code === "INVALID_STATE") {
     return jsonError(result.error.message, 409, result.error.code);
   }
-  if (result.error?.code === "ADDRESS_REQUIRED") {
-    return jsonError(result.error.message, 400, result.error.code);
+  const code = result.error?.code;
+  if (
+    code === "ADDRESS_REQUIRED" ||
+    code === "BOOK_INCOMPLETE" ||
+    code === "PROOF_REQUIRED" ||
+    code === "COVER_REQUIRED" ||
+    code === "COVER_INVALID" ||
+    code === "INVALID_PAGES"
+  ) {
+    return jsonError(result.error!.message, 400, code);
   }
   return jsonResult(result, result.error ? 500 : 200);
 }

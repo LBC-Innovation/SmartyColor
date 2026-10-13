@@ -6,7 +6,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
-import { BookBindingPicker, type BindingQuote } from "@/components/v2/book-order/BookBindingPicker";
+import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
+import { BookPageFitPicker } from "@/components/v2/book-order/BookPageFitPicker";
+import { BookProofStep } from "@/components/v2/book-order/BookProofStep";
+import {
+  coverSourcesFor,
+  hasOriginalPhotos,
+  useCoverPictures,
+} from "@/components/v2/book-order/useCoverSources";
+import {
+  BookBindingPicker,
+  type BindingQuote,
+  type FormatPrice,
+} from "@/components/v2/book-order/BookBindingPicker";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
 import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { useV2Toast } from "@/components/v2/V2Toast";
@@ -21,11 +33,18 @@ import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
 import { DIGITAL_BOOK_CENTS } from "@/lib/credits/pricing";
 import {
+  BOOK_BINDINGS,
+  PRINT_BINDING_IDS,
   getBookFormat,
   isDigitalFormat,
+  isPrintBindingId,
   recommendBinding,
+  type BookBindingId,
   type BookFormatId,
 } from "@/lib/print/bookBindings";
+import { defaultCoverDesign, normalizeCoverDesign, type BookCoverDesign } from "@/lib/print/bookCover";
+import { clearCoverPictureCache, renderFrontCoverJpeg } from "@/lib/print/coverCanvas";
+import { putToSignedUrl } from "@/lib/library/client";
 import { printRotationForBookPage } from "@/lib/print/bookPageImageFit";
 import {
   computeBookPagePlan,
@@ -34,34 +53,51 @@ import {
   insertAfterContent,
 } from "@/lib/print/bookPagePlan";
 import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
+import type { PageFit } from "@/lib/print/pageLayout";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import {
   EMPTY_SHIPPING_ADDRESS,
   isShippingAddressComplete,
   normalizeShippingAddress,
+  validateBillingAddress,
   validateShippingAddress,
   type ShippingAddressErrors,
 } from "@/lib/orders/shippingAddress";
 import type { DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 
+/** The customer's own address: billing, and where the book ships unless they say otherwise. */
 const ADDRESS_STORAGE_KEY = "cm_shipping_address";
+/** A separate delivery address, when the book ships somewhere else. */
+const SHIP_TO_STORAGE_KEY = "cm_ship_to_address";
+/** Survives the trip to add credit and back, which reloads the wizard. */
+const COVER_STORAGE_KEY = "cm_book_cover_design";
 
-function readStoredAddress(): ShippingAddress {
+function readStoredAddress(key: string): ShippingAddress {
   if (typeof window === "undefined") return EMPTY_SHIPPING_ADDRESS;
   try {
-    const raw = localStorage.getItem(ADDRESS_STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? { ...EMPTY_SHIPPING_ADDRESS, ...(JSON.parse(raw) as Partial<ShippingAddress>) } : EMPTY_SHIPPING_ADDRESS;
   } catch {
     return EMPTY_SHIPPING_ADDRESS;
   }
 }
 
-function storeAddress(address: ShippingAddress) {
+function storeAddress(key: string, address: ShippingAddress) {
   try {
-    localStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(address));
+    localStorage.setItem(key, JSON.stringify(address));
   } catch {
     /* ignore */
+  }
+}
+
+function readStoredCover(): BookCoverDesign | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(COVER_STORAGE_KEY);
+    return raw ? normalizeCoverDesign(JSON.parse(raw)) : null;
+  } catch {
+    return null;
   }
 }
 import {
@@ -71,8 +107,10 @@ import {
 } from "@/lib/v2/loadAlbumPagesForBook";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 
-// Binding first: it decides whether the book needs padded pages at all.
-const STEPS: BookOrderStep[] = ["book", "pages", "review"];
+// Format first: it decides whether the book needs padded pages at all. A printed
+// book also gets a cover and a page-by-page check before checkout.
+const PRINT_STEPS: BookOrderStep[] = ["book", "pages", "cover", "proof", "review"];
+const DIGITAL_STEPS: BookOrderStep[] = ["book", "pages", "review"];
 
 export function V2BookOrderWizard() {
   const router = useRouter();
@@ -91,21 +129,35 @@ export function V2BookOrderWizard() {
   /** Album selection the current bookPages were collected for. */
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const removedIdsRef = useRef<Set<string>>(new Set());
+  /** Framed inside the margin, or filling the page edge to edge. One choice for the whole book. */
+  const [pageFit, setPageFit] = useState<PageFit>("framed");
+  const fittedPages = useMemo(
+    () => bookPages.map((p) => (p.kind === "photo" ? { ...p, fit: pageFit } : p)),
+    [bookPages, pageFit],
+  );
 
   const [chosenBindingId, setBindingId] = useState<BookFormatId>(() => {
     const fromUrl = searchParams.get("binding");
-    return fromUrl === "perfect_bound" || fromUrl === "saddle_stitch" || fromUrl === "digital"
-      ? fromUrl
-      : "saddle_stitch";
+    return isPrintBindingId(fromUrl) || fromUrl === "digital" ? fromUrl : "saddle_stitch";
   });
   const [bindingTouched, setBindingTouched] = useState(false);
 
   // Only rendered on the review step, so reading storage up front can't mismatch SSR.
   // Legacy ZIP-only estimate, used until a full address is entered.
   const [shippingZip] = useState(() => readStoredQuoteShippingZip());
-  const [address, setAddress] = useState<ShippingAddress>(() => readStoredAddress());
+  const [address, setAddress] = useState<ShippingAddress>(() => readStoredAddress(ADDRESS_STORAGE_KEY));
   const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
-  const addressComplete = isShippingAddressComplete(address);
+  const [shipDifferent, setShipDifferent] = useState(false);
+  const [shipTo, setShipTo] = useState<ShippingAddress>(() => readStoredAddress(SHIP_TO_STORAGE_KEY));
+  const [shipToErrors, setShipToErrors] = useState<ShippingAddressErrors>({});
+  /** Where the book is delivered: the customer's own address unless they ship elsewhere. */
+  const shippingAddress = shipDifferent ? shipTo : address;
+  const addressComplete = isShippingAddressComplete(shippingAddress);
+
+  /** Null until the customer changes something, so the cover text follows the book title. */
+  const [coverDraft, setCoverDraft] = useState<BookCoverDesign | null>(() => readStoredCover());
+  /** The exact book (pages, cover, binding) the customer last confirmed in the proof step. */
+  const [confirmedProofKey, setConfirmedProofKey] = useState<string | null>(null);
   const [printQuote, setPrintQuote] = useState<BindingQuote | null>(null);
   const [addCreditShortfall, setAddCreditShortfall] = useState<number | null>(null);
 
@@ -120,7 +172,7 @@ export function V2BookOrderWizard() {
     !bindingTouched && chosenBindingId === "saddle_stitch" ? recommendBinding(contentPageCount(bookPages)) : chosenBindingId;
   const isDigital = isDigitalFormat(bindingId);
   const binding = getBookFormat(bindingId);
-  const plan = useMemo(() => computeBookPagePlan(bookPages, binding), [bookPages, binding]);
+  const plan = useMemo(() => computeBookPagePlan(fittedPages, binding), [fittedPages, binding]);
   const contentCount = contentPageCount(bookPages);
   const selectedQuote: BindingQuote | null = isDigital
     ? { totalCents: DIGITAL_BOOK_CENTS, printCents: null, shippingCents: null, loading: false, error: null }
@@ -146,6 +198,37 @@ export function V2BookOrderWizard() {
   );
   const projectTitle =
     selectedProjects.length === 1 ? selectedProjects[0].name : "My coloring book";
+
+  // ---- cover and proof -----------------------------------------------------
+
+  const steps = isDigital ? DIGITAL_STEPS : PRINT_STEPS;
+  const coverDesign = useMemo(() => coverDraft ?? defaultCoverDesign(projectTitle), [coverDraft, projectTitle]);
+  const { pictures: coverPictures, loading: coverPicturesLoading } = useCoverPictures(
+    plan.allPages,
+    coverDesign.imageSource,
+  );
+  const coverSources = useMemo(() => coverSourcesFor(coverDesign, coverPictures), [coverDesign, coverPictures]);
+  const proofKey = useMemo(
+    () =>
+      JSON.stringify([
+        bindingId,
+        coverDesign,
+        plan.allPages.map((p) => (p.kind === "photo" ? [p.id, p.rotation, p.mirrored === true, p.fit] : [p.variant ?? "plain"])),
+      ]),
+    [bindingId, coverDesign, plan.allPages],
+  );
+  const proofConfirmed = confirmedProofKey === proofKey;
+
+  function updateCover(next: BookCoverDesign) {
+    setCoverDraft(next);
+    try {
+      sessionStorage.setItem(COVER_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  useEffect(() => clearCoverPictureCache, []);
 
   // ---- albums ------------------------------------------------------------
 
@@ -218,10 +301,12 @@ export function V2BookOrderWizard() {
           return insertAfterContent(kept, added);
         });
         setLoadedKey(selectionKey);
-        // Coming back from adding credit: resume on the review step.
+        // Coming back from adding credit reloads the wizard. A print-at-home book
+        // resumes at checkout; a printed one resumes at the page check, because
+        // that confirmation has to be made on the book as it is now.
         if (jumpToStepRef.current === "review" && collected.length > 0) {
           jumpToStepRef.current = null;
-          setStep("review");
+          setStep(isDigitalFormat(chosenBindingId) ? "review" : "proof");
         }
       },
     );
@@ -251,14 +336,14 @@ export function V2BookOrderWizard() {
     if (!quoteActive || isDigitalFormat(bindingId)) return;
     let cancelled = false;
     const t = window.setTimeout(() => {
-      const zip = (addressComplete ? address.postcode : shippingZip).trim();
+      const zip = (addressComplete ? shippingAddress.postcode : shippingZip).trim();
       const shipping = addressComplete
         ? {
             shippingAddress: {
-              city: address.city,
-              state_code: address.state_code,
-              postcode: address.postcode,
-              country_code: address.country_code,
+              city: shippingAddress.city,
+              state_code: shippingAddress.state_code,
+              postcode: shippingAddress.postcode,
+              country_code: shippingAddress.country_code,
             },
           }
         : zip
@@ -294,68 +379,141 @@ export function V2BookOrderWizard() {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, address.city, address.state_code, address.postcode, address.country_code]);
+  }, [quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
+
+  // The customer's own address is a full delivery address unless they ship elsewhere.
+  const validateOwnAddress = shipDifferent ? validateBillingAddress : validateShippingAddress;
+
+  // ---- format prices (first screen) -----------------------------------------
+
+  /** Printed size of the book in each format: the chosen pages, padded as that binding needs. */
+  const formatPageCounts = useMemo(() => {
+    const counts = {} as Record<BookBindingId, number>;
+    for (const id of PRINT_BINDING_IDS) counts[id] = computeBookPagePlan(bookPages, BOOK_BINDINGS[id]).totalPages;
+    return counts;
+  }, [bookPages]);
+  /** Book price (everything but shipping) by `binding:pageCount`; null when no price came back. */
+  const [formatQuotes, setFormatQuotes] = useState<Record<string, number | null>>({});
+  const formatQuotesAsked = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (step !== "book" || loadingAlbums || loadingPages) return;
+    for (const id of PRINT_BINDING_IDS) {
+      const pageCount = formatPageCounts[id];
+      const key = `${id}:${pageCount}`;
+      if (pageCount > BOOK_BINDINGS[id].maxPages || formatQuotesAsked.current.has(key)) continue;
+      formatQuotesAsked.current.add(key);
+      void api.fetchOrderQuote({ bindingId: id, pageCount }).then((result) => {
+        const total = api.isError(result) ? null : result.data.estimatedTotalCents;
+        const shipping = api.isError(result) ? null : result.data.shippingCents;
+        // Total less shipping, so this price plus shipping is what checkout charges.
+        setFormatQuotes((prev) => ({ ...prev, [key]: total != null && shipping != null ? total - shipping : null }));
+      });
+    }
+  }, [step, loadingAlbums, loadingPages, formatPageCounts]);
+
+  const formatPrices = useMemo(() => {
+    const prices: Partial<Record<BookBindingId, FormatPrice>> = {};
+    for (const id of PRINT_BINDING_IDS) {
+      const pageCount = formatPageCounts[id];
+      const key = `${id}:${pageCount}`;
+      prices[id] = {
+        pageCount,
+        bookCents: formatQuotes[key] ?? null,
+        loading: !(key in formatQuotes),
+        overCapacity: pageCount > BOOK_BINDINGS[id].maxPages,
+      };
+    }
+    return prices;
+  }, [formatPageCounts, formatQuotes]);
 
   function updateAddress(next: ShippingAddress) {
     setAddress(next);
-    storeAddress(next);
-    if (Object.keys(addressErrors).length > 0) setAddressErrors(validateShippingAddress(next));
+    storeAddress(ADDRESS_STORAGE_KEY, next);
+    if (Object.keys(addressErrors).length > 0) setAddressErrors(validateOwnAddress(next));
+  }
+
+  function updateShipTo(next: ShippingAddress) {
+    setShipTo(next);
+    storeAddress(SHIP_TO_STORAGE_KEY, next);
+    if (Object.keys(shipToErrors).length > 0) setShipToErrors(validateShippingAddress(next));
   }
 
   // ---- navigation ----------------------------------------------------------
 
   const goNext = useCallback(() => {
     setError(null);
-    if (step === "book") {
-      setStep("pages");
-    } else if (step === "pages") {
-      if (plan.photoCount === 0) {
-        setError("Pick at least one album with a generated coloring sheet.");
+    if (step === "pages" && plan.photoCount === 0) {
+      setError("Pick at least one album with a generated coloring sheet.");
+      return;
+    }
+    if (step === "proof" && !proofConfirmed) {
+      setError("Turn through every page, then tick the box to confirm your book.");
+      return;
+    }
+    if (step !== "review") {
+      setStep(steps[steps.indexOf(step) + 1] ?? "review");
+      return;
+    }
+    if (!isDigital) {
+      const errors = validateOwnAddress(address);
+      const shipErrors = shipDifferent ? validateShippingAddress(shipTo) : {};
+      setAddressErrors(errors);
+      setShipToErrors(shipErrors);
+      if (Object.keys(errors).length > 0) {
+        setError(shipDifferent ? "Please complete your billing address." : "Please complete your address.");
+        document.getElementById("ship-name")?.focus();
         return;
       }
-      setStep("review");
-    } else {
-      if (!isDigital) {
-        const errors = validateShippingAddress(address);
-        setAddressErrors(errors);
-        if (Object.keys(errors).length > 0) {
-          setError("Please complete the shipping address.");
-          document.getElementById("ship-name")?.focus();
-          return;
-        }
+      if (Object.keys(shipErrors).length > 0) {
+        setError("Please complete the shipping address.");
+        document.getElementById("ship-to-name")?.focus();
+        return;
       }
-      setConfirmOpen(true);
     }
-  }, [step, plan.photoCount, address, isDigital]);
+    setConfirmOpen(true);
+  }, [step, steps, plan.photoCount, proofConfirmed, address, shipTo, shipDifferent, validateOwnAddress, isDigital]);
 
   function goBack() {
     setError(null);
-    if (step === "review") setStep("pages");
-    else if (step === "pages") setStep("book");
+    const at = steps.indexOf(step);
+    if (at > 0) setStep(steps[at - 1]);
     else router.push("/studio");
   }
 
-  async function placeDigitalOrder() {
-    setPlacing(true);
-    setError(null);
+  /** The book's pages as the server stores them, or null if one isn't saved to the library. */
+  function pageManifest(): DigitalBookPage[] | null {
     const pages: DigitalBookPage[] = [];
     for (const page of plan.allPages) {
       if (page.kind === "blank") {
         pages.push({ kind: "blank", variant: page.variant === "lined" ? "lined" : "plain" });
         continue;
       }
-      if (!page.revisionId) {
-        setError("One of your pages isn't saved to your library yet. Open it in the studio and try again.");
-        setPlacing(false);
-        setConfirmOpen(false);
-        return;
-      }
+      if (!page.revisionId) return null;
       pages.push({
         kind: "photo",
         revisionId: page.revisionId,
         rotation: printRotationForBookPage(page, binding) as 0 | 90 | 180 | 270,
         mirrored: page.mirrored === true,
+        ...(page.fit === "full" ? { fit: "full" as const } : {}),
       });
+    }
+    return pages;
+  }
+
+  function failUnsavedPage() {
+    setError("One of your pages isn't saved to your library yet. Open it in the studio and try again.");
+    setPlacing(false);
+    setConfirmOpen(false);
+  }
+
+  async function placeDigitalOrder() {
+    setPlacing(true);
+    setError(null);
+    const pages = pageManifest();
+    if (!pages) {
+      failUnsavedPage();
+      return;
     }
 
     const created = await api.createDigitalBookOrder({ projectTitle, pages });
@@ -384,8 +542,19 @@ export function V2BookOrderWizard() {
     }
     setPlacing(true);
     setError(null);
-    const shippingPostcode = shippingZip.trim() || null;
-    const shippingAddress = normalizeShippingAddress(address);
+    const pages = pageManifest();
+    if (!pages) {
+      failUnsavedPage();
+      return;
+    }
+    const book = {
+      shippingPostcode: shippingZip.trim() || null,
+      shippingAddress: normalizeShippingAddress(shippingAddress),
+      billingAddress: shipDifferent ? normalizeShippingAddress(address) : null,
+      pages,
+      coverDesign,
+      proofConfirmed,
+    };
     let orderId = savedDraftIdRef.current;
 
     if (orderId) {
@@ -394,8 +563,7 @@ export function V2BookOrderWizard() {
         pageCount: plan.totalPages,
         projectTitle,
         estimatedTotalCents: quoteCents,
-        shippingPostcode,
-        shippingAddress,
+        ...book,
       });
       if (api.isError(updated)) {
         setError(updated.error.message);
@@ -410,8 +578,7 @@ export function V2BookOrderWizard() {
         blankCount: plan.blankCount,
         projectTitle,
         estimatedTotalCents: quoteCents,
-        shippingPostcode,
-        shippingAddress,
+        ...book,
       });
       if (api.isError(created)) {
         setError(created.error.message);
@@ -422,11 +589,44 @@ export function V2BookOrderWizard() {
       savedDraftIdRef.current = orderId;
     }
 
+    // The front cover goes up as a print-size image, drawn by the same code as the preview.
+    const upload = await api.createOrderCoverUpload(orderId);
+    if (api.isError(upload)) {
+      setError(upload.error.message);
+      setPlacing(false);
+      return;
+    }
+    let coverImage: Blob;
+    try {
+      coverImage = await renderFrontCoverJpeg({
+        design: coverDesign,
+        sources: coverSources,
+        bindingId,
+        fontHost: document.querySelector(".v2-shell") ?? document.body,
+      });
+    } catch {
+      setError("We couldn't prepare your cover. Please try again.");
+      setPlacing(false);
+      return;
+    }
+    const uploaded = await putToSignedUrl(upload.data, coverImage, "image/jpeg");
+    if (api.isError(uploaded)) {
+      setError("We couldn't save your cover. Please try again.");
+      setPlacing(false);
+      return;
+    }
+
     const confirmed = await api.confirmDraftBookOrder(orderId);
     setPlacing(false);
     if (api.isError(confirmed)) {
       setError(confirmed.error.message);
+      setConfirmOpen(false);
       return;
+    }
+    try {
+      sessionStorage.removeItem(COVER_STORAGE_KEY);
+    } catch {
+      /* ignore */
     }
     setConfirmOpen(false);
     router.push(`/orders/${orderId}?confirmed=1`);
@@ -438,23 +638,31 @@ export function V2BookOrderWizard() {
     step === "book"
       ? "Choose pages"
       : step === "pages"
-        ? "Review order"
-        : isDigital
-          ? `Buy PDF · ${formatCredits(DIGITAL_BOOK_CENTS)}`
-          : "Place order";
+        ? isDigital
+          ? "Review order"
+          : "Design cover"
+        : step === "cover"
+          ? "Check your book"
+          : step === "proof"
+            ? "Checkout"
+            : isDigital
+              ? `Buy PDF · ${formatCredits(DIGITAL_BOOK_CENTS)}`
+              : "Place order";
   const nextDisabled =
     (step === "pages" && (plan.photoCount === 0 || loadingPages || overCapacity)) ||
+    (step === "cover" && coverPicturesLoading && coverDesign.layout !== "none") ||
+    (step === "proof" && !proofConfirmed) ||
     (step === "review" && (placing || quoteLoading || !selectedAffordable || quoteCents == null));
 
   return (
     <V2StudioFrame hideBottomNav>
       <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
         <header className="shrink-0 border-b border-gray-200 bg-white">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:py-4">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between sm:px-8 sm:py-4">
             <h1 className="v2-brand-title text-xl tracking-tight text-v2-ink sm:text-2xl">
               Create a coloring book
             </h1>
-            <BookOrderStepper steps={STEPS} current={step} />
+            <BookOrderStepper steps={steps} current={step} />
           </div>
         </header>
 
@@ -486,11 +694,13 @@ export function V2BookOrderWizard() {
                       <h2 className="text-base font-semibold text-v2-ink">How do you want your book?</h2>
                       <p className="mt-0.5 text-sm text-v2-muted">
                         8.5 × 11″ · portrait. Pick this first — printed books need a set number
-                        of pages, a PDF is exactly the pages you choose.
+                        of pages and get a cover you design, a PDF is exactly the pages you choose.
                       </p>
                     </div>
                     <BookBindingPicker
                       value={bindingId}
+                      prices={formatPrices}
+                      contentPageCount={contentCount}
                       onChange={(id) => {
                         setBindingTouched(true);
                         setBindingId(id);
@@ -547,6 +757,13 @@ export function V2BookOrderWizard() {
                         Loading pages…
                       </p>
                     ) : plan.photoCount > 0 ? (
+                      <>
+                      <BookPageFitPicker
+                        value={pageFit}
+                        onChange={setPageFit}
+                        sample={plan.contentPages[0]}
+                        binding={binding}
+                      />
                       <BookPageThumbnailGrid
                         binding={binding}
                         pages={plan.allPages}
@@ -565,6 +782,7 @@ export function V2BookOrderWizard() {
                         onInsertBlank={() => insertBlank("plain")}
                         onInsertLined={() => insertBlank("lined")}
                       />
+                      </>
                     ) : selectedProjectIds.length > 0 ? (
                       <div className="v2-panel p-5 text-sm text-v2-muted">
                         None of these photos has a coloring sheet yet. Go back to the studio and
@@ -591,6 +809,45 @@ export function V2BookOrderWizard() {
                         Preview the book
                       </button>
                     ) : null}
+                  </section>
+                ) : null}
+
+                {step === "cover" && !isDigital ? (
+                  <section className="space-y-4" aria-label="Design cover">
+                    <div>
+                      <h2 className="text-base font-semibold text-v2-ink">Design your cover</h2>
+                      <p className="mt-0.5 text-sm text-v2-muted">
+                        The cover prints in full color. What you see here is what goes to the printer.
+                      </p>
+                    </div>
+                    <BookCoverDesigner
+                      design={coverDesign}
+                      onChange={updateCover}
+                      binding={binding}
+                      pictures={coverPictures}
+                      picturesLoading={coverPicturesLoading}
+                      canUseOriginals={hasOriginalPhotos(plan.allPages)}
+                    />
+                  </section>
+                ) : null}
+
+                {step === "proof" && !isDigital ? (
+                  <section className="space-y-4" aria-label="Check your book">
+                    <div>
+                      <h2 className="text-base font-semibold text-v2-ink">Check your book, cover to cover</h2>
+                      <p className="mt-0.5 text-sm text-v2-muted">
+                        This is your proof. Turn every page and make sure it&apos;s what you expect —
+                        go back a step to change anything.
+                      </p>
+                    </div>
+                    <BookProofStep
+                      pages={plan.allPages}
+                      binding={binding}
+                      design={coverDesign}
+                      coverSources={coverSources}
+                      confirmed={proofConfirmed}
+                      onConfirmedChange={(ok) => setConfirmedProofKey(ok ? proofKey : null)}
+                    />
                   </section>
                 ) : null}
 
@@ -627,23 +884,56 @@ export function V2BookOrderWizard() {
                     <div className="v2-panel p-5 sm:p-6">
                       {!isDigital ? (
                         <>
-                          <h2 className="text-base font-semibold text-v2-ink">Ship to</h2>
+                          <h2 className="text-base font-semibold text-v2-ink">
+                            {shipDifferent ? "Billing address" : "Your address"}
+                          </h2>
                           <p className="mt-0.5 text-xs text-v2-muted">
-                            Where the printer should mail your book.
+                            {shipDifferent
+                              ? "The address for your account and receipt."
+                              : "Your billing address, and where the printer mails your book."}
                           </p>
                           <BookShippingAddressForm
                             className="mt-4"
                             value={address}
                             onChange={updateAddress}
                             errors={addressErrors}
+                            section={shipDifferent ? "billing" : "shipping"}
+                            hideContact={shipDifferent}
                           />
+                          <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-v2-navy">
+                            <input
+                              type="checkbox"
+                              checked={shipDifferent}
+                              onChange={(e) => {
+                                setShipDifferent(e.target.checked);
+                                setAddressErrors({});
+                                setShipToErrors({});
+                              }}
+                            />
+                            Ship to a different address
+                          </label>
+                          {shipDifferent ? (
+                            <>
+                              <h2 className="mt-6 text-base font-semibold text-v2-ink">Ship to</h2>
+                              <p className="mt-0.5 text-xs text-v2-muted">
+                                Where the printer should mail your book.
+                              </p>
+                              <BookShippingAddressForm
+                                className="mt-4"
+                                idPrefix="ship-to"
+                                value={shipTo}
+                                onChange={updateShipTo}
+                                errors={shipToErrors}
+                              />
+                            </>
+                          ) : null}
                         </>
                       ) : null}
 
                       <h2 className={cn("text-base font-semibold text-v2-ink", !isDigital && "mt-6")}>Price</h2>
                       {!isDigital && !addressComplete ? (
                         <p className="mt-1 text-xs text-v2-muted">
-                          Shipping is estimated until the address above is complete.
+                          Shipping is estimated until the shipping address is complete.
                         </p>
                       ) : null}
                       <dl className="mt-4 space-y-1.5 text-sm">
@@ -739,7 +1029,7 @@ export function V2BookOrderWizard() {
         photoCount={plan.photoCount}
         totalCents={quoteCents}
         shippingZip={shippingZip}
-        shippingAddress={address}
+        shippingAddress={shippingAddress}
         onCancel={() => !placing && setConfirmOpen(false)}
         onConfirm={() => void placeOrder()}
       />

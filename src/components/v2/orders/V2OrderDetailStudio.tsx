@@ -23,8 +23,7 @@ import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
 import type { BookOrderDetail } from "@/lib/orders/types";
 
-function formatAddress(order: BookOrderDetail): string {
-  const a = order.shippingAddress;
+function formatAddress(a: ShippingAddress): string {
   const lines = [
     a.name,
     a.street1,
@@ -47,10 +46,10 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   const [downloading, setDownloading] = useState(false);
   const purchased = searchParams.get("purchased") === "1";
 
-  async function downloadPdf(title: string) {
+  async function downloadPdf(title: string, file?: "interior" | "cover") {
     setDownloading(true);
     setError(null);
-    const result = await api.downloadOrderPdf(orderId, title);
+    const result = await api.downloadOrderPdf(orderId, title, file);
     setDownloading(false);
     if (api.isError(result)) setError(result.error.message);
   }
@@ -314,7 +313,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                 </div>
                 {isShippingAddressComplete(order.shippingAddress) ? (
                   <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-v2-ink">
-                    {formatAddress(order)}
+                    {formatAddress(order.shippingAddress)}
                   </pre>
                 ) : (
                   <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -322,7 +321,42 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     No shipping address yet — add one before this order can go to checkout.
                   </p>
                 )}
+                {order.billingAddress ? (
+                  <>
+                    <h2 className="mt-4 text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                      Billing address
+                    </h2>
+                    <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-v2-ink">
+                      {formatAddress(order.billingAddress)}
+                    </pre>
+                  </>
+                ) : null}
               </section>
+              ) : null}
+
+              {order.fulfillment !== "digital" && order.hasPrintFiles ? (
+                <section className="v2-panel mb-4 p-4 sm:p-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                    Print files
+                  </h2>
+                  <p className="mt-2 text-sm text-v2-muted">
+                    The exact files the printer receives: your cover, and every inside page.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(["cover", "interior"] as const).map((file) => (
+                      <button
+                        key={file}
+                        type="button"
+                        disabled={downloading}
+                        onClick={() => void downloadPdf(`${order.projectTitle?.trim() || order.productName} ${file}`, file)}
+                        className="v2-btn-outline text-sm"
+                      >
+                        <Download className="h-4 w-4" aria-hidden />
+                        {file === "cover" ? "Cover PDF" : "Pages PDF"}
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ) : null}
 
               {order.events.length > 0 ? (

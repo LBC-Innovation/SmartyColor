@@ -3,12 +3,14 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export type BookOrderStep = "pages" | "book" | "review";
+export type BookOrderStep = "book" | "pages" | "cover" | "proof" | "review";
 
 const LABEL: Record<BookOrderStep, string> = {
-  book: "Binding",
+  book: "Format",
   pages: "Pages",
-  review: "Review",
+  cover: "Cover",
+  proof: "Check",
+  review: "Checkout",
 };
 
 export function BookOrderStepper({
@@ -35,7 +37,8 @@ export function BookOrderStepper({
             ) : null}
             <span
               className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-2.5 text-xs font-semibold",
+                "inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-1 text-xs font-semibold md:pr-2.5",
+                active && "pr-2.5",
                 active && "bg-v2-primary-light text-v2-link",
                 done && "text-v2-navy",
                 !active && !done && "text-v2-muted",
@@ -52,7 +55,8 @@ export function BookOrderStepper({
               >
                 {done ? <Check className="h-3 w-3" strokeWidth={3} /> : i + 1}
               </span>
-              {LABEL[step]}
+              {/* Five steps don't fit a phone: only the current one keeps its name there. */}
+              <span className={cn(!active && "hidden md:inline")}>{LABEL[step]}</span>
             </span>
           </li>
         );

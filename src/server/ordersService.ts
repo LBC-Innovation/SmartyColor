@@ -15,6 +15,11 @@ import type {
   ShippingAddress,
 } from "@/lib/orders/types";
 import { isShippingAddressComplete, normalizeShippingAddress } from "@/lib/orders/shippingAddress";
+import type { DigitalBookPage } from "@/lib/orders/types";
+import { bindingIdForProduct } from "@/lib/print/bookBindings";
+import { normalizeCoverDesign, type BookCoverDesign } from "@/lib/print/bookCover";
+import type { SignedUpload } from "@/lib/library/types";
+import { buildPrintFiles, createCoverFrontUpload, parsePrintPages } from "@/server/printBookService";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { quoted, recordActivity } from "@/server/activityService";
 import { luluConfigured } from "@/server/lulu/config";
@@ -48,6 +53,8 @@ type OrderRow = {
   estimated_dispatch_max: string | null;
   contact_email: string;
   shipping_address: ShippingAddress;
+  billing_address?: ShippingAddress | null;
+  cover_pdf_path?: string | null;
   paid_at: string | null;
   submitted_to_lulu_at: string | null;
   shipped_at: string | null;
@@ -116,6 +123,8 @@ function mapDetail(row: OrderRow, events: EventRow[]): BookOrderDetail {
     ...summary,
     contactEmail: row.contact_email,
     shippingAddress: row.shipping_address,
+    billingAddress: row.billing_address ?? null,
+    hasPrintFiles: Boolean(row.cover_pdf_path),
     carrier: row.carrier,
     estimatedDispatchMin: row.estimated_dispatch_min,
     estimatedDispatchMax: row.estimated_dispatch_max,
@@ -148,7 +157,26 @@ async function appendOrderEvent(
   });
 }
 
-export async function createDraftBookOrder(input: {
+/** What the wizard saves about the book itself, alongside price and addresses. */
+export type DraftBookContent = {
+  /** Every printed page in order, padding included. */
+  printPages?: DigitalBookPage[] | null;
+  coverDesign?: BookCoverDesign | null;
+  billingAddress?: ShippingAddress | null;
+  /** The customer flipped through the whole book and said it's right. */
+  proofConfirmed?: boolean;
+};
+
+function draftContentColumns(input: DraftBookContent) {
+  return {
+    print_pages: input.printPages ?? null,
+    cover_design: input.coverDesign ?? null,
+    billing_address: input.billingAddress ? normalizeShippingAddress(input.billingAddress) : null,
+    proof_confirmed_at: input.proofConfirmed ? new Date().toISOString() : null,
+  };
+}
+
+export async function createDraftBookOrder(input: DraftBookContent & {
   userId: string;
   contactEmail: string;
   productId: string;
@@ -174,6 +202,7 @@ export async function createDraftBookOrder(input: {
       shipping_address: input.shippingAddress
         ? normalizeShippingAddress(input.shippingAddress)
         : shippingAddressFromQuotePostcode(input.shippingPostcode),
+      ...draftContentColumns(input),
     })
     .select("id")
     .single();
@@ -232,7 +261,7 @@ async function getOwnedDraftOrder(
   return { data: row, error: null };
 }
 
-export async function updateDraftBookOrder(input: {
+export async function updateDraftBookOrder(input: DraftBookContent & {
   userId: string;
   orderId: string;
   productId: string;
@@ -262,6 +291,7 @@ export async function updateDraftBookOrder(input: {
       lulu_cost_cents: input.luluCostCents,
       total_cents: input.totalCents,
       shipping_address: mergedAddress,
+      ...draftContentColumns(input),
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.orderId)
@@ -332,10 +362,45 @@ export async function confirmDraftBookOrder(input: {
     };
   }
 
+  // The print files are built before anything is charged, so a book that can't
+  // be printed never reaches payment.
+  const draft = owned.data! as OrderRow & {
+    print_pages?: unknown;
+    cover_design?: unknown;
+    proof_confirmed_at?: string | null;
+  };
+  const bindingId = bindingIdForProduct(draft.product_id);
+  const pages = bindingId ? parsePrintPages(draft.print_pages, bindingId) : null;
+  if (!bindingId || !pages?.data || pages.data.length !== draft.page_count || !draft.cover_design) {
+    return {
+      data: null,
+      error: {
+        message: "This book needs its pages and cover set up again. Please create it from the studio.",
+        code: "BOOK_INCOMPLETE",
+      },
+    };
+  }
+  if (!draft.proof_confirmed_at) {
+    return {
+      data: null,
+      error: { message: "Flip through the book and confirm it looks right before ordering.", code: "PROOF_REQUIRED" },
+    };
+  }
+  const files = await buildPrintFiles({
+    userId: input.userId,
+    orderId: input.orderId,
+    bindingId,
+    pages: pages.data,
+    cover: normalizeCoverDesign(draft.cover_design),
+  });
+  if (files.error) return { data: null, error: files.error };
+
   const { error } = await getSupabaseAdmin()
     .from("book_orders")
     .update({
       status: "awaiting_payment",
+      interior_pdf_path: files.data!.interiorPdfPath,
+      cover_pdf_path: files.data!.coverPdfPath,
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.orderId)
@@ -505,7 +570,7 @@ export async function getOrderForUser(
       total_cents, shipping_level, lulu_status_name, lulu_status_message,
       lulu_print_job_id, tracking_number, tracking_urls, carrier,
       estimated_delivery_min, estimated_delivery_max, estimated_dispatch_min,
-      estimated_dispatch_max, contact_email, shipping_address, paid_at,
+      estimated_dispatch_max, contact_email, shipping_address, billing_address, cover_pdf_path, paid_at,
       submitted_to_lulu_at, shipped_at, delivered_at, created_at, updated_at,
       print_products ( name )
     `,
@@ -801,4 +866,37 @@ export async function softDeleteOrderAsAdmin(input: {
   });
 
   return { data: { success: true }, error: null };
+}
+
+/** A print order's print-ready file, for the customer who owns it. */
+export async function getPrintOrderFilePath(
+  userId: string,
+  orderId: string,
+  file: "interior" | "cover",
+): Promise<ApiResult<{ path: string; title: string }>> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("project_title, fulfillment, interior_pdf_path, cover_pdf_path")
+    .eq("id", orderId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) return { data: null, error: { message: error.message } };
+  const path = (file === "cover" ? data?.cover_pdf_path : data?.interior_pdf_path) as string | null | undefined;
+  if (!data || data.fulfillment === "digital" || !path) {
+    return { data: null, error: { message: "Print file not found", code: "NOT_FOUND" } };
+  }
+  const title = (data.project_title as string | null)?.trim() || "coloring-book";
+  return { data: { path, title: `${title} ${file}` }, error: null };
+}
+
+/** Signed upload for the front cover image; only while the order is still a draft. */
+export async function createDraftCoverUpload(userId: string, orderId: string): Promise<ApiResult<SignedUpload>> {
+  const owned = await getOwnedDraftOrder(userId, orderId);
+  if (owned.error) return { data: null, error: owned.error };
+  try {
+    return { data: await createCoverFrontUpload(userId, orderId), error: null };
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : "Could not start the cover upload." } };
+  }
 }

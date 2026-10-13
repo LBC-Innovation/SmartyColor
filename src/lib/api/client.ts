@@ -1,6 +1,8 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { FeatureAccess } from "@/lib/auth/features";
 import type { BookBindingId } from "@/lib/print/bookBindings";
+import type { BookCoverDesign } from "@/lib/print/bookCover";
+import type { SignedUpload } from "@/lib/library/types";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import type { CreditLedgerEntry, CreditTopUpConfirmation, PromoCreditSettings } from "@/lib/credits/types";
@@ -441,7 +443,17 @@ export type BookDraftPayload = {
   estimatedTotalCents: number | null;
   shippingPostcode?: string | null;
   shippingAddress?: ShippingAddress | null;
+  /** Only when the customer ships somewhere other than their billing address. */
+  billingAddress?: ShippingAddress | null;
+  pages: DigitalBookPage[];
+  coverDesign: BookCoverDesign;
+  proofConfirmed: boolean;
 };
+
+/** Signed PUT target for the print-ready front cover image of a draft order. */
+export function createOrderCoverUpload(orderId: string): Promise<ApiResult<SignedUpload>> {
+  return request(`/orders/${orderId}/cover-upload`, { method: "POST" });
+}
 
 export function createDraftBookOrder(
   input: BookDraftPayload,
@@ -505,9 +517,14 @@ export function createDigitalBookOrder(input: {
 }
 
 /** Save a paid digital order's PDF to the user's device. Free to repeat. */
-export async function downloadOrderPdf(orderId: string, fileName = "colorful-memories-book"): Promise<ApiResult<true>> {
+export async function downloadOrderPdf(
+  orderId: string,
+  fileName = "colorful-memories-book",
+  /** Printed orders: which print-ready file to fetch. */
+  file?: "interior" | "cover",
+): Promise<ApiResult<true>> {
   try {
-    const res = await authedFetch(`/api/orders/${orderId}/pdf`);
+    const res = await authedFetch(`/api/orders/${orderId}/pdf${file ? `?file=${file}` : ""}`);
     if (!res.ok) {
       let message = "Could not download the PDF.";
       try {

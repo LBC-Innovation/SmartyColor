@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { BookPrintGuidesToggle } from "@/components/v2/book-order/BookPrintGuidesToggle";
 import { BookPrintPagePreview } from "@/components/v2/book-order/BookPrintPagePreview";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import { BOOK_PAGE_COUNT_HINT } from "@/lib/print/bookPageCountCopy";
@@ -33,6 +34,7 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
   // Phones page one side at a time; wider screens show the open-book spread.
   const stepTotal = wide ? spreadTotal : pages.length;
   const [rawPos, setPos] = useState(0);
+  const [showGuides, setShowGuides] = useState(true);
   // Clamp at render so a shrinking page list never leaves us past the end.
   const pos = Math.min(rawPos, Math.max(0, stepTotal - 1));
   const spreadIndex = wide ? pos : Math.floor(pos / 2);
@@ -58,7 +60,7 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
   return (
     <V2Modal onClose={onClose} maxWidthClass="max-w-4xl" title={title}>
       <div className="px-4 pb-6 pt-2 sm:px-6">
-        <div className="mx-auto flex max-h-[min(68dvh,40rem)] w-full items-stretch justify-center gap-2 rounded-xl border border-gray-300 bg-gradient-to-b from-gray-100 to-gray-200 p-3 shadow-inner sm:gap-3 sm:p-4">
+        <div className="mx-auto flex h-[min(62dvh,40rem)] w-full items-stretch justify-center gap-2 rounded-xl border border-gray-300 bg-gradient-to-b from-gray-100 to-gray-200 p-3 shadow-inner sm:gap-3 sm:p-4">
           {wide ? (
             <>
               <BookPrintPagePreview
@@ -66,6 +68,7 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
                 pageNumber={spread.leftPageNumber}
                 binding={binding}
                 side="left"
+                showGuides={showGuides}
               />
               <div className="w-px shrink-0 bg-gray-300/80" aria-hidden />
               <BookPrintPagePreview
@@ -73,6 +76,7 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
                 pageNumber={spread.rightPageNumber}
                 binding={binding}
                 side="right"
+                showGuides={showGuides}
               />
             </>
           ) : (
@@ -81,6 +85,7 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
               pageNumber={pos + 1}
               binding={binding}
               side={pos % 2 === 0 ? "right" : "left"}
+              showGuides={showGuides}
               className="max-w-xs"
             />
           )}
@@ -110,6 +115,10 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
             Next
             <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
+        </div>
+
+        <div className="mt-3">
+          <BookPrintGuidesToggle checked={showGuides} onChange={setShowGuides} printed={binding.id !== "digital"} />
         </div>
 
         <p className="mt-3 text-center text-xs leading-relaxed text-v2-muted">

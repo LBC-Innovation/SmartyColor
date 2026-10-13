@@ -1,5 +1,5 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
-import { getBookBinding, type BookBindingId } from "@/lib/print/bookBindings";
+import { getBookBinding, isPrintBindingId } from "@/lib/print/bookBindings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { luluConfigured } from "@/server/lulu/config";
 import { fetchLuluPrintJobCost } from "@/server/lulu/costCalculation";
@@ -10,15 +10,15 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
 
   const body = (await request.json()) as {
-    bindingId?: BookBindingId;
+    bindingId?: string;
     pageCount?: number;
     shippingPostcode?: string;
     shippingLevel?: string;
     shippingAddress?: { city?: string; state_code?: string; postcode?: string; country_code?: string };
   };
 
-  if (body.bindingId !== "perfect_bound" && body.bindingId !== "saddle_stitch") {
-    return jsonError("bindingId must be perfect_bound or saddle_stitch", 400);
+  if (!isPrintBindingId(body.bindingId)) {
+    return jsonError("bindingId must be a print binding", 400);
   }
   if (typeof body.pageCount !== "number" || !Number.isInteger(body.pageCount) || body.pageCount < 1) {
     return jsonError("pageCount must be a positive integer", 400);

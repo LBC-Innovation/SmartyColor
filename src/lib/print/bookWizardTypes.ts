@@ -1,4 +1,5 @@
 import type { BookBindingId } from "@/lib/print/bookBindings";
+import type { PageFit } from "@/lib/print/pageLayout";
 import type { Orientation } from "@/lib/print/settings";
 
 export type PrintRotation = 0 | 90 | 180 | 270;
@@ -13,10 +14,14 @@ export type BookWizardPhotoPage = {
   revisionId?: string;
   title: string;
   imageDataUrl: string;
+  /** Where the original color photo lives (cloud libraries), for the cover. */
+  photoSource?: { storagePath: string; url: string };
   sheetOrientation: Orientation;
   rotation: PrintRotation;
   /** Mirrored left-to-right on the printed (portrait) page. */
   mirrored?: boolean;
+  /** Framed inside the margin (default) or filling the page edge to edge. Set for the whole book. */
+  fit?: PageFit;
 };
 
 export type BookWizardBlankPage = {
