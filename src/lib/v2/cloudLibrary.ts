@@ -34,6 +34,9 @@ async function revisionToVersion(rev: LibraryRevision): Promise<SheetVersion> {
     id: rev.id,
     createdAt: rev.createdAt,
     sheet: { title: rev.title, mimeType: rev.mimeType, imageDataUrl: url, storagePath: rev.storagePath },
+    kind: rev.kind,
+    orientation: (rev.orientation as SheetVersion["orientation"] | null) ?? undefined,
+    sourceRevisionId: rev.sourceRevisionId,
   };
 }
 
@@ -122,6 +125,7 @@ export async function uploadRevisionToLibrary(input: {
   photoId: string;
   sheet: GeneratedSheet;
   makeActive?: boolean;
+  meta?: Pick<SheetVersion, "kind" | "orientation" | "sourceRevisionId">;
 }): Promise<LibraryPhoto> {
   const blob = dataUrlToBlob(input.sheet.imageDataUrl);
   const mime = blob.type || input.sheet.mimeType || "image/png";
@@ -134,6 +138,7 @@ export async function uploadRevisionToLibrary(input: {
     mimeType: mime,
     title: input.sheet.title,
     makeActive: input.makeActive ?? true,
+    ...input.meta,
   });
   if (registered.error) throw new Error(registered.error.message);
   await primeImageCache(ticket.data!.path, blob);

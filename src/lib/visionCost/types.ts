@@ -1,6 +1,7 @@
 export type VisionCostOperation =
   | "photoToColoring"
   | "correctPhotoColoring"
+  | "photoToPortrait"
   | "generateImage"
   | "refine"
   | "storybookPhotoChat"

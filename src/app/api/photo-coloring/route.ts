@@ -9,7 +9,7 @@ import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
 import { withVisionUser } from "@/lib/visionCost/context";
-import { addRevisionFromSheet } from "@/server/libraryService";
+import { addRevisionFromSheet, type RevisionMeta } from "@/server/libraryService";
 import { quoted, recordActivity } from "@/server/activityService";
 import {
   chargeSheetUsage,
@@ -42,7 +42,8 @@ type Body =
       image?: PhotoImageSizeHint;
     }
   /* Cloud library (signed-in): bytes are read from storage and the result is stored as a revision. */
-  | { mode: "generate-library"; photoId: string }
+  /* sourceRevisionId: draw from a portrait version of the photo instead of the upload. */
+  | { mode: "generate-library"; photoId: string; sourceRevisionId?: string }
   | { mode: "correct-library"; photoId: string; revisionId: string; corrections: string[] };
 
 function mergePrintPrefs(raw?: PrintPrefs): PrintPrefs {
@@ -195,6 +196,9 @@ async function handleLibraryModeForUser(
     return Response.json({ error: photo.error.message }, { status: photo.error.code === "NOT_FOUND" ? 404 : 500 });
   }
   const { photo: record, dataUrl, printPrefs } = photo.data!;
+  if (body.mode === "generate-library" && body.sourceRevisionId !== undefined && typeof body.sourceRevisionId !== "string") {
+    return Response.json({ error: "sourceRevisionId must be a string." }, { status: 400 });
+  }
 
   // Don't spend on the model for a wallet that can't cover it.
   const quote = await quoteSheetUsage(userId, kind, record.editCount);
@@ -206,26 +210,56 @@ async function handleLibraryModeForUser(
     );
   }
 
-  const image =
-    record.width && record.height ? { width: record.width, height: record.height } : undefined;
   const ai = createColoringAI();
 
-  let sheet;
-  if (body.mode === "generate-library") {
-    sheet = await ai.photoToColoring({ photoDataUrl: dataUrl, printPrefs, image });
-  } else {
-    const current = await revisionDataUrlById(userId, body.revisionId);
+  let current;
+  if (body.mode === "correct-library") {
+    current = await revisionDataUrlById(userId, body.revisionId);
     if (current.error) {
       return Response.json({ error: current.error.message }, { status: current.error.code === "NOT_FOUND" ? 404 : 500 });
     }
-    sheet = await ai.correctPhotoColoring({
-      photoDataUrl: dataUrl,
-      sheetDataUrl: current.data!.dataUrl,
-      corrections,
-      printPrefs,
-      image,
-    });
+    if (current.data!.photoId !== record.id || current.data!.kind === "photo") {
+      return Response.json({ error: "That version is not a coloring sheet of this photo." }, { status: 400 });
+    }
   }
+
+  // A sheet of a portrait version is drawn from, and checked against, that version.
+  const sourceRevisionId =
+    body.mode === "generate-library" ? body.sourceRevisionId : current!.data!.sourceRevisionId;
+  let source: { dataUrl: string; printPrefs: PrintPrefs; image?: PhotoImageSizeHint };
+  let meta: RevisionMeta | undefined;
+  if (sourceRevisionId) {
+    const version = await revisionDataUrlById(userId, sourceRevisionId);
+    if (version.error) {
+      return Response.json({ error: version.error.message }, { status: version.error.code === "NOT_FOUND" ? 404 : 500 });
+    }
+    if (version.data!.photoId !== record.id || version.data!.kind !== "photo") {
+      return Response.json({ error: "That version is not a photo version of this photo." }, { status: 400 });
+    }
+    const orientation = version.data!.orientation === "landscape" ? "landscape" : "portrait";
+    source = { dataUrl: version.data!.dataUrl, printPrefs: { ...printPrefs, orientation } };
+    meta = { orientation, sourceRevisionId };
+  } else {
+    source = {
+      dataUrl,
+      printPrefs,
+      image: record.width && record.height ? { width: record.width, height: record.height } : undefined,
+    };
+  }
+
+  const sheet = current
+    ? await ai.correctPhotoColoring({
+        photoDataUrl: source.dataUrl,
+        sheetDataUrl: current.data!.dataUrl,
+        corrections,
+        printPrefs: source.printPrefs,
+        image: source.image,
+      })
+    : await ai.photoToColoring({
+        photoDataUrl: source.dataUrl,
+        printPrefs: source.printPrefs,
+        image: source.image,
+      });
 
   // Charge only once there is a sheet to hand over; refund if it can't be saved.
   const charge = await chargeSheetUsage(userId, record.id, kind);
@@ -241,7 +275,7 @@ async function handleLibraryModeForUser(
 
   let stored;
   try {
-    stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet);
+    stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet, meta);
   } catch (error) {
     await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
     throw error;

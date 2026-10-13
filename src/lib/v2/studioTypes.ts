@@ -41,6 +41,47 @@ export function photoPrintPrefs(photo: { image?: V2PhotoImageMeta; printPrefs: P
   return { ...photo.printPrefs, orientation: photoOrientation(photo) };
 }
 
+type VersionedPhoto = {
+  image?: V2PhotoImageMeta;
+  printPrefs: PrintPrefs;
+  sheet?: GeneratedSheet | null;
+  sheetRevisions?: SheetVersion[];
+  activeRevisionId?: string | null;
+};
+
+/** The version the studio is showing: the chosen one, else the newest. */
+export function activeSheetVersion(photo: VersionedPhoto): SheetVersion | null {
+  const revisions = photo.sheetRevisions ?? [];
+  return (
+    revisions.find((revision) => revision.id === photo.activeRevisionId) ??
+    revisions[revisions.length - 1] ??
+    null
+  );
+}
+
+/**
+ * The photo version behind what is showing: the active version when it is a
+ * portrait photo, or the one the active sheet was drawn from. Null means the
+ * uploaded photo.
+ */
+export function activeSourceVersion(photo: VersionedPhoto): SheetVersion | null {
+  const active = activeSheetVersion(photo);
+  if (!active) return null;
+  if (active.kind === "photo") return active;
+  if (!active.sourceRevisionId) return null;
+  return (photo.sheetRevisions ?? []).find((revision) => revision.id === active.sourceRevisionId) ?? null;
+}
+
+/** Orientation of the active version, which a portrait version turns away from the photo's own. */
+export function activeVersionOrientation(photo: VersionedPhoto): Orientation {
+  return activeSheetVersion(photo)?.orientation ?? photoOrientation(photo);
+}
+
+/** printPrefs for printing or editing the active version. */
+export function activeVersionPrintPrefs(photo: VersionedPhoto): PrintPrefs {
+  return { ...photo.printPrefs, orientation: activeVersionOrientation(photo) };
+}
+
 /** Where a cover-cropped thumbnail should anchor: faces sit high in portraits. */
 export function photoThumbObjectPosition(photo: {
   image?: V2PhotoImageMeta;

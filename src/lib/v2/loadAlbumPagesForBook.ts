@@ -4,7 +4,7 @@ import { loadV2ProjectSession, loadV2ProjectsMeta } from "@/lib/v2/studioSession
 import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
-import { normalizeV2SheetRevisions, photoOrientation } from "@/lib/v2/studioTypes";
+import { activeSheetVersion, normalizeV2SheetRevisions, photoOrientation } from "@/lib/v2/studioTypes";
 
 export async function loadProjectsCatalog(cloud = false): Promise<V2ProjectMeta[]> {
   if (cloud) {
@@ -26,7 +26,8 @@ async function collectCloudPages(projectIds: string[], nameById: Map<string, str
       const active =
         photo.revisions.find((r) => r.id === photo.activeRevisionId) ??
         photo.revisions[photo.revisions.length - 1];
-      if (!active) {
+      // A portrait photo version is not a coloring page until a sheet is drawn from it.
+      if (!active || active.kind === "photo") {
         skippedWithoutSheet += 1;
         continue;
       }
@@ -40,7 +41,9 @@ async function collectCloudPages(projectIds: string[], nameById: Map<string, str
         title: active.title,
         imageDataUrl: await cachedImageUrl(active.storagePath, active.url),
         photoSource: { storagePath: photo.storagePath, url: photo.url },
-        sheetOrientation: (photo.orientation as BookWizardPhotoPage["sheetOrientation"]) ?? photo.printPrefs.orientation,
+        sheetOrientation:
+          ((active.orientation ?? photo.orientation) as BookWizardPhotoPage["sheetOrientation"] | null) ??
+          photo.printPrefs.orientation,
         rotation: 0,
       });
     }
@@ -63,11 +66,9 @@ export async function collectPhotoPagesFromProjects(input: {
     const projectName = nameById.get(projectId) ?? "Album";
     for (const photo of session.photos) {
       const revisions = normalizeV2SheetRevisions(photo);
-      const active =
-        revisions.find((r) => r.id === photo.activeRevisionId)?.sheet ??
-        photo.sheet ??
-        revisions[revisions.length - 1]?.sheet;
-      if (!active) {
+      const version = activeSheetVersion({ ...photo, sheetRevisions: revisions });
+      const active = version?.sheet ?? photo.sheet;
+      if (!active || version?.kind === "photo") {
         skippedWithoutSheet += 1;
         continue;
       }
@@ -79,7 +80,7 @@ export async function collectPhotoPagesFromProjects(input: {
         photoId: photo.id,
         title: active.title,
         imageDataUrl: active.imageDataUrl,
-        sheetOrientation: photoOrientation(photo),
+        sheetOrientation: version?.orientation ?? photoOrientation(photo),
         rotation: 0,
       });
     }

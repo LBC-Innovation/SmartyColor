@@ -92,6 +92,8 @@ export async function migrateLocalLibraryToCloud(
       });
 
       const revisions = normalizeV2SheetRevisions(photo);
+      // Sheets drawn from a portrait version point at it by id; ids change on upload.
+      const cloudRevisionIds = new Map<string, string>();
       for (const rev of revisions) {
         const sheetBlob = dataUrlToBlob(rev.sheet.imageDataUrl);
         const sheetMime = sheetBlob.type || rev.sheet.mimeType || "image/png";
@@ -105,8 +107,12 @@ export async function migrateLocalLibraryToCloud(
           mimeType: sheetMime,
           title: rev.sheet.title,
           makeActive: isActive,
+          kind: rev.kind,
+          orientation: rev.orientation,
+          sourceRevisionId: rev.sourceRevisionId ? cloudRevisionIds.get(rev.sourceRevisionId) : undefined,
         });
         if (reg.error) throw new Error(reg.error.message);
+        cloudRevisionIds.set(rev.id, revTicket.data!.revisionId);
         await primeImageCache(revTicket.data!.path, sheetBlob);
       }
       done += 1;

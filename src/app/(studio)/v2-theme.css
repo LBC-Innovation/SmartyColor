@@ -482,6 +482,42 @@ html.has-session .v2-landing {
   }
 
   /* Phone studio view footer actions */
+  /* Floating controls over the studio's photo pane (mirror, make portrait). */
+  .v2-photo-tool {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.92);
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--color-v2-navy);
+    box-shadow:
+      0 1px 2px rgb(10 16 26 / 0.12),
+      0 0 0 1px rgb(10 16 26 / 0.06);
+    backdrop-filter: blur(6px);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .v2-photo-tool:hover:not(:disabled) {
+    background: white;
+    color: var(--color-v2-primary);
+  }
+
+  .v2-photo-tool:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .v2-photo-tool--ai {
+    color: var(--color-v2-primary);
+  }
+
   .v2-studio-action {
     display: inline-flex;
     min-height: 3.25rem;

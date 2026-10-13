@@ -20,9 +20,9 @@ function log(level: string, message: string, ctx: Record<string, unknown> = {}) 
 }
 
 function insufficientMessage(kind: SheetUsageKind): string {
-  return kind === "edit"
-    ? "You've used this sheet's free edits. Add credit to keep editing."
-    : "Add credit to generate this coloring sheet.";
+  if (kind === "edit") return "You've used this sheet's free edits. Add credit to keep editing.";
+  if (kind === "portrait") return "Add credit to make a portrait version of this photo.";
+  return "Add credit to generate this coloring sheet.";
 }
 
 /** JSON body for the 402 the studio turns into the add-credit modal. */

@@ -7,6 +7,7 @@ import type {
   LibraryPhotoPatch,
   LibraryProject,
   LibraryProjectPatch,
+  LibraryRevision,
   RegisterPhotoInput,
   SignedUpload,
 } from "@/lib/library/types";
@@ -64,6 +65,11 @@ export function updatePhoto(id: string, patch: LibraryPhotoPatch) {
   return api.request<LibraryPhoto>(`${base}/photos/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
+/** Flip a photo and its coloring sheets left-to-right. */
+export function mirrorPhoto(id: string) {
+  return api.request<LibraryPhoto>(`${base}/photos/${id}/mirror`, { method: "POST" });
+}
+
 export function deletePhotos(ids: string[]) {
   return api.request<{ deleted: string[] }>(`${base}/photos/delete`, { method: "POST", body: JSON.stringify({ ids }) });
 }
@@ -77,7 +83,15 @@ export function createRevisionUpload(photoId: string, mimeType: string) {
 
 export function registerRevision(
   photoId: string,
-  input: { revisionId: string; mimeType: string; title: string; makeActive: boolean },
+  input: {
+    revisionId: string;
+    mimeType: string;
+    title: string;
+    makeActive: boolean;
+    kind?: LibraryRevision["kind"];
+    orientation?: string | null;
+    sourceRevisionId?: string | null;
+  },
 ) {
   return api.request<LibraryPhoto>(`${base}/photos/${photoId}/revisions`, {
     method: "POST",

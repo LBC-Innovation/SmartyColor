@@ -20,11 +20,14 @@ import {
   libraryPaths,
   objectExists,
   putObject,
+  removeObjects,
   removePrefix,
   signedReadUrls,
 } from "@/server/storage/libraryFiles";
 import { quoted, recordActivity } from "@/server/activityService";
 import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } from "@/server/libraryAccess";
+import { mirrorImageBytes } from "@/lib/photo/mirrorImageServer";
+import { mirrorPhotoCrop, type PhotoCropRect } from "@/lib/v2/storybookTypes";
 
 type Row = Record<string, unknown>;
 const err = (message: string, code?: string): ApiResult<never> => ({ data: null, error: { message, ...(code ? { code } : {}) } });
@@ -336,8 +339,22 @@ function revisionFromRow(row: Row, url: string): LibraryRevision {
     storagePath: row.storage_path as string,
     mimeType: row.mime_type as string,
     title: (row.title as string) ?? "",
+    kind: row.kind === "photo" ? "photo" : "sheet",
+    orientation: (row.orientation as string | null) ?? null,
+    sourceRevisionId: (row.source_revision_id as string | null) ?? null,
     createdAt: row.created_at as string,
     url,
+  };
+}
+
+/** What sets a version apart from a plain sheet of the uploaded photo. */
+export type RevisionMeta = Partial<Pick<LibraryRevision, "kind" | "orientation" | "sourceRevisionId">>;
+
+function revisionMetaColumns(meta: RevisionMeta | undefined): Row {
+  return {
+    ...(meta?.kind ? { kind: meta.kind } : {}),
+    ...(meta?.orientation ? { orientation: meta.orientation } : {}),
+    ...(meta?.sourceRevisionId ? { source_revision_id: meta.sourceRevisionId } : {}),
   };
 }
 
@@ -521,6 +538,84 @@ export async function registerPhoto(
   return { data: hydrated.data![0], error: null };
 }
 
+/**
+ * Flip a photo left-to-right, along with every version made from it so they
+ * still line up. Mirrored files get new paths; the old ones are removed.
+ */
+export async function mirrorPhoto(userId: string, photoId: string): Promise<ApiResult<LibraryPhoto>> {
+  const found = await photoContext(userId, photoId);
+  if (found.error) return found;
+  const { row, access } = found.data!;
+  const projectId = row.project_id as string;
+
+  const { data: revRows, error: rErr } = await db()
+    .from("library_sheet_revisions")
+    .select("id, storage_path, mime_type")
+    .eq("photo_id", photoId);
+  if (rErr) return err(rErr.message);
+
+  type Flipped = { oldPath: string; path: string; mime: string };
+  const written: string[] = [];
+  const flip = async (oldPath: string, mime: string, pathFor: (mime: string) => string): Promise<Flipped> => {
+    const source = await getObjectBytes(oldPath);
+    const mirrored = await mirrorImageBytes(source.bytes, mime);
+    const path = pathFor(mirrored.mime);
+    await putObject(path, mirrored.bytes, mirrored.mime);
+    written.push(path);
+    return { oldPath, path, mime: mirrored.mime };
+  };
+
+  let original: Flipped;
+  const sheets = new Map<string, Flipped>();
+  try {
+    original = await flip(row.storage_path as string, row.mime_type as string, (mime) =>
+      libraryPaths.originalVersion(access.ownerId, projectId, photoId, crypto.randomUUID(), mime),
+    );
+    for (const rev of revRows ?? []) {
+      sheets.set(
+        rev.id as string,
+        await flip(rev.storage_path as string, rev.mime_type as string, (mime) =>
+          libraryPaths.sheet(access.ownerId, projectId, photoId, crypto.randomUUID(), mime),
+        ),
+      );
+    }
+  } catch (e) {
+    await removeObjects(written).catch(() => undefined);
+    return err(e instanceof Error ? e.message : "Could not mirror photo");
+  }
+
+  for (const [revisionId, sheet] of sheets) {
+    const { error } = await db()
+      .from("library_sheet_revisions")
+      .update({ storage_path: sheet.path, mime_type: sheet.mime })
+      .eq("id", revisionId);
+    if (error) return err(error.message);
+  }
+  const crop = row.crop as PhotoCropRect | null;
+  const { data, error } = await db()
+    .from("library_photos")
+    .update({
+      storage_path: original.path,
+      mime_type: original.mime,
+      ...(crop ? { crop: mirrorPhotoCrop(crop) } : {}),
+    })
+    .eq("id", photoId)
+    .select("*")
+    .maybeSingle();
+  if (error) return err(error.message);
+  if (!data) return NOT_FOUND;
+
+  try {
+    await removeObjects([original.oldPath, ...[...sheets.values()].map((s) => s.oldPath)]);
+  } catch (e) {
+    // Rows already point at the mirrored files; orphans are harmless.
+    console.error(JSON.stringify({ level: "warn", message: "library: mirror cleanup failed", photoId, error: String(e) }));
+  }
+  const hydrated = await hydratePhotos([data], { userId, role: access.role });
+  if (hydrated.error) return hydrated;
+  return { data: hydrated.data![0], error: null };
+}
+
 export async function updatePhoto(
   userId: string,
   photoId: string,
@@ -667,10 +762,10 @@ export async function loadPhotoBytes(
 export async function loadRevisionBytes(
   userId: string,
   revisionId: string,
-): Promise<ApiResult<{ bytes: Buffer; mime: string; title: string }>> {
+): Promise<ApiResult<{ bytes: Buffer; mime: string; title: string; photoId: string } & Required<RevisionMeta>>> {
   const { data, error } = await db()
     .from("library_sheet_revisions")
-    .select("photo_id, storage_path, mime_type, title")
+    .select("*")
     .eq("id", revisionId)
     .maybeSingle();
   if (error) return err(error.message);
@@ -679,7 +774,18 @@ export async function loadRevisionBytes(
   if (found.error) return found;
   try {
     const obj = await getObjectBytes(data.storage_path as string);
-    return { data: { bytes: obj.bytes, mime: obj.mime || (data.mime_type as string), title: (data.title as string) ?? "" }, error: null };
+    return {
+      data: {
+        bytes: obj.bytes,
+        mime: obj.mime || (data.mime_type as string),
+        title: (data.title as string) ?? "",
+        photoId: data.photo_id as string,
+        kind: data.kind === "photo" ? "photo" : "sheet",
+        orientation: (data.orientation as string | null) ?? null,
+        sourceRevisionId: (data.source_revision_id as string | null) ?? null,
+      },
+      error: null,
+    };
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not read sheet");
   }
@@ -690,18 +796,19 @@ export async function addRevisionFromSheet(
   userId: string,
   photo: Pick<LibraryPhoto, "id" | "projectId">,
   sheet: GeneratedSheet,
+  meta?: RevisionMeta,
 ): Promise<ApiResult<LibraryPhoto>> {
   const match = sheet.imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return err("Generated sheet was not an image");
   const mime = match[1];
   const bytes = Buffer.from(match[2], "base64");
-  return addRevisionFromBytes(userId, photo, { bytes, mime, title: sheet.title });
+  return addRevisionFromBytes(userId, photo, { bytes, mime, title: sheet.title, ...meta });
 }
 
 export async function addRevisionFromBytes(
   userId: string,
   photo: Pick<LibraryPhoto, "id" | "projectId">,
-  input: { bytes: Buffer | Uint8Array; mime: string; title: string },
+  input: { bytes: Buffer | Uint8Array; mime: string; title: string } & RevisionMeta,
 ): Promise<ApiResult<LibraryPhoto>> {
   const found = await accessFor(userId, photo.projectId);
   if (found.error) return found;
@@ -721,6 +828,7 @@ export async function addRevisionFromBytes(
     storage_path: path,
     mime_type: input.mime,
     title: input.title,
+    ...revisionMetaColumns(input),
   });
   if (error) return err(error.message);
   return updatePhoto(userId, photo.id, { activeRevisionId: revisionId });
@@ -749,7 +857,7 @@ export async function createRevisionUpload(
 export async function registerRevision(
   userId: string,
   photoId: string,
-  input: { revisionId: string; mimeType: string; title: string; makeActive: boolean },
+  input: { revisionId: string; mimeType: string; title: string; makeActive: boolean } & RevisionMeta,
 ): Promise<ApiResult<LibraryPhoto>> {
   const found = await photoContext(userId, photoId);
   if (found.error) return found;
@@ -768,6 +876,7 @@ export async function registerRevision(
     storage_path: path,
     mime_type: input.mimeType,
     title: input.title,
+    ...revisionMetaColumns(input),
   });
   if (error) return err(error.message);
   if (input.makeActive) return updatePhoto(userId, photoId, { activeRevisionId: input.revisionId });

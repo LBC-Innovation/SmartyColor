@@ -1,5 +1,5 @@
 import { blobToDataUrl, dataUrlToBlob } from "@/lib/photo/dataUrlBlob";
-import type { GeneratedSheet } from "@/lib/session/types";
+import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import type { StudioLayoutMode } from "@/components/v2/V2StudioLayoutToggle";
 import { defaultStoryFields } from "@/lib/v2/storybookTypes";
 import type {
@@ -32,7 +32,7 @@ type StoredPhoto = {
   printPrefs: V2PhotoEntry["printPrefs"];
   photoBlob: Blob;
   sheet: StoredSheet | null;
-  sheetRevisions: Array<{ id: string; createdAt: string; sheet: StoredSheet }>;
+  sheetRevisions: Array<Omit<SheetVersion, "sheet"> & { sheet: StoredSheet }>;
   activeRevisionId: string | null;
   capturedAt?: string;
   fileName?: string;
@@ -121,8 +121,7 @@ async function storedSheetToGenerated(stored: StoredSheet): Promise<GeneratedShe
 
 async function photoToStored(photo: V2PhotoEntry): Promise<StoredPhoto> {
   const revisions = (photo.sheetRevisions ?? []).map((revision) => ({
-    id: revision.id,
-    createdAt: revision.createdAt,
+    ...revision,
     sheet: sheetFromGenerated(revision.sheet),
   }));
 
@@ -153,8 +152,7 @@ async function storedToPhoto(stored: StoredPhoto): Promise<V2PhotoEntry> {
 
   const sheetRevisions = await Promise.all(
     stored.sheetRevisions.map(async (revision) => ({
-      id: revision.id,
-      createdAt: revision.createdAt,
+      ...revision,
       sheet: await storedSheetToGenerated(revision.sheet),
     })),
   );

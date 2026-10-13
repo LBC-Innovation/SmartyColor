@@ -25,6 +25,9 @@ export const libraryPaths = {
   photoDir: (userId: string, projectId: string, photoId: string) => `${userId}/${projectId}/${photoId}`,
   original: (userId: string, projectId: string, photoId: string, mime: string) =>
     `${userId}/${projectId}/${photoId}/original.${extensionForMime(mime)}`,
+  /** A rewritten original. Clients cache bytes by path, so new bytes always get a new name. */
+  originalVersion: (userId: string, projectId: string, photoId: string, versionId: string, mime: string) =>
+    `${userId}/${projectId}/${photoId}/original-${versionId}.${extensionForMime(mime)}`,
   sheet: (userId: string, projectId: string, photoId: string, revisionId: string, mime: string) =>
     `${userId}/${projectId}/${photoId}/sheets/${revisionId}.${extensionForMime(mime)}`,
 };
