@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, KeyRound, Loader2, UserPen } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2AddCreditForm } from "@/components/v2/credits/V2AddCreditForm";
+import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { ChangePasswordModal, EditProfileModal } from "@/components/v2/auth/V2UserMenu";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
-import { useV2Toast } from "@/components/v2/V2Toast";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
@@ -30,11 +30,8 @@ function describeReason(reason: string, note: string | null): string {
 }
 
 export function V2AccountStudio() {
-  const { user, loading: authLoading, refreshUser } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const toast = useV2Toast();
-  const creditsReturn = searchParams.get("credits");
 
   const [ledger, setLedger] = useState<CreditLedgerEntry[] | null>(null);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
@@ -64,19 +61,7 @@ export function V2AccountStudio() {
     };
   }, [userId, ledgerVersion]);
 
-  useEffect(() => {
-    if (!creditsReturn) return;
-    if (creditsReturn === "success") {
-      void refreshUser().then(() => setLedgerVersion((v) => v + 1));
-      toast.success({ title: "Credit added", message: "Your balance is updated." });
-    } else if (creditsReturn === "canceled") {
-      toast.info("No charge was made.", "Payment canceled");
-    }
-    const url = new URL(window.location.href);
-    url.searchParams.delete("credits");
-    window.history.replaceState(null, "", url.toString());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creditsReturn]);
+  useCreditCheckoutReturn({ onBalanceChanged: () => setLedgerVersion((v) => v + 1) });
 
   if (authLoading || !user) {
     return (

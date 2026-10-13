@@ -2,7 +2,7 @@ import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
-import type { CreditLedgerEntry, PromoCreditSettings } from "@/lib/credits/types";
+import type { CreditLedgerEntry, CreditTopUpConfirmation, PromoCreditSettings } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 
 const TOKEN_KEY = "cm_access_token";
@@ -526,6 +526,14 @@ export function createCreditTopUpCheckout(input: {
   return request("/credits/checkout", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+/** Back from Stripe Checkout: have the server verify the payment and credit the wallet. */
+export function confirmCreditTopUp(sessionId: string): Promise<ApiResult<CreditTopUpConfirmation>> {
+  return request<CreditTopUpConfirmation>("/credits/confirm", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
   });
 }
 

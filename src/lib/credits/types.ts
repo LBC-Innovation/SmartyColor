@@ -16,3 +16,17 @@ export type PromoCreditSettings = {
 };
 
 export const MAX_WELCOME_CREDIT_CENTS = 500_00;
+
+/** Query flag Stripe Checkout returns with: `success` or `canceled`. */
+export const CREDITS_RETURN_PARAM = "credits";
+/** Query param carrying the Stripe Checkout Session id on a successful return. */
+export const CHECKOUT_SESSION_PARAM = "session_id";
+
+/**
+ * Outcome of checking a returned checkout with Stripe.
+ * `pending` is a payment Stripe accepted but has not collected yet (bank debits
+ * take days); the credit lands when Stripe reports it paid.
+ */
+export type CreditTopUpConfirmation =
+  | { status: "credited"; amountCents: number; creditsBalanceCents: number }
+  | { status: "pending"; amountCents: number };

@@ -8,6 +8,7 @@ import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
 import { BookOrderCheckoutPanel } from "@/components/v2/orders/BookOrderCheckoutPanel";
+import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import {
@@ -35,10 +36,9 @@ function formatAddress(order: BookOrderDetail): string {
 }
 
 export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
-  const { user, loading: authLoading, refreshUser } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const justConfirmed = searchParams.get("confirmed") === "1";
-  const creditsReturn = searchParams.get("credits");
   const [order, setOrder] = useState<BookOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,11 +79,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
     void load(true);
   }, [load, user?.id]);
 
-  useEffect(() => {
-    if (creditsReturn === "success") {
-      void refreshUser();
-    }
-  }, [creditsReturn, refreshUser]);
+  useCreditCheckoutReturn({ creditedHint: "You can finish your order." });
 
   async function confirmDraftFromDetail() {
     setConfirmingCheckout(true);
@@ -189,19 +185,6 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                 <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
                   Your book is saved and your print job is registered. Add credits below if needed,
                   then place your order.
-                </div>
-              ) : null}
-
-              {creditsReturn === "success" && order.status === "awaiting_payment" ? (
-                <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
-                  Credits added to your wallet. You can place your order when your balance covers
-                  the total.
-                </div>
-              ) : null}
-
-              {creditsReturn === "canceled" && order.status === "awaiting_payment" ? (
-                <div className="v2-panel mb-4 border-gray-200 bg-v2-bg-subtle p-4 text-sm text-v2-muted">
-                  Credit purchase canceled — your wallet was not charged.
                 </div>
               ) : null}
 

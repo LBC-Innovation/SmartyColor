@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
-import { useV2Toast } from "@/components/v2/V2Toast";
+import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { useAuth } from "@/context/AuthContext";
 import {
   INSUFFICIENT_CREDITS_CODE,
@@ -32,26 +32,10 @@ export function useSheetUsageCredits(returnPath: string): {
   applyResponse: (status: number, payload: UsagePayload, kind: SheetUsageKind) => boolean;
   addCreditModal: ReactNode;
 } {
-  const toast = useV2Toast();
-  const { user, refreshUser, setCreditsBalance } = useAuth();
+  const { user, setCreditsBalance } = useAuth();
   const [shortfall, setShortfall] = useState<Shortfall | null>(null);
 
-  // Back from Stripe Checkout.
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const creditsReturn = url.searchParams.get("credits");
-    if (!creditsReturn) return;
-    if (creditsReturn === "success") {
-      void refreshUser();
-      toast.success({ title: "Credit added", message: "Your balance is updated." });
-    } else if (creditsReturn === "canceled") {
-      toast.info("No charge was made.", "Payment canceled");
-    }
-    // Clean the flag so a refresh doesn't repeat the toast.
-    url.searchParams.delete("credits");
-    window.history.replaceState(null, "", url.toString());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useCreditCheckoutReturn();
 
   function canAfford(kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "remote" | "editCount">): boolean {
     if (!photo.remote || !user) return true;
