@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/lib/api/types";
+import { DEFAULT_FEATURE_ACCESS } from "@/lib/auth/features";
 import * as api from "@/lib/api/client";
 import { clearImageCache } from "@/lib/v2/imageCache";
 
@@ -39,6 +40,7 @@ function userFromHint(hint: api.SessionHint): User {
     permissions: [],
     planTier: "free",
     creditsBalanceCents: 0,
+    features: { ...DEFAULT_FEATURE_ACCESS },
   };
 }
 

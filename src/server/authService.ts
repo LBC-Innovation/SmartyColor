@@ -27,6 +27,7 @@ function profileToUser(
     permissions: authUser.permissions,
     planTier: profile.plan_tier,
     creditsBalanceCents: profile.credits_balance,
+    features: authUser.features,
   };
 }
 

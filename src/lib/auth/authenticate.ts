@@ -1,3 +1,4 @@
+import { effectiveFeatureAccess, type FeatureAccess } from "@/lib/auth/features";
 import { getSupabaseAdmin, getSupabaseAuth } from "@/lib/supabase/service";
 
 export type AuthUser = {
@@ -6,6 +7,7 @@ export type AuthUser = {
   emailVerified: boolean;
   role: string;
   permissions: string[];
+  features: FeatureAccess;
   amr: string[] | null;
 };
 
@@ -64,13 +66,16 @@ export async function authenticateBearer(
     };
   }
 
+  const role = (user.app_metadata?.role as string | undefined) ?? "user";
+
   return {
     user: {
       id: user.id,
       email: user.email ?? "",
       emailVerified: Boolean(user.email_confirmed_at),
-      role: (user.app_metadata?.role as string | undefined) ?? "user",
+      role,
       permissions: (user.app_metadata?.permissions as string[] | undefined) ?? [],
+      features: effectiveFeatureAccess(role, user.app_metadata?.features),
       amr,
     },
   };

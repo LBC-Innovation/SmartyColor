@@ -1,4 +1,5 @@
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
+import type { FeatureAccess } from "@/lib/auth/features";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
@@ -388,6 +389,16 @@ export function updateUserPermissions(
   });
 }
 
+export function updateUserFeatures(
+  id: string,
+  features: Partial<FeatureAccess>,
+): Promise<ApiResult<{ features: FeatureAccess }>> {
+  return request<{ features: FeatureAccess }>(`/admin/users/${id}/features`, {
+    method: "PUT",
+    body: JSON.stringify({ features }),
+  });
+}
+
 export function listOrders(): Promise<ApiResult<BookOrderSummary[]>> {
   return request<BookOrderSummary[]>("/orders");
 }
@@ -589,9 +600,14 @@ export function adminHideUserOrder(
 
 export function adminAdjustUserCredits(
   userId: string,
-  input: { deltaCents: number; note?: string } | { amountDollars: string; note?: string },
-): Promise<ApiResult<{ creditsBalanceCents: number }>> {
-  return request<{ creditsBalanceCents: number }>(`/admin/users/${userId}/credits`, {
+  input: ({ deltaCents: number } | { amountDollars: string }) & {
+    note?: string;
+    /** Email the user about a grant, quoting `emailNote` when given. */
+    notifyUser?: boolean;
+    emailNote?: string;
+  },
+): Promise<ApiResult<{ creditsBalanceCents: number; emailSent?: boolean }>> {
+  return request<{ creditsBalanceCents: number; emailSent?: boolean }>(`/admin/users/${userId}/credits`, {
     method: "POST",
     body: JSON.stringify(input),
   });

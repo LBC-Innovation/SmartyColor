@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { AdminUser } from "@/lib/api/types";
+import { PRODUCT_FEATURES } from "@/lib/auth/features";
 import { PERMISSION_META } from "@/lib/auth/permissionMeta";
 import * as api from "@/lib/api/client";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
@@ -52,6 +53,9 @@ export function V2UserManagementModal({
   const [password, setPassword] = useState("");
   const [creditAmount, setCreditAmount] = useState("10.00");
   const [creditNote, setCreditNote] = useState("");
+  const [creditNotify, setCreditNotify] = useState(false);
+  /** Outcome of the email for the latest adjustment; null when none was requested. */
+  const [creditEmailSent, setCreditEmailSent] = useState<boolean | null>(null);
   const [creditLedger, setCreditLedger] = useState<CreditLedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -61,6 +65,8 @@ export function V2UserManagementModal({
 
   const canAdjustCredits =
     me?.role === "admin" || (me?.permissions.includes("usermanage:adjustcredits") ?? false);
+  const canEditAccess =
+    me?.role === "admin" || (me?.permissions.includes("usermanage:editpermissions") ?? false);
   const canManageOrders =
     me?.role === "admin" || (me?.permissions.includes("usermanage:manageorders") ?? false);
 
@@ -122,6 +128,28 @@ export function V2UserManagementModal({
       });
       if (api.isError(result)) return { ok: false };
       patch({ displayName });
+      return { ok: true };
+    });
+  }
+
+  function applyCredit(
+    amount: { deltaCents: number } | { amountDollars: string },
+    fallbackNote?: string,
+  ) {
+    const typedNote = creditNote.trim();
+    setCreditEmailSent(null);
+    return run("credits", async () => {
+      const r = await api.adminAdjustUserCredits(localUser.id, {
+        ...amount,
+        note: typedNote || fallbackNote,
+        notifyUser: creditNotify,
+        emailNote: typedNote || undefined,
+      });
+      if (api.isError(r)) return { ok: false };
+      patch({ creditsBalanceCents: r.data.creditsBalanceCents });
+      setCreditEmailSent(r.data.emailSent ?? null);
+      const ledger = await api.adminListUserCredits(localUser.id);
+      if (!api.isError(ledger)) setCreditLedger(ledger.data);
       return { ok: true };
     });
   }
@@ -392,19 +420,7 @@ export function V2UserManagementModal({
                       type="button"
                       className="v2-btn-sm v2-btn-sm-primary"
                       disabled={busy === "credits"}
-                      onClick={() =>
-                        run("credits", async () => {
-                          const r = await api.adminAdjustUserCredits(localUser.id, {
-                            deltaCents: cents,
-                            note: creditNote.trim() || `Granted ${label}`,
-                          });
-                          if (api.isError(r)) return { ok: false };
-                          patch({ creditsBalanceCents: r.data.creditsBalanceCents });
-                          const ledger = await api.adminListUserCredits(localUser.id);
-                          if (!api.isError(ledger)) setCreditLedger(ledger.data);
-                          return { ok: true };
-                        })
-                      }
+                      onClick={() => void applyCredit({ deltaCents: cents }, `Granted ${label}`)}
                     >
                       {label}
                     </button>
@@ -418,17 +434,7 @@ export function V2UserManagementModal({
                   e.preventDefault();
                   const trimmed = creditAmount.trim();
                   if (!trimmed) return;
-                  void run("credits", async () => {
-                    const r = await api.adminAdjustUserCredits(localUser.id, {
-                      amountDollars: trimmed,
-                      note: creditNote.trim() || undefined,
-                    });
-                    if (api.isError(r)) return { ok: false };
-                    patch({ creditsBalanceCents: r.data.creditsBalanceCents });
-                    const ledger = await api.adminListUserCredits(localUser.id);
-                    if (!api.isError(ledger)) setCreditLedger(ledger.data);
-                    return { ok: true };
-                  });
+                  void applyCredit({ amountDollars: trimmed });
                 }}
               >
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -462,7 +468,36 @@ export function V2UserManagementModal({
                     />
                   </div>
                 </div>
-                <div className="flex justify-end">
+                <label className="flex items-start gap-2.5 text-sm text-v2-ink" htmlFor="credit-notify">
+                  <input
+                    id="credit-notify"
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-v2-primary"
+                    checked={creditNotify}
+                    onChange={(e) => setCreditNotify(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-semibold">Email the user about this credit</span>
+                    <span className="block text-xs text-v2-muted">
+                      Tells them how much was added and what credit is good for, and includes your
+                      note. Sent for grants only, including the quick buttons above.
+                    </span>
+                  </span>
+                </label>
+                <div className="flex items-center justify-end gap-3">
+                  {creditEmailSent === null ? null : (
+                    <p
+                      role="status"
+                      className={cn(
+                        "text-xs font-semibold",
+                        creditEmailSent ? "text-v2-success-text" : "text-red-600",
+                      )}
+                    >
+                      {creditEmailSent
+                        ? `Email sent to ${localUser.email ?? "the user"}`
+                        : "Credit applied, but the email could not be sent"}
+                    </p>
+                  )}
                   <button
                     type="submit"
                     disabled={busy === "credits"}
@@ -511,6 +546,57 @@ export function V2UserManagementModal({
                 )}
               </div>
             </div>
+          </section>
+        ) : null}
+
+        {canEditAccess ? (
+          <section>
+            <p className="v2-section-title mb-3">Product access</p>
+            <ul className="v2-panel divide-y divide-gray-100 p-2">
+              {PRODUCT_FEATURES.map((feature) => {
+                const enabled = localUser.features[feature.key];
+                const key = `feature-${feature.key}`;
+                return (
+                  <li key={feature.key} className="flex items-center justify-between gap-3 px-2 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-v2-ink">{feature.name}</p>
+                      <p className="text-xs text-v2-muted">{feature.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={enabled}
+                      aria-label={`${feature.name} access`}
+                      disabled={busy === key}
+                      onClick={() =>
+                        run(key, async () => {
+                          const r = await api.updateUserFeatures(localUser.id, {
+                            [feature.key]: !enabled,
+                          });
+                          if (api.isError(r)) return { ok: false };
+                          patch({ features: r.data.features });
+                          return { ok: true };
+                        })
+                      }
+                      className={cn(
+                        "v2-hit relative inline-flex h-6 w-10 shrink-0 items-center rounded-full border transition-colors disabled:opacity-60",
+                        enabled ? "border-v2-primary bg-v2-primary" : "border-gray-300 bg-gray-200",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform",
+                          enabled ? "translate-x-[18px]" : "translate-x-0.5",
+                        )}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-2 text-xs text-v2-muted">
+              New accounts start with My projects only. Admins can always open both.
+            </p>
           </section>
         ) : null}
 

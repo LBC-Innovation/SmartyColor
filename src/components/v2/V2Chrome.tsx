@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { V2UserMenu } from "@/components/v2/auth/V2UserMenu";
 import { useAuth } from "@/context/AuthContext";
+import { DEFAULT_FEATURE_ACCESS, homePathFor } from "@/lib/auth/features";
 import { formatCredits } from "@/lib/credits/money";
 import { CircleDollarSign } from "lucide-react";
 import { V2BrandLogo } from "@/components/v2/ui/V2BrandLogo";
@@ -14,7 +15,18 @@ import {
   STUDIO_HOME,
   v2BottomNav,
   v2TopNav,
+  type V2NavItem,
 } from "@/components/v2/nav-config";
+
+/** Drops the product lines this account (or a guest) doesn't have turned on. */
+function useVisibleNav(items: V2NavItem[]) {
+  const { user } = useAuth();
+  const access = user?.features ?? DEFAULT_FEATURE_ACCESS;
+  return {
+    items: items.filter((item) => !item.feature || access[item.feature]),
+    home: homePathFor(access),
+  };
+}
 
 function NavButton({
   label,
@@ -82,11 +94,12 @@ function CreditsChip() {
 
 export function V2TopBar() {
   const pathname = usePathname();
+  const nav = useVisibleNav(v2TopNav);
 
   return (
     <header className="shrink-0 border-b border-gray-200 bg-white">
       <div className="v2-gutter-x flex w-full items-center justify-between gap-4 py-2.5 sm:py-3.5">
-        <Link href="/studio" className="min-w-0 rounded-lg outline-offset-2">
+        <Link href={nav.home} className="min-w-0 rounded-lg outline-offset-2">
           <V2BrandLogo />
         </Link>
 
@@ -94,7 +107,7 @@ export function V2TopBar() {
           className="hidden items-center gap-1 lg:flex"
           aria-label="Primary"
         >
-          {v2TopNav.map((item) => {
+          {nav.items.map((item) => {
             const active = isV2NavItemActive(pathname, item);
             return (
               <div key={item.id} className="relative pb-1">
@@ -123,14 +136,18 @@ export function V2TopBar() {
 
 export function V2BottomNav() {
   const pathname = usePathname();
+  const nav = useVisibleNav(v2BottomNav);
 
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
       aria-label="Mobile"
     >
-      <ul className="grid grid-cols-3">
-        {v2BottomNav.map((item) => {
+      <ul
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${nav.items.length}, minmax(0, 1fr))` }}
+      >
+        {nav.items.map((item) => {
           const active = isV2NavItemActive(pathname, item);
           return (
             <li key={item.id}>

@@ -45,7 +45,7 @@ type V2LibraryWorkspaceProps = {
  * The photo library sidebar every studio page shares: project switcher and
  * upload/delete toolbar, "Your Photos" list with drag reorder, and a pinned
  * call to action. On phones the list is the page itself and `children`
- * decide how they appear (My Projects and Story book open full-screen views).
+ * decide how they appear (My projects and Story book open full-screen views).
  */
 export function V2LibraryWorkspace({
   fileInputRef,
