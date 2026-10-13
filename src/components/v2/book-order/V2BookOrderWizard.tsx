@@ -8,6 +8,7 @@ import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
 import { BookBindingPicker, type BindingQuote } from "@/components/v2/book-order/BookBindingPicker";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
+import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { BookFlipThroughModal } from "@/components/v2/book-order/BookFlipThroughModal";
 import { BookOrderConfirmModal } from "@/components/v2/book-order/BookOrderConfirmModal";
@@ -149,25 +150,11 @@ export function V2BookOrderWizard() {
   // ---- albums ------------------------------------------------------------
 
   const preselectId = searchParams.get("project");
-  const creditsReturn = searchParams.get("credits");
   const jumpToStepRef = useRef<BookOrderStep | null>(
     searchParams.get("step") === "review" ? "review" : null,
   );
 
-  useEffect(() => {
-    if (!creditsReturn) return;
-    if (creditsReturn === "success") {
-      void refreshUser();
-      toast.success({ title: "Credit added", message: "Your balance is updated — you can finish your order." });
-    } else if (creditsReturn === "canceled") {
-      toast.info("No charge was made.", "Payment canceled");
-    }
-    // Clean the flag so a refresh doesn't repeat the toast.
-    const url = new URL(window.location.href);
-    url.searchParams.delete("credits");
-    window.history.replaceState(null, "", url.toString());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creditsReturn]);
+  useCreditCheckoutReturn({ creditedHint: "You can finish your order." });
 
   useEffect(() => {
     let cancelled = false;
