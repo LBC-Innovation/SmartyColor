@@ -211,26 +211,22 @@ export function V2StoryBookApp() {
     setChatBusyFor(photoId);
 
     try {
-      const res = await authedFetch(
-        "/api/storybook/photo-chat",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            albumTitle,
-            tripNarrative,
-            familyContext,
-            userCaption: photo.userCaption ?? "",
-            photoSummary: photo.photoSummary ?? null,
-            history: prior,
-            userMessage: text,
-            ...(photo.remote
-              ? { photoId: photo.remote.photoId }
-              : { photoDataUrl: photo.photoDataUrl }),
-          }),
-        },
-        { withAuth: Boolean(photo.remote) },
-      );
+      const res = await authedFetch("/api/storybook/photo-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          albumTitle,
+          tripNarrative,
+          familyContext,
+          userCaption: photo.userCaption ?? "",
+          photoSummary: photo.photoSummary ?? null,
+          history: prior,
+          userMessage: text,
+          ...(photo.remote
+            ? { photoId: photo.remote.photoId }
+            : { photoDataUrl: photo.photoDataUrl }),
+        }),
+      });
       const data = (await res.json()) as {
         error?: string;
         assistantMessage?: string;
@@ -269,7 +265,7 @@ export function V2StoryBookApp() {
     try {
       // Pages follow the album order: drag to arrange, or use Sort by date.
       const timeline = photosRef.current;
-      const res = await fetch("/api/storybook/generate", {
+      const res = await authedFetch("/api/storybook/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

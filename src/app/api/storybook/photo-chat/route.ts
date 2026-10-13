@@ -24,6 +24,15 @@ type Body = {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuthRequest(request);
+    if ("error" in auth) return auth.error;
+    if (!auth.user.features.storybook) {
+      return Response.json(
+        { error: "Story book is not turned on for your account." },
+        { status: 403 },
+      );
+    }
+
     const body = (await request.json()) as Body;
     const userMessage = body.userMessage?.trim();
     if (!userMessage) {
@@ -42,8 +51,6 @@ export async function POST(request: Request) {
 
     let photoDataUrl = body.photoDataUrl;
     if (body.photoId) {
-      const auth = await requireAuthRequest(request);
-      if ("error" in auth) return auth.error;
       const photo = await photoDataUrlById(auth.user.id, body.photoId);
       if (photo.error) return Response.json({ error: photo.error.message }, { status: 404 });
       photoDataUrl = photo.data!.dataUrl;

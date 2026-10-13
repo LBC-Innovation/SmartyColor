@@ -1,3 +1,5 @@
+import type { FeatureAccess } from "@/lib/auth/features";
+
 export type ApiError = {
   data: null;
   error: { message: string; code?: string };
@@ -18,6 +20,8 @@ export interface User {
   planTier: string;
   /** Promo wallet balance in USD cents. */
   creditsBalanceCents: number;
+  /** Product lines this account can open. */
+  features: FeatureAccess;
 }
 
 export interface AdminUser {
@@ -31,6 +35,8 @@ export interface AdminUser {
   createdAt: string;
   /** Promo wallet balance in USD cents. */
   creditsBalanceCents: number;
+  /** Product-line toggles saved on the account. */
+  features: FeatureAccess;
 }
 
 export const USERMANAGE_PERMISSIONS = [

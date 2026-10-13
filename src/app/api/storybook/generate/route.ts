@@ -1,3 +1,4 @@
+import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import {
   storybookGenerateStory,
   storybookStubGenerate,
@@ -19,6 +20,15 @@ type Body = {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAuthRequest(request);
+    if ("error" in auth) return auth.error;
+    if (!auth.user.features.storybook) {
+      return Response.json(
+        { error: "Story book is not turned on for your account." },
+        { status: 403 },
+      );
+    }
+
     const body = (await request.json()) as Body;
     const photoIds = body.photoIds ?? [];
     const photos = body.photos ?? [];

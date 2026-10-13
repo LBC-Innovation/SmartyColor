@@ -2,6 +2,7 @@ import { removePrefix } from "@/server/storage/libraryFiles";
 import type { AdminUser, ApiResult } from "@/lib/api/types";
 import { USERMANAGE_PERMISSIONS } from "@/lib/api/types";
 import type { AuthUser } from "@/lib/auth/authenticate";
+import { PRODUCT_FEATURES, storedFeatureAccess, type FeatureAccess } from "@/lib/auth/features";
 import { clientOrigin } from "@/lib/auth/clientOrigin";
 import { getSupabaseAdmin, getSupabaseAuth } from "@/lib/supabase/service";
 
@@ -54,6 +55,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       createdAt: u.created_at,
       creditsBalanceCents:
         (profile as { credits_balance?: number }).credits_balance ?? 0,
+      features: storedFeatureAccess(u.app_metadata?.features),
     };
   });
 
@@ -274,6 +276,46 @@ export async function setPermissions(
   if (error) return { data: null, error: { message: error.message } };
   log("info", "Permissions updated", { adminId, targetId: id, permissions });
   return { data: { permissions: permissions as string[] }, error: null };
+}
+
+export async function setFeatureAccess(
+  id: string,
+  features: unknown,
+  adminId: string,
+): Promise<ApiResult<{ features: FeatureAccess }>> {
+  const input = (features && typeof features === "object" ? features : null) as Record<
+    string,
+    unknown
+  > | null;
+  const known = PRODUCT_FEATURES.map((f) => f.key as string);
+  if (
+    !input ||
+    Array.isArray(features) ||
+    Object.keys(input).length === 0 ||
+    Object.entries(input).some(([key, value]) => !known.includes(key) || typeof value !== "boolean")
+  ) {
+    return {
+      data: null,
+      error: { message: `features must map ${known.join(" / ")} to true or false` },
+    };
+  }
+
+  const {
+    data: { user },
+    error: getUserError,
+  } = await getSupabaseAuth().auth.admin.getUserById(id);
+  if (getUserError || !user) {
+    return { data: null, error: { message: "User not found" } };
+  }
+
+  const next = { ...storedFeatureAccess(user.app_metadata?.features), ...input } as FeatureAccess;
+  // app_metadata merges by top-level key, so role and permissions are left alone.
+  const { error } = await getSupabaseAuth().auth.admin.updateUserById(id, {
+    app_metadata: { features: next },
+  });
+  if (error) return { data: null, error: { message: error.message } };
+  log("info", "Product access updated", { adminId, targetId: id, features: next });
+  return { data: { features: next }, error: null };
 }
 
 export async function deleteUser(id: string, adminId: string): Promise<ApiResult<{ success: boolean }>> {
