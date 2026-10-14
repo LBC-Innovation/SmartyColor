@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   CircleHelp,
+  CircleUser,
   KeyRound,
   Loader2,
   LogOut,
@@ -119,6 +120,15 @@ export function V2UserMenu() {
 </div>
 
           <div className="p-1">
+            <Link
+              href="/account"
+              role="menuitem"
+              className={ITEM_CLASS}
+              onClick={() => setOpen(false)}
+            >
+              <CircleUser className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+              Account
+            </Link>
             <button
               type="button"
               role="menuitem"
