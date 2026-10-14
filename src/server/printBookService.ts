@@ -1,5 +1,6 @@
 import "server-only";
-import { deflateSync } from "node:zlib";
+import { promisify } from "node:util";
+import { deflate } from "node:zlib";
 import sharp from "sharp";
 import type { ApiResult } from "@/lib/api/types";
 import type { DigitalBookPage } from "@/lib/orders/types";
@@ -24,6 +25,8 @@ import {
 import type { PdfGrayImage } from "@/lib/print/pdf";
 import { buildPdf, parsePages } from "@/server/digitalBookService";
 import { createSignedUpload, getObjectBytes, putObject } from "@/server/storage/libraryFiles";
+
+const deflateAsync = promisify(deflate);
 
 /** Everything for one print order lives under the customer's own folder. */
 export const printOrderPaths = {
@@ -62,7 +65,7 @@ const INTERIOR_MAX_PX = BOOK_TRIM_HEIGHT_IN * 2 * BOOK_PRINT_PPI;
  * deflate to almost nothing, so a page is about a tenth of the same page as a
  * JPEG, which had books outgrowing the storage upload limit at 16 pages.
  */
-function packGray4(pixels: Uint8Array | Buffer, width: number, height: number): PdfGrayImage {
+async function packGray4(pixels: Uint8Array | Buffer, width: number, height: number): Promise<PdfGrayImage> {
   const rowBytes = Math.ceil(width / 2);
   const packed = Buffer.alloc(rowBytes * height, 0xff);
   for (let y = 0; y < height; y++) {
@@ -74,7 +77,8 @@ function packGray4(pixels: Uint8Array | Buffer, width: number, height: number): 
       packed[out + (x >> 1)] = (hi << 4) | lo;
     }
   }
-  return { width, height, bitsPerComponent: 4, deflated: deflateSync(packed, { level: 9 }) };
+  // Async so pages being prepared together compress on the thread pool instead of blocking in turn.
+  return { width, height, bitsPerComponent: 4, deflated: await deflateAsync(packed, { level: 9 }) };
 }
 
 /**
@@ -157,17 +161,18 @@ export async function buildPrintFiles(input: {
   pages: DigitalBookPage[];
   cover: BookCoverDesign;
 }): Promise<ApiResult<{ interiorPdfPath: string; coverPdfPath: string }>> {
-  const front = await loadCoverFront(input.userId, input.orderId);
-  if (front.error) return { data: null, error: front.error };
-
   const gutterIn = bookGutterIn(input.bindingId, input.pages.length);
   const bleedIn = input.pages.some((p) => p.kind === "photo" && p.fit === "full") ? BOOK_BLEED_IN : 0;
-  const interior = await buildPdf(input.userId, input.pages, {
-    gutterIn,
-    bleedIn,
-    prepareSheet: (dataUrl, page) =>
-      prepareInteriorSheet(dataUrl, { rotation: page.rotation, fit: page.fit, gutterIn, bleedIn }),
-  });
+  const [front, interior] = await Promise.all([
+    loadCoverFront(input.userId, input.orderId),
+    buildPdf(input.userId, input.pages, {
+      gutterIn,
+      bleedIn,
+      prepareSheet: (dataUrl, page) =>
+        prepareInteriorSheet(dataUrl, { rotation: page.rotation, fit: page.fit, gutterIn, bleedIn }),
+    }),
+  ]);
+  if (front.error) return { data: null, error: front.error };
   if (interior.error) return { data: null, error: interior.error };
 
   try {
@@ -179,8 +184,10 @@ export async function buildPrintFiles(input: {
     });
     const interiorPdfPath = printOrderPaths.interiorPdf(input.userId, input.orderId);
     const coverPdfPath = printOrderPaths.coverPdf(input.userId, input.orderId);
-    await putObject(interiorPdfPath, interior.data!, "application/pdf");
-    await putObject(coverPdfPath, cover, "application/pdf");
+    await Promise.all([
+      putObject(interiorPdfPath, interior.data!, "application/pdf"),
+      putObject(coverPdfPath, cover, "application/pdf"),
+    ]);
     return { data: { interiorPdfPath, coverPdfPath }, error: null };
   } catch (e) {
     return { data: null, error: { message: e instanceof Error ? e.message : "Could not prepare the print files." } };
