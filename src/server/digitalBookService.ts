@@ -15,6 +15,23 @@ const ROTATIONS = [0, 90, 180, 270];
 
 type PhotoBookPage = Extract<DigitalBookPage, { kind: "photo" }>;
 
+/** Sheets prepared at once when building a book: enough to overlap storage reads, few enough to bound memory. */
+const SHEET_CONCURRENCY = 6;
+
+/** Map over items with at most `limit` running at once, keeping results in input order. */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 function log(level: string, message: string, ctx: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ level, message, ...ctx }));
 }
@@ -57,17 +74,19 @@ export async function buildPdf(
     prepareSheet?: (dataUrl: string, page: PhotoBookPage) => Promise<PdfSheetImage>;
   } = {},
 ): Promise<ApiResult<Uint8Array>> {
-  const cache = new Map<string, PdfSheetImage>();
-  const sheets: Array<PdfSheetPage | PdfBlankPage> = [];
+  // A sheet is prepared for its placement, so the same sheet turned or fitted differently is a new entry.
+  const sheetKey = (page: PhotoBookPage) => `${page.revisionId}:${page.rotation % 180}:${page.fit ?? "framed"}`;
+  const unique = new Map<string, PhotoBookPage>();
   for (const page of pages) {
-    if (page.kind === "blank") {
-      sheets.push({ pageKind: page.variant === "lined" ? "lined" : "blank", printPrefs: BOOK_PREFS });
-      continue;
-    }
-    // A sheet is prepared for its placement, so the same sheet turned or fitted differently is a new entry.
-    const cacheKey = `${page.revisionId}:${page.rotation % 180}:${page.fit ?? "framed"}`;
-    let image = cache.get(cacheKey);
-    if (!image) {
+    if (page.kind === "photo" && !unique.has(sheetKey(page))) unique.set(sheetKey(page), page);
+  }
+
+  // Each sheet is a storage download plus an image re-encode, so they're prepared
+  // a few at a time rather than one after another (a 16-page book took ~12s serially).
+  const prepared = await mapWithConcurrency(
+    [...unique.entries()],
+    SHEET_CONCURRENCY,
+    async ([key, page]): Promise<ApiResult<[string, PdfSheetImage]>> => {
       const rev = await revisionDataUrlById(userId, page.revisionId);
       if (rev.error) {
         return {
@@ -76,20 +95,28 @@ export async function buildPdf(
         };
       }
       try {
-        image = options.prepareSheet ? await options.prepareSheet(rev.data!.dataUrl, page) : rev.data!.dataUrl;
+        const image = options.prepareSheet ? await options.prepareSheet(rev.data!.dataUrl, page) : rev.data!.dataUrl;
+        return { data: [key, image], error: null };
       } catch {
         return { data: null, error: { message: "One of the pages in this book couldn't be prepared for print." } };
       }
-      cache.set(cacheKey, image);
-    }
-    sheets.push({
-      image,
-      printPrefs: BOOK_PREFS,
-      rotation: page.rotation,
-      mirrored: page.mirrored,
-      fit: page.fit,
-    });
-  }
+    },
+  );
+  const failed = prepared.find((r) => r.error);
+  if (failed?.error) return { data: null, error: failed.error };
+  const images = new Map(prepared.map((r) => r.data!));
+
+  const sheets: Array<PdfSheetPage | PdfBlankPage> = pages.map((page) =>
+    page.kind === "blank"
+      ? { pageKind: page.variant === "lined" ? "lined" : "blank", printPrefs: BOOK_PREFS }
+      : {
+          image: images.get(sheetKey(page))!,
+          printPrefs: BOOK_PREFS,
+          rotation: page.rotation,
+          mirrored: page.mirrored,
+          fit: page.fit,
+        },
+  );
   try {
     return { data: await sheetsToPdf(sheets, { gutterIn: options.gutterIn, bleedIn: options.bleedIn }), error: null };
   } catch (e) {
