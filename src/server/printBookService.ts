@@ -1,4 +1,5 @@
 import "server-only";
+import { deflateSync } from "node:zlib";
 import sharp from "sharp";
 import type { ApiResult } from "@/lib/api/types";
 import type { DigitalBookPage } from "@/lib/orders/types";
@@ -20,6 +21,7 @@ import {
   type PageFit,
   type PageRotation,
 } from "@/lib/print/pageLayout";
+import type { PdfGrayImage } from "@/lib/print/pdf";
 import { buildPdf, parsePages } from "@/server/digitalBookService";
 import { createSignedUpload, getObjectBytes, putObject } from "@/server/storage/libraryFiles";
 
@@ -54,6 +56,28 @@ export function createCoverFrontUpload(userId: string, orderId: string) {
 const INTERIOR_MAX_PX = BOOK_TRIM_HEIGHT_IN * 2 * BOOK_PRINT_PPI;
 
 /**
+ * Line art packed as 16 gray levels, two samples a byte, each row on its own
+ * bytes. Ink and paper stay pure black and white and the soft edge between them
+ * keeps 16 steps, more than a black-and-white press resolves. Mostly-white rows
+ * deflate to almost nothing, so a page is about a tenth of the same page as a
+ * JPEG, which had books outgrowing the storage upload limit at 16 pages.
+ */
+function packGray4(pixels: Uint8Array | Buffer, width: number, height: number): PdfGrayImage {
+  const rowBytes = Math.ceil(width / 2);
+  const packed = Buffer.alloc(rowBytes * height, 0xff);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    const out = y * rowBytes;
+    for (let x = 0; x < width; x += 2) {
+      const hi = Math.round(pixels[row + x] / 17);
+      const lo = x + 1 < width ? Math.round(pixels[row + x + 1] / 17) : 15;
+      packed[out + (x >> 1)] = (hi << 4) | lo;
+    }
+  }
+  return { width, height, bitsPerComponent: 4, deflated: deflateSync(packed, { level: 9 }) };
+}
+
+/**
  * An interior page as the printer wants it: grayscale (the interior prints in
  * black and white) and exactly 300 PPI at the size it is printed. A sheet with
  * fewer pixels is enlarged here with a high-quality kernel and its ink edges
@@ -63,7 +87,7 @@ const INTERIOR_MAX_PX = BOOK_TRIM_HEIGHT_IN * 2 * BOOK_PRINT_PPI;
 async function prepareInteriorSheet(
   dataUrl: string,
   placement: { rotation: PageRotation; fit?: PageFit; gutterIn: number; bleedIn: number },
-): Promise<string> {
+): Promise<PdfGrayImage> {
   const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
   const upright = await sharp(Buffer.from(base64, "base64"))
     .rotate()
@@ -83,20 +107,15 @@ async function prepareInteriorSheet(
   });
   const scale = Math.min(BOOK_PRINT_PPI / ppi, INTERIOR_MAX_PX / Math.max(width, height));
 
-  let gray = sharp(upright.data, { raw: { width, height, channels: 1 } });
-  if (Math.abs(scale - 1) > 0.01) {
-    const resized = await gray
-      .resize(Math.round(width * scale), Math.round(height * scale), { kernel: "lanczos3" })
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    const pixels = scale > 1 ? crispInkEdges(new Uint8Array(resized.data)) : resized.data;
-    gray = sharp(Buffer.from(pixels), {
-      raw: { width: resized.info.width, height: resized.info.height, channels: 1 },
-    });
-  }
-  // Deringing keeps black-on-white edges clean, so a page at full print resolution stays a reasonable size.
-  const jpeg = await gray.jpeg({ quality: 88, trellisQuantisation: true, overshootDeringing: true }).toBuffer();
-  return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+  if (Math.abs(scale - 1) <= 0.01) return packGray4(upright.data, width, height);
+  const resized = await sharp(upright.data, { raw: { width, height, channels: 1 } })
+    .resize(Math.round(width * scale), Math.round(height * scale), { kernel: "lanczos3" })
+    // Resizing hands raw single-channel input back as three-channel sRGB; keep it one gray channel.
+    .toColourspace("b-w")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const pixels = scale > 1 ? crispInkEdges(new Uint8Array(resized.data)) : resized.data;
+  return packGray4(pixels, resized.info.width, resized.info.height);
 }
 
 /** The uploaded front cover, checked and re-encoded as a plain sRGB JPEG at print size. */
