@@ -10,6 +10,11 @@ type V2ModalProps = {
   children: ReactNode;
   className?: string;
   maxWidthClass?: string;
+  /**
+   * Use (nearly) the whole screen height and let the content lay itself out
+   * in it, for previews that should be as large as the window allows.
+   */
+  fill?: boolean;
 };
 
 export function V2Modal({
@@ -18,6 +23,7 @@ export function V2Modal({
   children,
   className,
   maxWidthClass = "max-w-2xl",
+  fill = false,
 }: V2ModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -45,7 +51,10 @@ export function V2Modal({
       />
       <div
         className={cn(
-          "relative flex max-h-[min(calc(100dvh_-_2rem_-_env(safe-area-inset-bottom)),720px)] w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-v2-surface shadow-[0_24px_64px_rgb(10_16_26/0.18)]",
+          "relative flex w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-v2-surface shadow-[0_24px_64px_rgb(10_16_26/0.18)]",
+          fill
+            ? "h-[calc(100dvh_-_2rem_-_env(safe-area-inset-bottom))] max-h-[1200px]"
+            : "max-h-[min(calc(100dvh_-_2rem_-_env(safe-area-inset-bottom)),720px)]",
           maxWidthClass,
           className,
         )}
@@ -63,7 +72,9 @@ export function V2Modal({
             </button>
           </div>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain", fill && "flex flex-col")}>
+          {children}
+        </div>
       </div>
     </div>
   );

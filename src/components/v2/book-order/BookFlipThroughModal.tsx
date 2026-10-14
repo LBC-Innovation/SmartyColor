@@ -58,9 +58,11 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
       : `Page ${spread.rightPageNumber} of ${pages.length}`;
 
   return (
-    <V2Modal onClose={onClose} maxWidthClass="max-w-4xl" title={title}>
-      <div className="px-4 pb-6 pt-2 sm:px-6">
-        <div className="mx-auto flex h-[min(62dvh,40rem)] w-full items-stretch justify-center gap-2 rounded-xl border border-gray-300 bg-gradient-to-b from-gray-100 to-gray-200 p-3 shadow-inner sm:gap-3 sm:p-4">
+    <V2Modal onClose={onClose} maxWidthClass="max-w-6xl" title={title} fill>
+      {/* The pages take every bit of height the controls don't need, so the
+          whole preview fits the window without scrolling. */}
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2 sm:px-5 sm:pb-4">
+        <div className="mx-auto flex min-h-[18rem] w-full flex-1 items-stretch justify-center gap-2 rounded-xl border border-gray-300 bg-gradient-to-b from-gray-100 to-gray-200 p-2 shadow-inner sm:gap-3 sm:p-4">
           {wide ? (
             <>
               <BookPrintPagePreview
@@ -86,15 +88,14 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
               binding={binding}
               side={pos % 2 === 0 ? "right" : "left"}
               showGuides={showGuides}
-              className="max-w-xs"
             />
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-2">
+        <div className="mt-3 flex shrink-0 items-center justify-between gap-2">
           <button
             type="button"
-            className="v2-btn-outline h-11 px-4"
+            className="v2-btn-outline h-10 px-4"
             disabled={pos <= 0}
             onClick={() => setPos((i) => i - 1)}
             aria-label="Previous"
@@ -102,12 +103,14 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
             <ChevronLeft className="h-4 w-4" aria-hidden />
             Prev
           </button>
-          <p className="text-center text-xs text-v2-muted">
-            {wide ? `Spread ${spreadIndex + 1} of ${spreadTotal}` : `${pos + 1} / ${pages.length}`}
-          </p>
+          <div className="min-w-0 text-center">
+            <p className="text-xs font-semibold tabular-nums text-v2-navy">
+              {wide ? `Spread ${spreadIndex + 1} of ${spreadTotal}` : `${pos + 1} / ${pages.length}`}
+            </p>
+          </div>
           <button
             type="button"
-            className="v2-btn-outline h-11 px-4"
+            className="v2-btn-outline h-10 px-4"
             disabled={pos >= stepTotal - 1}
             onClick={() => setPos((i) => i + 1)}
             aria-label="Next"
@@ -117,11 +120,11 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
           </button>
         </div>
 
-        <div className="mt-3">
+        <div className="mt-2 shrink-0">
           <BookPrintGuidesToggle checked={showGuides} onChange={setShowGuides} printed={binding.id !== "digital"} />
         </div>
 
-        <p className="mt-3 text-center text-xs leading-relaxed text-v2-muted">
+        <p className="mt-1.5 shrink-0 text-center text-[11px] leading-snug text-v2-muted">
           {BOOK_PAGE_COUNT_HINT} Page 1 prints on the right-hand side. Landscape sheets are shown
           rotated to portrait as they will print.
         </p>

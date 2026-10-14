@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { V2UserMenu } from "@/components/v2/auth/V2UserMenu";
+import { V2CartMenu } from "@/components/v2/orders/V2CartMenu";
 import { useAuth } from "@/context/AuthContext";
 import { DEFAULT_FEATURE_ACCESS, homePathFor } from "@/lib/auth/features";
 import { formatCredits } from "@/lib/credits/money";
@@ -127,6 +128,7 @@ export function V2TopBar() {
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <CreditsChip />
+          <V2CartMenu />
           <V2UserMenu />
         </div>
       </div>
