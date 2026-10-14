@@ -51,6 +51,21 @@ function formatUsZip(raw: string): string {
   return /^\d{6,9}$/.test(raw) ? `${raw.slice(0, 5)}-${raw.slice(5)}` : raw;
 }
 
+/**
+ * (XXX) XXX-XXXX as the digits arrive. No trailing punctuation is added, so a
+ * backspace always removes a digit. A leading country code 1 (autofill's
+ * "+1 …") is dropped and anything past ten digits is ignored.
+ */
+function formatNanpPhone(raw: string): string {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length > 10 && digits.startsWith("1")) digits = digits.slice(1);
+  digits = digits.slice(0, 10);
+  if (digits.length === 0) return "";
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 /** Lulu-ready shipping address; US-first, with a country select for the rest. */
 export function BookShippingAddressForm({
   value,
@@ -65,6 +80,8 @@ export function BookShippingAddressForm({
   const inputClass = (key: FieldKey) =>
     cn("v2-input", errors[key] && "border-red-400 focus:border-red-500");
   const isUs = (value.country_code || "US") === "US";
+  // US and Canada share the North American numbering plan.
+  const isNanp = isUs || value.country_code === "CA";
 
   return (
     <div className={cn("grid gap-3 sm:grid-cols-2", className)}>
@@ -178,10 +195,14 @@ export function BookShippingAddressForm({
         <input
           id={`${idPrefix}-phone`}
           type="tel"
-          className={inputClass("phone_number")}
+          inputMode="tel"
+          className={cn(inputClass("phone_number"), "tabular-nums")}
           autoComplete={`${section} tel`}
-          value={value.phone_number}
-          onChange={(e) => set("phone_number", e.target.value)}
+          placeholder={isNanp ? "(555) 555-5555" : undefined}
+          value={isNanp ? formatNanpPhone(value.phone_number) : value.phone_number}
+          onChange={(e) =>
+            set("phone_number", isNanp ? formatNanpPhone(e.target.value) : e.target.value)
+          }
         />
       </Field>
 
