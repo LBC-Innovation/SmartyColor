@@ -412,15 +412,32 @@ export function fetchOrder(id: string, sync = true): Promise<ApiResult<BookOrder
 }
 
 export type OrderQuoteData = {
+  /** Printing, shipping and tax together. */
   estimatedTotalCents: number | null;
+  /** The book before tax (print cost plus Lulu's fulfillment fee). */
   printCents: number | null;
+  /** Shipping before tax. */
   shippingCents: number | null;
+  taxCents?: number | null;
   currency: string;
   source: string;
   shippingPostcode?: string | null;
   shippingLevel?: string;
   quoteError?: string | null;
 };
+
+/** The address the customer saved for future orders; null when they haven't saved one. */
+export function fetchSavedAddress(): Promise<ApiResult<ShippingAddress | null>> {
+  return request("/account/address");
+}
+
+export function saveAddress(address: ShippingAddress): Promise<ApiResult<ShippingAddress>> {
+  return request("/account/address", { method: "PUT", body: JSON.stringify(address) });
+}
+
+export function clearSavedAddress(): Promise<ApiResult<{ cleared: true }>> {
+  return request("/account/address", { method: "DELETE" });
+}
 
 export function fetchOrderQuote(input: {
   bindingId: BookBindingId;

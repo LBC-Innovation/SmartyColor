@@ -16,6 +16,10 @@ type Props = {
   digital?: boolean;
   pageCount: number;
   photoCount: number;
+  /** Printed book only: the book, shipping and sales tax that make up the total. */
+  printCents?: number | null;
+  shippingCents?: number | null;
+  taxCents?: number | null;
   totalCents: number | null;
   shippingZip: string;
   shippingAddress?: ShippingAddress | null;
@@ -31,6 +35,9 @@ export function BookOrderConfirmModal({
   digital = false,
   pageCount,
   photoCount,
+  printCents = null,
+  shippingCents = null,
+  taxCents = null,
   totalCents,
   shippingZip,
   shippingAddress,
@@ -107,6 +114,13 @@ export function BookOrderConfirmModal({
               <dd className="font-semibold tabular-nums text-v2-ink">{shippingZip.trim()}</dd>
             </div>
           ) : null}
+          {digital ? null : (
+            <div className="space-y-2 border-t border-gray-200/80 pt-2">
+              <PriceRow label="Printing" cents={printCents} />
+              <PriceRow label="Shipping" cents={shippingCents} />
+              <PriceRow label="Sales tax" cents={taxCents} />
+            </div>
+          )}
           <div className="flex justify-between gap-3 border-t border-gray-200/80 pt-2">
             <dt className="font-semibold text-v2-ink">{digital ? "Total" : "Estimated total"}</dt>
             <dd className="font-bold tabular-nums text-v2-ink">
@@ -135,6 +149,15 @@ export function BookOrderConfirmModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PriceRow({ label, cents }: { label: string; cents: number | null }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-v2-muted">{label}</dt>
+      <dd className="font-semibold tabular-nums text-v2-ink">{cents != null ? formatCredits(cents) : "—"}</dd>
     </div>
   );
 }

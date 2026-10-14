@@ -3,15 +3,23 @@ import { luluFetch } from "@/server/lulu/client";
 type CostResponse = {
   total_cost_incl_tax?: string;
   total_cost_excl_tax?: string;
+  total_tax?: string;
   currency?: string;
-  line_item_costs?: Array<{ total_cost_incl_tax?: string; total_cost_excl_tax?: string }>;
-  shipping_cost?: { total_cost_incl_tax?: string; total_cost_excl_tax?: string };
+  line_item_costs?: Array<{ total_cost_excl_tax?: string }>;
+  shipping_cost?: { total_cost_excl_tax?: string };
+  fulfillment_cost?: { total_cost_excl_tax?: string };
 };
 
+/** Lulu's quote split so print + shipping + tax adds up to the total, all in cents. */
 export type LuluPrintJobCostBreakdown = {
+  /** What checkout charges: printing, shipping and tax together. */
   totalCents: number | null;
+  /** The book before tax: Lulu's print cost plus its per-order fulfillment fee. */
   printCents: number | null;
+  /** Shipping before tax. */
   shippingCents: number | null;
+  /** Sales tax on the whole order (book, fee and shipping). */
+  taxCents: number | null;
   currency: string;
   shippingLevel: string;
 };
@@ -49,9 +57,7 @@ function sumLineItemCents(raw: CostResponse): number | null {
   if (!raw.line_item_costs?.length) return null;
   let sum = 0;
   for (const item of raw.line_item_costs) {
-    const cents =
-      parseMoneyToCents(item.total_cost_incl_tax) ??
-      parseMoneyToCents(item.total_cost_excl_tax);
+    const cents = parseMoneyToCents(item.total_cost_excl_tax);
     if (cents == null) return null;
     sum += cents;
   }
@@ -91,15 +97,24 @@ export async function fetchLuluPrintJobCost(input: {
   const totalCents =
     parseMoneyToCents(raw.total_cost_incl_tax) ??
     parseMoneyToCents(raw.total_cost_excl_tax);
-  const printCents = sumLineItemCents(raw);
-  const shippingCents =
-    parseMoneyToCents(raw.shipping_cost?.total_cost_incl_tax) ??
-    parseMoneyToCents(raw.shipping_cost?.total_cost_excl_tax);
+  const lineItemCents = sumLineItemCents(raw);
+  // The fulfillment fee is charged per order through the API; it goes with the book.
+  const fulfillmentCents = raw.fulfillment_cost
+    ? parseMoneyToCents(raw.fulfillment_cost.total_cost_excl_tax)
+    : 0;
+  const printCents =
+    lineItemCents != null && fulfillmentCents != null ? lineItemCents + fulfillmentCents : null;
+  const shippingCents = parseMoneyToCents(raw.shipping_cost?.total_cost_excl_tax);
+  const exclTaxCents = parseMoneyToCents(raw.total_cost_excl_tax);
+  const taxCents =
+    parseMoneyToCents(raw.total_tax) ??
+    (totalCents != null && exclTaxCents != null ? totalCents - exclTaxCents : null);
 
   return {
     totalCents,
     printCents,
     shippingCents,
+    taxCents,
     currency: raw.currency ?? "USD",
     shippingLevel,
   };
