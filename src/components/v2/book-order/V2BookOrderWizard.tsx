@@ -82,22 +82,39 @@ import type { DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 const ADDRESS_STORAGE_KEY = "cm_shipping_address";
 /** A separate delivery address, when the book ships somewhere else. */
 const SHIP_TO_STORAGE_KEY = "cm_ship_to_address";
+/** The banner shown when the customer's own address is incomplete: one address, or billing when shipping elsewhere. */
+const OWN_ADDRESS_ERRORS = ["Please complete your address.", "Please complete your billing address."] as const;
+const SHIP_TO_ADDRESS_ERROR = "Please complete the shipping address.";
 /** Survives the trip to add credit and back, which reloads the wizard. */
 const COVER_STORAGE_KEY = "cm_book_cover_design";
 
+/**
+ * The address being typed is a draft for this tab only, so it survives the trip
+ * to add credit and back; keeping it for later orders is the customer's choice,
+ * saved to their account.
+ */
 function readStoredAddress(key: string): ShippingAddress {
   if (typeof window === "undefined") return EMPTY_SHIPPING_ADDRESS;
   try {
-    const raw = localStorage.getItem(key);
+    // Addresses used to be kept in this browser without asking; drop those.
+    localStorage.removeItem(key);
+    const raw = sessionStorage.getItem(key);
     return raw ? { ...EMPTY_SHIPPING_ADDRESS, ...(JSON.parse(raw) as Partial<ShippingAddress>) } : EMPTY_SHIPPING_ADDRESS;
   } catch {
     return EMPTY_SHIPPING_ADDRESS;
   }
 }
 
+/** Nothing typed yet: only the defaults, like the country, are set. */
+function isBlankAddress(a: ShippingAddress): boolean {
+  return (Object.keys(EMPTY_SHIPPING_ADDRESS) as (keyof ShippingAddress)[]).every(
+    (k) => (a[k] ?? "").trim() === (EMPTY_SHIPPING_ADDRESS[k] ?? "").trim(),
+  );
+}
+
 function storeAddress(key: string, address: ShippingAddress) {
   try {
-    localStorage.setItem(key, JSON.stringify(address));
+    sessionStorage.setItem(key, JSON.stringify(address));
   } catch {
     /* ignore */
   }
@@ -259,6 +276,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
   const [shipDifferent, setShipDifferent] = useState(false);
   const [shipTo, setShipTo] = useState<ShippingAddress>(() => readStoredAddress(SHIP_TO_STORAGE_KEY));
+  /** "Save this address for future orders": on when the account already has one saved. */
+  const [rememberAddress, setRememberAddress] = useState(false);
+  const hadSavedAddressRef = useRef(false);
+  const savedAddressLoadedRef = useRef(false);
   const [shipToErrors, setShipToErrors] = useState<ShippingAddressErrors>({});
   /** Where the book is delivered: the customer's own address unless they ship elsewhere. */
   const shippingAddress = shipDifferent ? shipTo : address;
@@ -300,11 +321,12 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const softPrintPages = useSoftPrintPages(plan.allPages, binding);
   const formatFits = bookFormatFit(contentCount, binding).fits;
   const selectedQuote: BindingQuote | null = isDigital
-    ? { totalCents: DIGITAL_BOOK_CENTS, printCents: null, shippingCents: null, loading: false, error: null }
+    ? { totalCents: DIGITAL_BOOK_CENTS, printCents: null, shippingCents: null, taxCents: null, loading: false, error: null }
     : printQuote;
   const quoteCents = selectedQuote?.totalCents ?? null;
   const printCents = selectedQuote?.printCents ?? null;
   const shippingCents = selectedQuote?.shippingCents ?? null;
+  const taxCents = selectedQuote?.taxCents ?? null;
   const quoteLoading = selectedQuote?.loading ?? false;
   const quoteError = selectedQuote?.error ?? null;
   const balanceCents = user?.creditsBalanceCents ?? null;
@@ -568,6 +590,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         totalCents: null,
         printCents: null,
         shippingCents: null,
+        taxCents: null,
         error: null,
         ...prev,
         loading: true,
@@ -578,11 +601,12 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
           if (cancelled) return;
           setPrintQuote(
             api.isError(result)
-              ? { totalCents: null, printCents: null, shippingCents: null, loading: false, error: result.error.message }
+              ? { totalCents: null, printCents: null, shippingCents: null, taxCents: null, loading: false, error: result.error.message }
               : {
                   totalCents: result.data.estimatedTotalCents,
                   printCents: result.data.printCents ?? null,
                   shippingCents: result.data.shippingCents ?? null,
+                  taxCents: result.data.taxCents ?? null,
                   loading: false,
                   error: result.data.quoteError ?? null,
                 },
@@ -606,7 +630,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     for (const id of PRINT_BINDING_IDS) counts[id] = computeBookPagePlan(bookPages, BOOK_BINDINGS[id]).totalPages;
     return counts;
   }, [bookPages]);
-  /** Book price (everything but shipping) by `binding:pageCount`; null when no price came back. */
+  /** Book price before shipping and tax by `binding:pageCount`; null when no price came back. */
   const [formatQuotes, setFormatQuotes] = useState<Record<string, number | null>>({});
   const formatQuotesAsked = useRef(new Set<string>());
 
@@ -619,10 +643,9 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       if (!bookFormatFit(contentCount, BOOK_BINDINGS[id]).fits || formatQuotesAsked.current.has(key)) continue;
       formatQuotesAsked.current.add(key);
       void api.fetchOrderQuote({ bindingId: id, pageCount }).then((result) => {
-        const total = api.isError(result) ? null : result.data.estimatedTotalCents;
-        const shipping = api.isError(result) ? null : result.data.shippingCents;
-        // Total less shipping, so this price plus shipping is what checkout charges.
-        setFormatQuotes((prev) => ({ ...prev, [key]: total != null && shipping != null ? total - shipping : null }));
+        // Before tax: the quote address is only a placeholder here, so its tax would mislead.
+        const book = api.isError(result) ? null : result.data.printCents;
+        setFormatQuotes((prev) => ({ ...prev, [key]: book ?? null }));
       });
     }
   }, [step, loadingAlbums, loadingPages, contentCount, formatPageCounts]);
@@ -642,16 +665,51 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     return prices;
   }, [formatPageCounts, formatQuotes]);
 
+  // Prefill from the address saved to the account, unless this tab already has one typed in.
+  useEffect(() => {
+    if (!user || savedAddressLoadedRef.current) return;
+    savedAddressLoadedRef.current = true;
+    void api.fetchSavedAddress().then((result) => {
+      if (api.isError(result) || !result.data) return;
+      const saved = result.data;
+      hadSavedAddressRef.current = true;
+      setRememberAddress(true);
+      setAddress((current) => (isBlankAddress(current) ? saved : current));
+    });
+  }, [user]);
+
+  /** Keeps or forgets the customer's own address for next time, as the checkbox says. */
+  function persistRememberedAddress() {
+    if (rememberAddress) {
+      hadSavedAddressRef.current = true;
+      void api.saveAddress(normalizeShippingAddress(address));
+    } else if (hadSavedAddressRef.current) {
+      hadSavedAddressRef.current = false;
+      void api.clearSavedAddress();
+    }
+  }
+
   function updateAddress(next: ShippingAddress) {
     setAddress(next);
     storeAddress(ADDRESS_STORAGE_KEY, next);
-    if (Object.keys(addressErrors).length > 0) setAddressErrors(validateOwnAddress(next));
+    if (Object.keys(addressErrors).length === 0) return;
+    const errors = validateOwnAddress(next);
+    setAddressErrors(errors);
+    if (Object.keys(errors).length === 0) clearAddressError(OWN_ADDRESS_ERRORS);
   }
 
   function updateShipTo(next: ShippingAddress) {
     setShipTo(next);
     storeAddress(SHIP_TO_STORAGE_KEY, next);
-    if (Object.keys(shipToErrors).length > 0) setShipToErrors(validateShippingAddress(next));
+    if (Object.keys(shipToErrors).length === 0) return;
+    const errors = validateShippingAddress(next);
+    setShipToErrors(errors);
+    if (Object.keys(errors).length === 0) clearAddressError([SHIP_TO_ADDRESS_ERROR]);
+  }
+
+  /** Drops the banner once the address it was about is filled in, leaving any other message. */
+  function clearAddressError(messages: readonly string[]) {
+    setError((current) => (current != null && messages.includes(current) ? null : current));
   }
 
   // ---- navigation ----------------------------------------------------------
@@ -707,12 +765,12 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       setAddressErrors(errors);
       setShipToErrors(shipErrors);
       if (Object.keys(errors).length > 0) {
-        setError(shipDifferent ? "Please complete your billing address." : "Please complete your address.");
+        setError(shipDifferent ? OWN_ADDRESS_ERRORS[1] : OWN_ADDRESS_ERRORS[0]);
         document.getElementById("ship-name")?.focus();
         return;
       }
       if (Object.keys(shipErrors).length > 0) {
-        setError("Please complete the shipping address.");
+        setError(SHIP_TO_ADDRESS_ERROR);
         document.getElementById("ship-to-name")?.focus();
         return;
       }
@@ -983,6 +1041,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     }
     setPlacing(true);
     setError(null);
+    persistRememberedAddress();
     const pages = pageManifest();
     if (!pages) {
       failUnsavedPage();
@@ -1437,6 +1496,14 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                           <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-v2-navy">
                             <input
                               type="checkbox"
+                              checked={rememberAddress}
+                              onChange={(e) => setRememberAddress(e.target.checked)}
+                            />
+                            Save this address for future orders
+                          </label>
+                          <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-v2-navy">
+                            <input
+                              type="checkbox"
                               checked={shipDifferent}
                               onChange={(e) => {
                                 setShipDifferent(e.target.checked);
@@ -1467,7 +1534,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                       <h2 className={cn("text-base font-semibold text-v2-ink", !isDigital && "mt-6")}>Price</h2>
                       {!isDigital && !addressComplete ? (
                         <p className="mt-1 text-xs text-v2-muted">
-                          Shipping is estimated until the shipping address is complete.
+                          Shipping and tax are estimated until the shipping address is complete.
                         </p>
                       ) : null}
                       <dl className="mt-4 space-y-1.5 text-sm">
@@ -1477,6 +1544,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                           <>
                             <Money label="Printing" cents={printCents} loading={quoteLoading} />
                             <Money label="Shipping" cents={shippingCents} loading={quoteLoading} />
+                            <Money label="Sales tax" cents={taxCents} loading={quoteLoading} />
                           </>
                         )}
                         <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
@@ -1565,6 +1633,9 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         digital={isDigital}
         pageCount={plan.totalPages}
         photoCount={plan.photoCount}
+        printCents={printCents}
+        shippingCents={shippingCents}
+        taxCents={taxCents}
         totalCents={quoteCents}
         shippingZip={shippingZip}
         shippingAddress={shippingAddress}

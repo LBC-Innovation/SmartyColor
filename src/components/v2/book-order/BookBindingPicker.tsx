@@ -17,15 +17,16 @@ export type BindingQuote = {
   totalCents: number | null;
   printCents: number | null;
   shippingCents: number | null;
+  taxCents: number | null;
   loading: boolean;
   error: string | null;
 };
 
-/** What one printed format costs for the book as it stands, before shipping. */
+/** What one printed format costs for the book as it stands, before shipping and tax. */
 export type FormatPrice = {
   /** Printed pages the price is for, padding included. */
   pageCount: number;
-  /** Everything but shipping; null while loading or when no price is available. */
+  /** The book before shipping and tax; null while loading or when no price is available. */
   bookCents: number | null;
   loading: boolean;
   /** The pages already chosen don't fit this format. */
@@ -193,7 +194,7 @@ export function BookBindingPicker({
               ) : priced ? (
                 <>
                   {formatCredits(price.bookCents!)}
-                  <span className="text-sm font-semibold text-v2-muted">+ shipping</span>
+                  <span className="text-sm font-semibold text-v2-muted">+ shipping &amp; tax</span>
                 </>
               ) : card.digital ? (
                 card.headline
