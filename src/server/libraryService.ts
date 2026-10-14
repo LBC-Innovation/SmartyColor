@@ -24,6 +24,7 @@ import {
   removePrefix,
   signedReadUrls,
 } from "@/server/storage/libraryFiles";
+import { scheduleThumbnails } from "@/server/storage/libraryThumbs";
 import { quoted, recordActivity } from "@/server/activityService";
 import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } from "@/server/libraryAccess";
 import { mirrorImageBytes } from "@/lib/photo/mirrorImageServer";
@@ -111,67 +112,65 @@ export async function listProjects(
   /** Pass the caller's address to pick up albums shared with it before they had an account. */
   claim?: { email: string; emailVerified: boolean },
 ): Promise<ApiResult<LibraryProject[]>> {
-  if (claim?.emailVerified && claim.email) await claimPendingShares(userId, claim.email);
-
-  const { data: owned, error } = await db()
-    .from("library_projects")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
+  // Each step below runs its independent queries together; only real dependencies wait.
+  const claiming = claim?.emailVerified && claim.email ? claimPendingShares(userId, claim.email) : null;
+  const ownedQuery = Promise.resolve(
+    db().from("library_projects").select("*").eq("user_id", userId).order("created_at", { ascending: true }),
+  );
+  // Memberships must be read after the claim, which may have just activated some.
+  const membershipsQuery = (claiming ?? Promise.resolve()).then(() =>
+    db()
+      .from("library_project_shares")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("accepted_at", { ascending: true }),
+  );
+  const [{ data: owned, error }, { data: memberships, error: mErr }] = await Promise.all([
+    ownedQuery,
+    membershipsQuery,
+  ]);
   if (error) return err(error.message);
-
-  const { data: memberships, error: mErr } = await db()
-    .from("library_project_shares")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "active")
-    .order("accepted_at", { ascending: true });
   if (mErr) return err(mErr.message);
 
   const shareByProject = new Map<string, Row>();
   for (const m of memberships ?? []) shareByProject.set(m.project_id as string, m);
 
+  const ownedIds = (owned ?? []).map((r) => r.id as string);
+  const sharedIds = [...shareByProject.keys()];
+  const ids = [...ownedIds, ...sharedIds];
+
+  const [sharedRes, photosRes, invitesRes] = await Promise.all([
+    sharedIds.length > 0 ? db().from("library_projects").select("*").in("id", sharedIds) : null,
+    ids.length > 0 ? db().from("library_photos").select("project_id").in("project_id", ids) : null,
+    ownedIds.length > 0
+      ? db().from("library_project_shares").select("project_id").in("project_id", ownedIds)
+      : null,
+  ]);
+  if (sharedRes?.error) return err(sharedRes.error.message);
+  if (photosRes?.error) return err(photosRes.error.message);
+  if (invitesRes?.error) return err(invitesRes.error.message);
+
   let shared: Row[] = [];
-  if (shareByProject.size > 0) {
-    const { data, error: sErr } = await db()
-      .from("library_projects")
-      .select("*")
-      .in("id", [...shareByProject.keys()]);
-    if (sErr) return err(sErr.message);
-    const byId = new Map((data ?? []).map((r) => [r.id as string, r as Row]));
+  if (sharedRes) {
+    const byId = new Map((sharedRes.data ?? []).map((r) => [r.id as string, r as Row]));
     // Keep the order in which the albums were joined; skip any the caller owns.
-    shared = [...shareByProject.keys()]
+    shared = sharedIds
       .map((id) => byId.get(id))
       .filter((r): r is Row => Boolean(r) && r!.user_id !== userId);
   }
 
-  const ownedIds = (owned ?? []).map((r) => r.id as string);
-  const ids = [...ownedIds, ...shared.map((r) => r.id as string)];
   const counts = new Map<string, number>();
+  for (const p of photosRes?.data ?? []) {
+    const pid = p.project_id as string;
+    counts.set(pid, (counts.get(pid) ?? 0) + 1);
+  }
   const sharedCounts = new Map<string, number>();
+  for (const i of invitesRes?.data ?? []) {
+    const pid = i.project_id as string;
+    sharedCounts.set(pid, (sharedCounts.get(pid) ?? 0) + 1);
+  }
   const ownerNames = new Map<string, string>();
-  if (ids.length > 0) {
-    const { data: photos, error: pErr } = await db()
-      .from("library_photos")
-      .select("project_id")
-      .in("project_id", ids);
-    if (pErr) return err(pErr.message);
-    for (const p of photos ?? []) {
-      const pid = p.project_id as string;
-      counts.set(pid, (counts.get(pid) ?? 0) + 1);
-    }
-  }
-  if (ownedIds.length > 0) {
-    const { data: invites, error: iErr } = await db()
-      .from("library_project_shares")
-      .select("project_id")
-      .in("project_id", ownedIds);
-    if (iErr) return err(iErr.message);
-    for (const i of invites ?? []) {
-      const pid = i.project_id as string;
-      sharedCounts.set(pid, (sharedCounts.get(pid) ?? 0) + 1);
-    }
-  }
   if (shared.length > 0) {
     const ownerIds = [...new Set(shared.map((r) => r.user_id as string))];
     const { data: profiles } = await db().from("profiles").select("id, display_name").in("id", ownerIds);
@@ -400,24 +399,39 @@ async function hydratePhotos(rows: Row[], viewer: Viewer): Promise<ApiResult<Lib
     ...rows.map((r) => r.storage_path as string),
     ...(revRows ?? []).map((r) => r.storage_path as string),
   ];
+  // Thumbnails are signed separately and best effort: some may not have been made yet.
+  const thumbsSigning = signedReadUrls(paths.map(libraryPaths.thumb)).catch(() => null);
   let urls: Map<string, string>;
   try {
     urls = await signedReadUrls(paths);
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not sign image URLs");
   }
+  const signedThumbs = await thumbsSigning;
+  const thumbs = new Map<string, string>();
+  if (signedThumbs) {
+    const missing: string[] = [];
+    for (const path of paths) {
+      const url = signedThumbs.get(libraryPaths.thumb(path));
+      if (url) thumbs.set(path, url);
+      else missing.push(path);
+    }
+    scheduleThumbnails(missing);
+  }
 
   const revsByPhoto = new Map<string, LibraryRevision[]>();
   for (const r of revRows ?? []) {
     const pid = r.photo_id as string;
     const list = revsByPhoto.get(pid) ?? [];
-    list.push(revisionFromRow(r, urls.get(r.storage_path as string) ?? ""));
+    const path = r.storage_path as string;
+    list.push({ ...revisionFromRow(r, urls.get(path) ?? ""), thumbUrl: thumbs.get(path) });
     revsByPhoto.set(pid, list);
   }
   return {
-    data: rows.map((r) =>
-      photoFromRow(r, revsByPhoto.get(r.id as string) ?? [], urls.get(r.storage_path as string) ?? "", viewer),
-    ),
+    data: rows.map((r) => ({
+      ...photoFromRow(r, revsByPhoto.get(r.id as string) ?? [], urls.get(r.storage_path as string) ?? "", viewer),
+      thumbUrl: thumbs.get(r.storage_path as string),
+    })),
     error: null,
   };
 }
@@ -606,7 +620,8 @@ export async function mirrorPhoto(userId: string, photoId: string): Promise<ApiR
   if (!data) return NOT_FOUND;
 
   try {
-    await removeObjects([original.oldPath, ...[...sheets.values()].map((s) => s.oldPath)]);
+    const oldPaths = [original.oldPath, ...[...sheets.values()].map((s) => s.oldPath)];
+    await removeObjects([...oldPaths, ...oldPaths.map(libraryPaths.thumb)]);
   } catch (e) {
     // Rows already point at the mirrored files; orphans are harmless.
     console.error(JSON.stringify({ level: "warn", message: "library: mirror cleanup failed", photoId, error: String(e) }));

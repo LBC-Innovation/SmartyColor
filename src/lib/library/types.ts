@@ -55,6 +55,8 @@ export type LibraryRevision = {
   createdAt: string;
   /** Short-lived read URL; refresh via /photos when it expires. */
   url: string;
+  /** Short-lived URL for a small server-resized copy, for tiles. Absent if it couldn't be signed. */
+  thumbUrl?: string;
 };
 
 export type LibraryPhoto = {
@@ -82,6 +84,8 @@ export type LibraryPhoto = {
   canDelete: boolean;
   /** Short-lived read URL for the original. */
   url: string;
+  /** Short-lived URL for a small server-resized copy of the original, for tiles. */
+  thumbUrl?: string;
   createdAt: string;
   updatedAt: string;
 };

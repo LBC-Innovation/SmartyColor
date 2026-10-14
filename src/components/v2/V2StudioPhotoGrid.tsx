@@ -54,8 +54,8 @@ function Tile({
   dragHandle?: React.HTMLAttributes<HTMLButtonElement>;
   isOverlay?: boolean;
 }) {
-  const photoThumb = useThumbUrl(photo.previewUrl);
-  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl);
+  const photoThumb = useThumbUrl(photo.previewUrl, photo.thumbUrl);
+  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl, photo.sheet?.thumbUrl);
   return (
     <div
       className={cn(

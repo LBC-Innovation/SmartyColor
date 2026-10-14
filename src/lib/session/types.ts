@@ -39,6 +39,8 @@ export type GeneratedSheet = {
   mimeType: string;
   /** Storage path when the sheet lives in the cloud library. */
   storagePath?: string;
+  /** Cloud revisions: short-lived URL for a small resized copy, for tiles. */
+  thumbUrl?: string;
 };
 
 /** One entry in a photo's version rail. */

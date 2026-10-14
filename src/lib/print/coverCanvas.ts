@@ -40,6 +40,8 @@ function loadPicture(src: string, cell: LayoutBox): Promise<Picture> {
 
   const task = (async () => {
     const img = new Image();
+    // Cloud images may still be signed storage URLs; CORS keeps the canvas readable.
+    img.crossOrigin = "anonymous";
     img.decoding = "async";
     img.src = src;
     await img.decode();

@@ -23,34 +23,36 @@ export async function authenticateBearer(
   }
 
   const token = authHeader.slice(7);
-  const supabaseAuth = getSupabaseAuth();
+
+  let claims: { sub?: string; amr?: string[] } = {};
+  try {
+    const [, payload] = token.split(".");
+    claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")) as typeof claims;
+  } catch {
+    claims = {};
+  }
+  const amr = claims.amr ?? null;
+
+  // Verifying the token and reading the profile are independent round trips, so run them together.
+  // The profile is looked up by the token's (unverified) subject and only used once getUser confirms it.
+  // Query builders are lazy until awaited; Promise.resolve sends the request now.
+  const loadProfile = (userId: string) =>
+    Promise.resolve(getSupabaseAdmin().from("profiles").select("status").eq("id", userId).single());
+  const profileByClaim = claims.sub ? loadProfile(claims.sub) : null;
+  profileByClaim?.catch(() => undefined);
+
   const {
     data: { user },
     error,
-  } = await supabaseAuth.auth.getUser(token);
+  } = await getSupabaseAuth().auth.getUser(token);
 
   if (error || !user) {
     log("warn", "Auth failed: invalid token", {});
     return { error: { status: 401, message: "Invalid or expired token" } };
   }
 
-  let amr: string[] | null = null;
-  try {
-    const [, payload] = token.split(".");
-    const claims = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf-8"),
-    ) as { amr?: string[] };
-    amr = claims.amr ?? null;
-  } catch {
-    amr = null;
-  }
-
-  const supabaseAdmin = getSupabaseAdmin();
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("status")
-    .eq("id", user.id)
-    .single();
+  const { data: profile, error: profileError } =
+    profileByClaim && claims.sub === user.id ? await profileByClaim : await loadProfile(user.id);
 
   if (profileError) {
     log("error", "Failed to fetch profile during auth check", {
