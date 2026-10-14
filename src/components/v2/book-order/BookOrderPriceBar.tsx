@@ -63,7 +63,7 @@ export function BookOrderPriceBar({
               </p>
               <p className="text-sm font-semibold leading-tight tabular-nums text-v2-ink">
                 {photoCount === 0
-                  ? "Choose a format to start"
+                  ? "Choose an album to start"
                   : `${photoCount} coloring page${photoCount === 1 ? "" : "s"}`}
                 {pageCount > photoCount && photoCount > 0 ? (
                   <span className="font-medium text-v2-muted"> · {pageCount} printed</span>

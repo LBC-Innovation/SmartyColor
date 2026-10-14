@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 export type BookOrderStep = "book" | "pages" | "cover" | "proof" | "review";
 
 const LABEL: Record<BookOrderStep, string> = {
-  book: "Format",
+  book: "Book",
   pages: "Pages",
   cover: "Cover",
   proof: "Check",

@@ -1,4 +1,10 @@
-import type { BookBindingSpec } from "@/lib/print/bookBindings";
+import {
+  BOOK_BINDINGS,
+  PRINT_BINDING_IDS,
+  recommendBinding,
+  type BookBindingSpec,
+  type BookFormatId,
+} from "@/lib/print/bookBindings";
 import type { Orientation } from "@/lib/print/settings";
 import type {
   BookPagePlan,
@@ -24,6 +30,45 @@ function targetPageCount(count: number, binding: BookBindingSpec): number {
     if (remainder !== 0) total += binding.pageMultiple - remainder;
   }
   return total;
+}
+
+/**
+ * Most blank padding a format may add and still count as a good fit. Rounding
+ * up to a stapled booklet's set of 4 adds up to 3; anything past that is the
+ * format's minimum showing through as a stack of empty pages.
+ */
+const MAX_FIT_PADDING = 3;
+
+function paddingFits(count: number, binding: BookBindingSpec): boolean {
+  const padding = targetPageCount(count, binding) - count;
+  // A tiny book can't be mostly blank either: 1 page in a 4-page booklet is not a book.
+  return count > 0 && padding <= Math.min(MAX_FIT_PADDING, count);
+}
+
+export type BookFormatFit = {
+  /** The pages fill this format without a pile of blank pages. */
+  fits: boolean;
+  /** More pages that would make it fit; 0 when it fits or holds too many already. */
+  shortBy: number;
+  /** More pages than the format can bind. */
+  tooMany: boolean;
+};
+
+/** Whether a book of `count` chosen pages suits a format. */
+export function bookFormatFit(count: number, binding: BookBindingSpec): BookFormatFit {
+  if (count > binding.maxPages) return { fits: false, shortBy: 0, tooMany: true };
+  if (paddingFits(count, binding)) return { fits: true, shortBy: 0, tooMany: false };
+  let needed = Math.max(count, 1);
+  while (needed <= binding.maxPages && !paddingFits(needed, binding)) needed += 1;
+  return { fits: false, shortBy: needed - count, tooMany: false };
+}
+
+/** The format to suggest for `count` pages: a printed book when one fits, else the PDF. */
+export function bestFitFormat(count: number): BookFormatId {
+  const preferred = recommendBinding(count);
+  // Nothing chosen yet: keep the usual default rather than judging an empty book.
+  if (count === 0 || bookFormatFit(count, BOOK_BINDINGS[preferred]).fits) return preferred;
+  return PRINT_BINDING_IDS.find((id) => bookFormatFit(count, BOOK_BINDINGS[id]).fits) ?? "digital";
 }
 
 /**
