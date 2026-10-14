@@ -5,6 +5,8 @@ export async function mirrorImageDataUrl(
 ): Promise<string> {
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image();
+    // Cloud images may still be signed storage URLs; CORS keeps the canvas readable.
+    el.crossOrigin = "anonymous";
     el.onload = () => resolve(el);
     el.onerror = () => reject(new Error("Could not read that image."));
     el.src = src;

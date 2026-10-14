@@ -36,6 +36,7 @@ import { useThumbUrl } from "@/lib/v2/thumbnail";
 export type V2LibraryPhoto = {
   id: string;
   previewUrl: string;
+  thumbUrl?: string;
   photoDataUrl: string;
   image?: V2PhotoImageMeta;
   printPrefs: PrintPrefs;
@@ -113,8 +114,8 @@ function PhotoLibraryRow({
   deleteSelectDisabled,
   isOverlay,
 }: PhotoRowProps) {
-  const photoThumb = useThumbUrl(photo.previewUrl);
-  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl);
+  const photoThumb = useThumbUrl(photo.previewUrl, photo.thumbUrl);
+  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl, photo.sheet?.thumbUrl);
   const rowSelect =
     deleteMode && !deleteSelectDisabled ? onToggleDeleteSelect : onSelect;
 

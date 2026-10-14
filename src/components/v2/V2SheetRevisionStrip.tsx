@@ -10,7 +10,7 @@ type V2SheetRevisionStripProps = {
   activeRevisionId: string | null;
   onSelect: (revisionId: string) => void;
   /** The uploaded photo, listed first so it can be recalled once it has portrait versions. */
-  original?: { src: string; selected: boolean; onSelect: () => void };
+  original?: { src: string; thumbSrc?: string; selected: boolean; onSelect: () => void };
   onEditSheet?: () => void;
   editDisabled?: boolean;
   disabled?: boolean;
@@ -19,8 +19,8 @@ type V2SheetRevisionStripProps = {
   variant?: "sidebar" | "compact";
 };
 
-function RevisionThumb({ src }: { src: string }) {
-  const thumb = useThumbUrl(src);
+function RevisionThumb({ src, thumbSrc }: { src: string; thumbSrc?: string }) {
+  const thumb = useThumbUrl(src, thumbSrc);
   if (!thumb) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -119,7 +119,7 @@ export function V2SheetRevisionStrip({
             aria-label={`Original photo${original.selected ? ", selected" : ""}`}
             title="Original photo"
           >
-            <RevisionThumb src={original.src} />
+            <RevisionThumb src={original.src} thumbSrc={original.thumbSrc} />
             <span className={badgeClass}>
               <ImageIcon className="h-3 w-3" aria-hidden />
             </span>
@@ -143,7 +143,7 @@ export function V2SheetRevisionStrip({
               aria-label={`Version ${index + 1}${isPhoto ? ", portrait photo" : ""}${selected ? ", selected" : ""}`}
               title={isPhoto ? "Portrait photo" : undefined}
             >
-              <RevisionThumb src={revision.sheet.imageDataUrl} />
+              <RevisionThumb src={revision.sheet.imageDataUrl} thumbSrc={revision.sheet.thumbUrl} />
               {isPhoto ? (
                 <span className={badgeClass}>
                   <ImageIcon className="h-3 w-3" aria-hidden />

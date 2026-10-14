@@ -29,6 +29,8 @@ export async function applyPhotoCropDataUrl(
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Cloud images may still be signed storage URLs; CORS keeps the canvas readable.
+    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Could not load image for crop."));
     img.src = dataUrl;

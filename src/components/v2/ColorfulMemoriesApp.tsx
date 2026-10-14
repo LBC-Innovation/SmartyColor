@@ -136,6 +136,7 @@ export function ColorfulMemoriesApp() {
     selected && selectedRevisions.some((revision) => revision.kind === "photo")
       ? {
           src: selected.previewUrl,
+          thumbSrc: selected.thumbUrl,
           selected: viewingOriginal,
           onSelect: () => setOriginalViewFor(originalViewKey),
         }

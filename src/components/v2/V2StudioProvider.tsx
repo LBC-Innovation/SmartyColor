@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -15,11 +16,15 @@ import { usePathname, useRouter } from "next/navigation";
 import type { StudioLayoutMode } from "@/components/v2/V2StudioLayoutToggle";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useAuth } from "@/context/AuthContext";
+import { hasSessionToken, readSessionHint } from "@/lib/api/client";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import * as library from "@/lib/library/client";
+import type { LibraryProject } from "@/lib/library/types";
 import {
-  entriesFromLibraryPhotos,
+  applyResolvedImageUrls,
+  entriesFromLibraryPhotosNow,
   evictEntryImages,
+  resolveLibraryImages,
   pickPersistedPatch,
   projectMetaFromLibrary,
 } from "@/lib/v2/cloudLibrary";
@@ -119,6 +124,13 @@ function readActiveProjectPref(userId: string): string | null {
   }
 }
 
+const noSubscribe = () => () => {};
+
+/** The account this device last signed in as, if it still holds a session token. */
+function readHintedUserId(): string | null {
+  return hasSessionToken() ? readSessionHint()?.id ?? null : null;
+}
+
 const ALBUM_LINK_PARAM = "album";
 
 /** Album id from a share email's link (`/studio?album=…`), if this page load has one. */
@@ -186,7 +198,11 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const toast = useV2Toast();
   const toastRef = useRef(toast);
-  const userId = user?.id ?? null;
+  // While the session check is still in flight, assume the account this device last signed in as,
+  // so the album loads alongside that check instead of after it. If the check comes back with a
+  // different answer (signed out, expired), the identity changes and the studio re-bootstraps.
+  const hintedUserId = useSyncExternalStore(noSubscribe, readHintedUserId, () => null);
+  const userId = authLoading ? hintedUserId : user?.id ?? null;
   const userEmailRef = useRef<string | null>(user?.email ?? null);
   const mode: V2StudioMode = userId ? "cloud" : "local";
   const cloud = mode === "cloud";
@@ -275,14 +291,25 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
 
   // ---------------------------------------------------------------- loading
 
+  // What the server last had for the active album's own fields, so loads and photo-only changes
+  // don't save them back unchanged.
+  const savedProjectFieldsRef = useRef<string | null>(null);
+  // Bumped on every album load, so background image downloads for an album we've left stop.
+  const imageLoadGenRef = useRef(0);
+
+  /**
+   * Show an album as soon as its photo list arrives. Images not yet cached on this device keep
+   * their signed URLs and are swapped for cached copies in the background, selected photo first.
+   * Pass `list` when the caller already fetched the album list, to skip fetching it again.
+   */
   const loadCloudProject = useCallback(
-    async (projectId: string, meta: V2ProjectMeta[]): Promise<void> => {
+    async (projectId: string, meta: V2ProjectMeta[], list?: LibraryProject[]): Promise<void> => {
       const [photosRes, projectsRes] = await Promise.all([
         library.listPhotos(projectId),
-        library.listProjects(),
+        list ? { data: list, error: null } : library.listProjects(),
       ]);
       if (photosRes.error) throw new Error(photosRes.error.message);
-      const entries = await entriesFromLibraryPhotos(photosRes.data!);
+      const { entries, pending } = await entriesFromLibraryPhotosNow(photosRes.data!);
       const project = projectsRes.error ? null : projectsRes.data!.find((p) => p.id === projectId) ?? null;
       const session: V2StudioSnapshot = {
         ...emptyV2StudioSnapshot(),
@@ -299,8 +326,37 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
         storyPhase: (project?.storyPhase as V2StoryBookPhase) ?? "setup",
       };
       applySessionToState(session, previewUrlsRef, setters);
+      // As stored: anything the load had to fill in or correct still gets saved once.
+      savedProjectFieldsRef.current = project
+        ? JSON.stringify([
+            projectId,
+            {
+              selectedPhotoId: project.selectedPhotoId,
+              studioLayout: project.studioLayout,
+              tripNarrative: project.tripNarrative,
+              familyContext: project.familyContext,
+              generatedStory: project.generatedStory,
+              printArtMode: project.printArtMode,
+              storyPhase: project.storyPhase,
+            },
+          ])
+        : null;
       if (!projectsRes.error) setProjects(projectsRes.data!.map(projectMetaFromLibrary));
       else setProjects(meta);
+
+      const gen = ++imageLoadGenRef.current;
+      if (pending.length === 0) return;
+      void resolveLibraryImages(pending, {
+        first: session.selectedId,
+        cancelled: () => imageLoadGenRef.current !== gen || activeProjectIdRef.current !== projectId,
+        onResolved: (urls) => {
+          setPhotos((prev) => {
+            const next = prev.map((entry) => applyResolvedImageUrls(entry, urls));
+            photosRef.current = next;
+            return next;
+          });
+        },
+      });
     },
     [setters],
   );
@@ -337,7 +393,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       setActiveProjectId(active);
       activeProjectIdRef.current = active;
       writeActiveProjectPref(uid, active);
-      await loadCloudProject(active, meta);
+      await loadCloudProject(active, meta, list);
     },
     [loadCloudProject, notifyAlbumLinkMiss],
   );
@@ -353,8 +409,10 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   }, [setters]);
 
   // Re-bootstrap whenever the identity changes (sign-in, sign-out, first load).
+  // Nothing to load until we know (or have a good guess at) who is signed in.
+  const awaitingIdentity = authLoading && !hintedUserId;
   useEffect(() => {
-    if (authLoading) return;
+    if (awaitingIdentity) return;
     // Share links need an account: sign in first, then come back to the album.
     const linkedAlbum = userId ? null : readAlbumLink();
     if (linkedAlbum) {
@@ -384,7 +442,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, userId, bootstrapCloud, bootstrapLocal, revokeAllPreviews, router]);
+  }, [awaitingIdentity, userId, bootstrapCloud, bootstrapLocal, revokeAllPreviews, router]);
 
   const reload = useCallback(async () => {
     if (modeRef.current === "cloud" && userIdRef.current) {
@@ -414,7 +472,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
         await bootstrapCloud(uid);
         return "gone";
       }
-      await loadCloudProject(projectId, list.data!.map(projectMetaFromLibrary));
+      await loadCloudProject(projectId, list.data!.map(projectMetaFromLibrary), list.data!);
       if (keepSelected && photosRef.current.some((p) => p.id === keepSelected)) setSelectedId(keepSelected);
       return "ok";
     } finally {
@@ -433,7 +491,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
 
     const timer = window.setTimeout(() => {
       if (modeRef.current === "cloud") {
-        void library.updateProject(projectId, {
+        const fields = {
           selectedPhotoId: selectedIdRef.current,
           studioLayout: studioLayoutRef.current,
           tripNarrative: tripNarrativeRef.current,
@@ -441,7 +499,12 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
           generatedStory: generatedStoryRef.current,
           printArtMode: printArtModeRef.current,
           storyPhase: storyPhaseRef.current,
-        });
+        };
+        // Photo changes (images arriving, edits) also land here; only save what actually changed.
+        const signature = JSON.stringify([projectId, fields]);
+        if (signature === savedProjectFieldsRef.current) return;
+        savedProjectFieldsRef.current = signature;
+        void library.updateProject(projectId, fields);
         return;
       }
       void saveV2ProjectSession(projectId, buildSnapshot()).then(() => {

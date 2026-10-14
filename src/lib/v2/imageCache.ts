@@ -115,6 +115,38 @@ export function cachedImageUrl(path: string, signedUrl: string): Promise<string>
   return task;
 }
 
+/**
+ * Object URLs for whichever of `paths` are already on this device (memory or IndexedDB), read in
+ * one transaction. Never touches the network; paths missing from the result aren't cached yet.
+ */
+export async function peekCachedImageUrls(paths: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const missing: string[] = [];
+  for (const path of new Set(paths)) {
+    const hit = objectUrls.get(path);
+    if (hit) out.set(path, hit);
+    else missing.push(path);
+  }
+  if (missing.length === 0) return out;
+  try {
+    const db = await openDb();
+    const blobs = await new Promise<(Blob | undefined)[]>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const store = tx.objectStore(STORE);
+      const reqs = missing.map((path) => store.get(path));
+      tx.oncomplete = () => resolve(reqs.map((r) => r.result as Blob | undefined));
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+    blobs.forEach((blob, i) => {
+      if (blob) out.set(missing[i], memo(missing[i], blob));
+    });
+  } catch {
+    /* cache is best-effort */
+  }
+  return out;
+}
+
 /** Bytes for a path (for client-side composites). Same lookup order. */
 export async function cachedImageBlob(path: string, signedUrl: string): Promise<Blob> {
   const cached = await idbGet(path);

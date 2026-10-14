@@ -36,6 +36,8 @@ export async function downscaleImageToDataUrl(
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    // Cloud images may still be signed storage URLs; CORS keeps the canvas readable.
+    img.crossOrigin = "anonymous";
     img.decoding = "async";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Could not load image."));

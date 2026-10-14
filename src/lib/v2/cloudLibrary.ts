@@ -4,7 +4,7 @@ import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import type { PrintPrefs } from "@/lib/print/settings";
 import type { PhotoLayout } from "@/lib/photo/orientation";
 import { dataUrlToBlob } from "@/lib/photo/dataUrlBlob";
-import { cachedImageUrl, evictImages, primeImageCache } from "@/lib/v2/imageCache";
+import { cachedImageUrl, evictImages, peekCachedImageUrls, primeImageCache } from "@/lib/v2/imageCache";
 import type { V2PhotoEntry, V2ProjectMeta } from "@/lib/v2/studioTypes";
 
 /**
@@ -28,27 +28,31 @@ export function projectMetaFromLibrary(p: LibraryProject): V2ProjectMeta {
   };
 }
 
-async function revisionToVersion(rev: LibraryRevision): Promise<SheetVersion> {
-  const url = await cachedImageUrl(rev.storagePath, rev.url);
+type ImageUrlFor = (path: string, signedUrl: string) => string;
+
+function versionFromRevision(rev: LibraryRevision, urlFor: ImageUrlFor): SheetVersion {
   return {
     id: rev.id,
     createdAt: rev.createdAt,
-    sheet: { title: rev.title, mimeType: rev.mimeType, imageDataUrl: url, storagePath: rev.storagePath },
+    sheet: {
+      title: rev.title,
+      mimeType: rev.mimeType,
+      imageDataUrl: urlFor(rev.storagePath, rev.url),
+      storagePath: rev.storagePath,
+      thumbUrl: rev.thumbUrl,
+    },
     kind: rev.kind,
     orientation: (rev.orientation as SheetVersion["orientation"] | null) ?? undefined,
     sourceRevisionId: rev.sourceRevisionId,
   };
 }
 
-/** Full entry for a library photo; resolves (and caches) every image URL. */
-export async function entryFromLibraryPhoto(
+function buildEntry(
   p: LibraryPhoto,
+  urlFor: ImageUrlFor,
   transient?: Partial<Pick<V2PhotoEntry, "generating" | "correcting">>,
-): Promise<V2PhotoEntry> {
-  const [previewUrl, revisions] = await Promise.all([
-    cachedImageUrl(p.storagePath, p.url),
-    Promise.all(p.revisions.map(revisionToVersion)),
-  ]);
+): V2PhotoEntry {
+  const revisions = p.revisions.map((rev) => versionFromRevision(rev, urlFor));
   const active =
     revisions.find((r) => r.id === p.activeRevisionId) ?? revisions[revisions.length - 1] ?? null;
 
@@ -56,7 +60,8 @@ export async function entryFromLibraryPhoto(
     id: p.id,
     remote: { photoId: p.id, projectId: p.projectId, storagePath: p.storagePath },
     canDelete: p.canDelete,
-    previewUrl,
+    previewUrl: urlFor(p.storagePath, p.url),
+    thumbUrl: p.thumbUrl,
     photoDataUrl: "",
     image:
       p.width && p.height && p.orientation && p.aspectRatio
@@ -83,8 +88,96 @@ export async function entryFromLibraryPhoto(
   };
 }
 
-export async function entriesFromLibraryPhotos(photos: LibraryPhoto[]): Promise<V2PhotoEntry[]> {
-  return Promise.all(photos.map((p) => entryFromLibraryPhoto(p)));
+function imagePaths(p: LibraryPhoto): { path: string; url: string }[] {
+  return [{ path: p.storagePath, url: p.url }, ...p.revisions.map((r) => ({ path: r.storagePath, url: r.url }))];
+}
+
+/** Full entry for a library photo; resolves (and caches) every image URL. */
+export async function entryFromLibraryPhoto(
+  p: LibraryPhoto,
+  transient?: Partial<Pick<V2PhotoEntry, "generating" | "correcting">>,
+): Promise<V2PhotoEntry> {
+  const images = imagePaths(p);
+  const urls = await Promise.all(images.map((i) => cachedImageUrl(i.path, i.url)));
+  const byPath = new Map(images.map((i, n) => [i.path, urls[n]]));
+  return buildEntry(p, (path, signedUrl) => byPath.get(path) ?? signedUrl, transient);
+}
+
+/** An image an entry still shows from its signed URL because the bytes aren't cached yet. */
+export type PendingLibraryImage = { photoId: string; path: string; url: string };
+
+/**
+ * Entries for a whole album without waiting on image downloads. Images already on this device
+ * get their cached object URL; the rest keep their signed URL and are listed in `pending`, for
+ * `resolveLibraryImages` to fetch in the background.
+ */
+export async function entriesFromLibraryPhotosNow(
+  photos: LibraryPhoto[],
+): Promise<{ entries: V2PhotoEntry[]; pending: PendingLibraryImage[] }> {
+  const cached = await peekCachedImageUrls(photos.flatMap((p) => imagePaths(p).map((i) => i.path)));
+  const pending: PendingLibraryImage[] = [];
+  const seen = new Set<string>();
+  for (const p of photos) {
+    for (const i of imagePaths(p)) {
+      if (cached.has(i.path) || seen.has(i.path) || !i.url) continue;
+      seen.add(i.path);
+      pending.push({ photoId: p.id, ...i });
+    }
+  }
+  const entries = photos.map((p) => buildEntry(p, (path, signedUrl) => cached.get(path) ?? signedUrl));
+  return { entries, pending };
+}
+
+const RESOLVE_CONCURRENCY = 3;
+
+/**
+ * Download and cache pending images a few at a time, `first` photo's images ahead of the rest.
+ * `onResolved` gets each batch of path → object URL as it lands; stops early once `cancelled()`.
+ */
+export async function resolveLibraryImages(
+  pending: PendingLibraryImage[],
+  opts: { first?: string | null; cancelled: () => boolean; onResolved: (urls: Map<string, string>) => void },
+): Promise<void> {
+  const queue = [
+    ...pending.filter((i) => i.photoId === opts.first),
+    ...pending.filter((i) => i.photoId !== opts.first),
+  ];
+  const worker = async () => {
+    for (let item = queue.shift(); item && !opts.cancelled(); item = queue.shift()) {
+      try {
+        const url = await cachedImageUrl(item.path, item.url);
+        if (!opts.cancelled()) opts.onResolved(new Map([[item.path, url]]));
+      } catch {
+        /* keep the signed URL; the next album load tries again */
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: RESOLVE_CONCURRENCY }, worker));
+}
+
+/** Point an entry's images at freshly cached object URLs, wherever it still shows a signed URL. */
+export function applyResolvedImageUrls(entry: V2PhotoEntry, urls: Map<string, string>): V2PhotoEntry {
+  const swap = (path: string | undefined, current: string): string => {
+    if (!path || current.startsWith("blob:") || current.startsWith("data:")) return current;
+    return urls.get(path) ?? current;
+  };
+  const previewUrl = swap(entry.remote?.storagePath, entry.previewUrl);
+  let changed = previewUrl !== entry.previewUrl;
+  const sheetRevisions = entry.sheetRevisions?.map((v) => {
+    const imageDataUrl = swap(v.sheet.storagePath, v.sheet.imageDataUrl);
+    if (imageDataUrl === v.sheet.imageDataUrl) return v;
+    changed = true;
+    return { ...v, sheet: { ...v.sheet, imageDataUrl } };
+  });
+  let sheet = entry.sheet;
+  if (sheet) {
+    const imageDataUrl = swap(sheet.storagePath, sheet.imageDataUrl);
+    if (imageDataUrl !== sheet.imageDataUrl) {
+      changed = true;
+      sheet = { ...sheet, imageDataUrl };
+    }
+  }
+  return changed ? { ...entry, previewUrl, sheet, sheetRevisions } : entry;
 }
 
 /** Upload a prepared original and register it. Returns the studio entry. */

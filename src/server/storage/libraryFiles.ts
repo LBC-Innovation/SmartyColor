@@ -30,6 +30,11 @@ export const libraryPaths = {
     `${userId}/${projectId}/${photoId}/original-${versionId}.${extensionForMime(mime)}`,
   sheet: (userId: string, projectId: string, photoId: string, revisionId: string, mime: string) =>
     `${userId}/${projectId}/${photoId}/sheets/${revisionId}.${extensionForMime(mime)}`,
+  /**
+   * Tile-sized copy of any library image, kept next to it so deleting a photo's folder takes it
+   * too. Made after the fact (see libraryThumbs), so it may not exist yet.
+   */
+  thumb: (imagePath: string) => `${imagePath}.thumb.webp`,
 };
 
 /** Signed PUT target so the browser uploads straight to storage (bypasses Vercel body limits). */
