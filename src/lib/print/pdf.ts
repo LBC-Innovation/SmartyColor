@@ -1,7 +1,11 @@
 import {
   PDFDocument,
+  type PDFPage,
+  type PDFRef,
+  type Rotation,
   concatTransformationMatrix,
   degrees,
+  drawImage as drawImageOperators,
   popGraphicsState,
   pushGraphicsState,
   rgb,
@@ -20,6 +24,66 @@ import {
   type PageRotation,
 } from "@/lib/print/pageLayout";
 import type { PrintPrefs } from "@/lib/print/settings";
+
+/**
+ * A grayscale picture already compressed for the PDF: rows of `bitsPerComponent`
+ * samples (0 black … max white), each row starting on a byte, Flate-deflated.
+ * Line art kept this way is a fraction of the size of the same page as a JPEG.
+ */
+export type PdfGrayImage = {
+  width: number;
+  height: number;
+  bitsPerComponent: 4 | 8;
+  deflated: Uint8Array;
+};
+
+/** A sheet picture: a data URL (PNG or JPEG), or grayscale samples ready for the PDF. */
+export type PdfSheetImage = string | PdfGrayImage;
+
+/** An image placed in the PDF: where it lives, and its size in pixels. */
+type EmbeddedImage = { ref: PDFRef; width: number; height: number };
+
+/**
+ * Put a ready-made DeviceGray image straight into the PDF, no re-encoding.
+ * pdf-lib only embeds JPEG and PNG, so this registers the image stream itself.
+ */
+function embedGrayImage(pdf: PDFDocument, gray: PdfGrayImage): EmbeddedImage {
+  const stream = pdf.context.stream(gray.deflated, {
+    Type: "XObject",
+    Subtype: "Image",
+    Width: gray.width,
+    Height: gray.height,
+    ColorSpace: "DeviceGray",
+    BitsPerComponent: gray.bitsPerComponent,
+    Filter: "FlateDecode",
+  });
+  return { ref: pdf.context.register(stream), width: gray.width, height: gray.height };
+}
+
+async function embedSheetImage(pdf: PDFDocument, source: PdfSheetImage): Promise<EmbeddedImage> {
+  if (typeof source !== "string") return embedGrayImage(pdf, source);
+  const match = source.match(/^data:(.+);base64,(.+)$/);
+  if (source.startsWith("data:image/svg+xml") && !match) {
+    throw new Error("Print this page in the browser for sample drawings.");
+  }
+  if (!match) {
+    throw new Error("Could not read the drawing.");
+  }
+  const bytes = Buffer.from(match[2], "base64");
+  return match[1].includes("png") ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
+}
+
+/** `page.drawImage` for any embedded image, including ones pdf-lib didn't embed itself. */
+function drawEmbeddedImage(
+  page: PDFPage,
+  image: EmbeddedImage,
+  at: { x: number; y: number; width: number; height: number; rotate?: Rotation },
+) {
+  const name = page.node.newXObject("Image", image.ref);
+  page.pushOperators(
+    ...drawImageOperators(name, { ...at, rotate: at.rotate ?? degrees(0), xSkew: degrees(0), ySkew: degrees(0) }),
+  );
+}
 
 type SheetDrawOptions = {
   rotation?: PageRotation;
@@ -41,29 +105,15 @@ type SheetDrawOptions = {
  */
 async function drawSheetOnPdf(
   pdf: PDFDocument,
-  imageDataUrl: string,
+  source: PdfSheetImage,
   prefs: PrintPrefs,
   options: SheetDrawOptions = {},
 ) {
-  const match = imageDataUrl.match(/^data:(.+);base64,(.+)$/);
-  const svgMatch = imageDataUrl.match(/^data:image\/svg\+xml/);
-  if (svgMatch && !match) {
-    throw new Error("Print this page in the browser for sample drawings.");
-  }
-  if (!match) {
-    throw new Error("Could not read the drawing.");
-  }
-
-  const mime = match[1];
-  const bytes = Buffer.from(match[2], "base64");
+  const image = await embedSheetImage(pdf, source);
   const [width, height] = paperSizePt(prefs);
   const bleed = options.bleed ?? 0;
   const pageHeight = height + bleed * 2;
   const page = pdf.addPage([width + bleed * 2, pageHeight]);
-  const image =
-    mime.includes("png")
-      ? await pdf.embedPng(bytes)
-      : await pdf.embedJpg(bytes);
 
   const full = options.fit === "full";
   const onTrim = layoutImageOnPage({
@@ -81,7 +131,7 @@ async function drawSheetOnPdf(
       pushGraphicsState(),
       concatTransformationMatrix(...pdfMirroredMatrix(placement, pageHeight)),
     );
-    page.drawImage(image, {
+    drawEmbeddedImage(page, image, {
       x: 0,
       y: 0,
       width: placement.drawWidth,
@@ -91,7 +141,7 @@ async function drawSheetOnPdf(
     return;
   }
   const { x, y, rotateDeg, ...size } = pdfDrawOptions(placement, pageHeight);
-  page.drawImage(image, { x, y, ...size, rotate: degrees(rotateDeg) });
+  drawEmbeddedImage(page, image, { x, y, ...size, rotate: degrees(rotateDeg) });
 }
 
 /** An empty page, or a lined writing page ruled by the shared layout engine. */
@@ -122,7 +172,7 @@ export async function sheetToPdf(
 }
 
 export type PdfSheetPage = {
-  imageDataUrl: string;
+  image: PdfSheetImage;
   printPrefs: PrintPrefs;
   rotation?: PageRotation;
   /** Mirror left-to-right on the printed page. */
@@ -157,7 +207,7 @@ export async function sheetsToPdf(
       drawBlankPage(pdf, page, box, bleed);
       continue;
     }
-    await drawSheetOnPdf(pdf, page.imageDataUrl, page.printPrefs, {
+    await drawSheetOnPdf(pdf, page.image, page.printPrefs, {
       rotation: page.rotation,
       mirrored: page.mirrored,
       box,
