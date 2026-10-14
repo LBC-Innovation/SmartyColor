@@ -40,7 +40,6 @@ import {
   getBookFormat,
   isDigitalFormat,
   isPrintBindingId,
-  recommendBinding,
   type BookBindingId,
   type BookFormatId,
 } from "@/lib/print/bookBindings";
@@ -49,12 +48,14 @@ import { clearCoverPictureCache, renderFrontCoverJpeg } from "@/lib/print/coverC
 import { putToSignedUrl } from "@/lib/library/client";
 import { printRotationForBookPage } from "@/lib/print/bookPageImageFit";
 import {
+  bestFitFormat,
+  bookFormatFit,
   computeBookPagePlan,
   contentPageCount,
   explainBookPagePadding,
   insertAfterContent,
 } from "@/lib/print/bookPagePlan";
-import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
+import type { BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import type { PageFit } from "@/lib/print/pageLayout";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
@@ -109,8 +110,9 @@ import {
 } from "@/lib/v2/loadAlbumPagesForBook";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 
-// Format first: it decides whether the book needs padded pages at all. A printed
-// book also gets a cover and a page-by-page check before checkout.
+// Album and format first: the album decides which formats it can fill, and the
+// format decides whether the book needs padded pages at all. A printed book also
+// gets a cover and a page-by-page check before checkout.
 const PRINT_STEPS: BookOrderStep[] = ["book", "pages", "cover", "proof", "review"];
 const DIGITAL_STEPS: BookOrderStep[] = ["book", "pages", "review"];
 
@@ -131,6 +133,8 @@ export function V2BookOrderWizard() {
   /** Album selection the current bookPages were collected for. */
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const removedIdsRef = useRef<Set<string>>(new Set());
+  /** Coloring pages the user took out, so they can be put back from the first step. */
+  const [removedPages, setRemovedPages] = useState<BookWizardPhotoPage[]>([]);
   /** Framed inside the margin, or filling the page edge to edge. One choice for the whole book. */
   const [pageFit, setPageFit] = useState<PageFit>("framed");
   const fittedPages = useMemo(
@@ -169,14 +173,25 @@ export function V2BookOrderWizard() {
   const [error, setError] = useState<string | null>(null);
   const savedDraftIdRef = useRef<string | null>(null);
 
+  const contentCount = contentPageCount(bookPages);
+  const recommendedFormat = bestFitFormat(contentCount);
   // An album too big for the stapled booklet moves up to paperback unless they picked it themselves.
+  const preferredBindingId: BookFormatId =
+    !bindingTouched && chosenBindingId === "saddle_stitch" ? recommendedFormat : chosenBindingId;
+  // While albums are still being chosen, a format the pages can't fill steps aside for
+  // the best one that fits, and comes back if the pages grow into it again. Leaving the
+  // first step locks the choice in, so editing pages later never swaps the binding.
   const bindingId: BookFormatId =
-    !bindingTouched && chosenBindingId === "saddle_stitch" ? recommendBinding(contentPageCount(bookPages)) : chosenBindingId;
+    step === "book" &&
+    contentCount > 0 &&
+    !bookFormatFit(contentCount, getBookFormat(preferredBindingId)).fits
+      ? recommendedFormat
+      : preferredBindingId;
   const isDigital = isDigitalFormat(bindingId);
   const binding = getBookFormat(bindingId);
   const plan = useMemo(() => computeBookPagePlan(fittedPages, binding), [fittedPages, binding]);
   const softPrintPages = useSoftPrintPages(plan.allPages, binding);
-  const contentCount = contentPageCount(bookPages);
+  const formatFits = bookFormatFit(contentCount, binding).fits;
   const selectedQuote: BindingQuote | null = isDigital
     ? { totalCents: DIGITAL_BOOK_CENTS, printCents: null, shippingCents: null, loading: false, error: null }
     : printQuote;
@@ -312,12 +327,47 @@ export function V2BookOrderWizard() {
           setStep(isDigitalFormat(chosenBindingId) ? "review" : "proof");
         }
       },
+      () => {
+        if (cancelled) return;
+        // Usually an album deleted in the studio since the list was read: drop it from
+        // the selection, which collects again. Otherwise stop waiting and say so.
+        setLoadedKey(selectionKey);
+        void loadProjectsCatalog(cloud)
+          .then((list) => {
+            if (cancelled) return;
+            const gone = selectedProjectIds.some((id) => !list.some((p) => p.id === id));
+            // Only a changed list collects again; the same failure must not loop.
+            if (!gone) {
+              setError("We couldn't load the pages for that album. Please try again.");
+              return;
+            }
+            setProjects(list);
+            setSelectedProjectIds((prev) => prev.filter((id) => list.some((p) => p.id === id)));
+          })
+          .catch(() => setError("We couldn't load your albums. Please try again."));
+      },
     );
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectIds, selectionKey, projects]);
+
+  const restorablePages = removedPages.filter((p) => selectedProjectIds.includes(p.sourceProjectId));
+
+  function removePage(id: string) {
+    removedIdsRef.current.add(id);
+    const page = bookPages.find((p) => p.id === id);
+    if (page?.kind === "photo") setRemovedPages((prev) => [...prev, page]);
+    setBookPages((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  function restoreRemovedPages() {
+    const ids = new Set(restorablePages.map((p) => p.id));
+    for (const id of ids) removedIdsRef.current.delete(id);
+    setRemovedPages((prev) => prev.filter((p) => !ids.has(p.id)));
+    setBookPages((prev) => insertAfterContent(prev, restorablePages));
+  }
 
   function toggleProject(id: string) {
     setSelectedProjectIds((prev) =>
@@ -400,11 +450,12 @@ export function V2BookOrderWizard() {
   const formatQuotesAsked = useRef(new Set<string>());
 
   useEffect(() => {
-    if (step !== "book" || loadingAlbums || loadingPages) return;
+    if (step !== "book" || loadingAlbums || loadingPages || contentCount === 0) return;
     for (const id of PRINT_BINDING_IDS) {
       const pageCount = formatPageCounts[id];
       const key = `${id}:${pageCount}`;
-      if (pageCount > BOOK_BINDINGS[id].maxPages || formatQuotesAsked.current.has(key)) continue;
+      // Formats the pages don't fill aren't offered, so they don't need a price.
+      if (!bookFormatFit(contentCount, BOOK_BINDINGS[id]).fits || formatQuotesAsked.current.has(key)) continue;
       formatQuotesAsked.current.add(key);
       void api.fetchOrderQuote({ bindingId: id, pageCount }).then((result) => {
         const total = api.isError(result) ? null : result.data.estimatedTotalCents;
@@ -413,7 +464,7 @@ export function V2BookOrderWizard() {
         setFormatQuotes((prev) => ({ ...prev, [key]: total != null && shipping != null ? total - shipping : null }));
       });
     }
-  }, [step, loadingAlbums, loadingPages, formatPageCounts]);
+  }, [step, loadingAlbums, loadingPages, contentCount, formatPageCounts]);
 
   const formatPrices = useMemo(() => {
     const prices: Partial<Record<BookBindingId, FormatPrice>> = {};
@@ -446,6 +497,15 @@ export function V2BookOrderWizard() {
 
   const goNext = useCallback(() => {
     setError(null);
+    if (step === "book") {
+      if (contentCount === 0) {
+        setError("Choose an album with at least one coloring sheet.");
+        return;
+      }
+      // Lock in the format shown as selected, including one picked for them.
+      setBindingId(bindingId);
+      setBindingTouched(true);
+    }
     if (step === "pages" && plan.photoCount === 0) {
       setError("Pick at least one album with a generated coloring sheet.");
       return;
@@ -475,7 +535,7 @@ export function V2BookOrderWizard() {
       }
     }
     setConfirmOpen(true);
-  }, [step, steps, plan.photoCount, proofConfirmed, address, shipTo, shipDifferent, validateOwnAddress, isDigital]);
+  }, [step, steps, contentCount, bindingId, plan.photoCount, proofConfirmed, address, shipTo, shipDifferent, validateOwnAddress, isDigital]);
 
   function goBack() {
     setError(null);
@@ -639,7 +699,7 @@ export function V2BookOrderWizard() {
 
   const nextLabel =
     step === "book"
-      ? "Choose pages"
+      ? "Arrange pages"
       : step === "pages"
         ? isDigital
           ? "Review order"
@@ -652,6 +712,7 @@ export function V2BookOrderWizard() {
               ? `Buy PDF · ${formatCredits(DIGITAL_BOOK_CENTS)}`
               : "Place order";
   const nextDisabled =
+    (step === "book" && (loadingAlbums || loadingPages || contentCount === 0)) ||
     (step === "pages" && (plan.photoCount === 0 || loadingPages || overCapacity)) ||
     (step === "cover" && coverPicturesLoading && coverDesign.layout !== "none") ||
     (step === "proof" && !proofConfirmed) ||
@@ -692,23 +753,80 @@ export function V2BookOrderWizard() {
                 ) : null}
 
                 {step === "book" ? (
-                  <section className="space-y-5" aria-label="Choose binding">
-                    <div>
-                      <h2 className="text-base font-semibold text-v2-ink">How do you want your book?</h2>
-                      <p className="mt-0.5 text-sm text-v2-muted">
-                        8.5 × 11″ · portrait. Pick this first — printed books need a set number
-                        of pages and get a cover you design, a PDF is exactly the pages you choose.
-                      </p>
+                  <section className="space-y-8" aria-label="Choose album and format">
+                    <div className="space-y-3">
+                      <StepHeading
+                        number={1}
+                        title="Which album is this book for?"
+                        hint="Every photo with a coloring sheet becomes a page. Pick more than one album to combine them."
+                      />
+                      {!loadingAlbums && projects.length === 0 ? (
+                        <div className="v2-panel p-5 text-sm text-v2-muted">
+                          Create an album in the studio and generate coloring sheets first.{" "}
+                          <Link href="/studio" className="font-semibold text-v2-link hover:underline">
+                            Go to the studio
+                          </Link>
+                        </div>
+                      ) : (
+                        <BookAlbumSelect
+                          className="sm:max-w-md"
+                          projects={projects}
+                          sheetCounts={sheetCounts}
+                          selectedIds={selectedProjectIds}
+                          onToggle={toggleProject}
+                          loading={loadingAlbums}
+                        />
+                      )}
+                      {restorablePages.length > 0 && !loadingPages ? (
+                        <p className="text-xs text-v2-muted">
+                          {restorablePages.length} page{restorablePages.length === 1 ? " you removed is" : "s you removed are"}{" "}
+                          left out of this book.{" "}
+                          <button
+                            type="button"
+                            className="font-semibold text-v2-link hover:underline"
+                            onClick={restoreRemovedPages}
+                          >
+                            Put {restorablePages.length === 1 ? "it" : "them"} back
+                          </button>
+                        </p>
+                      ) : null}
                     </div>
-                    <BookBindingPicker
-                      value={bindingId}
-                      prices={formatPrices}
-                      contentPageCount={contentCount}
-                      onChange={(id) => {
-                        setBindingTouched(true);
-                        setBindingId(id);
-                      }}
-                    />
+
+                    <div className="space-y-3">
+                      <StepHeading
+                        number={2}
+                        title="How do you want your book?"
+                        hint="8.5 × 11″ · portrait. Formats your pages can't fill are greyed out, so your book never ends in a stack of blank pages."
+                        muted={contentCount === 0}
+                      />
+                      {loadingAlbums || loadingPages ? (
+                        <p className="flex items-center gap-2 py-6 text-sm text-v2-muted" role="status">
+                          <Loader2 className="h-4 w-4 animate-spin text-v2-primary" aria-hidden />
+                          {loadingAlbums ? "Loading your albums…" : "Counting your pages…"}
+                        </p>
+                      ) : selectedProjectIds.length === 0 ? (
+                        <div className="rounded-2xl border-2 border-dashed border-gray-200 px-5 py-8 text-center text-sm text-v2-muted">
+                          Choose an album above to see the books it can make.
+                        </div>
+                      ) : contentCount === 0 ? (
+                        <div className="rounded-2xl border-2 border-dashed border-gray-200 px-5 py-8 text-center text-sm text-v2-muted">
+                          {selectedProjectIds.length === 1 ? "This album doesn't" : "These albums don't"} have
+                          any coloring sheets yet. Open it in the studio and tap{" "}
+                          <span className="font-semibold text-v2-ink">Generate</span> first.
+                        </div>
+                      ) : (
+                        <BookBindingPicker
+                          value={bindingId}
+                          prices={formatPrices}
+                          contentPageCount={contentCount}
+                          recommendedId={recommendedFormat}
+                          onChange={(id) => {
+                            setBindingTouched(true);
+                            setBindingId(id);
+                          }}
+                        />
+                      )}
+                    </div>
                     {balanceCents != null ? (
                       <p className="text-xs text-v2-muted">
                         Your balance:{" "}
@@ -729,30 +847,30 @@ export function V2BookOrderWizard() {
                 ) : null}
 
                 {step === "pages" ? (
-                  <section className="space-y-4" aria-label="Choose pages">
+                  <section className="space-y-4" aria-label="Arrange pages">
                     <div>
-                      <h2 className="text-base font-semibold text-v2-ink">
-                        Which albums go in the book?
-                      </h2>
+                      <h2 className="text-base font-semibold text-v2-ink">Arrange your pages</h2>
                       <p className="mt-0.5 text-sm text-v2-muted">
-                        Toggle albums on or off. Only photos with a coloring sheet become pages.
+                        Drag to reorder, remove any you don&apos;t want, or add blank and lined pages.
+                      </p>
+                      <p className="mt-2 text-xs text-v2-muted">
+                        <span className="font-semibold text-v2-navy">{binding.shortLabel}</span>
+                        {selectedProjects.length > 0 ? (
+                          <> from {selectedProjects.map((p) => p.name).join(", ")}</>
+                        ) : null}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="font-semibold text-v2-link hover:underline"
+                          onClick={() => {
+                            setError(null);
+                            setStep("book");
+                          }}
+                        >
+                          Change album or format
+                        </button>
                       </p>
                     </div>
-
-                    {!loadingAlbums && projects.length === 0 ? (
-                      <div className="v2-panel p-5 text-sm text-v2-muted">
-                        Create a project in the studio and generate coloring sheets first.
-                      </div>
-                    ) : (
-                      <BookAlbumSelect
-                        className="sm:max-w-md"
-                        projects={projects}
-                        sheetCounts={sheetCounts}
-                        selectedIds={selectedProjectIds}
-                        onToggle={toggleProject}
-                        loading={loadingAlbums}
-                      />
-                    )}
 
                     {loadingPages ? (
                       <p className="flex items-center gap-2 text-sm text-v2-muted">
@@ -779,10 +897,7 @@ export function V2BookOrderWizard() {
                             ),
                           )
                         }
-                        onRemovePage={(id) => {
-                          removedIdsRef.current.add(id);
-                          setBookPages((prev) => prev.filter((p) => p.id !== id));
-                        }}
+                        onRemovePage={removePage}
                         onInsertBlank={() => insertBlank("plain")}
                         onInsertLined={() => insertBlank("lined")}
                       />
@@ -798,6 +913,20 @@ export function V2BookOrderWizard() {
                       <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert">
                         {binding.shortLabel} holds up to {binding.maxPages} pages and you have{" "}
                         {contentCount}. Remove some pages, or go back and pick a bigger format.
+                      </p>
+                    ) : !formatFits && contentCount > 0 && !loadingPages ? (
+                      // Pages removed here can leave the format they picked mostly blank.
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        That leaves {plan.paddingCount} blank pages in your {binding.shortLabel.toLowerCase()}.
+                        Add some pages back, or{" "}
+                        <button
+                          type="button"
+                          className="font-semibold underline underline-offset-2"
+                          onClick={() => setStep("book")}
+                        >
+                          choose a format that fits
+                        </button>
+                        .
                       </p>
                     ) : paddingNote ? (
                       <p className="text-xs leading-snug text-amber-800">{paddingNote}.</p>
@@ -1001,7 +1130,7 @@ export function V2BookOrderWizard() {
             backLabel={step === "book" ? "Studio" : "Back"}
             nextLabel={nextLabel}
             nextDisabled={nextDisabled}
-            busy={placing || (step === "pages" && loadingPages)}
+            busy={placing || ((step === "book" || step === "pages") && loadingPages)}
             onBack={goBack}
             onNext={goNext}
           />
@@ -1039,6 +1168,33 @@ export function V2BookOrderWizard() {
         onConfirm={() => void placeOrder()}
       />
     </V2StudioFrame>
+  );
+}
+
+function StepHeading({
+  number,
+  title,
+  hint,
+  muted,
+}: {
+  number: number;
+  title: string;
+  hint: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className={cn("flex gap-3 transition-opacity", muted && "opacity-60")}>
+      <span
+        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-v2-primary text-xs font-bold tabular-nums text-white"
+        aria-hidden
+      >
+        {number}
+      </span>
+      <div>
+        <h2 className="text-base font-semibold text-v2-ink">{title}</h2>
+        <p className="mt-0.5 text-sm text-v2-muted">{hint}</p>
+      </div>
+    </div>
   );
 }
 

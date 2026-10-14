@@ -116,14 +116,17 @@ export function BookAlbumSelect({
             const on = selectedIds.includes(project.id);
             const sheets = sheetCounts[project.id];
             const empty = sheets === 0;
+            // An album with no coloring sheets adds nothing to the book; one already on can still be turned off.
+            const unavailable = empty && !on;
             return (
-              <li key={project.id} role="option" aria-selected={on}>
+              <li key={project.id} role="option" aria-selected={on} aria-disabled={unavailable}>
                 <button
                   type="button"
+                  disabled={unavailable}
                   onClick={() => onToggle(project.id)}
                   className={cn(
-                    "flex min-h-12 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition",
-                    on ? "bg-v2-primary-light/70" : "hover:bg-v2-bg-subtle",
+                    "flex min-h-12 w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-55",
+                    on ? "bg-v2-primary-light/70" : "hover:bg-v2-bg-subtle disabled:hover:bg-transparent",
                   )}
                 >
                   <span className="min-w-0 flex-1">
