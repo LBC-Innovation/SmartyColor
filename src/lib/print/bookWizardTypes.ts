@@ -22,6 +22,24 @@ export type BookWizardPhotoPage = {
   mirrored?: boolean;
   /** Framed inside the margin (default) or filling the page edge to edge. Set for the whole book. */
   fit?: PageFit;
+  /** Newest AI portrait version of the photo (cloud libraries), which a portrait sheet is drawn from. */
+  portraitRevisionId?: string;
+};
+
+/** A photo in a chosen album with no coloring sheet yet: shown in the wizard, but it can't print. */
+export type BookWizardPendingPhoto = {
+  /** The id its page will have once it has a sheet. */
+  id: string;
+  sourceProjectId: string;
+  sourceProjectName: string;
+  photoId: string;
+  title: string;
+  /** Short-lived URL for a picture of the photo. */
+  imageUrl: string;
+  orientation: Orientation;
+  /** The photo version a new sheet is drawn from, when that is a portrait version rather than the upload. */
+  sourceRevisionId?: string;
+  portraitRevisionId?: string;
 };
 
 export type BookWizardBlankPage = {

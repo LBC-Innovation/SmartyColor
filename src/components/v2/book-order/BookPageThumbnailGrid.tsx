@@ -26,7 +26,9 @@ import {
   ChevronRight,
   FlipHorizontal2,
   GripVertical,
+  Loader2,
   Plus,
+  RectangleVertical,
   Trash2,
 } from "lucide-react";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
@@ -49,6 +51,12 @@ type Props = {
   onRemovePage: (pageId: string) => void;
   onInsertBlank: () => void;
   onInsertLined: () => void;
+  /** Redraw a landscape page as a portrait sheet. Omit to hide the button. */
+  onMakePortrait?: (pageId: string) => void;
+  /** Pages with an AI job running on them, and what it is doing. */
+  busy?: Record<string, string>;
+  /** Shown on the portrait button, e.g. what it costs. */
+  portraitHint?: string;
 };
 
 const ICON_BTN =
@@ -133,11 +141,17 @@ function SortablePhotoTile({
   page,
   binding,
   onMirror,
+  onMakePortrait,
+  portraitHint,
+  busyLabel,
   ...tile
 }: TileProps & {
   page: BookWizardPhotoPage;
   binding: BookBindingSpec;
   onMirror: () => void;
+  onMakePortrait?: () => void;
+  portraitHint?: string;
+  busyLabel?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id,
@@ -158,11 +172,26 @@ function SortablePhotoTile({
         <BookPageImageFill page={page} binding={binding} />
         <PageNumber index={tile.index} />
         <DragHandle index={tile.index} listeners={listeners} attributes={attributes} />
-        {landscape ? (
+        {landscape && onMakePortrait && !busyLabel ? (
+          <button
+            type="button"
+            className="absolute inset-x-1.5 bottom-1.5 flex flex-col items-center rounded-md bg-amber-500/95 px-1.5 py-1 text-center text-[10px] font-semibold leading-tight text-white shadow-sm transition hover:bg-amber-600"
+            onClick={onMakePortrait}
+            title={portraitHint}
+            aria-label={`Make page ${tile.index + 1} a portrait sheet`}
+          >
+            <span className="opacity-90">Landscape: rotated to fit</span>
+            <span className="inline-flex items-center gap-1 underline underline-offset-2">
+              <RectangleVertical className="h-3 w-3" aria-hidden />
+              Make it portrait
+            </span>
+          </button>
+        ) : landscape ? (
           <span className="absolute inset-x-1.5 bottom-1.5 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">
             Landscape: rotated to portrait
           </span>
         ) : null}
+        {busyLabel ? <BusyOverlay label={busyLabel} /> : null}
       </div>
       <TileFooter
         {...tile}
@@ -187,6 +216,18 @@ function SortablePhotoTile({
           ) : null
         }
       />
+    </div>
+  );
+}
+
+export function BusyOverlay({ label }: { label: string }) {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/80 px-3 text-center backdrop-blur-[1px]"
+      role="status"
+    >
+      <Loader2 className="h-6 w-6 animate-spin text-v2-primary" aria-hidden />
+      <span className="text-xs font-semibold text-v2-navy">{label}</span>
     </div>
   );
 }
@@ -240,6 +281,9 @@ export function BookPageThumbnailGrid({
   onRemovePage,
   onInsertBlank,
   onInsertLined,
+  onMakePortrait,
+  busy,
+  portraitHint,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const sortableIds = pages.map((p) => p.id);
@@ -304,6 +348,9 @@ export function BookPageThumbnailGrid({
                     page={page}
                     binding={binding}
                     onMirror={() => onMirrorPhoto(page.id)}
+                    onMakePortrait={onMakePortrait ? () => onMakePortrait(page.id) : undefined}
+                    portraitHint={portraitHint}
+                    busyLabel={busy?.[page.id]}
                     onRemove={() => onRemovePage(page.id)}
                   />
                 );

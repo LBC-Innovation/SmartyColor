@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
@@ -29,11 +29,20 @@ import { BookOrderConfirmModal } from "@/components/v2/book-order/BookOrderConfi
 import { BookOrderPriceBar } from "@/components/v2/book-order/BookOrderPriceBar";
 import { BookOrderStepper, type BookOrderStep } from "@/components/v2/book-order/BookOrderStepper";
 import { BookPageThumbnailGrid } from "@/components/v2/book-order/BookPageThumbnailGrid";
+import { BookPendingPhotos } from "@/components/v2/book-order/BookPendingPhotos";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
+import { authedFetch } from "@/lib/api/client";
+import type { LibraryPhoto } from "@/lib/library/types";
+import {
+  BOOK_CARTS_CHANGED_EVENT,
+  type BookCartInput,
+  type BookCartPageEntry,
+  type BookCartState,
+} from "@/lib/orders/cartTypes";
 import { formatCredits } from "@/lib/credits/money";
-import { DIGITAL_BOOK_CENTS } from "@/lib/credits/pricing";
+import { DIGITAL_BOOK_CENTS, INSUFFICIENT_CREDITS_CODE, sheetUsageCostCents } from "@/lib/credits/pricing";
 import {
   BOOK_BINDINGS,
   PRINT_BINDING_IDS,
@@ -55,7 +64,7 @@ import {
   explainBookPagePadding,
   insertAfterContent,
 } from "@/lib/print/bookPagePlan";
-import type { BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import type { BookWizardPage, BookWizardPendingPhoto, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import type { PageFit } from "@/lib/print/pageLayout";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
@@ -104,6 +113,7 @@ function readStoredCover(): BookCoverDesign | null {
   }
 }
 import {
+  bookEntryFromLibraryPhoto,
   collectPhotoPagesFromProjects,
   countProjectSheets,
   loadProjectsCatalog,
@@ -115,15 +125,109 @@ import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 // gets a cover and a page-by-page check before checkout.
 const PRINT_STEPS: BookOrderStep[] = ["book", "pages", "cover", "proof", "review"];
 const DIGITAL_STEPS: BookOrderStep[] = ["book", "pages", "review"];
+const ALL_STEPS: BookOrderStep[] = ["book", "pages", "cover", "proof", "review"];
 
-export function V2BookOrderWizard() {
+function isStep(value: unknown): value is BookOrderStep {
+  return typeof value === "string" && (ALL_STEPS as string[]).includes(value);
+}
+
+/** The pages as the cart remembers them: ids, order and turns, never the images. */
+function cartPages(pages: BookWizardPage[]): BookCartPageEntry[] {
+  return pages.map((p) =>
+    p.kind === "photo"
+      ? { id: p.id, kind: "photo", ...(p.rotation ? { rotation: p.rotation } : {}), ...(p.mirrored ? { mirrored: true } : {}) }
+      : { id: p.id, kind: "blank", variant: p.variant === "lined" ? "lined" : "plain", ...(p.auto ? { auto: true } : {}) },
+  );
+}
+
+/**
+ * Rebuild a saved book from freshly collected pages: the saved order first,
+ * then any sheets made since it was saved. Pages whose photo is gone drop out.
+ */
+function restoreCartPages(
+  saved: BookCartPageEntry[],
+  collected: BookWizardPhotoPage[],
+  removed: Set<string>,
+): BookWizardPage[] {
+  const byId = new Map(collected.map((p) => [p.id, p]));
+  const restored: BookWizardPage[] = [];
+  for (const entry of saved) {
+    if (entry.kind === "blank") {
+      restored.push({ id: entry.id, kind: "blank", variant: entry.variant, ...(entry.auto ? { auto: true } : {}) });
+      continue;
+    }
+    const page = byId.get(entry.id);
+    if (page) restored.push({ ...page, rotation: entry.rotation ?? 0, mirrored: entry.mirrored });
+  }
+  const ids = new Set(restored.map((p) => p.id));
+  return insertAfterContent(
+    restored,
+    collected.filter((p) => !ids.has(p.id) && !removed.has(p.id)),
+  );
+}
+
+/** Put a newly drawn page where its photo sits in the album, among the pages already there. */
+function insertInAlbumOrder(pages: BookWizardPage[], page: BookWizardPhotoPage, albumOrder: string[]): BookWizardPage[] {
+  const rank = new Map(albumOrder.map((id, i) => [id, i]));
+  const mine = rank.get(page.id);
+  if (mine === undefined) return insertAfterContent(pages, [page]);
+  const before = pages.findIndex(
+    (p) => p.kind === "photo" && p.sourceProjectId === page.sourceProjectId && (rank.get(p.id) ?? -1) > mine,
+  );
+  if (before < 0) return insertAfterContent(pages, [page]);
+  return [...pages.slice(0, before), page, ...pages.slice(before)];
+}
+
+type AiPayload = {
+  photo?: LibraryPhoto;
+  error?: string;
+  code?: string;
+  creditsBalanceCents?: number;
+  costCents?: number;
+  shortfallCents?: number;
+};
+
+/**
+ * Remounts the wizard when the header's cart opens a different saved book,
+ * but not when the wizard itself saves a new one and puts it in the URL.
+ */
+export function V2BookOrderWizardRoute() {
+  const cartParam = useSearchParams().get("cart");
+  /** Carts the mounted wizard created itself; their arrival in the URL is not a new book. */
+  const [ownCarts] = useState(() => new Set<string>());
+  const [instance, setInstance] = useState({ key: 0, cartParam });
+  if (cartParam !== instance.cartParam) {
+    const ours = cartParam !== null && ownCarts.has(cartParam);
+    setInstance({ key: ours ? instance.key : instance.key + 1, cartParam });
+  }
+  return <V2BookOrderWizard key={instance.key} onCartCreated={(id) => ownCarts.add(id)} />;
+}
+
+export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: string) => void } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading: authLoading, refreshUser } = useAuth();
+  const { user, loading: authLoading, refreshUser, setCreditsBalance } = useAuth();
   const cloud = Boolean(user);
   const toast = useV2Toast();
 
   const [step, setStep] = useState<BookOrderStep>("book");
+  /** Steps reached so far; the stepper can jump back to any of them. */
+  const [visited, setVisited] = useState<BookOrderStep[]>(["book"]);
+  // ---- cart: the book is saved as it's built, so it can be picked up later ----
+  const [initialCartId] = useState(() => searchParams.get("cart"));
+  const [cartId, setCartId] = useState<string | null>(initialCartId);
+  const cartIdRef = useRef<string | null>(initialCartId);
+  /** True while a saved book is being read back; nothing is collected or saved until it is. */
+  const [restoring, setRestoring] = useState(Boolean(initialCartId));
+  const restorePagesRef = useRef<BookCartPageEntry[] | null>(null);
+  /** Set once the book is ordered (or its cart removed), so nothing saves it again. */
+  const cartClosedRef = useRef(false);
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  /** Photos in the chosen albums with no coloring sheet yet. */
+  const [pendingPhotos, setPendingPhotos] = useState<BookWizardPendingPhoto[]>([]);
+  const albumOrderRef = useRef<string[]>([]);
+  /** Photos with an AI job running, and what it is doing. */
+  const [busyPhotos, setBusyPhotos] = useState<Record<string, string>>({});
   const [projects, setProjects] = useState<V2ProjectMeta[]>([]);
   const [sheetCounts, setSheetCounts] = useState<Record<string, number>>({});
   const [loadingAlbums, setLoadingAlbums] = useState(true);
@@ -161,7 +265,10 @@ export function V2BookOrderWizard() {
   const addressComplete = isShippingAddressComplete(shippingAddress);
 
   /** Null until the customer changes something, so the cover text follows the book title. */
-  const [coverDraft, setCoverDraft] = useState<BookCoverDesign | null>(() => readStoredCover());
+  // A saved book brings its own cover; otherwise only a trip to add credit leaves one behind.
+  const [coverDraft, setCoverDraft] = useState<BookCoverDesign | null>(() =>
+    searchParams.get("step") && !searchParams.get("cart") ? readStoredCover() : null,
+  );
   /** The exact book (pages, cover, binding) the customer last confirmed in the proof step. */
   const [confirmedProofKey, setConfirmedProofKey] = useState<string | null>(null);
   const [printQuote, setPrintQuote] = useState<BindingQuote | null>(null);
@@ -265,10 +372,11 @@ export function V2BookOrderWizard() {
       setProjects(list);
       setLoadingAlbums(false);
       // Start with the project the user came from, or the only one they have.
+      // A saved book brings its own albums.
       const initial =
         (preselectId && list.some((p) => p.id === preselectId) && preselectId) ||
         (list.length === 1 ? list[0].id : null);
-      if (initial) setSelectedProjectIds([initial]);
+      if (initial && !initialCartId) setSelectedProjectIds([initial]);
 
       const counts: Record<string, number> = {};
       for (const p of list) {
@@ -279,7 +387,7 @@ export function V2BookOrderWizard() {
     return () => {
       cancelled = true;
     };
-  }, [preselectId, cloud]);
+  }, [preselectId, cloud, initialCartId]);
 
   // Albums can be deleted in the studio; re-read the catalog when we come back.
   useEffect(() => {
@@ -300,15 +408,22 @@ export function V2BookOrderWizard() {
   // Re-collect pages whenever the album selection changes, keeping the
   // order, rotations and removals the user already made.
   const selectionKey = selectedProjectIds.join("|");
-  const loadingPages = projects.length > 0 && loadedKey !== selectionKey;
+  const loadingPages = restoring || (projects.length > 0 && loadedKey !== selectionKey);
 
   useEffect(() => {
-    if (projects.length === 0) return;
+    if (projects.length === 0 || restoring) return;
     let cancelled = false;
     void collectPhotoPagesFromProjects({ projectIds: selectedProjectIds, projects, cloud }).then(
-      ({ pages: collected }) => {
+      ({ pages: collected, pending, albumOrder }) => {
         if (cancelled) return;
-        setBookPages((prev) => {
+        albumOrderRef.current = albumOrder;
+        setPendingPhotos(pending);
+        const restore = restorePagesRef.current;
+        restorePagesRef.current = null;
+        if (restore) {
+          setRemovedPages(collected.filter((p) => removedIdsRef.current.has(p.id)));
+          setBookPages(restoreCartPages(restore, collected, removedIdsRef.current));
+        } else setBookPages((prev) => {
           const byId = new Map(collected.map((p) => [p.id, p]));
           // Blank and lined pages stay put; photos stay only while their album is selected.
           const kept = prev.filter((p) => p.kind === "blank" || byId.has(p.id));
@@ -324,7 +439,9 @@ export function V2BookOrderWizard() {
         // that confirmation has to be made on the book as it is now.
         if (jumpToStepRef.current === "review" && collected.length > 0) {
           jumpToStepRef.current = null;
-          setStep(isDigitalFormat(chosenBindingId) ? "review" : "proof");
+          const resume = isDigitalFormat(chosenBindingId) ? "review" : "proof";
+          setStep(resume);
+          setVisited((prev) => [...new Set([...prev, ...(isDigitalFormat(chosenBindingId) ? DIGITAL_STEPS : PRINT_STEPS).slice(0, ALL_STEPS.indexOf(resume) + 1)])]);
         }
       },
       () => {
@@ -351,7 +468,51 @@ export function V2BookOrderWizard() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProjectIds, selectionKey, projects]);
+  }, [selectedProjectIds, selectionKey, projects, restoring]);
+
+  // Read a saved book back from the cart.
+  useEffect(() => {
+    if (!initialCartId || authLoading || !user) return;
+    let cancelled = false;
+    void api.fetchBookCart(initialCartId).then((result) => {
+      if (cancelled) return;
+      if (api.isError(result)) {
+        // Start afresh; a new cart is made once the book gets going again.
+        cartIdRef.current = null;
+        setCartId(null);
+        setError(
+          result.error.code === "NOT_FOUND"
+            ? "That book isn't in your cart anymore. You can start it again here."
+            : "We couldn't open your saved book. Please try again.",
+        );
+        setRestoring(false);
+        return;
+      }
+      const saved: BookCartState = result.data.state;
+      const format = saved.bindingId === "digital" || isPrintBindingId(saved.bindingId) ? saved.bindingId : null;
+      setSelectedProjectIds(Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds : []);
+      if (format) setBindingId(format);
+      setBindingTouched(saved.bindingTouched === true);
+      setPageFit(saved.pageFit === "full" ? "full" : "framed");
+      removedIdsRef.current = new Set(Array.isArray(saved.removedIds) ? saved.removedIds : []);
+      if (saved.coverDesign) setCoverDraft(normalizeCoverDesign(saved.coverDesign));
+      setShipDifferent(saved.shipDifferent === true);
+      restorePagesRef.current = Array.isArray(saved.pages) ? saved.pages : [];
+      const reached = (Array.isArray(saved.visited) ? saved.visited : []).filter(isStep);
+      setVisited(reached.length > 0 ? [...new Set<BookOrderStep>(["book", ...reached])] : ["book"]);
+      // A printed book is checked page by page again before checkout.
+      const resume: BookOrderStep = !isStep(saved.step)
+        ? "book"
+        : saved.step === "review" && !isDigitalFormat(format ?? "saddle_stitch")
+          ? "proof"
+          : saved.step;
+      setStep(resume);
+      setRestoring(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialCartId, authLoading, user]);
 
   const restorablePages = removedPages.filter((p) => selectedProjectIds.includes(p.sourceProjectId));
 
@@ -495,16 +656,38 @@ export function V2BookOrderWizard() {
 
   // ---- navigation ----------------------------------------------------------
 
-  const goNext = useCallback(() => {
+  const visiblePending = pendingPhotos.filter((p) => selectedProjectIds.includes(p.sourceProjectId));
+
+  /** Whether the book is ready to move on past this step. */
+  function stepDone(s: BookOrderStep): boolean {
+    if (s === "book") return !loadingAlbums && !loadingPages && (contentCount > 0 || visiblePending.length > 0);
+    if (s === "pages") return !loadingPages && plan.photoCount > 0 && !overCapacity;
+    if (s === "proof") return proofConfirmed;
+    return true;
+  }
+
+  /** Steps already reached can be reopened, as long as every step before them is still done. */
+  function canOpenStep(target: BookOrderStep): boolean {
+    const at = steps.indexOf(target);
+    return at >= 0 && visited.includes(target) && steps.slice(0, at).every(stepDone);
+  }
+
+  function openStep(target: BookOrderStep) {
     setError(null);
-    if (step === "book") {
-      if (contentCount === 0) {
-        setError("Choose an album with at least one coloring sheet.");
-        return;
-      }
-      // Lock in the format shown as selected, including one picked for them.
+    // Leaving the first step locks in the format shown as selected, including one picked for them.
+    if (step === "book" && target !== "book" && contentCount > 0) {
       setBindingId(bindingId);
       setBindingTouched(true);
+    }
+    setStep(target);
+    setVisited((prev) => (prev.includes(target) ? prev : [...prev, target]));
+  }
+
+  function goNext() {
+    setError(null);
+    if (step === "book" && contentCount === 0 && visiblePending.length === 0) {
+      setError("Choose an album with at least one photo.");
+      return;
     }
     if (step === "pages" && plan.photoCount === 0) {
       setError("Pick at least one album with a generated coloring sheet.");
@@ -515,7 +698,7 @@ export function V2BookOrderWizard() {
       return;
     }
     if (step !== "review") {
-      setStep(steps[steps.indexOf(step) + 1] ?? "review");
+      openStep(steps[steps.indexOf(step) + 1] ?? "review");
       return;
     }
     if (!isDigital) {
@@ -535,7 +718,7 @@ export function V2BookOrderWizard() {
       }
     }
     setConfirmOpen(true);
-  }, [step, steps, contentCount, bindingId, plan.photoCount, proofConfirmed, address, shipTo, shipDifferent, validateOwnAddress, isDigital]);
+  }
 
   function goBack() {
     setError(null);
@@ -543,6 +726,200 @@ export function V2BookOrderWizard() {
     if (at > 0) setStep(steps[at - 1]);
     else router.push("/studio");
   }
+
+  // ---- cart -----------------------------------------------------------------
+
+  const cartInput = useMemo<BookCartInput>(() => {
+    const firstPhoto = plan.allPages.find((p): p is BookWizardPhotoPage => p.kind === "photo");
+    return {
+      title: projectTitle,
+      step,
+      bindingId,
+      pageCount: plan.totalPages,
+      photoCount: plan.photoCount,
+      thumbRevisionId: firstPhoto?.revisionId ?? null,
+      state: {
+        v: 1,
+        step,
+        visited,
+        selectedProjectIds,
+        bindingId,
+        bindingTouched,
+        pageFit,
+        pages: cartPages(bookPages),
+        removedIds: removedPages.map((p) => p.id),
+        coverDesign: coverDraft,
+        shipDifferent,
+      },
+    };
+  }, [projectTitle, step, visited, bindingId, plan, selectedProjectIds, bindingTouched, pageFit, bookPages, removedPages, coverDraft, shipDifferent]);
+
+  // Saved once the customer moves past the first step, and on every change after that.
+  const cartReady = Boolean(user) && !restoring && !loadingPages && (cartId !== null || step !== "book");
+
+  function saveCart(input: BookCartInput): Promise<void> {
+    // One save at a time, so a new book is only ever created once.
+    saveChainRef.current = saveChainRef.current.then(async () => {
+      if (cartClosedRef.current) return;
+      const id = cartIdRef.current;
+      if (id) {
+        const updated = await api.updateBookCart(id, input);
+        // Removed from the cart elsewhere: leave it removed.
+        if (api.isError(updated) && updated.error.code === "NOT_FOUND") cartClosedRef.current = true;
+      } else {
+        const created = await api.createBookCart(input);
+        if (api.isError(created)) return;
+        cartIdRef.current = created.data.id;
+        setCartId(created.data.id);
+        onCartCreated?.(created.data.id);
+        // A reload (or the trip to add credit) comes back to this book.
+        const url = new URL(window.location.href);
+        url.searchParams.set("cart", created.data.id);
+        for (const key of ["project", "binding", "step"]) url.searchParams.delete(key);
+        window.history.replaceState(window.history.state, "", url);
+      }
+      window.dispatchEvent(new Event(BOOK_CARTS_CHANGED_EVENT));
+    });
+    return saveChainRef.current;
+  }
+
+  useEffect(() => {
+    if (!cartReady) return;
+    const t = window.setTimeout(() => void saveCart(cartInput), 700);
+    return () => window.clearTimeout(t);
+    // saveCart only reads refs and stable setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartReady, cartInput]);
+
+  /** The book was ordered: it leaves the cart. */
+  async function closeCart() {
+    await saveChainRef.current;
+    cartClosedRef.current = true;
+    const id = cartIdRef.current;
+    if (!id) return;
+    await api.deleteBookCart(id);
+    window.dispatchEvent(new Event(BOOK_CARTS_CHANGED_EVENT));
+  }
+
+  function openAddCredit(cents: number) {
+    // The trip to add credit reloads the wizard; make sure it comes back to this book.
+    if (cartReady) void saveCart(cartInput);
+    setAddCreditShortfall(cents);
+  }
+
+  // ---- coloring sheets drawn right here ----------------------------------------
+
+  const generateCents = sheetUsageCostCents("generation");
+  const portraitCents = sheetUsageCostCents("portrait");
+
+  /** True when the wallet covers it; otherwise opens add-credit and returns false. */
+  function canAfford(cents: number): boolean {
+    const balance = user?.creditsBalanceCents ?? 0;
+    if (balance >= cents) return true;
+    openAddCredit(cents - balance);
+    return false;
+  }
+
+  /** One AI call on a library photo. Null when the wallet ran short (add-credit is open). */
+  async function callPhotoAi(path: string, body: Record<string, unknown>): Promise<LibraryPhoto | null> {
+    const response = await authedFetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    let payload: AiPayload;
+    try {
+      payload = (await response.json()) as AiPayload;
+    } catch {
+      throw new Error("The server sent an unexpected response. Please try again in a moment.");
+    }
+    if (typeof payload.creditsBalanceCents === "number") setCreditsBalance(payload.creditsBalanceCents);
+    if (response.status === 402 && payload.code === INSUFFICIENT_CREDITS_CODE) {
+      openAddCredit(payload.shortfallCents ?? payload.costCents ?? 0);
+      return null;
+    }
+    if (!response.ok || !payload.photo) throw new Error(payload.error ?? "Something went wrong. Please try again.");
+    return payload.photo;
+  }
+
+  async function runPhotoJob(id: string, label: string, job: () => Promise<void>) {
+    if (busyPhotos[id]) return;
+    setBusyPhotos((prev) => ({ ...prev, [id]: label }));
+    try {
+      await job();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+    } finally {
+      setBusyPhotos((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  }
+
+  /** A fresh sheet goes in its photo's place: replacing the page it had, or joining the book. */
+  async function placeSheet(id: string, photo: LibraryPhoto, projectId: string, projectName: string) {
+    const entry = await bookEntryFromLibraryPhoto(photo, projectId, projectName);
+    if (!("page" in entry)) throw new Error("No coloring sheet came back. Please try again.");
+    const page = entry.page;
+    removedIdsRef.current.delete(id);
+    setPendingPhotos((prev) => prev.filter((p) => p.id !== id));
+    setBookPages((prev) =>
+      prev.some((p) => p.id === id)
+        ? prev.map((p) => (p.id === id ? page : p))
+        : insertInAlbumOrder(prev, page, albumOrderRef.current),
+    );
+  }
+
+  function generateSheet(id: string) {
+    const pending = pendingPhotos.find((p) => p.id === id);
+    if (!pending || !canAfford(generateCents)) return;
+    void runPhotoJob(id, "Drawing the coloring sheet…", async () => {
+      const photo = await callPhotoAi("/api/photo-coloring", {
+        mode: "generate-library",
+        photoId: pending.photoId,
+        ...(pending.sourceRevisionId ? { sourceRevisionId: pending.sourceRevisionId } : {}),
+      });
+      if (photo) await placeSheet(id, photo, pending.sourceProjectId, pending.sourceProjectName);
+    });
+  }
+
+  /** Redraw a landscape photo as a portrait sheet, making its portrait version first if it has none. */
+  function makePortraitSheet(id: string) {
+    const page = bookPages.find((p): p is BookWizardPhotoPage => p.kind === "photo" && p.id === id);
+    const target = page ?? pendingPhotos.find((p) => p.id === id);
+    if (!target) return;
+    const known = target.portraitRevisionId;
+    if (!canAfford(generateCents + (known ? 0 : portraitCents))) return;
+    void runPhotoJob(id, known ? "Drawing the portrait sheet…" : "Making a portrait version…", async () => {
+      let sourceRevisionId = known;
+      if (!sourceRevisionId) {
+        const withPortrait = await callPhotoAi("/api/photo-portrait", { photoId: target.photoId });
+        if (!withPortrait) return;
+        const portraitId = withPortrait.activeRevisionId ?? undefined;
+        if (!portraitId) throw new Error("No portrait version came back. Please try again.");
+        sourceRevisionId = portraitId;
+        // Remember it, so trying again doesn't pay for a second portrait.
+        setPendingPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, portraitRevisionId: portraitId } : p)));
+        setBookPages((prev) =>
+          prev.map((p) => (p.kind === "photo" && p.id === id ? { ...p, portraitRevisionId: portraitId } : p)),
+        );
+        setBusyPhotos((prev) => ({ ...prev, [id]: "Drawing the portrait sheet…" }));
+      }
+      const photo = await callPhotoAi("/api/photo-coloring", {
+        mode: "generate-library",
+        photoId: target.photoId,
+        sourceRevisionId,
+      });
+      if (photo) await placeSheet(id, photo, target.sourceProjectId, target.sourceProjectName);
+    });
+  }
+
+  const generateHint = `Uses ${formatCredits(generateCents)} of credit`;
+  const portraitHint = `Makes a portrait version of the photo, then draws a new sheet from it. Uses up to ${formatCredits(
+    generateCents + portraitCents,
+  )} of credit.`;
 
   /** The book's pages as the server stores them, or null if one isn't saved to the library. */
   function pageManifest(): DigitalBookPage[] | null {
@@ -588,6 +965,7 @@ export function V2BookOrderWizard() {
       return;
     }
     const orderId = created.data.orderId;
+    await closeCart();
     await refreshUser();
     const download = await api.downloadOrderPdf(orderId, projectTitle);
     setPlacing(false);
@@ -691,6 +1069,7 @@ export function V2BookOrderWizard() {
     } catch {
       /* ignore */
     }
+    await closeCart();
     setConfirmOpen(false);
     router.push(`/orders/${orderId}?confirmed=1`);
   }
@@ -712,7 +1091,7 @@ export function V2BookOrderWizard() {
               ? `Buy PDF · ${formatCredits(DIGITAL_BOOK_CENTS)}`
               : "Place order";
   const nextDisabled =
-    (step === "book" && (loadingAlbums || loadingPages || contentCount === 0)) ||
+    (step === "book" && !stepDone("book")) ||
     (step === "pages" && (plan.photoCount === 0 || loadingPages || overCapacity)) ||
     (step === "cover" && coverPicturesLoading && coverDesign.layout !== "none") ||
     (step === "proof" && !proofConfirmed) ||
@@ -726,7 +1105,7 @@ export function V2BookOrderWizard() {
             <h1 className="v2-brand-title text-xl tracking-tight text-v2-ink sm:text-2xl">
               Create a coloring book
             </h1>
-            <BookOrderStepper steps={steps} current={step} />
+            <BookOrderStepper steps={steps} current={step} canOpen={canOpenStep} onSelect={openStep} />
           </div>
         </header>
 
@@ -811,8 +1190,18 @@ export function V2BookOrderWizard() {
                       ) : contentCount === 0 ? (
                         <div className="rounded-2xl border-2 border-dashed border-gray-200 px-5 py-8 text-center text-sm text-v2-muted">
                           {selectedProjectIds.length === 1 ? "This album doesn't" : "These albums don't"} have
-                          any coloring sheets yet. Open it in the studio and tap{" "}
-                          <span className="font-semibold text-v2-ink">Generate</span> first.
+                          any coloring sheets yet.{" "}
+                          {visiblePending.length > 0 ? (
+                            <>
+                              Continue to <span className="font-semibold text-v2-ink">Arrange pages</span> to
+                              generate them, then come back here to pick a format.
+                            </>
+                          ) : (
+                            <>
+                              Open it in the studio and tap <span className="font-semibold text-v2-ink">Generate</span>{" "}
+                              first.
+                            </>
+                          )}
                         </div>
                       ) : (
                         <BookBindingPicker
@@ -837,7 +1226,7 @@ export function V2BookOrderWizard() {
                         <button
                           type="button"
                           className="font-semibold text-v2-link hover:underline"
-                          onClick={() => setAddCreditShortfall(0)}
+                          onClick={() => openAddCredit(0)}
                         >
                           Add credit
                         </button>
@@ -862,15 +1251,23 @@ export function V2BookOrderWizard() {
                         <button
                           type="button"
                           className="font-semibold text-v2-link hover:underline"
-                          onClick={() => {
-                            setError(null);
-                            setStep("book");
-                          }}
+                          onClick={() => openStep("book")}
                         >
                           Change album or format
                         </button>
                       </p>
                     </div>
+
+                    {!loadingPages ? (
+                      <BookPendingPhotos
+                        photos={visiblePending}
+                        busy={busyPhotos}
+                        onGenerate={generateSheet}
+                        onMakePortrait={makePortraitSheet}
+                        generateHint={generateHint}
+                        portraitHint={portraitHint}
+                      />
+                    ) : null}
 
                     {loadingPages ? (
                       <p className="flex items-center gap-2 text-sm text-v2-muted">
@@ -900,9 +1297,12 @@ export function V2BookOrderWizard() {
                         onRemovePage={removePage}
                         onInsertBlank={() => insertBlank("plain")}
                         onInsertLined={() => insertBlank("lined")}
+                        onMakePortrait={cloud ? makePortraitSheet : undefined}
+                        busy={busyPhotos}
+                        portraitHint={portraitHint}
                       />
                       </>
-                    ) : selectedProjectIds.length > 0 ? (
+                    ) : selectedProjectIds.length > 0 && visiblePending.length === 0 ? (
                       <div className="v2-panel p-5 text-sm text-v2-muted">
                         None of these photos has a coloring sheet yet. Go back to the studio and
                         tap <span className="font-semibold text-v2-ink">Generate</span> first.
@@ -922,7 +1322,7 @@ export function V2BookOrderWizard() {
                         <button
                           type="button"
                           className="font-semibold underline underline-offset-2"
-                          onClick={() => setStep("book")}
+                          onClick={() => openStep("book")}
                         >
                           choose a format that fits
                         </button>
@@ -1101,7 +1501,7 @@ export function V2BookOrderWizard() {
                           <button
                             type="button"
                             className="v2-btn-primary mt-3 text-sm"
-                            onClick={() => setAddCreditShortfall(shortfallCents)}
+                            onClick={() => openAddCredit(shortfallCents)}
                           >
                             Add {formatCredits(shortfallCents)} credit
                           </button>
@@ -1145,11 +1545,15 @@ export function V2BookOrderWizard() {
         <V2AddCreditModal
           onClose={() => setAddCreditShortfall(null)}
           shortfallCents={addCreditShortfall}
-          returnPath={`/studio/order?${new URLSearchParams({
-            ...(selectedProjectIds[0] ? { project: selectedProjectIds[0] } : {}),
-            step: "review",
-            binding: bindingId,
-          }).toString()}`}
+          returnPath={`/studio/order?${new URLSearchParams(
+            cartId
+              ? { cart: cartId, ...(step === "review" ? { step: "review" } : {}) }
+              : {
+                  ...(selectedProjectIds[0] ? { project: selectedProjectIds[0] } : {}),
+                  step: "review",
+                  binding: bindingId,
+                },
+          ).toString()}`}
         />
       ) : null}
 

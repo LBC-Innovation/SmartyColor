@@ -7,6 +7,7 @@ import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import type { CreditLedgerEntry, CreditTopUpConfirmation, PromoCreditSettings } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
+import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cartTypes";
 
 const TOKEN_KEY = "cm_access_token";
 const REFRESH_TOKEN_KEY = "cm_refresh_token";
@@ -641,4 +642,26 @@ export function adminUpdatePromoCredits(input: {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+// ---- carts: books started in the order wizard and not ordered yet ----------
+
+export function listBookCarts(): Promise<ApiResult<BookCartSummary[]>> {
+  return request<BookCartSummary[]>("/carts");
+}
+
+export function fetchBookCart(id: string): Promise<ApiResult<BookCart>> {
+  return request<BookCart>(`/carts/${id}`);
+}
+
+export function createBookCart(input: BookCartInput): Promise<ApiResult<BookCartSummary>> {
+  return request<BookCartSummary>("/carts", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBookCart(id: string, input: BookCartInput): Promise<ApiResult<BookCartSummary>> {
+  return request<BookCartSummary>(`/carts/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function deleteBookCart(id: string): Promise<ApiResult<{ id: string }>> {
+  return request<{ id: string }>(`/carts/${id}`, { method: "DELETE" });
 }
