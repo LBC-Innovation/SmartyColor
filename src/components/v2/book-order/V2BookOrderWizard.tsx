@@ -228,6 +228,12 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const toast = useV2Toast();
 
   const [step, setStep] = useState<BookOrderStep>("book");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Each step starts at its top, whether reached by Next, Back or the stepper.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
+  }, [step]);
   /** Steps reached so far; the stepper can jump back to any of them. */
   const [visited, setVisited] = useState<BookOrderStep[]>(["book"]);
   // ---- cart: the book is saved as it's built, so it can be picked up later ----
@@ -1168,7 +1174,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
           <div className="mx-auto w-full max-w-5xl px-4 py-4 sm:px-8 sm:py-6">
             {authLoading ? (
               <p className="text-sm text-v2-muted">Loading…</p>
