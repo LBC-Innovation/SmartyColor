@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlignCenter, AlignLeft, AlignRight, Loader2 } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { coverSourcesFor, type CoverPicture } from "@/components/v2/book-order/useCoverSources";
 import type { BookBindingSpec, BookBindingId } from "@/lib/print/bookBindings";
@@ -105,15 +105,10 @@ export function BookCoverDesigner({ design, onChange, binding, pictures, picture
           sources={sources}
           bindingId={binding.id as BookBindingId}
           showGuides={showGuides}
+          loading={picturesLoading && hasPictures}
           onRendered={(r) => setLowestPpi(r.lowestPpi)}
           className="mx-auto w-full max-w-xs rounded-sm lg:max-w-none"
         />
-        {picturesLoading && hasPictures ? (
-          <p className="mt-2 flex items-center justify-center gap-2 text-xs text-v2-muted">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            Loading your photos…
-          </p>
-        ) : null}
         <label className="mt-3 flex items-center justify-center gap-2 text-xs text-v2-muted">
           <input type="checkbox" checked={showGuides} onChange={(e) => setShowGuides(e.target.checked)} />
           Show print guides
