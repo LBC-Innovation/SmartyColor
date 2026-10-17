@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { HEADER } from "@/content/marketing";
 import { V2BrandLogo } from "@/components/v2/ui/V2BrandLogo";
 import { useAuth } from "@/context/AuthContext";
 
@@ -15,8 +16,11 @@ export function V2MarketingHeader() {
         </Link>
         <nav className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Account">
           {!loading && user ? (
-            <Link href="/studio" className="v2-btn-primary text-sm">
-              Open studio
+            <Link
+              href="/studio"
+              className="inline-flex h-10 items-center px-2 text-sm font-semibold text-v2-link hover:underline"
+            >
+              {HEADER.signedIn}
             </Link>
           ) : (
             <>
@@ -24,10 +28,10 @@ export function V2MarketingHeader() {
                 href="/sign-in"
                 className="inline-flex h-10 items-center px-2 text-sm font-semibold text-v2-link hover:underline lg:v2-btn-outline"
               >
-                Sign in
+                {HEADER.signIn}
               </Link>
               <Link href="/sign-up" className="v2-btn-primary hidden text-sm lg:inline-flex">
-                Sign up
+                {HEADER.signUp}
               </Link>
             </>
           )}

@@ -2,7 +2,7 @@ export function PwaShellScript() {
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `(function(){var h=document.documentElement;var ua=navigator.userAgent;var ios=/iphone|ipad|ipod/i.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);var standalone=window.matchMedia("(display-mode: standalone)").matches||window.matchMedia("(display-mode: fullscreen)").matches||("standalone" in navigator&&navigator.standalone===true);if(ios)h.classList.add("ios");if(standalone)h.classList.add("standalone");try{if(localStorage.getItem("cm_access_token"))h.classList.add("has-session");}catch(e){}})();`,
+        __html: `(function(){var h=document.documentElement;var ua=navigator.userAgent;var ios=/iphone|ipad|ipod/i.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);var standalone=window.matchMedia("(display-mode: standalone)").matches||window.matchMedia("(display-mode: fullscreen)").matches||("standalone" in navigator&&navigator.standalone===true);if(ios)h.classList.add("ios");if(standalone)h.classList.add("standalone");})();`,
       }}
     />
   );

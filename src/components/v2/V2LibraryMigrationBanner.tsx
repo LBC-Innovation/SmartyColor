@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CloudUpload, Loader2, X } from "lucide-react";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useV2Toast } from "@/components/v2/V2Toast";
+import { takeMigrationRequest } from "@/lib/marketing/savePrompt";
 import {
   migrateLocalLibraryToCloud,
   summarizeLocalLibrary,
@@ -21,6 +22,7 @@ export function V2LibraryMigrationBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [progress, setProgress] = useState<MigrationProgress | null>(null);
   const [busy, setBusy] = useState(false);
+  const [autoRun, setAutoRun] = useState(false);
 
   useEffect(() => {
     if (!cloud || !hydrated) return;
@@ -31,12 +33,24 @@ export function V2LibraryMigrationBanner() {
     }
     let cancelled = false;
     summarizeLocalLibrary().then((s) => {
-      if (!cancelled) setSummary(s);
+      if (cancelled) return;
+      setSummary(s);
+      if (s.photos > 0 && takeMigrationRequest()) setAutoRun(true);
     });
     return () => {
       cancelled = true;
     };
   }, [cloud, hydrated]);
+
+  // Signed up from the "Save this page" card: move their pages without asking again.
+  useEffect(() => {
+    if (!autoRun) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAutoRun(false);
+    void run();
+    // run reads only state that is current when autoRun flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun]);
 
   if (!cloud || dismissed || !summary || summary.photos === 0) return null;
 

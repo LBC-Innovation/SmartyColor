@@ -90,7 +90,7 @@ export function V2MyOrdersStudio() {
             <div className="v2-panel p-6 text-center">
               <p className="text-sm text-v2-muted">Sign in to view your orders.</p>
               <Link
-                href="/sign-in"
+                href="/sign-in?next=%2Forders"
                 className="mt-4 inline-flex rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
               >
                 Sign in

@@ -11,6 +11,7 @@ import type { AlbumInvitePreview } from "@/lib/library/types";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 import { cn } from "@/lib/cn";
+import { track } from "@/lib/track";
 
 const STEPS = ["Welcome", "Your account", "Done"] as const;
 
@@ -64,6 +65,7 @@ export function V2SignUpStudio() {
       setMessage(err);
       return;
     }
+    track("sign_up", { method: "email" });
     setStep(2);
     setNeedsEmailConfirm(!hasSessionToken());
   }

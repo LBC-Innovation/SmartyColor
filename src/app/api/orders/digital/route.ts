@@ -1,7 +1,11 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { INSUFFICIENT_CREDITS_CODE } from "@/lib/credits/pricing";
+import { after } from "next/server";
+import { attributionFromRequest } from "@/lib/marketing/attribution";
 import { createDigitalBookOrder } from "@/server/digitalBookService";
+import { saveAttribution } from "@/server/marketing/attributionService";
+import { trackPurchaseServer } from "@/server/marketing/serverTrack";
 
 /** Buy a print-at-home book: charges the wallet and creates the paid order. */
 export async function POST(request: Request) {
@@ -20,5 +24,10 @@ export async function POST(request: Request) {
   if (code === INSUFFICIENT_CREDITS_CODE) return jsonError(result.error!.message, 402, code);
   if (code === "INVALID_PAGES") return jsonError(result.error!.message, 400, code);
   if (code === "NOT_FOUND") return jsonError(result.error!.message, 404, code);
+  if (result.data) {
+    const { orderId } = result.data;
+    await saveAttribution("book_orders", orderId, attributionFromRequest(request));
+    after(() => trackPurchaseServer({ request, orderId, email: auth.user.email }));
+  }
   return jsonResult(result, result.error ? 500 : 201);
 }

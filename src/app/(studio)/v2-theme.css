@@ -38,11 +38,6 @@ body:has(.v2-shell) {
   height: 100%;
 }
 
-/* Signed-in visitors are redirected to the studio; don't flash the landing page first. */
-html.has-session .v2-landing {
-  visibility: hidden;
-}
-
 /* viewport-fit=cover: keep content clear of the notch / status bar. */
 .v2-shell {
   padding-top: env(safe-area-inset-top);
