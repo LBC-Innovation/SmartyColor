@@ -280,6 +280,17 @@ export function pdfMirroredMatrix(
 
 /** Wide-ruled notebook paper: 11/32″ between rules. */
 export const LINED_RULE_SPACING_IN = 11 / 32;
+
+/**
+ * The gift note page: centred serif italic text in a column narrower than the
+ * printable area, shared by the PDF and the on-screen preview.
+ */
+export const NOTE_PAGE = {
+  fontSizePt: 20,
+  lineHeight: 1.45,
+  /** Width of the text column as a share of the page's printable box. */
+  columnShare: 0.78,
+} as const;
 /** Header space above the first rule, measured from the top of the page. */
 export const LINED_FIRST_RULE_IN = 1;
 

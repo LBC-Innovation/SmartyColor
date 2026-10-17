@@ -34,18 +34,21 @@ import {
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import type {
   BookWizardBlankPage,
+  BookWizardNotePage,
   BookWizardPage,
   BookWizardPhotoPage,
 } from "@/lib/print/bookWizardTypes";
 import { BookLinedPageArt } from "@/components/v2/book-order/BookLinedPageArt";
+import { BookNotePageArt } from "@/components/v2/book-order/BookNotePageArt";
 import { BookPageImageFill } from "@/components/v2/book-order/BookPageImageFill";
 import { effectiveOrientation } from "@/lib/print/bookPagePlan";
 import { cn } from "@/lib/cn";
 
 type Props = {
   binding: BookBindingSpec;
-  /** Every printed page in order, including blank and lined ones. */
+  /** Every printed page in order, including blank and lined ones (and a gift note first, if there is one). */
   pages: BookWizardPage[];
+  /** The new order of every page except the gift note, which always stays first. */
   onReorder: (pages: BookWizardPage[]) => void;
   onMirrorPhoto: (pageId: string) => void;
   onRemovePage: (pageId: string) => void;
@@ -65,6 +68,8 @@ const ICON_BTN =
 type TileProps = {
   index: number;
   count: number;
+  /** Index of the first page that can move (1 when a gift note holds page 1). */
+  firstIndex?: number;
   onRemove?: () => void;
   onMove: (delta: -1 | 1) => void;
 };
@@ -98,6 +103,7 @@ function PageNumber({ index }: { index: number }) {
 function TileFooter({
   index,
   count,
+  firstIndex = 0,
   onMove,
   onRemove,
   middle,
@@ -107,7 +113,7 @@ function TileFooter({
       <button
         type="button"
         className={cn(ICON_BTN, "text-v2-navy hover:bg-v2-bg-subtle")}
-        disabled={index === 0}
+        disabled={index <= firstIndex}
         onClick={() => onMove(-1)}
         aria-label={`Move page ${index + 1} earlier`}
       >
@@ -241,6 +247,24 @@ function BlankArt({ page }: { page: BookWizardBlankPage }) {
   );
 }
 
+/** The gift note: always page 1, changed only on the review step. */
+function NoteTile({ page }: { page: BookWizardNotePage }) {
+  return (
+    <div className="relative flex flex-col overflow-hidden rounded-xl border border-v2-primary/40 bg-white shadow-sm">
+      <div className="relative aspect-[8.5/11] w-full bg-white">
+        <BookNotePageArt text={page.text} />
+        <PageNumber index={0} />
+        <span className="absolute inset-x-1.5 bottom-1.5 rounded-md bg-slate-700/80 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">
+          Gift note
+        </span>
+      </div>
+      <p className="flex h-10 items-center justify-center border-t border-gray-100 px-2 text-center text-[11px] text-v2-muted">
+        Edit it on the review step
+      </p>
+    </div>
+  );
+}
+
 function SortableBlankTile({ page, ...tile }: TileProps & { page: BookWizardBlankPage }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id,
@@ -286,7 +310,11 @@ export function BookPageThumbnailGrid({
   portraitHint,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const sortableIds = pages.map((p) => p.id);
+  // A gift note is fixed as page 1; everything after it can be reordered.
+  const note = pages[0]?.kind === "note" ? pages[0] : null;
+  const offset = note ? 1 : 0;
+  const movable = note ? pages.slice(1) : pages;
+  const sortableIds = movable.map((p) => p.id);
 
   // Touch waits briefly so the grid still scrolls; mouse starts after a small move.
   const sensors = useSensors(
@@ -296,23 +324,23 @@ export function BookPageThumbnailGrid({
   );
 
   function movePage(id: string, delta: -1 | 1) {
-    const from = pages.findIndex((p) => p.id === id);
+    const from = movable.findIndex((p) => p.id === id);
     const to = from + delta;
-    if (from < 0 || to < 0 || to >= pages.length) return;
-    onReorder(arrayMove(pages, from, to));
+    if (from < 0 || to < 0 || to >= movable.length) return;
+    onReorder(arrayMove(movable, from, to));
   }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = pages.findIndex((p) => p.id === active.id);
-    const newIndex = pages.findIndex((p) => p.id === over.id);
+    const oldIndex = movable.findIndex((p) => p.id === active.id);
+    const newIndex = movable.findIndex((p) => p.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
-    onReorder(arrayMove(pages, oldIndex, newIndex));
+    onReorder(arrayMove(movable, oldIndex, newIndex));
   }
 
-  const activePage = pages.find((p) => p.id === activeId);
+  const activePage = movable.find((p) => p.id === activeId);
 
   return (
     <div className="space-y-3">
@@ -334,12 +362,15 @@ export function BookPageThumbnailGrid({
       >
         <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-            {pages.map((page, index) => {
+            {note ? <NoteTile page={note} /> : null}
+            {movable.map((page, i) => {
               const tile = {
-                index,
+                index: i + offset,
                 count: pages.length,
+                firstIndex: offset,
                 onMove: (delta: -1 | 1) => movePage(page.id, delta),
               };
+              if (page.kind === "note") return null;
               if (page.kind === "photo") {
                 return (
                   <SortablePhotoTile
@@ -372,9 +403,9 @@ export function BookPageThumbnailGrid({
             <div className="aspect-[8.5/11] w-36 overflow-hidden rounded-xl border-2 border-v2-primary bg-white shadow-lg">
               {activePage.kind === "photo" ? (
                 <BookPageImageFill page={activePage} binding={binding} />
-              ) : (
+              ) : activePage.kind === "blank" ? (
                 <BlankArt page={activePage} />
-              )}
+              ) : null}
             </div>
           ) : null}
         </DragOverlay>

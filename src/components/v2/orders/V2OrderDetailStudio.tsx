@@ -334,6 +334,18 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     </pre>
                   </>
                 ) : null}
+                {order.isGift ? (
+                  <>
+                    <h2 className="mt-4 text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                      Gift
+                    </h2>
+                    <p className="mt-2 whitespace-pre-line text-sm text-v2-ink">
+                      {order.giftNote
+                        ? `Note on the first page: “${order.giftNote}”`
+                        : "Sent as a gift, without a note."}
+                    </p>
+                  </>
+                ) : null}
               </section>
               ) : null}
 
