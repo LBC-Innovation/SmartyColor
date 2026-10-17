@@ -8,6 +8,8 @@ export type OutgoingEmail = {
   html: string;
   text: string;
   replyTo?: string;
+  /** Extra headers, e.g. List-Unsubscribe on marketing mail. */
+  headers?: Record<string, string>;
 };
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -42,6 +44,7 @@ export async function sendEmail(message: OutgoingEmail): Promise<boolean> {
         html: message.html,
         text: message.text,
         ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(message.headers ? { headers: message.headers } : {}),
       }),
     });
     if (!res.ok) {

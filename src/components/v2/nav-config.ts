@@ -8,6 +8,7 @@ import {
   Gift,
   Home,
   LineChart,
+  MessageSquareQuote,
   Package,
   Tags,
   Users,
@@ -70,6 +71,13 @@ export const v2AdminNav: V2NavItem[] = [
     icon: Gift,
     href: "/admin/promo-credits",
     permission: "usermanage:adjustcredits",
+  },
+  {
+    id: "testimonials",
+    label: "Customer stories",
+    icon: MessageSquareQuote,
+    href: "/admin/testimonials",
+    permission: "marketing:testimonials",
   },
 ];
 

@@ -25,6 +25,7 @@ import { quoted, recordActivity } from "@/server/activityService";
 import { luluConfigured } from "@/server/lulu/config";
 import { pricePrintOrder } from "@/server/pricingService";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
+import { sendOrderEmails } from "@/server/email/lifecycleService";
 import {
   cancelLuluPrintJob,
   extractTrackingFromPrintJob,
@@ -591,6 +592,7 @@ export async function placeBookOrderWithCredits(input: {
   };
 
   await recordOrderPlacedEvent(input.orderId);
+  await sendOrderEmails(input.orderId);
 
   return { data: payload, error: null };
 }
@@ -744,6 +746,7 @@ export async function syncOrderFromLulu(
         metadata: { luluStatus },
       });
     }
+    if (mapped === "shipped" && !order.shipped_at) await sendOrderEmails(orderId);
 
     return { data: { status: (mapped ?? order.status) as BookOrderStatus }, error: null };
   } catch (e) {
