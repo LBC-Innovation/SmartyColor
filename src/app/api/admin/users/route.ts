@@ -6,10 +6,7 @@ import * as admin from "@/server/adminUsersService";
 export async function GET(request: Request) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (
-    auth.user.role !== "admin" &&
-    !requirePermission(auth.user, "usermanage:listusers")
-  ) {
+  if (!requirePermission(auth.user, "usermanage:listusers")) {
     return jsonError("Missing required permission: usermanage:listusers", 403);
   }
   const result = await admin.listAdminUsers();

@@ -19,7 +19,7 @@ export function V2AdminPermissionGate({
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
-    else if (!user.permissions.includes(permission) && user.role !== "admin") {
+    else if (!user.permissions.includes(permission)) {
       router.replace("/");
     }
   }, [user, loading, permission, router, pathname]);
@@ -32,6 +32,6 @@ export function V2AdminPermissionGate({
     );
   }
   if (!user) return null;
-  if (!user.permissions.includes(permission) && user.role !== "admin") return null;
+  if (!user.permissions.includes(permission)) return null;
   return <>{children}</>;
 }

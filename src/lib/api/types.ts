@@ -1,3 +1,4 @@
+import { ALL_PERMISSIONS } from "@/lib/auth/permissionMeta";
 import type { FeatureAccess } from "@/lib/auth/features";
 
 export type ApiError = {
@@ -15,7 +16,6 @@ export interface User {
   displayName: string;
   avatarUrl?: string;
   createdAt: string;
-  role: string;
   permissions: string[];
   planTier: string;
   /** Promo wallet balance in USD cents. */
@@ -39,14 +39,8 @@ export interface AdminUser {
   features: FeatureAccess;
 }
 
-export const USERMANAGE_PERMISSIONS = [
-  "usermanage:add",
-  "usermanage:suspend",
-  "usermanage:updatepassword",
-  "usermanage:listusers",
-  "usermanage:deleteusers",
-  "usermanage:editpermissions",
-  "usermanage:adjustcredits",
-  "usermanage:manageorders",
-  "usermanage:selfmanage",
-] as const;
+/** Every grantable permission (see PERMISSION_META). */
+export const USERMANAGE_PERMISSIONS = ALL_PERMISSIONS;
+
+/** Grants the price catalog page (/admin/pricing). */
+export const MANAGE_PRICES_PERMISSION = "pricing:manage";

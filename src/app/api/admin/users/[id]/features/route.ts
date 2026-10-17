@@ -9,7 +9,7 @@ export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (auth.user.role !== "admin" && !requirePermission(auth.user, "usermanage:editpermissions")) {
+  if (!requirePermission(auth.user, "usermanage:editpermissions")) {
     return jsonError("Missing required permission: usermanage:editpermissions", 403);
   }
   const body = (await request.json()) as { features?: unknown };

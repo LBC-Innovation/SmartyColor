@@ -17,10 +17,7 @@ export function V2AdminToolbar({ className }: { className?: string }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const items = v2AdminNav.filter(
-    (item) =>
-      !item.permission ||
-      user?.role === "admin" ||
-      (user?.permissions.includes(item.permission) ?? false),
+    (item) => !item.permission || (user?.permissions.includes(item.permission) ?? false),
   );
 
   return (

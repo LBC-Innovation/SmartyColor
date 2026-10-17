@@ -1,20 +1,16 @@
 import type { AuthUser } from "@/lib/auth/authenticate";
+import type { Permission } from "@/lib/auth/permissionMeta";
 
-export function requirePermission(user: AuthUser, permission: string): boolean {
+/** There is no master role: an account can do exactly what its permissions name. */
+export function requirePermission(user: AuthUser, permission: Permission): boolean {
   return user.permissions.includes(permission);
 }
 
-export function requireAdminOrSelfManage(user: AuthUser, targetId: string): boolean {
-  const isSelf = user.id === targetId;
-  const hasSelfManage = user.permissions.includes("usermanage:selfmanage");
-  const canManageUsers = user.permissions.includes("usermanage:listusers");
-  return user.role === "admin" || canManageUsers || (isSelf && hasSelfManage);
-}
-
+/** The permission, or the account acting on itself with full self-management. */
 export function requirePermissionOrSelfManage(
   user: AuthUser,
   targetId: string,
-  permission: string,
+  permission: Permission,
 ): boolean {
   const isSelf = user.id === targetId;
   const hasSelfManage = user.permissions.includes("usermanage:selfmanage");

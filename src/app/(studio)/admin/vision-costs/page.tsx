@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default function AdminVisionCostsPage() {
   return (
-    <V2AdminPermissionGate permission="usermanage:listusers">
+    <V2AdminPermissionGate permission="costs:viewai">
       <V2VisionCostsStudio />
     </V2AdminPermissionGate>
   );

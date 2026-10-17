@@ -4,14 +4,14 @@ import * as orders from "@/server/ordersService";
 
 type Params = { params: Promise<{ id: string; orderId: string }> };
 
-function canManageOrders(role: string, permissions: string[]): boolean {
-  return role === "admin" || permissions.includes("usermanage:manageorders");
+function canManageOrders(permissions: string[]): boolean {
+  return permissions.includes("usermanage:manageorders");
 }
 
 export async function POST(request: Request, { params }: Params) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!canManageOrders(auth.user.role, auth.user.permissions)) {
+  if (!canManageOrders(auth.user.permissions)) {
     return jsonError("Missing required permission: usermanage:manageorders", 403);
   }
 

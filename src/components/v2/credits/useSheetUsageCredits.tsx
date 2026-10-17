@@ -9,6 +9,7 @@ import {
   sheetUsageCostCents,
   type SheetUsageKind,
 } from "@/lib/credits/pricing";
+import { usePriceList } from "@/lib/pricing/usePriceList";
 import type { V2PhotoEntry } from "@/lib/v2/studioTypes";
 
 type Shortfall = { cents: number; kind: SheetUsageKind };
@@ -39,14 +40,16 @@ export function useSheetUsageCredits(returnPath: string): {
   addCreditModal: ReactNode;
 } {
   const { user, setCreditsBalance } = useAuth();
+  const prices = usePriceList();
   const [shortfall, setShortfall] = useState<Shortfall | null>(null);
 
   useCreditCheckoutReturn();
 
   function canAfford(kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "remote" | "editCount">): boolean {
     if (!photo.remote || !user) return true;
-    const cost = sheetUsageCostCents(kind, photo.editCount ?? 0);
-    if (user.creditsBalanceCents >= cost) return true;
+    const cost = sheetUsageCostCents(prices, kind, photo.editCount ?? 0);
+    // Price not loaded yet: let the server decide; it answers 402 if the wallet is short.
+    if (cost == null || user.creditsBalanceCents >= cost) return true;
     setShortfall({ cents: cost - user.creditsBalanceCents, kind });
     return false;
   }

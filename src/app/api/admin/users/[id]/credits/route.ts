@@ -1,3 +1,4 @@
+import { getPublicPriceList } from "@/server/pricingService";
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { requirePermission } from "@/lib/auth/guards";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
@@ -9,14 +10,14 @@ import { sendEmail } from "@/server/email/resend";
 
 type Params = { params: Promise<{ id: string }> };
 
-function canAdjustCredits(role: string, permissions: string[]): boolean {
-  return role === "admin" || permissions.includes("usermanage:adjustcredits");
+function canAdjustCredits(permissions: string[]): boolean {
+  return permissions.includes("usermanage:adjustcredits");
 }
 
 export async function GET(request: Request, { params }: Params) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!canAdjustCredits(auth.user.role, auth.user.permissions)) {
+  if (!canAdjustCredits(auth.user.permissions)) {
     return jsonError("Missing required permission: usermanage:adjustcredits", 403);
   }
 
@@ -28,7 +29,7 @@ export async function GET(request: Request, { params }: Params) {
 export async function POST(request: Request, { params }: Params) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!canAdjustCredits(auth.user.role, auth.user.permissions)) {
+  if (!canAdjustCredits(auth.user.permissions)) {
     return jsonError("Missing required permission: usermanage:adjustcredits", 403);
   }
 
@@ -73,6 +74,7 @@ export async function POST(request: Request, { params }: Params) {
           balanceCents: result.data.creditsBalanceCents,
           note: typeof body.emailNote === "string" ? body.emailNote : undefined,
           url: `${clientOrigin()}/studio`,
+          prices: (await getPublicPriceList()).data,
         }),
       );
     }

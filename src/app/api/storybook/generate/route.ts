@@ -1,4 +1,5 @@
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { walletCharge, walletCheck } from "@/server/walletUsageGuard";
 import {
   storybookGenerateStory,
   storybookStubGenerate,
@@ -59,6 +60,9 @@ export async function POST(request: Request) {
       return Response.json({ story });
     }
 
+    const unaffordable = await walletCheck(auth.user.id, "ai.storybook_generate");
+    if (unaffordable) return unaffordable;
+
     const story = await storybookGenerateStory({
       albumTitle: body.albumTitle ?? "",
       tripNarrative: body.tripNarrative ?? "",
@@ -66,6 +70,9 @@ export async function POST(request: Request) {
       photoIds,
       photos,
     });
+
+    const notCharged = await walletCharge(auth.user.id, "ai.storybook_generate");
+    if (notCharged) return notCharged;
 
     return Response.json({ story });
   } catch (error) {

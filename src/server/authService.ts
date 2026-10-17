@@ -23,7 +23,6 @@ function profileToUser(
     displayName: profile.display_name ?? authUser.email.split("@")[0] ?? "",
     avatarUrl: profile.avatar_url ?? undefined,
     createdAt: profile.created_at,
-    role: authUser.role,
     permissions: authUser.permissions,
     planTier: profile.plan_tier,
     creditsBalanceCents: profile.credits_balance,
@@ -85,7 +84,8 @@ export async function refreshSession(refreshToken: string): Promise<ApiResult<un
 }
 
 export async function logout(token: string, userId: string): Promise<ApiResult<{ success: boolean }>> {
-  const { error } = await getSupabaseAuth().auth.admin.signOut(token);
+  // Only this device: the default ("global") would also sign the account out everywhere else.
+  const { error } = await getSupabaseAuth().auth.admin.signOut(token, "local");
   if (error) {
     log("error", "Logout failed", { userId, error: error.message });
     return { data: null, error: { message: error.message } };

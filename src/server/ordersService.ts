@@ -16,13 +16,14 @@ import type {
 } from "@/lib/orders/types";
 import { isShippingAddressComplete, normalizeShippingAddress } from "@/lib/orders/shippingAddress";
 import type { DigitalBookPage } from "@/lib/orders/types";
-import { bindingIdForProduct } from "@/lib/print/bookBindings";
+import { bindingIdForProduct, type BookBindingId } from "@/lib/print/bookBindings";
 import { normalizeCoverDesign, type BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
 import { buildPrintFiles, createCoverFrontUpload, parsePrintPages } from "@/server/printBookService";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { quoted, recordActivity } from "@/server/activityService";
 import { luluConfigured } from "@/server/lulu/config";
+import { pricePrintOrder } from "@/server/pricingService";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import {
   cancelLuluPrintJob,
@@ -157,6 +158,57 @@ async function appendOrderEvent(
   });
 }
 
+/**
+ * The order's price columns from a fresh Lulu quote to its shipping address,
+ * marked up per the price catalog. The only place a print order's total is set:
+ * the browser's estimate is never trusted.
+ */
+async function pricedOrderColumns(input: {
+  bindingId: BookBindingId;
+  pageCount: number;
+  shippingAddress: ShippingAddress;
+  shippingLevel: string;
+}): Promise<ApiResult<Record<string, unknown>>> {
+  const a = input.shippingAddress;
+  let priced;
+  try {
+    priced = await pricePrintOrder({
+      bindingId: input.bindingId,
+      pageCount: input.pageCount,
+      shippingLevel: input.shippingLevel,
+      shippingAddress: {
+        city: a.city,
+        state_code: a.state_code ?? "",
+        postcode: a.postcode,
+        country_code: a.country_code,
+      },
+    });
+  } catch (e) {
+    priced = { data: null, error: { message: e instanceof Error ? e.message : "Lulu quote failed" } };
+  }
+  if (priced.error) {
+    return {
+      data: null,
+      error: { message: "We couldn't get a price from the printer. Please try again in a moment.", code: "QUOTE_UNAVAILABLE" },
+    };
+  }
+  const { price, sku, markupPct, shippingLevel } = priced.data;
+  return {
+    data: {
+      price_sku: sku,
+      lulu_cost_cents: price.costTotalCents,
+      subtotal_cents: price.printPriceCents,
+      shipping_cents: price.shippingCents,
+      tax_cents: price.taxCents,
+      markup_pct: markupPct,
+      markup_cents: price.markupCents,
+      total_cents: price.totalCents,
+      shipping_level: shippingLevel,
+    },
+    error: null,
+  };
+}
+
 /** What the wizard saves about the book itself, alongside price and addresses. */
 export type DraftBookContent = {
   /** Every printed page in order, padding included. */
@@ -182,8 +234,6 @@ export async function createDraftBookOrder(input: DraftBookContent & {
   productId: string;
   pageCount: number;
   projectTitle: string;
-  luluCostCents: number | null;
-  totalCents: number | null;
   shippingPostcode?: string | null;
   /** Full address when the customer has entered one; wins over the quote postcode. */
   shippingAddress?: ShippingAddress | null;
@@ -197,8 +247,9 @@ export async function createDraftBookOrder(input: DraftBookContent & {
       page_count: input.pageCount,
       status: "draft",
       contact_email: input.contactEmail,
-      lulu_cost_cents: input.luluCostCents,
-      total_cents: input.totalCents,
+      // Priced when the order is confirmed, from the printer's quote; never from the browser.
+      lulu_cost_cents: null,
+      total_cents: null,
       shipping_address: input.shippingAddress
         ? normalizeShippingAddress(input.shippingAddress)
         : shippingAddressFromQuotePostcode(input.shippingPostcode),
@@ -267,8 +318,6 @@ export async function updateDraftBookOrder(input: DraftBookContent & {
   productId: string;
   pageCount: number;
   projectTitle: string;
-  luluCostCents: number | null;
-  totalCents: number | null;
   shippingPostcode?: string | null;
   shippingAddress?: ShippingAddress | null;
 }): Promise<ApiResult<{ orderId: string }>> {
@@ -288,8 +337,9 @@ export async function updateDraftBookOrder(input: DraftBookContent & {
       product_id: input.productId,
       project_title: input.projectTitle,
       page_count: input.pageCount,
-      lulu_cost_cents: input.luluCostCents,
-      total_cents: input.totalCents,
+      // Priced when the order is confirmed, from the printer's quote; never from the browser.
+      lulu_cost_cents: null,
+      total_cents: null,
       shipping_address: mergedAddress,
       ...draftContentColumns(input),
       updated_at: new Date().toISOString(),
@@ -318,7 +368,7 @@ export async function updateOrderShippingAddress(input: {
 }): Promise<ApiResult<{ orderId: string }>> {
   const { data: order, error: loadError } = await getSupabaseAdmin()
     .from("book_orders")
-    .select("id, user_id, status")
+    .select("id, user_id, status, product_id, page_count, shipping_level")
     .eq("id", input.orderId)
     .eq("user_id", input.userId)
     .maybeSingle();
@@ -331,10 +381,26 @@ export async function updateOrderShippingAddress(input: {
     };
   }
 
+  // A new destination changes shipping and tax, so a confirmed order is priced again.
+  const shippingAddress = normalizeShippingAddress(input.shippingAddress);
+  let pricing: Record<string, unknown> = {};
+  const bindingId = bindingIdForProduct(order.product_id as string);
+  if (order.status === "awaiting_payment" && bindingId) {
+    const priced = await pricedOrderColumns({
+      bindingId,
+      pageCount: order.page_count as number,
+      shippingAddress,
+      shippingLevel: order.shipping_level as string,
+    });
+    if (priced.error) return { data: null, error: priced.error };
+    pricing = priced.data;
+  }
+
   const { error } = await getSupabaseAdmin()
     .from("book_orders")
     .update({
-      shipping_address: normalizeShippingAddress(input.shippingAddress),
+      ...pricing,
+      shipping_address: shippingAddress,
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.orderId)
@@ -386,18 +452,28 @@ export async function confirmDraftBookOrder(input: {
       error: { message: "Flip through the book and confirm it looks right before ordering.", code: "PROOF_REQUIRED" },
     };
   }
-  const files = await buildPrintFiles({
-    userId: input.userId,
-    orderId: input.orderId,
-    bindingId,
-    pages: pages.data,
-    cover: normalizeCoverDesign(draft.cover_design),
-  });
+  const [files, pricing] = await Promise.all([
+    buildPrintFiles({
+      userId: input.userId,
+      orderId: input.orderId,
+      bindingId,
+      pages: pages.data,
+      cover: normalizeCoverDesign(draft.cover_design),
+    }),
+    pricedOrderColumns({
+      bindingId,
+      pageCount: draft.page_count,
+      shippingAddress: draft.shipping_address,
+      shippingLevel: draft.shipping_level,
+    }),
+  ]);
   if (files.error) return { data: null, error: files.error };
+  if (pricing.error) return { data: null, error: pricing.error };
 
   const { error } = await getSupabaseAdmin()
     .from("book_orders")
     .update({
+      ...pricing.data,
       status: "awaiting_payment",
       interior_pdf_path: files.data!.interiorPdfPath,
       cover_pdf_path: files.data!.coverPdfPath,
