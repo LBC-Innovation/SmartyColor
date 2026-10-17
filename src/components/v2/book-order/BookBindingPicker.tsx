@@ -1,7 +1,6 @@
 "use client";
 
 import { Check, Download, Loader2, Printer } from "lucide-react";
-import { DIGITAL_BOOK_CENTS } from "@/lib/credits/pricing";
 import { formatCredits } from "@/lib/credits/money";
 import {
   BOOK_BINDINGS,
@@ -42,6 +41,8 @@ type Props = {
   contentPageCount?: number;
   /** Format to badge as the best match for these pages. */
   recommendedId?: BookFormatId;
+  /** The print-at-home PDF's price, from the price list. */
+  digitalPriceCents?: number | null;
 };
 
 type Card = {
@@ -62,7 +63,7 @@ const CARDS: Card[] = [
     id: DIGITAL_FORMAT.id,
     title: DIGITAL_FORMAT.shortLabel,
     blurb: DIGITAL_FORMAT.blurb,
-    headline: formatCredits(DIGITAL_BOOK_CENTS),
+    headline: "Print at home",
     detail: "Any number of pages · no blank padding",
     digital: true,
   },
@@ -99,6 +100,7 @@ export function BookBindingPicker({
   prices = {},
   contentPageCount = 0,
   recommendedId,
+  digitalPriceCents = null,
 }: Props) {
   const filtering = contentPageCount > 0;
   const fitCount = filtering
@@ -197,7 +199,7 @@ export function BookBindingPicker({
                   <span className="text-sm font-semibold text-v2-muted">+ shipping &amp; tax</span>
                 </>
               ) : card.digital ? (
-                card.headline
+                digitalPriceCents != null ? formatCredits(digitalPriceCents) : card.headline
               ) : (
                 <span className="text-lg">{card.headline}</span>
               )}

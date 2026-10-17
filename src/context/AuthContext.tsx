@@ -36,7 +36,6 @@ function userFromHint(hint: api.SessionHint): User {
     email: hint.email,
     displayName: hint.email.split("@")[0] ?? "",
     createdAt: "",
-    role: "user",
     permissions: [],
     planTier: "free",
     creditsBalanceCents: 0,

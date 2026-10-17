@@ -18,7 +18,6 @@ export async function PATCH(request: Request, { params }: Params) {
     bindingId?: string;
     pageCount?: number;
     projectTitle?: string;
-    estimatedTotalCents?: number | null;
     shippingPostcode?: string | null;
     shippingAddress?: Partial<ShippingAddress> | null;
     billingAddress?: Partial<ShippingAddress> | null;
@@ -52,8 +51,6 @@ export async function PATCH(request: Request, { params }: Params) {
     productId: binding.productId,
     pageCount: body.pageCount,
     projectTitle: body.projectTitle?.trim() || "My coloring book",
-    luluCostCents: body.estimatedTotalCents ?? null,
-    totalCents: body.estimatedTotalCents ?? null,
     shippingPostcode: body.shippingPostcode ?? null,
     shippingAddress: body.shippingAddress ? normalizeShippingAddress(body.shippingAddress) : null,
     billingAddress: body.billingAddress ? normalizeShippingAddress(body.billingAddress) : null,

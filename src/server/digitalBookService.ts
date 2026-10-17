@@ -1,12 +1,13 @@
 import "server-only";
 import type { ApiResult } from "@/lib/api/types";
-import { DIGITAL_BOOK_CENTS, INSUFFICIENT_CREDITS_CODE } from "@/lib/credits/pricing";
+import { INSUFFICIENT_CREDITS_CODE } from "@/lib/credits/pricing";
 import type { DigitalBookPage } from "@/lib/orders/types";
 import { DIGITAL_FORMAT } from "@/lib/print/bookBindings";
 import { sheetsToPdf, type PdfBlankPage, type PdfSheetImage, type PdfSheetPage } from "@/lib/print/pdf";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { revisionDataUrlById } from "@/server/libraryImages";
+import { chargeableCents } from "@/server/pricingService";
 import { getObjectBytes, putObject, removeObjects } from "@/server/storage/libraryFiles";
 
 /** Digital books are always US Letter portrait, like the book-order preview. */
@@ -145,14 +146,15 @@ export async function createDigitalBookOrder(input: {
   }
 
   const db = getSupabaseAdmin();
-  const { data: profile, error: profileError } = await db
-    .from("profiles")
-    .select("credits_balance")
-    .eq("id", input.userId)
-    .maybeSingle();
+  const [price, { data: profile, error: profileError }] = await Promise.all([
+    chargeableCents("book.digital"),
+    db.from("profiles").select("credits_balance").eq("id", input.userId).maybeSingle(),
+  ]);
+  if (price.error) return price;
   if (profileError) return { data: null, error: { message: profileError.message } };
   if (!profile) return { data: null, error: { message: "User profile not found" } };
-  if ((profile.credits_balance as number) < DIGITAL_BOOK_CENTS) {
+  // Early check so a book isn't built for a wallet that can't pay; the purchase re-checks.
+  if ((profile.credits_balance as number) < price.data) {
     return {
       data: null,
       error: { message: "You do not have enough credits for this book.", code: INSUFFICIENT_CREDITS_CODE },
@@ -177,13 +179,13 @@ export async function createDigitalBookOrder(input: {
     });
   }
 
-  const { data, error } = await db.rpc("create_digital_book_order", {
+  // Charged at the catalog price, read in the same transaction as the charge.
+  const { data, error } = await db.rpc("purchase_digital_book", {
     p_user_id: input.userId,
     p_order_id: orderId,
     p_email: input.contactEmail,
     p_title: input.projectTitle,
     p_page_count: pages.length,
-    p_price_cents: DIGITAL_BOOK_CENTS,
     p_pages: pages,
     p_pdf_path: storedPath,
   });

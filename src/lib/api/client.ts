@@ -8,6 +8,8 @@ import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddres
 import type { CreditLedgerEntry, CreditTopUpConfirmation, PromoCreditSettings } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cartTypes";
+import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/lib/pricing/types";
+import type { FinanceCost, FinanceCostInput, FinanceReport, FinanceSettings } from "@/lib/finance/types";
 
 const TOKEN_KEY = "cm_access_token";
 const REFRESH_TOKEN_KEY = "cm_refresh_token";
@@ -458,7 +460,6 @@ export type BookDraftPayload = {
   photoCount: number;
   blankCount: number;
   projectTitle: string;
-  estimatedTotalCents: number | null;
   shippingPostcode?: string | null;
   shippingAddress?: ShippingAddress | null;
   /** Only when the customer ships somewhere other than their billing address. */
@@ -681,4 +682,52 @@ export function updateBookCart(id: string, input: BookCartInput): Promise<ApiRes
 
 export function deleteBookCart(id: string): Promise<ApiResult<{ id: string }>> {
   return request<{ id: string }>(`/carts/${id}`, { method: "DELETE" });
+}
+
+// ---- price catalog (admin) ---------------------------------------------------
+
+export function adminGetPricing(): Promise<ApiResult<AdminPricingData>> {
+  return request<AdminPricingData>("/admin/pricing");
+}
+
+export function adminGetPrintCosts(pages: number): Promise<ApiResult<PrintCostSample[]>> {
+  return request<PrintCostSample[]>(`/admin/pricing/print-costs?pages=${pages}`);
+}
+
+export function adminUpdatePrice(
+  sku: PriceSku,
+  input: { unitCostCents?: number; markupPct?: number; minPriceCents?: number; freeQuota?: number; billable?: boolean },
+): Promise<ApiResult<PriceItem>> {
+  return request<PriceItem>(`/admin/pricing/${encodeURIComponent(sku)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+// --- Financials (/admin/finance) ---
+
+export function adminGetFinance(range: { from: string; to: string }): Promise<ApiResult<FinanceReport>> {
+  const q = new URLSearchParams(range);
+  return request<FinanceReport>(`/admin/finance?${q.toString()}`);
+}
+
+export function adminCreateFinanceCost(input: FinanceCostInput): Promise<ApiResult<FinanceCost>> {
+  return request<FinanceCost>("/admin/finance/costs", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function adminUpdateFinanceCost(id: string, input: FinanceCostInput): Promise<ApiResult<FinanceCost>> {
+  return request<FinanceCost>(`/admin/finance/costs/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminDeleteFinanceCost(id: string): Promise<ApiResult<{ id: string }>> {
+  return request<{ id: string }>(`/admin/finance/costs/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function adminUpdateFinanceSettings(
+  input: Omit<FinanceSettings, "updatedAt">,
+): Promise<ApiResult<FinanceSettings>> {
+  return request<FinanceSettings>("/admin/finance/settings", { method: "PUT", body: JSON.stringify(input) });
 }

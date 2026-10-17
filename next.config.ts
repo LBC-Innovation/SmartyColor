@@ -10,13 +10,10 @@ const nextConfig: NextConfig = {
         destination: "/vision-costs",
         permanent: false,
       },
-      {
-        source: "/create/:path*",
-        destination: "/legacy/create/:path*",
-        permanent: false,
-      },
-      { source: "/photo", destination: "/legacy/photo", permanent: false },
-      { source: "/library", destination: "/legacy/library", permanent: false },
+      { source: "/create/:path*", destination: "/studio", permanent: false },
+      { source: "/photo", destination: "/studio", permanent: false },
+      { source: "/library", destination: "/studio", permanent: false },
+      { source: "/legacy/:path*", destination: "/studio", permanent: false },
     ];
   },
 };

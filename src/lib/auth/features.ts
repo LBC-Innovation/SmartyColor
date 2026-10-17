@@ -20,8 +20,6 @@ export type FeatureAccess = Record<ProductFeature, boolean>;
 /** What an account gets until an admin changes it. Guests get the same. */
 export const DEFAULT_FEATURE_ACCESS: FeatureAccess = { projects: true, storybook: false };
 
-const ALL_FEATURES: FeatureAccess = { projects: true, storybook: true };
-
 /** Reads the toggles saved on an account, falling back to the default for any that are unset. */
 export function storedFeatureAccess(raw: unknown): FeatureAccess {
   const saved = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -32,9 +30,9 @@ export function storedFeatureAccess(raw: unknown): FeatureAccess {
   return access;
 }
 
-/** What the account can actually open: admins are never locked out of a product line. */
-export function effectiveFeatureAccess(role: string, raw: unknown): FeatureAccess {
-  return role === "admin" ? { ...ALL_FEATURES } : storedFeatureAccess(raw);
+/** What the account can open: exactly the product lines turned on for it. */
+export function effectiveFeatureAccess(raw: unknown): FeatureAccess {
+  return storedFeatureAccess(raw);
 }
 
 export function featureLabel(feature: ProductFeature): string {

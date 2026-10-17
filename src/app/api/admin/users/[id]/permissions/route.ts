@@ -1,5 +1,5 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
-import { requirePermissionOrSelfManage } from "@/lib/auth/guards";
+import { requirePermission } from "@/lib/auth/guards";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as admin from "@/server/adminUsersService";
 
@@ -9,7 +9,8 @@ export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!requirePermissionOrSelfManage(auth.user, id, "usermanage:editpermissions")) {
+  // Never through self-management: an account must not be able to grant itself permissions.
+  if (!requirePermission(auth.user, "usermanage:editpermissions")) {
     return jsonError("Missing required permission: usermanage:editpermissions", 403);
   }
   const body = (await request.json()) as { permissions?: unknown };

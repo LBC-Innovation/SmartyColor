@@ -1,5 +1,5 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
-import { requireAdminOrSelfManage, requirePermissionOrSelfManage } from "@/lib/auth/guards";
+import { requirePermissionOrSelfManage } from "@/lib/auth/guards";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as admin from "@/server/adminUsersService";
 
@@ -9,8 +9,8 @@ export async function PATCH(request: Request, { params }: Params) {
   const { id } = await params;
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!requireAdminOrSelfManage(auth.user, id)) {
-    return jsonError("Forbidden", 403);
+  if (!requirePermissionOrSelfManage(auth.user, id, "usermanage:editprofile")) {
+    return jsonError("Missing required permission: usermanage:editprofile", 403);
   }
   const body = (await request.json()) as Record<string, unknown>;
   const updates: { display_name?: string; avatar_url?: string } = {};

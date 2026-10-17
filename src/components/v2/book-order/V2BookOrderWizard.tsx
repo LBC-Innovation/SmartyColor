@@ -42,7 +42,8 @@ import {
   type BookCartState,
 } from "@/lib/orders/cartTypes";
 import { formatCredits } from "@/lib/credits/money";
-import { DIGITAL_BOOK_CENTS, INSUFFICIENT_CREDITS_CODE, sheetUsageCostCents } from "@/lib/credits/pricing";
+import { INSUFFICIENT_CREDITS_CODE, sheetUsageCostCents, unitPriceCents } from "@/lib/credits/pricing";
+import { usePriceList } from "@/lib/pricing/usePriceList";
 import {
   BOOK_BINDINGS,
   PRINT_BINDING_IDS,
@@ -224,6 +225,16 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, refreshUser, setCreditsBalance } = useAuth();
+  const prices = usePriceList();
+  // Unknown until the price list loads; the server charges the catalog price either way.
+  const { digitalCents, generateCents, portraitCents } = useMemo(
+    () => ({
+      digitalCents: unitPriceCents(prices, "book.digital"),
+      generateCents: sheetUsageCostCents(prices, "generation") ?? 0,
+      portraitCents: sheetUsageCostCents(prices, "portrait") ?? 0,
+    }),
+    [prices],
+  );
   const cloud = Boolean(user);
   const toast = useV2Toast();
 
@@ -327,7 +338,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const softPrintPages = useSoftPrintPages(plan.allPages, binding);
   const formatFits = bookFormatFit(contentCount, binding).fits;
   const selectedQuote: BindingQuote | null = isDigital
-    ? { totalCents: DIGITAL_BOOK_CENTS, printCents: null, shippingCents: null, taxCents: null, loading: false, error: null }
+    ? { totalCents: digitalCents, printCents: null, shippingCents: null, taxCents: null, loading: digitalCents == null, error: null }
     : printQuote;
   const quoteCents = selectedQuote?.totalCents ?? null;
   const printCents = selectedQuote?.printCents ?? null;
@@ -873,9 +884,6 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
 
   // ---- coloring sheets drawn right here ----------------------------------------
 
-  const generateCents = sheetUsageCostCents("generation");
-  const portraitCents = sheetUsageCostCents("portrait");
-
   /** True when the wallet covers it; otherwise opens add-credit and returns false. */
   function canAfford(cents: number): boolean {
     const balance = user?.creditsBalanceCents ?? 0;
@@ -980,10 +988,12 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     });
   }
 
-  const generateHint = `Uses ${formatCredits(generateCents)} of credit`;
-  const portraitHint = `Makes a portrait version of the photo, then draws a new sheet from it. Uses up to ${formatCredits(
-    generateCents + portraitCents,
-  )} of credit.`;
+  const generateHint = prices ? `Uses ${formatCredits(generateCents)} of credit` : "Uses credit";
+  const portraitHint = prices
+    ? `Makes a portrait version of the photo, then draws a new sheet from it. Uses up to ${formatCredits(
+        generateCents + portraitCents,
+      )} of credit.`
+    : "Makes a portrait version of the photo, then draws a new sheet from it.";
 
   /** The book's pages as the server stores them, or null if one isn't saved to the library. */
   function pageManifest(): DigitalBookPage[] | null {
@@ -1068,7 +1078,6 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         bindingId,
         pageCount: plan.totalPages,
         projectTitle,
-        estimatedTotalCents: quoteCents,
         ...book,
       });
       if (api.isError(updated)) {
@@ -1083,7 +1092,6 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         photoCount: plan.photoCount,
         blankCount: plan.blankCount,
         projectTitle,
-        estimatedTotalCents: quoteCents,
         ...book,
       });
       if (api.isError(created)) {
@@ -1153,7 +1161,9 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
           : step === "proof"
             ? "Checkout"
             : isDigital
-              ? `Buy PDF · ${formatCredits(DIGITAL_BOOK_CENTS)}`
+              ? digitalCents != null
+                ? `Buy PDF · ${formatCredits(digitalCents)}`
+                : "Buy PDF"
               : "Place order";
   const nextDisabled =
     (step === "book" && !stepDone("book")) ||
@@ -1274,6 +1284,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                           prices={formatPrices}
                           contentPageCount={contentCount}
                           recommendedId={recommendedFormat}
+                          digitalPriceCents={digitalCents}
                           onChange={(id) => {
                             setBindingTouched(true);
                             setBindingId(id);

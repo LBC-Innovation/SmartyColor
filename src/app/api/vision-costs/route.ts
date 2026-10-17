@@ -12,8 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  const isAdmin = auth.user.role === "admin" || auth.user.permissions.includes("usermanage:listusers");
-  if (!isAdmin) return Response.json({ error: "Forbidden" }, { status: 403 });
+  if (!auth.user.permissions.includes("costs:viewai")) return Response.json({ error: "Forbidden" }, { status: 403 });
 
   await ensureVisionCostSession();
   const [snapshot, logTail, persisted] = await Promise.all([

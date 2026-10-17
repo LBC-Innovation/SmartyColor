@@ -1,5 +1,6 @@
 import { ensurePhotoDataUrlForRequest } from "@/lib/ai/compressPhotoServer";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { walletCharge, walletCheck } from "@/server/walletUsageGuard";
 import { photoDataUrlById } from "@/server/libraryImages";
 import {
   storybookPhotoChat,
@@ -49,6 +50,9 @@ export async function POST(request: Request) {
       return Response.json(stub);
     }
 
+    const unaffordable = await walletCheck(auth.user.id, "ai.storybook_chat");
+    if (unaffordable) return unaffordable;
+
     let photoDataUrl = body.photoDataUrl;
     if (body.photoId) {
       const photo = await photoDataUrlById(auth.user.id, body.photoId);
@@ -70,6 +74,9 @@ export async function POST(request: Request) {
       userMessage,
       photoDataUrl,
     });
+
+    const notCharged = await walletCharge(auth.user.id, "ai.storybook_chat");
+    if (notCharged) return notCharged;
 
     return Response.json({
       assistantMessage: result.assistantMessage,

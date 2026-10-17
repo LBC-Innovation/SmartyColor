@@ -2,7 +2,7 @@ import { jsonError, jsonResult } from "@/lib/api/respond";
 import { getBookBinding, isPrintBindingId } from "@/lib/print/bookBindings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { luluConfigured } from "@/server/lulu/config";
-import { fetchLuluPrintJobCost } from "@/server/lulu/costCalculation";
+import { pricePrintOrder } from "@/server/pricingService";
 import { lookupUsPostcode, normalizeUsPostcode } from "@/server/shipping/usPostcodeLookup";
 
 export async function POST(request: Request) {
@@ -103,24 +103,27 @@ export async function POST(request: Request) {
   }
 
   try {
-    const breakdown = await fetchLuluPrintJobCost({
-      podPackageId: binding.podPackageId,
+    // The customer's price: Lulu's cost with our markup on the book, from the price catalog.
+    const priced = await pricePrintOrder({
+      bindingId: body.bindingId,
       pageCount: body.pageCount,
       shippingLevel: body.shippingLevel,
       shippingAddress: shippingAddressOverride,
     });
+    if (priced.error) throw new Error(priced.error.message);
+    const { price } = priced.data;
     return jsonResult({
       data: {
-        estimatedTotalCents: breakdown.totalCents,
-        printCents: breakdown.printCents,
-        shippingCents: breakdown.shippingCents,
-        taxCents: breakdown.taxCents,
-        currency: breakdown.currency,
+        estimatedTotalCents: price.totalCents,
+        printCents: price.printPriceCents,
+        shippingCents: price.shippingCents,
+        taxCents: price.taxCents,
+        currency: "USD",
         source: "lulu",
         bindingId: binding.id,
         pageCount: body.pageCount,
         shippingPostcode: resolvedPostcode,
-        shippingLevel: breakdown.shippingLevel,
+        shippingLevel: priced.data.shippingLevel,
         quoteError: null,
       },
       error: null,

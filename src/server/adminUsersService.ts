@@ -265,13 +265,9 @@ export async function setPermissions(
     return { data: null, error: { message: `Unknown permissions: ${invalid.join(", ")}` } };
   }
 
-  const {
-    data: { user },
-  } = await getSupabaseAuth().auth.admin.getUserById(id);
-  const existingRole = (user?.app_metadata?.role as string | undefined) ?? "user";
-
+  // app_metadata merges by top-level key, so features are left alone.
   const { error } = await getSupabaseAuth().auth.admin.updateUserById(id, {
-    app_metadata: { role: existingRole, permissions },
+    app_metadata: { permissions },
   });
   if (error) return { data: null, error: { message: error.message } };
   log("info", "Permissions updated", { adminId, targetId: id, permissions });
@@ -309,7 +305,7 @@ export async function setFeatureAccess(
   }
 
   const next = { ...storedFeatureAccess(user.app_metadata?.features), ...input } as FeatureAccess;
-  // app_metadata merges by top-level key, so role and permissions are left alone.
+  // app_metadata merges by top-level key, so permissions are left alone.
   const { error } = await getSupabaseAuth().auth.admin.updateUserById(id, {
     app_metadata: { features: next },
   });

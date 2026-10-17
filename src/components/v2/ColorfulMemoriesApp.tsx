@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   BookOpen,
   ChevronLeft,
-  Download,
   FlipHorizontal2,
   Loader2,
   PencilLine,
+  Printer,
   RectangleVertical,
   Sparkles,
   Trash2,
@@ -19,6 +19,7 @@ import {
   type LightboxFocus,
   type LightboxViewMode,
 } from "@/components/v2/V2AssetLightbox";
+import { V2PrintSheetModal } from "@/components/v2/V2PrintSheetModal";
 import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
 import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
 import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
@@ -45,7 +46,8 @@ import { Columns2, LayoutGrid } from "lucide-react";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
-import { PHOTO_PORTRAIT_CENTS } from "@/lib/credits/pricing";
+import { unitPriceCents } from "@/lib/credits/pricing";
+import { usePriceList } from "@/lib/pricing/usePriceList";
 import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
 import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
@@ -78,6 +80,7 @@ export function ColorfulMemoriesApp() {
   const router = useRouter();
   const welcomeGuide = useV2WelcomeGuide();
   const sheetCredits = useSheetUsageCredits("/studio");
+  const prices = usePriceList();
   const {
     hydrated,
     cloud,
@@ -95,7 +98,7 @@ export function ColorfulMemoriesApp() {
   } = useV2Studio();
   const deletion = useV2LibraryDeletion();
   const ingestFiles = useV2PhotoIngest();
-  const [downloading, setDownloading] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const generateAllRunRef = useRef(false);
   const coloringApiLockRef = useRef(false);
@@ -581,34 +584,23 @@ export function ColorfulMemoriesApp() {
     }
   }
 
-  async function downloadSelected() {
-    if (!selected?.sheet || !activeSheet) return;
-    setDownloading(true);
-    try {
-      const response = await authedFetch("/api/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          selected.remote
-            ? { revisionId: activeVersion?.id, printPrefs: activeVersionPrintPrefs(selected) }
-            : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: activeVersionPrintPrefs(selected) },
-        ),
-      }, { withAuth: Boolean(selected.remote) });
-      if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error ?? "Could not make a PDF.");
-      }
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "colorful-memories-coloring-sheet.pdf";
-      link.click();
-      URL.revokeObjectURL(link.href);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "PDF failed.");
-    } finally {
-      setDownloading(false);
+  /** The print-ready PDF for the sheet on screen. */
+  async function makeSelectedPdf(): Promise<Blob> {
+    if (!selected?.sheet || !activeSheet) throw new Error("Pick a coloring sheet first.");
+    const response = await authedFetch("/api/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        selected.remote
+          ? { revisionId: activeVersion?.id, printPrefs: activeVersionPrintPrefs(selected) }
+          : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: activeVersionPrintPrefs(selected) },
+      ),
+    }, { withAuth: Boolean(selected.remote) });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(payload.error ?? "Could not make a PDF.");
     }
+    return response.blob();
   }
 
   const anyGenerating = photos.some(
@@ -620,6 +612,7 @@ export function ColorfulMemoriesApp() {
     generatingAll;
   const mirroring = Boolean(selected) && photoTransforms.mirroringId === selected?.id;
   const makingPortrait = Boolean(selected) && photoTransforms.portraitId === selected?.id;
+  const portraitCents = unitPriceCents(prices, "ai.photo_portrait");
   const photoToolsDisabled =
     busy || anyGenerating || photoTransforms.mirroringId !== null || photoTransforms.portraitId !== null;
   const sheetBusy = (selected?.generating ?? false) && !activeSheet;
@@ -758,8 +751,8 @@ export function ColorfulMemoriesApp() {
               onClick={() => void photoTransforms.makePortrait(selected.id)}
               className="v2-photo-tool v2-photo-tool--ai"
               title={
-                selected.remote
-                  ? `Add an AI portrait version of this photo (${formatCredits(PHOTO_PORTRAIT_CENTS)})`
+                selected.remote && portraitCents != null
+                  ? `Add an AI portrait version of this photo (${formatCredits(portraitCents)})`
                   : "Add an AI portrait version of this photo"
               }
             >
@@ -876,12 +869,12 @@ export function ColorfulMemoriesApp() {
           <>
             <button
               type="button"
-              disabled={!sheetReady || downloading || busy}
-              onClick={() => void downloadSelected()}
+              disabled={!sheetReady || busy}
+              onClick={() => setPrintOpen(true)}
               className="v2-studio-toolbar-btn"
             >
-              <Download className="h-4 w-4 shrink-0" aria-hidden />
-              Download page
+              <Printer className="h-4 w-4 shrink-0" aria-hidden />
+              Print page
             </button>
             <button
               type="button"
@@ -1017,16 +1010,12 @@ export function ColorfulMemoriesApp() {
                   <footer className="grid shrink-0 grid-cols-3 gap-2 border-t border-gray-100 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 lg:hidden">
                     <button
                       type="button"
-                      disabled={!sheetReady || downloading || busy}
-                      onClick={() => void downloadSelected()}
+                      disabled={!sheetReady || busy}
+                      onClick={() => setPrintOpen(true)}
                       className="v2-studio-action"
                     >
-                      {downloading ? (
-                        <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-                      ) : (
-                        <Download className="h-5 w-5" aria-hidden />
-                      )}
-                      Download
+                      <Printer className="h-5 w-5" aria-hidden />
+                      Print
                     </button>
                     <button
                       type="button"
@@ -1079,6 +1068,16 @@ export function ColorfulMemoriesApp() {
           onSend={(text) => void applySheetEdit(text)}
           busy={sheetCorrecting}
           disabled={!sheetReady}
+        />
+      ) : null}
+
+      {printOpen && selected && activeSheet ? (
+        <V2PrintSheetModal
+          key={`${selected.id}:${activeVersion?.id ?? "sheet"}`}
+          sheetSrc={activeSheet.imageDataUrl}
+          printPrefs={activeVersionPrintPrefs(selected)}
+          makePdf={makeSelectedPdf}
+          onClose={() => setPrintOpen(false)}
         />
       ) : null}
 

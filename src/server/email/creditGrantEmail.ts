@@ -1,9 +1,6 @@
 import "server-only";
-import {
-  DIGITAL_BOOK_CENTS,
-  FREE_EDITS_PER_SHEET,
-  SHEET_GENERATION_CENTS,
-} from "@/lib/credits/pricing";
+import { freeEditsPerSheet, unitPriceCents } from "@/lib/credits/pricing";
+import type { PublicPriceList } from "@/lib/pricing/types";
 import type { OutgoingEmail } from "@/server/email/resend";
 
 function escapeHtml(value: string): string {
@@ -31,20 +28,29 @@ export function creditGrantEmail(input: {
   /** Shown to the recipient as written. */
   note?: string;
   url: string;
+  /** Current customer prices; the email leaves amounts out when they couldn't be read. */
+  prices: PublicPriceList | null;
 }): OutgoingEmail {
   const amount = usd(input.amountCents);
   const balance = usd(input.balanceCents);
   const note = input.note?.trim() ?? "";
-  const pages = Math.floor(input.amountCents / SHEET_GENERATION_CENTS);
+  const sheetCents = unitPriceCents(input.prices, "ai.sheet_generation");
+  const digitalCents = unitPriceCents(input.prices, "book.digital");
+  const freeEdits = freeEditsPerSheet(input.prices);
+  const pages = sheetCents ? Math.floor(input.amountCents / sheetCents) : 0;
   const url = escapeHtml(input.url);
 
   const subject = `You've been given ${amount} in Colorful Memories credit`;
   const lead = `We've added ${amount} in credit to your Colorful Memories account. Your balance is now ${balance}.`;
   const benefits = [
-    `Turn your photos into coloring pages (${usd(SHEET_GENERATION_CENTS)} a page${
-      pages >= 2 ? `, so this credit covers about ${pages} of them` : ""
-    }). Each page comes with ${FREE_EDITS_PER_SHEET} free touch-ups.`,
-    `Download a print-at-home book of your pages for ${usd(DIGITAL_BOOK_CENTS)}.`,
+    sheetCents
+      ? `Turn your photos into coloring pages (${usd(sheetCents)} a page${
+          pages >= 2 ? `, so this credit covers about ${pages} of them` : ""
+        }).${freeEdits > 0 ? ` Each page comes with ${freeEdits} free touch-ups.` : ""}`
+      : "Turn your photos into coloring pages.",
+    digitalCents
+      ? `Download a print-at-home book of your pages for ${usd(digitalCents)}.`
+      : "Download a print-at-home book of your pages.",
     "Put it toward a printed coloring book delivered to your door.",
   ];
   const closing =

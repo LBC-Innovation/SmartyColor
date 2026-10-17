@@ -3,14 +3,14 @@ import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { resolveCreditDeltaCents } from "@/server/creditsService";
 import * as promo from "@/server/promoCreditsService";
 
-function canManagePromoCredits(role: string, permissions: string[]): boolean {
-  return role === "admin" || permissions.includes("usermanage:adjustcredits");
+function canManagePromoCredits(permissions: string[]): boolean {
+  return permissions.includes("usermanage:adjustcredits");
 }
 
 export async function GET(request: Request) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!canManagePromoCredits(auth.user.role, auth.user.permissions)) {
+  if (!canManagePromoCredits(auth.user.permissions)) {
     return jsonError("Missing required permission: usermanage:adjustcredits", 403);
   }
 
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   const auth = await requireAuthRequest(request);
   if ("error" in auth) return auth.error;
-  if (!canManagePromoCredits(auth.user.role, auth.user.permissions)) {
+  if (!canManagePromoCredits(auth.user.permissions)) {
     return jsonError("Missing required permission: usermanage:adjustcredits", 403);
   }
 

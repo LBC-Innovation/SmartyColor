@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import * as api from "@/lib/api/client";
+import { v2AdminNav } from "@/components/v2/nav-config";
 import { cn } from "@/lib/cn";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
@@ -75,8 +76,9 @@ export function V2UserMenu() {
   }
 
   const name = user.displayName || user.email.split("@")[0];
-  const isAdmin =
-    user.role === "admin" || user.permissions.includes("usermanage:listusers");
+  // The first admin page this account may open; no link when it may open none.
+  const adminHref =
+    v2AdminNav.find((item) => item.href && item.permission && user.permissions.includes(item.permission))?.href ?? null;
 
   function pick(next: OpenModal) {
     setOpen(false);
@@ -162,9 +164,9 @@ export function V2UserMenu() {
               />
               Transaction history
             </Link>
-            {isAdmin ? (
+            {adminHref ? (
               <Link
-                href="/admin/users"
+                href={adminHref}
                 role="menuitem"
                 className={ITEM_CLASS}
                 onClick={() => setOpen(false)}

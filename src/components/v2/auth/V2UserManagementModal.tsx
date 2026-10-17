@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { AdminUser } from "@/lib/api/types";
 import { PRODUCT_FEATURES } from "@/lib/auth/features";
-import { PERMISSION_META } from "@/lib/auth/permissionMeta";
+import { PERMISSION_META, type Permission } from "@/lib/auth/permissionMeta";
 import * as api from "@/lib/api/client";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
@@ -63,12 +63,13 @@ export function V2UserManagementModal({
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<Record<string, "ok" | "err">>({});
 
-  const canAdjustCredits =
-    me?.role === "admin" || (me?.permissions.includes("usermanage:adjustcredits") ?? false);
-  const canEditAccess =
-    me?.role === "admin" || (me?.permissions.includes("usermanage:editpermissions") ?? false);
-  const canManageOrders =
-    me?.role === "admin" || (me?.permissions.includes("usermanage:manageorders") ?? false);
+  const can = (permission: Permission) => me?.permissions.includes(permission) ?? false;
+  const canAdjustCredits = can("usermanage:adjustcredits");
+  const canEditAccess = can("usermanage:editpermissions");
+  const canManageOrders = can("usermanage:manageorders");
+  const canVerifyEmail = can("usermanage:verifyemail");
+  const canChangeEmail = can("usermanage:changeemail");
+  const canSendMagicLink = can("usermanage:magiclink");
 
   useEffect(() => {
     setLocalUser(user);
@@ -216,7 +217,7 @@ export function V2UserManagementModal({
                 </p>
               </div>
               <div className="flex gap-2">
-                {!localUser.emailConfirmed ? (
+                {!canVerifyEmail ? null : !localUser.emailConfirmed ? (
                   <button
                     type="button"
                     className="v2-btn-sm v2-btn-sm-primary"
@@ -252,7 +253,7 @@ export function V2UserManagementModal({
               </div>
             </div>
 
-            {!localUser.emailConfirmed ? (
+            {canChangeEmail && !localUser.emailConfirmed ? (
               <form
                 className="space-y-2"
                 onSubmit={(e) => {
@@ -288,6 +289,7 @@ export function V2UserManagementModal({
               </form>
             ) : null}
 
+            {canSendMagicLink ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-4">
               <div>
                 <p className="flex items-center gap-2 text-sm font-semibold text-v2-ink">
@@ -316,6 +318,7 @@ export function V2UserManagementModal({
                 {magicLinkSent ? "Sent!" : "Send link"}
               </button>
             </div>
+            ) : null}
           </div>
         </section>
 
@@ -595,7 +598,7 @@ export function V2UserManagementModal({
               })}
             </ul>
             <p className="mt-2 text-xs text-v2-muted">
-              New accounts start with My projects only. Admins can always open both.
+              New accounts start with My projects only.
             </p>
           </section>
         ) : null}
@@ -613,7 +616,7 @@ export function V2UserManagementModal({
                   type="checkbox"
                   className="h-4 w-4 shrink-0 accent-v2-primary"
                   checked={localUser.permissions.includes(perm.key)}
-                  disabled={busy === `perm-${perm.key}`}
+                  disabled={!canEditAccess || busy === `perm-${perm.key}`}
                   onChange={(e) => {
                     const checked = e.target.checked;
                     void run(`perm-${perm.key}`, async () => {

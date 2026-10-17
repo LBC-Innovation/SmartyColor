@@ -1,12 +1,15 @@
 import type { LucideIcon } from "lucide-react";
 import type { ProductFeature } from "@/lib/auth/features";
+import type { Permission } from "@/lib/auth/permissionMeta";
 import {
   BookOpen,
   CircleDollarSign,
   ClipboardList,
   Gift,
   Home,
+  LineChart,
   Package,
+  Tags,
   Users,
 } from "lucide-react";
 
@@ -17,7 +20,7 @@ export type V2NavItem = {
   /** When set, the item navigates to this route. */
   href?: string;
   /** When set, only admins and users with this permission see the item. */
-  permission?: string;
+  permission?: Permission;
   /** When set, only accounts with this product line turned on see the item. */
   feature?: ProductFeature;
 };
@@ -39,12 +42,27 @@ export const v2BottomNav: V2NavItem[] = [
 
 /** Secondary menu shown on admin pages. */
 export const v2AdminNav: V2NavItem[] = [
-  { id: "users", label: "Users", icon: Users, href: "/admin/users" },
+  { id: "users", label: "Users", icon: Users, href: "/admin/users", permission: "usermanage:listusers" },
+  {
+    id: "finance",
+    label: "Financials",
+    icon: LineChart,
+    href: "/admin/finance",
+    permission: "finance:view",
+  },
   {
     id: "vision-costs",
     label: "Vision costs",
     icon: CircleDollarSign,
     href: "/admin/vision-costs",
+    permission: "costs:viewai",
+  },
+  {
+    id: "pricing",
+    label: "Prices",
+    icon: Tags,
+    href: "/admin/pricing",
+    permission: "pricing:manage",
   },
   {
     id: "promo-credits",
