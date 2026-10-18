@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, KeyRound, Loader2, UserPen } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
+import { V2ReferralPanel } from "@/components/v2/account/V2ReferralPanel";
 import { V2SavedAddressPanel } from "@/components/v2/account/V2SavedAddressPanel";
 import { V2AddCreditForm } from "@/components/v2/credits/V2AddCreditForm";
 import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
@@ -136,6 +137,9 @@ export function V2AccountStudio() {
 
               {/* ---- saved address */}
               <V2SavedAddressPanel userId={user.id} />
+
+              {/* ---- refer a friend */}
+              <V2ReferralPanel />
 
               {/* ---- transactions */}
               <section className="v2-panel p-5 sm:p-6">

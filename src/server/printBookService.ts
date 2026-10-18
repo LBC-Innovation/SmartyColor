@@ -122,6 +122,24 @@ async function prepareInteriorSheet(
   return packGray4(pixels, resized.info.width, resized.info.height);
 }
 
+/**
+ * A sheet for a home-printed PDF (an email attachment): gray, no more than `maxPx` on its long
+ * side, packed like the interior pages so a whole album stays a small attachment.
+ */
+export async function compactGraySheet(dataUrl: string, maxPx: number): Promise<PdfGrayImage> {
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const out = await sharp(Buffer.from(base64, "base64"))
+    .rotate()
+    .flatten({ background: "#ffffff" })
+    .resize(maxPx, maxPx, { fit: "inside", withoutEnlargement: true, kernel: "lanczos3" })
+    .grayscale()
+    // Resizing can hand back three channels; keep it one gray channel for packGray4.
+    .toColourspace("b-w")
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return packGray4(out.data, out.info.width, out.info.height);
+}
+
 /** The uploaded front cover, checked and re-encoded as a plain sRGB JPEG at print size. */
 async function loadCoverFront(userId: string, orderId: string): Promise<ApiResult<Uint8Array>> {
   let bytes: Buffer;

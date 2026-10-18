@@ -10,6 +10,7 @@ import {
   PencilLine,
   Printer,
   RectangleVertical,
+  Share2,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import {
   type LightboxViewMode,
 } from "@/components/v2/V2AssetLightbox";
 import { V2PrintSheetModal } from "@/components/v2/V2PrintSheetModal";
+import { V2SharePageModal } from "@/components/v2/share/V2SharePageModal";
 import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
 import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
 import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
@@ -99,6 +101,7 @@ export function ColorfulMemoriesApp() {
   const deletion = useV2LibraryDeletion();
   const ingestFiles = useV2PhotoIngest();
   const [printOpen, setPrintOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const generateAllRunRef = useRef(false);
   const coloringApiLockRef = useRef(false);
@@ -158,6 +161,7 @@ export function ColorfulMemoriesApp() {
     setLightboxFocus(null);
     setLightboxViewMode("single");
     setEditChatOpen(false);
+    setShareOpen(false);
     setEditMessages([]);
   }, [selectedId]);
 
@@ -618,6 +622,9 @@ export function ColorfulMemoriesApp() {
   const sheetBusy = (selected?.generating ?? false) && !activeSheet;
   const sheetCorrecting = selected?.correcting ?? false;
   const sheetReady = Boolean(activeSheet);
+  /** Signed-in pages saved to the library can get a share link; guest pages never leave the device. */
+  const shareRevisionId =
+    cloud && selected?.remote && selected.canDelete !== false && activeSheet ? activeVersion?.id ?? null : null;
   const hasAnySheet = photos.some((entry) => entry.sheet);
   const needsSheetCount = photos.filter((entry) => !entry.sheet).length;
   const uploading = pendingUploads.length > 0;
@@ -876,6 +883,17 @@ export function ColorfulMemoriesApp() {
               <Printer className="h-4 w-4 shrink-0" aria-hidden />
               Print page
             </button>
+            {shareRevisionId ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setShareOpen(true)}
+                className="v2-studio-toolbar-btn"
+              >
+                <Share2 className="h-4 w-4 shrink-0" aria-hidden />
+                Share
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={!sheetReady || busy}
@@ -1007,7 +1025,7 @@ export function ColorfulMemoriesApp() {
                   />
                 ) : null}
                 {selected ? (
-                  <footer className="grid shrink-0 grid-cols-3 gap-2 border-t border-gray-100 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 lg:hidden">
+                  <footer className={`grid shrink-0 ${shareRevisionId ? "grid-cols-4" : "grid-cols-3"} gap-2 border-t border-gray-100 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 lg:hidden`}>
                     <button
                       type="button"
                       disabled={!sheetReady || busy}
@@ -1017,6 +1035,17 @@ export function ColorfulMemoriesApp() {
                       <Printer className="h-5 w-5" aria-hidden />
                       Print
                     </button>
+                    {shareRevisionId ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setShareOpen(true)}
+                        className="v2-studio-action"
+                      >
+                        <Share2 className="h-5 w-5" aria-hidden />
+                        Share
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={!sheetReady || busy}
@@ -1078,6 +1107,16 @@ export function ColorfulMemoriesApp() {
           printPrefs={activeVersionPrintPrefs(selected)}
           makePdf={makeSelectedPdf}
           onClose={() => setPrintOpen(false)}
+        />
+      ) : null}
+
+      {shareOpen && selected?.remote && shareRevisionId && activeSheet ? (
+        <V2SharePageModal
+          key={`${selected.id}:${shareRevisionId}`}
+          photoId={selected.remote.photoId}
+          revisionId={shareRevisionId}
+          sheetSrc={activeSheet.imageDataUrl}
+          onClose={() => setShareOpen(false)}
         />
       ) : null}
 
