@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/service";
  * Refer-a-friend. Each account has a short code, assigned the first time it asks for its link.
  * The link lands on `/?ref=CODE`; the cm_attr cookie keeps the code through sign-up and onto
  * the order, and the database credits both accounts once when the friend's first order is
- * paid (grant_referral_credit, migration 0025). Nothing here grants credit.
+ * paid (grant_referral_credit, migration 0026). Nothing here grants credit.
  */
 
 const err = (message: string, code?: string): ApiResult<never> => ({ data: null, error: { message, ...(code ? { code } : {}) } });
