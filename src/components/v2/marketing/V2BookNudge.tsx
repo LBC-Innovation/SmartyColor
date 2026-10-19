@@ -7,8 +7,9 @@ import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { getBookBinding, recommendBinding } from "@/lib/print/bookBindings";
 
 /**
- * Album with coloring pages: "You have N pages. Make them a book." with the reference price, or
- * progress toward the suggested format's minimum. The minimum comes from the binding config.
+ * The photo list's dock when an album has coloring pages: a short caption ("You have N pages.
+ * Make them a book." plus the reference price, or progress toward the suggested format's
+ * minimum) over the dock's usual primary button. The minimum comes from the binding config.
  */
 export function V2BookNudge({ pageCount, disabled, onMakeBook }: { pageCount: number; disabled?: boolean; onMakeBook: () => void }) {
   const numbers = useMarketingNumbers();
@@ -26,15 +27,18 @@ export function V2BookNudge({ pageCount, disabled, onMakeBook }: { pageCount: nu
       : null;
 
   return (
-    <div className="flex w-full items-center gap-3 rounded-2xl border border-v2-primary/25 bg-white px-3 py-2.5 shadow-sm">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold leading-snug text-v2-ink">{title}</p>
-        {detail ? <p className="mt-0.5 text-xs leading-snug text-v2-muted">{detail}</p> : null}
+    // Solid card so it stands out over the list; it takes its own clicks (the dock's fade doesn't).
+    <div className="pointer-events-auto flex w-full flex-col gap-2.5 rounded-2xl border border-v2-primary/25 bg-white p-2.5 shadow-[0_8px_24px_rgb(10_16_26/0.12)]">
+      <p className="px-1 pt-0.5 text-center text-xs leading-snug text-v2-navy">
+        <span className="font-semibold text-v2-ink">{title}</span>
+        {detail ? <span className="block text-v2-muted">{detail}</span> : null}
+      </p>
+      <div className="flex">
+        <button type="button" disabled={disabled} onClick={onMakeBook} className="v2-photo-list-dock-cta">
+          <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
+          {BOOK_NUDGE.cta}
+        </button>
       </div>
-      <button type="button" disabled={disabled} onClick={onMakeBook} className="v2-btn-primary h-10 shrink-0 px-4 text-sm">
-        <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
-        {BOOK_NUDGE.cta}
-      </button>
     </div>
   );
 }
