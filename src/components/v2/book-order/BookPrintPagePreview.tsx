@@ -1,6 +1,7 @@
 "use client";
 
 import { BookLinedPageArt } from "@/components/v2/book-order/BookLinedPageArt";
+import { BookNotePageArt } from "@/components/v2/book-order/BookNotePageArt";
 import { BookPageImageFill } from "@/components/v2/book-order/BookPageImageFill";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
 import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
@@ -66,6 +67,8 @@ export function BookPrintPagePreview({
           <div className="absolute" style={inset}>
             {!page ? (
               <span className="flex h-full w-full items-center justify-center text-xs text-v2-muted">—</span>
+            ) : page.kind === "note" ? (
+              <BookNotePageArt text={page.text} />
             ) : page.kind === "blank" && page.variant === "lined" ? (
               <BookLinedPageArt />
             ) : page.kind === "blank" ? (

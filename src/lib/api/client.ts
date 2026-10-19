@@ -472,6 +472,8 @@ export type BookDraftPayload = {
   pages: DigitalBookPage[];
   coverDesign: BookCoverDesign;
   proofConfirmed: boolean;
+  /** Sent to someone else. A gift note travels as the first page in `pages`. */
+  isGift: boolean;
 };
 
 /** Signed PUT target for the print-ready front cover image of a draft order. */

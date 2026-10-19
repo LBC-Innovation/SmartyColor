@@ -24,6 +24,7 @@ export async function PATCH(request: Request, { params }: Params) {
     pages?: unknown;
     coverDesign?: unknown;
     proofConfirmed?: boolean;
+    isGift?: boolean;
   };
 
   if (!isPrintBindingId(body.bindingId)) {
@@ -57,6 +58,7 @@ export async function PATCH(request: Request, { params }: Params) {
     printPages: pages.data,
     coverDesign: normalizeCoverDesign(body.coverDesign),
     proofConfirmed: body.proofConfirmed === true,
+    isGift: body.isGift === true,
   });
 
   if (result.error?.code === "NOT_FOUND") {

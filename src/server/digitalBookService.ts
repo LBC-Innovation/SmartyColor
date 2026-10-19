@@ -1,9 +1,16 @@
 import "server-only";
 import type { ApiResult } from "@/lib/api/types";
 import { INSUFFICIENT_CREDITS_CODE } from "@/lib/credits/pricing";
+import { normalizeGiftNote } from "@/lib/orders/giftNote";
 import type { DigitalBookPage } from "@/lib/orders/types";
 import { DIGITAL_FORMAT } from "@/lib/print/bookBindings";
-import { sheetsToPdf, type PdfBlankPage, type PdfSheetImage, type PdfSheetPage } from "@/lib/print/pdf";
+import {
+  sheetsToPdf,
+  type PdfBlankPage,
+  type PdfNotePage,
+  type PdfSheetImage,
+  type PdfSheetPage,
+} from "@/lib/print/pdf";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { revisionDataUrlById } from "@/server/libraryImages";
@@ -46,6 +53,11 @@ export function parsePages(input: unknown, maxPages = DIGITAL_FORMAT.maxPages): 
     const p = raw as Record<string, unknown>;
     if (p.kind === "blank") {
       pages.push({ kind: "blank", variant: p.variant === "lined" ? "lined" : "plain" });
+    } else if (p.kind === "note") {
+      // A gift note opens the book; there is only ever one.
+      const text = normalizeGiftNote(p.text);
+      if (!text || pages.length > 0) return null;
+      pages.push({ kind: "note", text });
     } else if (p.kind === "photo") {
       if (typeof p.revisionId !== "string" || !p.revisionId) return null;
       const rotation = typeof p.rotation === "number" ? p.rotation : 0;
@@ -107,16 +119,18 @@ export async function buildPdf(
   if (failed?.error) return { data: null, error: failed.error };
   const images = new Map(prepared.map((r) => r.data!));
 
-  const sheets: Array<PdfSheetPage | PdfBlankPage> = pages.map((page) =>
+  const sheets: Array<PdfSheetPage | PdfBlankPage | PdfNotePage> = pages.map((page) =>
     page.kind === "blank"
       ? { pageKind: page.variant === "lined" ? "lined" : "blank", printPrefs: BOOK_PREFS }
-      : {
-          image: images.get(sheetKey(page))!,
-          printPrefs: BOOK_PREFS,
-          rotation: page.rotation,
-          mirrored: page.mirrored,
-          fit: page.fit,
-        },
+      : page.kind === "note"
+        ? { pageKind: "note", text: page.text, printPrefs: BOOK_PREFS }
+        : {
+            image: images.get(sheetKey(page))!,
+            printPrefs: BOOK_PREFS,
+            rotation: page.rotation,
+            mirrored: page.mirrored,
+            fit: page.fit,
+          },
   );
   try {
     return { data: await sheetsToPdf(sheets, { gutterIn: options.gutterIn, bleedIn: options.bleedIn }), error: null };

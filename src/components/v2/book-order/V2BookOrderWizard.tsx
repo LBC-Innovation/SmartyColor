@@ -65,7 +65,12 @@ import {
   explainBookPagePadding,
   insertAfterContent,
 } from "@/lib/print/bookPagePlan";
-import type { BookWizardPage, BookWizardPendingPhoto, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import type {
+  BookWizardNotePage,
+  BookWizardPage,
+  BookWizardPendingPhoto,
+  BookWizardPhotoPage,
+} from "@/lib/print/bookWizardTypes";
 import type { PageFit } from "@/lib/print/pageLayout";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
@@ -81,7 +86,8 @@ import type { DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import { centsToValue, trackFormat } from "@/lib/marketing/events";
 import { track, trackPageGenerated, trackPurchaseOnce } from "@/lib/track";
 import { HOLIDAY_LINE } from "@/content/marketing";
-import { fillCopy } from "@/lib/marketing/copy";
+import { fillCopy, readIntent } from "@/lib/marketing/copy";
+import { GIFT_NOTE_MAX_CHARS, normalizeGiftNote, printableGiftNoteChars } from "@/lib/orders/giftNote";
 import { holidayOrderBy } from "@/lib/marketing/holiday";
 
 /** The customer's own address: billing, and where the book ships unless they say otherwise. */
@@ -156,10 +162,13 @@ function isStep(value: unknown): value is BookOrderStep {
 
 /** The pages as the cart remembers them: ids, order and turns, never the images. */
 function cartPages(pages: BookWizardPage[]): BookCartPageEntry[] {
-  return pages.map((p) =>
+  // The gift note is saved with the cart on its own, not as a page.
+  return pages.flatMap((p): BookCartPageEntry[] =>
     p.kind === "photo"
-      ? { id: p.id, kind: "photo", ...(p.rotation ? { rotation: p.rotation } : {}), ...(p.mirrored ? { mirrored: true } : {}) }
-      : { id: p.id, kind: "blank", variant: p.variant === "lined" ? "lined" : "plain", ...(p.auto ? { auto: true } : {}) },
+      ? [{ id: p.id, kind: "photo", ...(p.rotation ? { rotation: p.rotation } : {}), ...(p.mirrored ? { mirrored: true } : {}) }]
+      : p.kind === "blank"
+        ? [{ id: p.id, kind: "blank", variant: p.variant === "lined" ? "lined" : "plain", ...(p.auto ? { auto: true } : {}) }]
+        : [],
   );
 }
 
@@ -298,6 +307,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
   const [shipDifferent, setShipDifferent] = useState(false);
   const [shipTo, setShipTo] = useState<ShippingAddress>(() => readStoredAddress(SHIP_TO_STORAGE_KEY));
+  /** Sent to someone else. Starts on for visitors who came in through the gift page. */
+  const [isGift, setIsGift] = useState(() => readIntent() === "gift");
+  /** The gift note as typed; it prints as the book's first page. */
+  const [giftNote, setGiftNote] = useState("");
   /** "Save this address for future orders": on when the account already has one saved. */
   const [rememberAddress, setRememberAddress] = useState(false);
   const hadSavedAddressRef = useRef(false);
@@ -347,7 +360,23 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     bookStartedRef.current = true;
     track("book_started", { format: trackFormat(bindingId) });
   }, [user, bindingId]);
-  const plan = useMemo(() => computeBookPagePlan(fittedPages, binding), [fittedPages, binding]);
+  // A gift note prints as page 1 and counts toward the page total (and price) like any page.
+  const giftNoteText = !isDigital && isGift ? normalizeGiftNote(giftNote) : "";
+  const giftNoteFits = contentCount + 1 <= binding.maxPages;
+  const giftNotePage = useMemo<BookWizardNotePage | null>(
+    () => (giftNoteText && giftNoteFits ? { id: "gift-note", kind: "note", text: giftNoteText } : null),
+    [giftNoteText, giftNoteFits],
+  );
+  const plannedPages = useMemo(
+    () => (giftNotePage ? [giftNotePage, ...fittedPages] : fittedPages),
+    [giftNotePage, fittedPages],
+  );
+  const plan = useMemo(() => computeBookPagePlan(plannedPages, binding), [plannedPages, binding]);
+  // The proof covers the art; writing a gift note on the review step doesn't ask for it again.
+  const proofPlan = useMemo(
+    () => (giftNotePage ? computeBookPagePlan(fittedPages, binding) : plan),
+    [giftNotePage, fittedPages, binding, plan],
+  );
   const softPrintPages = useSoftPrintPages(plan.allPages, binding);
   const formatFits = bookFormatFit(contentCount, binding).fits;
   const selectedQuote: BindingQuote | null = isDigital
@@ -364,7 +393,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     balanceCents != null && quoteCents != null ? Math.max(0, quoteCents - balanceCents) : 0;
   const selectedAffordable = shortfallCents === 0;
   const overCapacity = contentCount > binding.maxPages;
-  const paddingNote = explainBookPagePadding(contentCount, binding, {
+  const paddingNote = explainBookPagePadding(contentCount + (giftNotePage ? 1 : 0), binding, {
     totalPages: plan.totalPages,
     blankCount: plan.paddingCount,
   });
@@ -390,9 +419,11 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       JSON.stringify([
         bindingId,
         coverDesign,
-        plan.allPages.map((p) => (p.kind === "photo" ? [p.id, p.rotation, p.mirrored === true, p.fit] : [p.variant ?? "plain"])),
+        proofPlan.allPages.map((p) =>
+          p.kind === "photo" ? [p.id, p.rotation, p.mirrored === true, p.fit] : p.kind === "blank" ? [p.variant ?? "plain"] : ["note"],
+        ),
       ]),
-    [bindingId, coverDesign, plan.allPages],
+    [bindingId, coverDesign, proofPlan.allPages],
   );
   const proofConfirmed = confirmedProofKey === proofKey;
 
@@ -549,6 +580,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       removedIdsRef.current = new Set(Array.isArray(saved.removedIds) ? saved.removedIds : []);
       if (saved.coverDesign) setCoverDraft(normalizeCoverDesign(saved.coverDesign));
       setShipDifferent(saved.shipDifferent === true);
+      if (typeof saved.isGift === "boolean") setIsGift(saved.isGift);
+      if (typeof saved.giftNote === "string") setGiftNote(printableGiftNoteChars(saved.giftNote));
       restorePagesRef.current = Array.isArray(saved.pages) ? saved.pages : [];
       const reached = (Array.isArray(saved.visited) ? saved.visited : []).filter(isStep);
       setVisited(reached.length > 0 ? [...new Set<BookOrderStep>(["book", ...reached])] : ["book"]);
@@ -838,9 +871,11 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         removedIds: removedPages.map((p) => p.id),
         coverDesign: coverDraft,
         shipDifferent,
+        isGift,
+        giftNote,
       },
     };
-  }, [projectTitle, step, visited, bindingId, plan, selectedProjectIds, bindingTouched, pageFit, bookPages, removedPages, coverDraft, shipDifferent]);
+  }, [projectTitle, step, visited, bindingId, plan, selectedProjectIds, bindingTouched, pageFit, bookPages, removedPages, coverDraft, shipDifferent, isGift, giftNote]);
 
   // Saved once the customer moves past the first step, and on every change after that.
   const cartReady = Boolean(user) && !restoring && !loadingPages && (cartId !== null || step !== "book");
@@ -1022,6 +1057,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         pages.push({ kind: "blank", variant: page.variant === "lined" ? "lined" : "plain" });
         continue;
       }
+      if (page.kind === "note") {
+        pages.push({ kind: "note", text: page.text });
+        continue;
+      }
       if (!page.revisionId) return null;
       pages.push({
         kind: "photo",
@@ -1083,7 +1122,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         currency: "USD",
         page_count: plan.totalPages,
         format: trackFormat(bindingId),
-        is_gift: false,
+        is_gift: !isDigital && isGift,
       });
     }
     if (isDigital) {
@@ -1105,6 +1144,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       pages,
       coverDesign,
       proofConfirmed,
+      isGift,
     };
     let orderId = savedDraftIdRef.current;
 
@@ -1506,8 +1546,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                         <Row
                           label="Pages"
                           value={`${plan.totalPages} (${plan.photoCount} coloring${
-                            plan.blankCount > 0 ? `, ${plan.blankCount} blank` : ""
-                          })`}
+                            giftNotePage ? ", 1 gift note" : ""
+                          }${plan.blankCount > 0 ? `, ${plan.blankCount} blank` : ""})`}
                         />
                         {selectedProjects.length > 1 ? (
                           <Row label="Albums" value={selectedProjects.map((p) => p.name).join(", ")} />
@@ -1529,6 +1569,51 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                     <div className="v2-panel p-5 sm:p-6">
                       {!isDigital ? (
                         <>
+                          <div className="mb-6 rounded-xl border border-gray-200 bg-v2-bg-subtle/60 p-4">
+                            <label className="flex items-center gap-2 text-sm font-semibold text-v2-navy">
+                              <input
+                                type="checkbox"
+                                checked={isGift}
+                                onChange={(e) => {
+                                  setIsGift(e.target.checked);
+                                  // A gift goes to someone else, so it gets its own ship-to address.
+                                  if (e.target.checked && !shipDifferent) {
+                                    setShipDifferent(true);
+                                    setAddressErrors({});
+                                    setShipToErrors({});
+                                  }
+                                }}
+                              />
+                              <Gift className="h-4 w-4 text-v2-primary" aria-hidden />
+                              This is a gift
+                            </label>
+                            {isGift ? (
+                              <div className="mt-3">
+                                <label htmlFor="gift-note" className="text-sm font-semibold text-v2-ink">
+                                  Gift note <span className="font-normal text-v2-muted">(optional)</span>
+                                </label>
+                                <textarea
+                                  id="gift-note"
+                                  className="v2-input mt-1 min-h-24 w-full resize-y"
+                                  maxLength={GIFT_NOTE_MAX_CHARS}
+                                  value={giftNote}
+                                  disabled={!giftNoteFits && !giftNote}
+                                  onChange={(e) => setGiftNote(printableGiftNoteChars(e.target.value))}
+                                  placeholder="Merry Christmas! Love, Grandma"
+                                />
+                                <div className="mt-1 flex items-start justify-between gap-3 text-xs text-v2-muted">
+                                  <p>
+                                    {giftNoteFits
+                                      ? "Your note prints on the book's first page, so it adds a page to the book and its price. The packing slip shows no prices."
+                                      : `This ${binding.shortLabel.toLowerCase()} book is already at its ${binding.maxPages}-page limit, so there's no room for a note page. Remove a page to add one.`}
+                                  </p>
+                                  <span className="shrink-0 tabular-nums">
+                                    {giftNote.length}/{GIFT_NOTE_MAX_CHARS}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
                           <h2 className="text-base font-semibold text-v2-ink">
                             {shipDifferent ? "Billing address" : "Your address"}
                           </h2>
