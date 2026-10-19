@@ -15,13 +15,115 @@ function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-export function V2PromoCreditsStudio() {
-  const [settings, setSettings] = useState<PromoCreditSettings | null>(null);
-  const [amount, setAmount] = useState("");
-  const [loadError, setLoadError] = useState<string | null>(null);
+type PromoField = "welcome" | "referral";
+
+const FIELD_CENTS: Record<PromoField, (s: PromoCreditSettings) => number> = {
+  welcome: (s) => s.welcomeCreditCents,
+  referral: (s) => s.referralCreditCents,
+};
+
+/** One promo amount with its own Save, so editing one never resubmits the other. */
+function PromoAmountForm({
+  field,
+  settings,
+  onSaved,
+  title,
+  description,
+}: {
+  field: PromoField;
+  settings: PromoCreditSettings;
+  onSaved: (next: PromoCreditSettings) => void;
+  title: string;
+  description: string;
+}) {
+  const current = FIELD_CENTS[field](settings);
+  const [amount, setAmount] = useState(() => centsToInput(current));
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const inputId = `${field}-credit`;
+
+  const cents = parseDollarsToCents(amount);
+  const valid = cents !== null && cents >= 0 && cents <= MAX_WELCOME_CREDIT_CENTS;
+  const dirty = cents !== current;
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (!valid || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    const result = await api.adminUpdatePromoCredits(
+      field === "welcome" ? { welcomeCreditDollars: amount.trim() } : { referralCreditDollars: amount.trim() },
+    );
+    setSaving(false);
+    if (api.isError(result)) {
+      setSaveError(result.error.message);
+      return;
+    }
+    onSaved(result.data);
+    setAmount(centsToInput(FIELD_CENTS[field](result.data)));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <form onSubmit={save} className="v2-panel max-w-xl space-y-4 p-4">
+      <div>
+        <p className="flex items-center gap-2 text-sm font-semibold text-v2-ink">
+          <Gift className="h-4 w-4 text-v2-success-text" aria-hidden />
+          {title}
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-v2-muted">{description}</p>
+      </div>
+
+      <div>
+        <label className="v2-label" htmlFor={inputId}>
+          Amount (USD)
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          inputMode="decimal"
+          className="v2-input max-w-[12rem]"
+          placeholder="5.00"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          aria-invalid={!valid}
+          required
+        />
+        {!valid ? (
+          <p className="mt-1 text-xs text-red-700">
+            Enter an amount between $0.00 and {formatCredits(MAX_WELCOME_CREDIT_CENTS)}.
+          </p>
+        ) : null}
+      </div>
+
+      {saveError ? (
+        <p className="text-sm text-red-700" role="alert">
+          {saveError}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
+        <p className="text-xs text-v2-muted">
+          Currently {formatCredits(current)} · last changed{" "}
+          {new Date(settings.updatedAt).toLocaleString(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })}
+        </p>
+        <button type="submit" disabled={!valid || !dirty || saving} className="v2-btn-sm v2-btn-sm-primary">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+          {saved ? "Saved" : "Save"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function V2PromoCreditsStudio() {
+  const [settings, setSettings] = useState<PromoCreditSettings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,33 +134,11 @@ export function V2PromoCreditsStudio() {
         return;
       }
       setSettings(result.data);
-      setAmount(centsToInput(result.data.welcomeCreditCents));
     });
     return () => {
       cancelled = true;
     };
   }, []);
-
-  const cents = parseDollarsToCents(amount);
-  const valid = cents !== null && cents >= 0 && cents <= MAX_WELCOME_CREDIT_CENTS;
-  const dirty = settings !== null && cents !== settings.welcomeCreditCents;
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (!valid || saving) return;
-    setSaving(true);
-    setSaveError(null);
-    const result = await api.adminUpdatePromoCredits({ welcomeCreditDollars: amount.trim() });
-    setSaving(false);
-    if (api.isError(result)) {
-      setSaveError(result.error.message);
-      return;
-    }
-    setSettings(result.data);
-    setAmount(centsToInput(result.data.welcomeCreditCents));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
 
   return (
     <V2StudioFrame>
@@ -84,69 +164,28 @@ export function V2PromoCreditsStudio() {
                 <Loader2 className="h-8 w-8 animate-spin text-v2-primary" aria-label="Loading" />
               </div>
             ) : (
-              <section>
-                <p className="v2-section-title mb-3">Welcome credit</p>
-                <form onSubmit={save} className="v2-panel max-w-xl space-y-4 p-4">
-                  <div>
-                    <p className="flex items-center gap-2 text-sm font-semibold text-v2-ink">
-                      <Gift className="h-4 w-4 text-v2-success-text" aria-hidden />
-                      “Welcome To Colorful Memories” starter credit
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-v2-muted">
-                      Added to every new account&apos;s wallet once, when its email address is
-                      confirmed. A new amount applies to accounts confirmed from now on; set it to
-                      $0.00 to stop gifting.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="v2-label" htmlFor="welcome-credit">
-                      Amount (USD)
-                    </label>
-                    <input
-                      id="welcome-credit"
-                      type="text"
-                      inputMode="decimal"
-                      className="v2-input max-w-[12rem]"
-                      placeholder="5.00"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      aria-invalid={!valid}
-                      required
-                    />
-                    {!valid ? (
-                      <p className="mt-1 text-xs text-red-700">
-                        Enter an amount between $0.00 and{" "}
-                        {formatCredits(MAX_WELCOME_CREDIT_CENTS)}.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  {saveError ? (
-                    <p className="text-sm text-red-700" role="alert">
-                      {saveError}
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-                    <p className="text-xs text-v2-muted">
-                      Currently {formatCredits(settings.welcomeCreditCents)} · last changed{" "}
-                      {new Date(settings.updatedAt).toLocaleString(undefined, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={!valid || !dirty || saving}
-                      className="v2-btn-sm v2-btn-sm-primary"
-                    >
-                      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-                      {saved ? "Saved" : "Save"}
-                    </button>
-                  </div>
-                </form>
-              </section>
+              <div className="space-y-8">
+                <section>
+                  <p className="v2-section-title mb-3">Welcome credit</p>
+                  <PromoAmountForm
+                    field="welcome"
+                    settings={settings}
+                    onSaved={setSettings}
+                    title="“Welcome To Colorful Memories” starter credit"
+                    description="Added to every new account's wallet once, when its email address is confirmed. A new amount applies to accounts confirmed from now on; set it to $0.00 to stop gifting."
+                  />
+                </section>
+                <section>
+                  <p className="v2-section-title mb-3">Referral credit</p>
+                  <PromoAmountForm
+                    field="referral"
+                    settings={settings}
+                    onSaved={setSettings}
+                    title="Refer-a-friend credit"
+                    description="When someone who arrived through a customer's referral link has their first order paid, both accounts get this much, once. A new amount applies to orders paid from now on; set it to $0.00 to stop it and hide the referral card."
+                  />
+                </section>
+              </div>
             )}
           </div>
         </main>

@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { STUDIO_PATH } from "@/lib/v2/guestSession";
+import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 
 function resolveNextPath(next: string | null): string {
   if (next && next.startsWith("/") && !next.startsWith("//")) {
     return next;
   }
-  return STUDIO_PATH;
+  return SIGNED_IN_HOME;
 }
 
 export function V2SignInStudio() {

@@ -25,17 +25,25 @@ export async function PUT(request: Request) {
     return jsonError("Missing required permission: usermanage:adjustcredits", 403);
   }
 
-  const body = (await request.json()) as { welcomeCreditCents?: unknown; welcomeCreditDollars?: unknown };
-  const resolved = resolveCreditDeltaCents({
-    deltaCents: body.welcomeCreditCents,
-    amountDollars: body.welcomeCreditDollars,
-  });
-  if (typeof resolved === "object") {
-    return jsonError("welcomeCreditDollars must be a valid dollar amount", 400);
-  }
+  const body = (await request.json()) as {
+    welcomeCreditCents?: unknown;
+    welcomeCreditDollars?: unknown;
+    referralCreditCents?: unknown;
+    referralCreditDollars?: unknown;
+  };
+  const amount = (cents: unknown, dollars: unknown, field: string): number | undefined | Response => {
+    if (cents === undefined && dollars === undefined) return undefined;
+    const resolved = resolveCreditDeltaCents({ deltaCents: cents, amountDollars: dollars });
+    return typeof resolved === "object" ? jsonError(`${field} must be a valid dollar amount`, 400) : resolved;
+  };
+  const welcome = amount(body.welcomeCreditCents, body.welcomeCreditDollars, "welcomeCreditDollars");
+  if (welcome instanceof Response) return welcome;
+  const referral = amount(body.referralCreditCents, body.referralCreditDollars, "referralCreditDollars");
+  if (referral instanceof Response) return referral;
 
   const result = await promo.updatePromoCreditSettings({
-    welcomeCreditCents: resolved,
+    welcomeCreditCents: welcome,
+    referralCreditCents: referral,
     adminId: auth.user.id,
   });
   return jsonResult(result, result.error ? 400 : 200);

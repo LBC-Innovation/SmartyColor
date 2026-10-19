@@ -12,7 +12,21 @@ export type CreditLedgerEntry = {
 export type PromoCreditSettings = {
   /** Gifted once when an account's email is first confirmed; 0 turns the gift off. */
   welcomeCreditCents: number;
+  /** Given to both accounts when a referred person's first order is paid; 0 turns it off. */
+  referralCreditCents: number;
   updatedAt: string;
+};
+
+/** An account's refer-a-friend link and how it has done. */
+export type ReferralSummary = {
+  code: string;
+  /** Landing page link carrying ?ref= (and utm tags), to share with friends. */
+  url: string;
+  /** What each side gets when a friend's first order is paid. */
+  creditCents: number;
+  /** Friends whose first order earned a credit. */
+  referredCount: number;
+  earnedCents: number;
 };
 
 export const MAX_WELCOME_CREDIT_CENTS = 500_00;
