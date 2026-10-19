@@ -22,6 +22,9 @@ export type BookCartState = {
   removedIds: string[];
   coverDesign: unknown | null;
   shipDifferent: boolean;
+  /** Sent to someone else, with an optional note printed as the first page. Absent on carts saved before gifting. */
+  isGift?: boolean;
+  giftNote?: string;
 };
 
 export type BookCartSummary = {

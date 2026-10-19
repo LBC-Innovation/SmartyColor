@@ -1,0 +1,12 @@
+"use client";
+
+import { Printer } from "lucide-react";
+
+export function SharedPagePrintButton() {
+  return (
+    <button type="button" onClick={() => window.print()} className="v2-btn-outline inline-flex items-center gap-2">
+      <Printer className="h-4 w-4" aria-hidden />
+      Print this page
+    </button>
+  );
+}

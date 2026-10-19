@@ -8,8 +8,10 @@ import type {
   LibraryProject,
   LibraryProjectPatch,
   LibraryRevision,
+  PageShare,
   RegisterPhotoInput,
   SignedUpload,
+  YearPhoto,
 } from "@/lib/library/types";
 
 /** Browser-side calls for the cloud library. Bytes go straight to storage, never through /api. */
@@ -151,4 +153,46 @@ export function leaveAlbum(projectId: string) {
 
 export function getInvitePreview(inviteId: string) {
   return api.request<AlbumInvitePreview>(`${base}/invites/${inviteId}`);
+}
+
+// ------------------------------------------------------------------ page links
+
+/** The live share link for a page, or null when the page isn't shared. */
+export function getPageShare(photoId: string) {
+  return api.request<PageShare | null>(`${base}/photos/${photoId}/share`);
+}
+
+/** Share a page (or point its live link at another version of the sheet). */
+export function sharePage(photoId: string, revisionId: string) {
+  return api.request<PageShare>(`${base}/photos/${photoId}/share`, {
+    method: "POST",
+    body: JSON.stringify({ revisionId }),
+  });
+}
+
+export function stopSharingPage(photoId: string) {
+  return api.request<{ revoked: boolean }>(`${base}/photos/${photoId}/share`, { method: "DELETE" });
+}
+
+/** Email a printable PDF of an album's coloring pages to someone (signed-in only). */
+export function sendAlbumToFamily(projectId: string, email: string, note: string) {
+  return api.request<{ pageCount: number }>(`${base}/projects/${projectId}/send`, {
+    method: "POST",
+    body: JSON.stringify({ email, note }),
+  });
+}
+
+// ------------------------------------------------------------------ book of the year
+
+/** Photos in the caller's own albums uploaded since 1 January of `year`. */
+export function listYearPhotos(year: number) {
+  return api.request<YearPhoto[]>(`${base}/photos/year/${year}`);
+}
+
+/** A new album holding copies of these photos and their coloring pages. */
+export function createProjectFromPhotos(name: string, photoIds: string[]) {
+  return api.request<LibraryProject>(`${base}/projects/from-photos`, {
+    method: "POST",
+    body: JSON.stringify({ name, photoIds }),
+  });
 }

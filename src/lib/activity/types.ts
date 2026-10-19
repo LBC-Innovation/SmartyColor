@@ -25,6 +25,7 @@ export const ACTIVITY_TYPES = {
   albums: [
     { id: "album_created", label: "Album created" },
     { id: "album_deleted", label: "Album deleted" },
+    { id: "album_sent", label: "Pages emailed" },
   ],
   orders: [
     { id: "book_ordered", label: "Book ordered" },

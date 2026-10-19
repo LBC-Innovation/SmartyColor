@@ -5,7 +5,12 @@ import type { BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
-import type { CreditLedgerEntry, CreditTopUpConfirmation, PromoCreditSettings } from "@/lib/credits/types";
+import type {
+  CreditLedgerEntry,
+  CreditTopUpConfirmation,
+  PromoCreditSettings,
+  ReferralSummary,
+} from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cartTypes";
 import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/lib/pricing/types";
@@ -467,6 +472,8 @@ export type BookDraftPayload = {
   pages: DigitalBookPage[];
   coverDesign: BookCoverDesign;
   proofConfirmed: boolean;
+  /** Sent to someone else. A gift note travels as the first page in `pages`. */
+  isGift: boolean;
 };
 
 /** Signed PUT target for the print-ready front cover image of a draft order. */
@@ -654,12 +661,17 @@ export function adminGetPromoCredits(): Promise<ApiResult<PromoCreditSettings>> 
 }
 
 export function adminUpdatePromoCredits(input: {
-  welcomeCreditDollars: string;
+  welcomeCreditDollars?: string;
+  referralCreditDollars?: string;
 }): Promise<ApiResult<PromoCreditSettings>> {
   return request<PromoCreditSettings>("/admin/promo-credits", {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export function fetchReferral(): Promise<ApiResult<ReferralSummary>> {
+  return request<ReferralSummary>("/account/referral");
 }
 
 // ---- carts: books started in the order wizard and not ordered yet ----------

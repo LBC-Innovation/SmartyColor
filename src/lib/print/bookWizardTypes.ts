@@ -54,7 +54,14 @@ export type BookWizardBlankPage = {
   auto?: boolean;
 };
 
-export type BookWizardPage = BookWizardPhotoPage | BookWizardBlankPage;
+/** The gift note, printed on its own page at the front of the book. Never stored in the page list itself. */
+export type BookWizardNotePage = {
+  id: string;
+  kind: "note";
+  text: string;
+};
+
+export type BookWizardPage = BookWizardPhotoPage | BookWizardBlankPage | BookWizardNotePage;
 
 export type BookPagePlan = {
   contentPages: BookWizardPhotoPage[];

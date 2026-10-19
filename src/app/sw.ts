@@ -14,7 +14,10 @@ const networkOnly: RuntimeCaching[] = [
   {
     matcher: ({ sameOrigin, url }) =>
       sameOrigin &&
-      (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")),
+      (url.pathname.startsWith("/api/") ||
+        url.pathname.startsWith("/auth/") ||
+        // Shared pages must stop showing the moment their link is revoked.
+        url.pathname.startsWith("/p/")),
     handler: new NetworkOnly(),
   },
 ];

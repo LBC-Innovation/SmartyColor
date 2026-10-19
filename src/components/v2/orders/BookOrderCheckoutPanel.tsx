@@ -54,7 +54,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
       currency: "USD",
       order_id: order.id,
       format: trackFormatForProduct(order.productId),
-      is_gift: false,
+      is_gift: order.isGift,
     });
     await refreshUser();
     await onOrderUpdated();

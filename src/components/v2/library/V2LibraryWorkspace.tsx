@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import {
   CheckSquare,
   CloudUpload,
@@ -64,6 +64,17 @@ export function V2LibraryWorkspace({
   const { photos, pendingUploads, selectedId, replacePhotos } = useV2Studio();
   /** While the project name is being edited the toolbar is given over to that. */
   const [renamingProject, setRenamingProject] = useState(false);
+  // The dock floats over the end of the list; reserve exactly its height so it never hides a photo.
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [dockHeight, setDockHeight] = useState(0);
+  const dockShown = Boolean(dock) && photos.length + pendingUploads.length > 0;
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setDockHeight(Math.ceil(el.getBoundingClientRect().height)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [dockShown]);
 
   const uploading = pendingUploads.length > 0;
   const libraryPhotoCount = photos.length + pendingUploads.length;
@@ -218,7 +229,10 @@ export function V2LibraryWorkspace({
             ) : null}
 
             {libraryPhotoCount > 0 ? (
-              <div className="v2-photo-list-dock min-h-0 flex-1">
+              <div
+                className="v2-photo-list-dock min-h-0 flex-1"
+                style={dockHeight ? ({ "--v2-dock-height": `${dockHeight}px` } as CSSProperties) : undefined}
+              >
                 <div
                   className="v2-photo-list-scroll v2-photo-list-dock-scroll overscroll-y-contain"
                   aria-label="Uploaded photos"
@@ -236,7 +250,11 @@ export function V2LibraryWorkspace({
                     onToggleDeleteSelect={deletion?.toggle}
                   />
                 </div>
-                {dock ? <div className="v2-photo-list-dock-bar">{dock}</div> : null}
+                {dock ? (
+                  <div ref={dockRef} className="v2-photo-list-dock-bar">
+                    {dock}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>

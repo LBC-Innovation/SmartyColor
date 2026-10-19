@@ -56,6 +56,8 @@ type OrderRow = {
   contact_email: string;
   shipping_address: ShippingAddress;
   billing_address?: ShippingAddress | null;
+  is_gift?: boolean | null;
+  gift_note?: string | null;
   cover_pdf_path?: string | null;
   paid_at: string | null;
   submitted_to_lulu_at: string | null;
@@ -127,6 +129,8 @@ function mapDetail(row: OrderRow, events: EventRow[]): BookOrderDetail {
     contactEmail: row.contact_email,
     shippingAddress: row.shipping_address,
     billingAddress: row.billing_address ?? null,
+    isGift: row.is_gift === true,
+    giftNote: row.gift_note ?? null,
     hasPrintFiles: Boolean(row.cover_pdf_path),
     carrier: row.carrier,
     estimatedDispatchMin: row.estimated_dispatch_min,
@@ -219,10 +223,16 @@ export type DraftBookContent = {
   billingAddress?: ShippingAddress | null;
   /** The customer flipped through the whole book and said it's right. */
   proofConfirmed?: boolean;
+  /** Sent to someone else; its note, if any, is the first print page. */
+  isGift?: boolean;
 };
 
 function draftContentColumns(input: DraftBookContent) {
+  const first = input.printPages?.[0];
   return {
+    is_gift: input.isGift === true,
+    // Kept beside the pages so support and reports can read it without parsing the page list.
+    gift_note: first?.kind === "note" ? first.text : null,
     print_pages: input.printPages ?? null,
     cover_design: input.coverDesign ?? null,
     billing_address: input.billingAddress ? normalizeShippingAddress(input.billingAddress) : null,
@@ -649,7 +659,7 @@ export async function getOrderForUser(
       total_cents, shipping_level, lulu_status_name, lulu_status_message,
       lulu_print_job_id, tracking_number, tracking_urls, carrier,
       estimated_delivery_min, estimated_delivery_max, estimated_dispatch_min,
-      estimated_dispatch_max, contact_email, shipping_address, billing_address, cover_pdf_path, paid_at,
+      estimated_dispatch_max, contact_email, shipping_address, billing_address, is_gift, gift_note, cover_pdf_path, paid_at,
       submitted_to_lulu_at, shipped_at, delivered_at, created_at, updated_at,
       print_products ( name )
     `,

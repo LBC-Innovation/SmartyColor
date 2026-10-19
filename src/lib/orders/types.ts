@@ -28,7 +28,9 @@ export type DigitalBookPage =
       /** "full" fills the page edge to edge; otherwise the sheet is framed inside the margin. */
       fit?: "framed" | "full";
     }
-  | { kind: "blank"; variant: "plain" | "lined" };
+  | { kind: "blank"; variant: "plain" | "lined" }
+  /** A gift note, printed as plain text on its own page (always the first page). */
+  | { kind: "note"; text: string };
 
 export type BookPaymentMethod = "stripe" | "credits" | "mixed";
 
@@ -85,6 +87,9 @@ export type BookOrderDetail = BookOrderSummary & {
   shippingAddress: ShippingAddress;
   /** Null when the customer bills and ships to the same address. */
   billingAddress: ShippingAddress | null;
+  /** Sent to someone else; the note, if any, prints as the first page. */
+  isGift: boolean;
+  giftNote: string | null;
   /** Print orders: the interior and cover PDFs have been built. */
   hasPrintFiles: boolean;
   carrier: string | null;

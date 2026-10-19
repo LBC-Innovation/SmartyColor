@@ -57,6 +57,12 @@ export async function putObject(path: string, bytes: Buffer | Uint8Array, mime: 
   if (error) throw new Error(error.message);
 }
 
+/** Server-side copy inside the bucket; the bytes never leave storage. */
+export async function copyObject(fromPath: string, toPath: string): Promise<void> {
+  const { error } = await bucket().copy(fromPath, toPath);
+  if (error) throw new Error(error.message);
+}
+
 export async function getObjectBytes(path: string): Promise<{ bytes: Buffer; mime: string }> {
   const { data, error } = await bucket().download(path);
   if (error || !data) throw new Error(error?.message ?? "Object not found");

@@ -1,5 +1,7 @@
 import {
   PDFDocument,
+  StandardFonts,
+  type PDFFont,
   type PDFPage,
   type PDFRef,
   type Rotation,
@@ -11,12 +13,14 @@ import {
   rgb,
 } from "pdf-lib";
 import {
+  NOTE_PAGE,
   POINTS_PER_INCH,
   bookPageBox,
   fullBleedBox,
   layoutImageOnPage,
   linedPageRules,
   paperSizePt,
+  printableBox,
   pdfDrawOptions,
   pdfMirroredMatrix,
   type LayoutBox,
@@ -161,6 +165,62 @@ function drawBlankPage(pdf: PDFDocument, page: PdfBlankPage, box?: LayoutBox, bl
   }
 }
 
+/** Break text into lines no wider than `maxWidth`, keeping the writer's own line breaks. */
+function wrapToWidth(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(/ +/)) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (!line || font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        line = candidate;
+        continue;
+      }
+      lines.push(line);
+      line = word;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+/** The gift note, centred on its own page. Characters the font can't draw are left out. */
+function drawNotePage(pdf: PDFDocument, page: PdfNotePage, font: PDFFont, box?: LayoutBox, bleed = 0) {
+  const [width, height] = paperSizePt(page.printPrefs);
+  const pageHeight = height + bleed * 2;
+  const pdfPage = pdf.addPage([width + bleed * 2, pageHeight]);
+  const area = box ?? printableBox(width, height);
+  const drawable = new Set(font.getCharacterSet());
+  const text = Array.from(page.text)
+    .filter((ch) => ch === "\n" || drawable.has(ch.codePointAt(0)!))
+    .join("");
+
+  const columnWidth = area.width * NOTE_PAGE.columnShare;
+  // A long unbroken word still has to fit, so the size steps down until every line does.
+  let size: number = NOTE_PAGE.fontSizePt;
+  let lines = wrapToWidth(text, font, size, columnWidth);
+  while (size > 10 && lines.some((l) => font.widthOfTextAtSize(l, size) > columnWidth)) {
+    size -= 1;
+    lines = wrapToWidth(text, font, size, columnWidth);
+  }
+  const leading = size * NOTE_PAGE.lineHeight;
+  const centerX = area.x + area.width / 2 + bleed;
+  // Top of the text block in top-down page coordinates, so the block is centred in the area.
+  const top = area.y + bleed + (area.height - leading * lines.length) / 2;
+  lines.forEach((line, i) => {
+    const lineWidth = font.widthOfTextAtSize(line, size);
+    // The baseline sits a little below the middle of its line, so the letters look centred in it.
+    const baselineFromTop = top + leading * i + (leading + size * 0.6) / 2;
+    pdfPage.drawText(line, {
+      x: centerX - lineWidth / 2,
+      y: pageHeight - baselineFromTop,
+      size,
+      font,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+  });
+}
+
 export async function sheetToPdf(
   imageDataUrl: string,
   prefs: PrintPrefs,
@@ -186,8 +246,14 @@ export type PdfBlankPage = {
   printPrefs: PrintPrefs;
 };
 
+export type PdfNotePage = {
+  pageKind: "note";
+  text: string;
+  printPrefs: PrintPrefs;
+};
+
 export async function sheetsToPdf(
-  pages: Array<PdfSheetPage | PdfBlankPage>,
+  pages: Array<PdfSheetPage | PdfBlankPage | PdfNotePage>,
   options: {
     /** Bound books: extra inside margin (inches) on the spine side of every framed page. */
     gutterIn?: number;
@@ -201,8 +267,15 @@ export async function sheetsToPdf(
   const gutter = (options.gutterIn ?? 0) * POINTS_PER_INCH;
   const bleed = (options.bleedIn ?? 0) * POINTS_PER_INCH;
   const pdf = await PDFDocument.create();
+  const noteFont = pages.some((p) => "pageKind" in p && p.pageKind === "note")
+    ? await pdf.embedFont(StandardFonts.TimesRomanItalic)
+    : null;
   for (const [index, page] of pages.entries()) {
     const box = gutter > 0 ? bookPageBox(...paperSizePt(page.printPrefs), index + 1, gutter) : undefined;
+    if ("pageKind" in page && page.pageKind === "note") {
+      drawNotePage(pdf, page, noteFont!, box, bleed);
+      continue;
+    }
     if ("pageKind" in page) {
       drawBlankPage(pdf, page, box, bleed);
       continue;

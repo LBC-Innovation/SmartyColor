@@ -128,3 +128,23 @@ export type SignedUpload = { path: string; url: string; token: string };
 
 /** How long read URLs stay valid; the client caches bytes so this can be short. */
 export const LIBRARY_READ_URL_TTL_SECONDS = 60 * 60;
+
+/** A live, unlisted link to one coloring page (never the photo or the album). */
+export type PageShare = {
+  /** Public URL, already tagged utm_source=share. */
+  url: string;
+  /** The sheet version the link shows. */
+  revisionId: string;
+  createdAt: string;
+};
+
+/** A photo uploaded this calendar year, offered when starting a "book of the year" album. */
+export type YearPhoto = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  hasSheet: boolean;
+  createdAt: string;
+  /** Short-lived URL for a small copy, for the picker tile. */
+  thumbUrl: string | null;
+};

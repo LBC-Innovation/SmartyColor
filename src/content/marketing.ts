@@ -267,8 +267,10 @@ export const FAQ: { eyebrow: string; title: string; items: FaqEntry[] } = {
       q: "When do I need to order for Christmas?",
       a: "Order by {date} for Christmas delivery. Printing and shipping times for your address are shown at checkout before you pay.",
     },
-    // Add once gift checkout (M9) ships:
-    // { q: "Can I send a book as a gift?", a: "Yes. Choose “This is a gift” at checkout to ship it to someone else and add a note." },
+    {
+      q: "Can I send a book as a gift?",
+      a: "Yes. Choose “This is a gift” at checkout to ship it to someone else and add a note.",
+    },
     {
       q: "How long does a printed book take?",
       a: "Books are printed to order. Printing and shipping times are shown at checkout before you pay.",

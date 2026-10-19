@@ -10,6 +10,8 @@ export type OutgoingEmail = {
   replyTo?: string;
   /** Extra headers, e.g. List-Unsubscribe on marketing mail. */
   headers?: Record<string, string>;
+  /** Files sent with the message (Resend allows 40 MB per email, after base64). */
+  attachments?: { filename: string; content: Uint8Array }[];
 };
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -45,6 +47,14 @@ export async function sendEmail(message: OutgoingEmail): Promise<boolean> {
         text: message.text,
         ...(message.replyTo ? { reply_to: message.replyTo } : {}),
         ...(message.headers ? { headers: message.headers } : {}),
+        ...(message.attachments?.length
+          ? {
+              attachments: message.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.content).toString("base64"),
+              })),
+            }
+          : {}),
       }),
     });
     if (!res.ok) {
