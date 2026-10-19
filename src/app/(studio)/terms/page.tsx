@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AdOptOutButton } from "@/components/marketing/AdOptOutButton";
+import { MarketingFooter } from "@/components/v2/marketing/MarketingFooter";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 
 export const metadata: Metadata = {
   title: "Terms & privacy · Colorful Memories",
   description: "How Colorful Memories uses your information and what it stores in cookies and your browser.",
+  alternates: { canonical: "/terms" },
 };
 
-const UPDATED = "October 10, 2026";
+// Analytics, advertising and opt-out wording below is a draft for Zach (or counsel) to approve. Not legal advice.
+const UPDATED = "October 17, 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -87,20 +91,51 @@ export default function TermsPage() {
             <strong>Stripe.</strong> Credit purchases are handled by Stripe on Stripe’s own checkout page. We
             never see or store your card details — only that a payment succeeded and for how much.
           </p>
-          <p>We don’t sell your information and we don’t use it for advertising.</p>
+          <p>
+            <strong>Google Analytics, Meta and Pinterest.</strong> To see which of our ads bring people to the
+            site and lead to orders, these companies’ tags run on our pages. They receive which page you
+            visited, which ad or link you came from, and when you make a coloring page, create an account,
+            start a book, check out or place an order, with the order’s amount. When you place an order we
+            also send Meta a scrambled (hashed) copy of your email address so it can match the order to its
+            ad. They never receive your photos, coloring pages, album names, captions or anyone’s name.
+          </p>
+          <p>
+            We don’t sell your information for money. Using these advertising tags may count as “selling” or
+            “sharing” personal information under some US state privacy laws. You can turn it off below.
+          </p>
+        </Section>
+
+        <Section title="Your choices">
+          <p id="your-choices">
+            Choose “Do not sell or share my personal information” to stop the analytics and advertising tags
+            on this browser. They stop right away and won’t load again, and orders you place won’t be
+            reported to them. We also honor the Global Privacy Control signal if your browser sends it.
+          </p>
+          <p>
+            <AdOptOutButton showOptIn className="text-v2-link" />
+          </p>
         </Section>
 
         <Section title="Cookies">
-          <p>We set one cookie ourselves:</p>
+          <p>We set these cookies ourselves:</p>
           <Table
             rows={[
               ["cm_welcome_guide_dismissed", "Cookie · 1 year", "Remembers that you asked not to see the welcome guide again."],
+              ["cm_attr", "Cookie · 30 days", "Which ad or link brought you here (campaign tags only), saved with your account or order when you create one."],
+              ["cm_ads_optout", "Cookie · 2 years", "Remembers that you chose not to have your information sold or shared."],
+            ]}
+          />
+          <p>Unless you opt out, our analytics and advertising partners set these:</p>
+          <Table
+            rows={[
+              ["_ga, _ga_*", "Google Analytics · up to 2 years", "Counts visits and tells one visitor from another."],
+              ["_fbp, _fbc", "Meta · 90 days", "Links visits and orders to the Facebook or Instagram ad you came from."],
+              ["_pin_unauth, _epik, _derived_epik", "Pinterest · up to 1 year", "Links visits and orders to the Pinterest ad you came from."],
             ]}
           />
           <p>
             Sign-in links and password resets may set short-lived cookies from our sign-in provider to
-            complete that step. Stripe sets its own cookies on its checkout page, under its own policy. We
-            use no advertising or analytics cookies.
+            complete that step. Stripe sets its own cookies on its checkout page, under its own policy.
           </p>
         </Section>
 
@@ -117,6 +152,10 @@ export default function TermsPage() {
               ["cm_shipping_address", "Local storage", "The last shipping address you typed, so you don’t re-enter it."],
               ["cm_quote_shipping_zip", "Local storage", "The ZIP used for a price estimate."],
               ["cm_guest_try_free", "Session storage", "Marks that you chose to try the studio without an account. Cleared when the tab closes."],
+              ["cm_intent", "Session storage", "Which page you started from (gift, story), so the next screens match. Cleared when the tab closes."],
+              ["cm_pages_made", "Local storage", "How many coloring pages you’ve made on this device, so we know which is your first."],
+              ["cm_save_prompt", "Local storage", "Remembers that you answered “Not now” to saving your pages."],
+              ["cm_purchase_tracked:…", "Local storage", "Makes sure each order is reported to our analytics only once."],
               ["Studio library", "IndexedDB", "Guests: your photos and coloring pages. Signed in: a local copy of your images so they load without re-downloading."],
             ]}
           />
@@ -159,11 +198,7 @@ export default function TermsPage() {
           </Link>
         </p>
       </main>
-      <footer className="border-t border-gray-200 bg-white py-6">
-        <div className="v2-gutter-x mx-auto w-full max-w-3xl text-xs text-v2-muted">
-          © {new Date().getFullYear()} Colorful Memories · LBC Innovation
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

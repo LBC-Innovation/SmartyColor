@@ -6,6 +6,8 @@ import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as orders from "@/server/ordersService";
 import { normalizeShippingAddress, validateBillingAddress } from "@/lib/orders/shippingAddress";
 import type { ShippingAddress } from "@/lib/orders/types";
+import { attributionFromRequest } from "@/lib/marketing/attribution";
+import { saveAttribution } from "@/server/marketing/attributionService";
 
 export async function POST(request: Request) {
   const auth = await requireAuthRequest(request);
@@ -61,5 +63,6 @@ export async function POST(request: Request) {
   if (result.error?.code === "NOT_FOUND") {
     return jsonError(result.error.message, 404);
   }
+  if (result.data) await saveAttribution("book_orders", result.data.orderId, attributionFromRequest(request));
   return jsonResult(result, result.error ? 500 : 201);
 }

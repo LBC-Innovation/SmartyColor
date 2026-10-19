@@ -1,12 +1,10 @@
-import type { Metadata } from "next";
-import { V2LandingPage } from "@/components/v2/marketing/V2LandingPage";
+import { LandingRoute, landingMetadata } from "@/components/v2/marketing/landingRoute";
 
-export const metadata: Metadata = {
-  title: "Turn family photos into coloring books | Colorful Memories",
-  description:
-    "Turn the photos already on your phone into coloring pages your kids will actually recognize. Print at home free, or order a real printed book.",
-};
+// Prices are cached for a day; the page re-renders hourly so the holiday banner ends on time.
+export const revalidate = 3600;
+
+export const metadata = landingMetadata("default");
 
 export default function HomePage() {
-  return <V2LandingPage />;
+  return <LandingRoute intent="default" />;
 }

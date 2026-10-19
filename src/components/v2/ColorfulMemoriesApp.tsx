@@ -34,6 +34,9 @@ import {
   type SheetEditMessage,
 } from "@/components/v2/V2SheetEditChat";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { trackPageGenerated } from "@/lib/track";
+import { V2BookNudge } from "@/components/v2/marketing/V2BookNudge";
+import { V2SavePromptCard } from "@/components/v2/marketing/V2SavePromptCard";
 import { authedFetch } from "@/lib/api/client";
 import {
   entryFromLibraryPhoto,
@@ -98,6 +101,8 @@ export function ColorfulMemoriesApp() {
     mutatePhotos,
     updatePhoto,
   } = useV2Studio();
+  /** Coloring pages in this album: the guest "Save this page" card and the book nudge read it. */
+  const sheetCount = photos.filter((p) => p.sheet).length;
   const deletion = useV2LibraryDeletion();
   const ingestFiles = useV2PhotoIngest();
   const [printOpen, setPrintOpen] = useState(false);
@@ -289,6 +294,7 @@ export function ColorfulMemoriesApp() {
           ),
         );
       }
+      trackPageGenerated(Boolean(photo.remote));
       if (!options?.batch) {
         toast.success({
           title: "Coloring sheet ready!",
@@ -862,15 +868,19 @@ export function ColorfulMemoriesApp() {
         deleteDisabled={uploading || generatingAll}
         headerAction={generateAllButton}
         dock={
-          <button
-            type="button"
-            disabled={!canBuyBook}
-            onClick={buyBook}
-            className="v2-photo-list-dock-cta"
-          >
-            <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
-            Create Book
-          </button>
+          cloud && sheetCount > 0 ? (
+            <V2BookNudge pageCount={sheetCount} disabled={!canBuyBook} onMakeBook={buyBook} />
+          ) : (
+            <button
+              type="button"
+              disabled={!canBuyBook}
+              onClick={buyBook}
+              className="v2-photo-list-dock-cta"
+            >
+              <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
+              Create Book
+            </button>
+          )
         }
         studioActions={
           <>
@@ -1009,6 +1019,8 @@ export function ColorfulMemoriesApp() {
                     </div>
                   )}
                 </div>
+
+                {!cloud && hydrated ? <V2SavePromptCard pageCount={sheetCount} /> : null}
 
                 {/* Phone-only: revisions + page actions */}
                 {showRevisionSidebar && selected && !gridView ? (

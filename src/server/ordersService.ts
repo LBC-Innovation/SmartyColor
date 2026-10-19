@@ -84,6 +84,7 @@ function mapSummary(row: OrderRow): BookOrderSummary {
   return {
     id: row.id,
     projectTitle: row.project_title,
+    productId: row.product_id,
     productName: productName(row),
     pageCount: row.page_count,
     status: row.status,

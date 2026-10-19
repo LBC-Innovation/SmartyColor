@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Loader2 } from "lucide-react";
+import { BookOpen, Gift, Loader2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { BookAlbumSelect } from "@/components/v2/book-order/BookAlbumSelect";
 import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
@@ -78,6 +78,11 @@ import {
   type ShippingAddressErrors,
 } from "@/lib/orders/shippingAddress";
 import type { DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
+import { centsToValue, trackFormat } from "@/lib/marketing/events";
+import { track, trackPageGenerated, trackPurchaseOnce } from "@/lib/track";
+import { HOLIDAY_LINE } from "@/content/marketing";
+import { fillCopy } from "@/lib/marketing/copy";
+import { holidayOrderBy } from "@/lib/marketing/holiday";
 
 /** The customer's own address: billing, and where the book ships unless they say otherwise. */
 const ADDRESS_STORAGE_KEY = "cm_shipping_address";
@@ -334,6 +339,14 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       : preferredBindingId;
   const isDigital = isDigitalFormat(bindingId);
   const binding = getBookFormat(bindingId);
+  const holiday = holidayOrderBy();
+  const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
+  const bookStartedRef = useRef(false);
+  useEffect(() => {
+    if (bookStartedRef.current || !user) return;
+    bookStartedRef.current = true;
+    track("book_started", { format: trackFormat(bindingId) });
+  }, [user, bindingId]);
   const plan = useMemo(() => computeBookPagePlan(fittedPages, binding), [fittedPages, binding]);
   const softPrintPages = useSoftPrintPages(plan.allPages, binding);
   const formatFits = bookFormatFit(contentCount, binding).fits;
@@ -953,7 +966,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         photoId: pending.photoId,
         ...(pending.sourceRevisionId ? { sourceRevisionId: pending.sourceRevisionId } : {}),
       });
-      if (photo) await placeSheet(id, photo, pending.sourceProjectId, pending.sourceProjectName);
+      if (photo) {
+        trackPageGenerated(true);
+        await placeSheet(id, photo, pending.sourceProjectId, pending.sourceProjectName);
+      }
     });
   }
 
@@ -984,7 +1000,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         photoId: target.photoId,
         sourceRevisionId,
       });
-      if (photo) await placeSheet(id, photo, target.sourceProjectId, target.sourceProjectName);
+      if (photo) {
+        trackPageGenerated(true);
+        await placeSheet(id, photo, target.sourceProjectId, target.sourceProjectName);
+      }
     });
   }
 
@@ -1039,6 +1058,13 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       return;
     }
     const orderId = created.data.orderId;
+    trackPurchaseOnce({
+      value: centsToValue(quoteCents ?? created.data.creditsAppliedCents),
+      currency: "USD",
+      order_id: orderId,
+      format: "digital",
+      is_gift: false,
+    });
     await closeCart();
     await refreshUser();
     const download = await api.downloadOrderPdf(orderId, projectTitle);
@@ -1051,6 +1077,15 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   }
 
   async function placeOrder() {
+    if (quoteCents != null) {
+      track("checkout_started", {
+        value: centsToValue(quoteCents),
+        currency: "USD",
+        page_count: plan.totalPages,
+        format: trackFormat(bindingId),
+        is_gift: false,
+      });
+    }
     if (isDigital) {
       await placeDigitalOrder();
       return;
@@ -1591,6 +1626,12 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                             Add {formatCredits(shortfallCents)} credit
                           </button>
                         </div>
+                      ) : null}
+                      {!isDigital && holidayLine ? (
+                        <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-v2-navy">
+                          <Gift className="h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
+                          {holidayLine}
+                        </p>
                       ) : null}
                       <p className="mt-3 text-xs text-v2-muted">
                         {isDigital

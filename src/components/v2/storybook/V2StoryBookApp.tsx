@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { trackPageGenerated } from "@/lib/track";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
 import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
@@ -191,6 +192,7 @@ export function V2StoryBookApp() {
       } else {
         updatePhoto(id, { sheet: data.sheet, generating: false });
       }
+      trackPageGenerated(Boolean(photo.remote));
       toast.success({ message: "Coloring page ready for blended or coloring-book print." });
     } catch (err) {
       updatePhoto(id, { generating: false });
