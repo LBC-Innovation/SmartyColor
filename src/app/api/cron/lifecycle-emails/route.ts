@@ -15,7 +15,7 @@ function authorized(request: Request): boolean {
 }
 
 /**
- * Hourly (vercel.json). `?dryRun=1` lists what would go out without sending or recording;
+ * Daily at 15:00 UTC (vercel.json; Hobby plans allow one run a day). `?dryRun=1` lists what would go out without sending or recording;
  * `?user=<id>` limits the run to one account, for testing against the live database.
  */
 export async function GET(request: Request) {

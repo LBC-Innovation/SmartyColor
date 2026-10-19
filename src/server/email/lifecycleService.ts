@@ -15,7 +15,7 @@ import { signToken } from "@/server/email/signedLinks";
 import { libraryPaths, objectExists, signedReadUrls } from "@/server/storage/libraryFiles";
 
 /**
- * Lifecycle emails (marketing plan M14). The hourly cron calls `runLifecycleEmails`; order code
+ * Lifecycle emails (marketing plan M14). The daily cron calls `runLifecycleEmails`; order code
  * also calls `sendOrderEmails` right after a payment or printer status change so those don't wait
  * for the next run. Each email claims its (kind, ref_key) row in `email_sends` before it is sent,
  * so it goes out once per trigger however many times it is attempted.
