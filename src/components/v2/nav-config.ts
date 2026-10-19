@@ -8,6 +8,7 @@ import {
   Gift,
   Home,
   LineChart,
+  Palette,
   Package,
   Tags,
   Users,
@@ -23,11 +24,16 @@ export type V2NavItem = {
   permission?: Permission;
   /** When set, only accounts with this product line turned on see the item. */
   feature?: ProductFeature;
+  /** Only shown to signed-in accounts. */
+  signedIn?: boolean;
 };
 
 export const STUDIO_HOME = "/studio";
+/** Signed-in home: a book to finish, the albums, and the seasonal prompt. */
+export const SIGNED_IN_HOME = "/home";
 
 export const v2TopNav: V2NavItem[] = [
+  { id: "home", label: "Home", icon: Home, href: SIGNED_IN_HOME, feature: "projects", signedIn: true },
   { id: "projects", label: "My projects", icon: ClipboardList, href: STUDIO_HOME, feature: "projects" },
   { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook", feature: "storybook" },
   { id: "orders", label: "My orders", icon: Package, href: "/orders" },
@@ -35,7 +41,8 @@ export const v2TopNav: V2NavItem[] = [
 
 /** Real routes only — keeps the mobile tab bar on a single row. */
 export const v2BottomNav: V2NavItem[] = [
-  { id: "home", label: "Create", icon: Home, href: STUDIO_HOME, feature: "projects" },
+  { id: "home", label: "Home", icon: Home, href: SIGNED_IN_HOME, feature: "projects", signedIn: true },
+  { id: "create", label: "Create", icon: Palette, href: STUDIO_HOME, feature: "projects" },
   { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook", feature: "storybook" },
   { id: "orders", label: "Orders", icon: Package, href: "/orders" },
 ];

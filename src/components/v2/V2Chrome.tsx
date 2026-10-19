@@ -13,6 +13,7 @@ import { CircleDollarSign } from "lucide-react";
 import { V2BrandLogo } from "@/components/v2/ui/V2BrandLogo";
 import {
   isV2NavItemActive,
+  SIGNED_IN_HOME,
   STUDIO_HOME,
   v2BottomNav,
   v2TopNav,
@@ -24,8 +25,8 @@ function useVisibleNav(items: V2NavItem[]) {
   const { user } = useAuth();
   const access = user?.features ?? DEFAULT_FEATURE_ACCESS;
   return {
-    items: items.filter((item) => !item.feature || access[item.feature]),
-    home: homePathFor(access),
+    items: items.filter((item) => (!item.feature || access[item.feature]) && (!item.signedIn || user)),
+    home: user && access.projects ? SIGNED_IN_HOME : homePathFor(access),
   };
 }
 

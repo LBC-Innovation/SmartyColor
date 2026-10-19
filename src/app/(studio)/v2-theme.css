@@ -376,7 +376,8 @@ body:has(.v2-shell) {
     flex: 1 1 0%;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    padding-bottom: 6.25rem;
+    /* Room for the floating dock: its measured height, plus a little air above the last photo. */
+    padding-bottom: max(6.25rem, calc(var(--v2-dock-height, 0px) + 1.5rem));
   }
 
   .v2-photo-list-dock-bar {

@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Loader2,
   LogOut,
+  Mail,
   Pencil,
   Plus,
   Share2,
@@ -18,6 +19,7 @@ import {
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
 import { V2ShareAlbumModal } from "@/components/v2/V2ShareAlbumModal";
+import { V2SendToFamilyModal } from "@/components/v2/share/V2SendToFamilyModal";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { cn } from "@/lib/cn";
@@ -70,6 +72,7 @@ export function V2ProjectSwitcher({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [sharing, setSharing] = useState<V2ProjectMeta | null>(null);
+  const [sendingToFamily, setSendingToFamily] = useState<V2ProjectMeta | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const sharedWithMe = activeProject?.role === "contributor";
 
@@ -340,6 +343,20 @@ export function V2ProjectSwitcher({
             )}
           </ul>
           <div className="border-t border-gray-200 p-1">
+            {/* Signed-in only: sending emails files, and trying without an account uploads nothing. */}
+            {cloud && activeProject && activeProject.photoCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setSendingToFamily(activeProject);
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-v2-link transition hover:bg-v2-primary-light"
+              >
+                <Mail className="h-4 w-4 shrink-0" aria-hidden />
+                Send pages to family
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -371,6 +388,14 @@ export function V2ProjectSwitcher({
           projectName={sharing.name}
           onClose={() => setSharing(null)}
           onCountChange={(count) => setProjectSharedCount(sharing.id, count)}
+        />
+      ) : null}
+
+      {sendingToFamily ? (
+        <V2SendToFamilyModal
+          projectId={sendingToFamily.id}
+          projectName={sendingToFamily.name}
+          onClose={() => setSendingToFamily(null)}
         />
       ) : null}
 
