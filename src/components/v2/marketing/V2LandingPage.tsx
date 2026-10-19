@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -14,203 +13,156 @@ import {
   ShieldCheck,
   Sparkles,
   Truck,
+  type LucideIcon,
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
+import {
+  FAQ,
+  FINAL_CTA,
+  HERO_DEMO_NOTE,
+  HERO_SECONDARY_CTA,
+  HOW_IT_WORKS,
+  LANDING_PAGES,
+  PRICE_LINE,
+  PRODUCTS,
+  STICKY_CTA,
+  WHY_FAMILIES,
+  type HeroPair,
+  type LandingIntent,
+} from "@/content/marketing";
+import { TESTIMONIALS } from "@/content/testimonials";
 import { markGuestTryFree, STUDIO_PATH } from "@/lib/v2/guestSession";
+import { fillCopy, formatUsd, rememberIntent, type CopyValues } from "@/lib/marketing/copy";
+import type { HolidayOrderBy } from "@/lib/marketing/holiday";
+import { HERO_STACK_SIZES, marketingSrcSet } from "@/lib/marketing/images";
+import { HolidayBanner } from "@/components/v2/marketing/HolidayBanner";
+import { MarketingFooter } from "@/components/v2/marketing/MarketingFooter";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 import { cn } from "@/lib/cn";
 
-const STEPS = [
-  {
-    icon: ImageIcon,
-    title: "Upload a photo",
-    body: "Any family picture from your phone — birthdays, the beach, the dog. HEIC works too.",
-  },
-  {
-    icon: Sparkles,
-    title: "Get a coloring page",
-    body: "In about a minute it becomes clean black-and-white line art your kid can color.",
-  },
-  {
-    icon: Printer,
-    title: "Print or order a book",
-    body: "Download a free PDF for your home printer, or turn your pages into a real stapled or paperback book, shipped to you.",
-  },
-] as const;
+const ICONS: Record<string, LucideIcon> = {
+  image: ImageIcon,
+  sparkles: Sparkles,
+  printer: Printer,
+  book: BookOpen,
+  message: MessageSquareText,
+  truck: Truck,
+  shield: ShieldCheck,
+};
 
-const PRODUCTS = [
-  {
-    icon: Printer,
-    name: "Coloring pages",
-    tagline: "Print at home",
-    price: "Free to try",
-    points: ["Letter-size PDF, ready to print", "Edit any page by typing a note", "No account needed"],
-    cta: "Make a free page",
-  },
-  {
-    icon: BookOpen,
-    name: "Printed coloring book",
-    tagline: "A real book of your family, shipped to your door",
-    price: "See your price at checkout",
-    points: [
-      "Pages your kids recognize — their faces, their dog, their house",
-      "Stapled booklet (up to 48 pages) or paperback (32+ pages)",
-      "Exact price shown before you pay — no surprises",
-    ],
-    cta: "Start a book",
-    note: "Free to build. Sign up and get a $5 credit toward it — you'll see the exact printing + shipping price before you pay.",
-    featured: true,
-  },
-  {
-    icon: MessageSquareText,
-    name: "Story book",
-    tagline: "Turn a trip into a story they can color",
-    price: "Included with your pages",
-    points: ["Turn an album into a story", "Captions you can edit", "Color it, read it, keep it"],
-    cta: "Try story mode",
-  },
-] as const;
+export type LandingNumbers = { referencePriceCents: number | null; welcomeCreditCents: number | null };
 
-const USE_CASES = [
-  "Grandparent gifts",
-  "Birthday parties",
-  "Rainy afternoons",
-  "Road trips",
-  "Classrooms",
-  "Family reunions",
-];
+type Props = {
+  intent: LandingIntent;
+  numbers: LandingNumbers;
+  holiday: HolidayOrderBy | null;
+};
 
-const FAQ = [
-  {
-    q: "Do I need an account?",
-    a: "No. Tap Try it free and start making pages right away. Create a free account when you want to save projects across devices or order a printed book.",
-  },
-  {
-    q: "What photos work best?",
-    a: "Clear, well-lit photos with one to three people or a simple scene come out best. Busy backgrounds still work — you can ask for them to be simplified.",
-  },
-  {
-    q: "Can I fix a drawing I don't love?",
-    a: "Yes. Every page has a chat where you can type things like “make the lines thicker” or “remove the car in the back,” and it redraws the page.",
-  },
-  {
-    q: "How much is a printed book?",
-    a: "It depends on page count, binding and where it ships. You'll see the exact price — printing and shipping — before you pay.",
-  },
-  {
-    q: "How long does a printed book take?",
-    a: "Books are printed to order. Printing and shipping times are shown at checkout before you pay.",
-  },
-  {
-    q: "What happens to my photos?",
-    a: "When you're signed in, your photos and coloring pages are stored privately in your account so they're on every device you use. Delete an album or your account and they're gone. Trying it without an account? Nothing is uploaded — everything stays in your browser.",
-  },
-] as const;
-
-export function V2LandingPage() {
+/** The marketing page for one ad angle: `/` (default), `/gift` or `/story`. Copy comes from content/marketing.ts. */
+export function V2LandingPage({ intent, numbers, holiday }: Props) {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const page = LANDING_PAGES[intent];
+  const values: CopyValues = {
+    price: numbers.referencePriceCents != null ? formatUsd(numbers.referencePriceCents) : null,
+    credit: numbers.welcomeCreditCents != null ? formatUsd(numbers.welcomeCreditCents) : null,
+    date: holiday?.label ?? null,
+  };
+  const priceLine = fillCopy(PRICE_LINE, values);
+  const faq = FAQ.items
+    .map(({ q, a, fallback }) => ({ q, a: fillCopy(a, values) ?? (fallback ? fillCopy(fallback, values) : null) }))
+    .filter((e): e is { q: string; a: string } => e.a != null);
 
-  useEffect(() => {
-    if (!loading && user) router.replace(STUDIO_PATH);
-  }, [user, loading, router]);
-
-  function tryForFree() {
+  function startFree() {
     markGuestTryFree();
-    router.push(STUDIO_PATH);
+    rememberIntent(intent);
+    router.push(intent === "default" ? STUDIO_PATH : `${STUDIO_PATH}?intent=${intent}`);
   }
-
-  // Session check finished with nobody signed in (or a stale token): reveal the page.
-  useEffect(() => {
-    if (!loading && !user) document.documentElement.classList.remove("has-session");
-  }, [user, loading]);
-
-  if (user) return null;
 
   // Rendered without waiting for the session check so the hero is in the server HTML.
   return (
     <div className="v2-landing flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-bg text-v2-ink">
+      {holiday ? <HolidayBanner label={holiday.label} /> : null}
       <V2MarketingHeader />
 
-      <main className="flex-1 pb-24 lg:pb-0">
+      <main className="flex-1">
         {/* ---------------------------------------------------------- hero */}
         <section className="relative overflow-hidden" aria-labelledby="hero-title">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-[36rem] bg-[radial-gradient(60%_50%_at_50%_0%,rgb(86_79_208/0.14),transparent_70%)]"
             aria-hidden
           />
-          <div className="v2-gutter-x relative mx-auto grid w-full max-w-6xl gap-10 py-10 sm:py-14 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-14 lg:py-20">
+          <div className="v2-gutter-x relative mx-auto grid w-full max-w-6xl gap-10 py-8 sm:py-14 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-14 lg:py-20">
             <div className="text-center lg:text-left">
               <p className="inline-flex items-center gap-2 rounded-full border border-v2-primary/20 bg-white px-3 py-1 text-xs font-bold text-v2-link shadow-sm">
-                <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                Made from your own photos
+                {intent === "gift" ? (
+                  <Gift className="h-3.5 w-3.5" aria-hidden />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {page.eyebrow}
               </p>
               <h1 id="hero-title" className="v2-brand-title mt-4 text-[2.5rem] leading-[1.05] text-v2-ink sm:text-5xl lg:text-6xl">
-                Your photos.
+                {page.headline[0]}
                 <br />
                 <span className="bg-gradient-to-r from-brand-coral via-brand-pink to-brand-violet bg-clip-text text-transparent">
-                  Their coloring book.
+                  {page.headline[1]}
                 </span>
               </h1>
-              <p className="mx-auto mt-5 max-w-lg text-base leading-relaxed text-v2-muted sm:text-lg lg:mx-0">
-                Turn the photos already on your phone into coloring pages your kids will actually
-                recognize. Print at home free, or order a real book.
+              <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-v2-muted sm:mt-5 sm:text-lg lg:mx-0">
+                {page.subhead}
               </p>
 
-              <div className="mt-7 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center lg:justify-start">
+              <div className="mt-6 flex flex-col items-stretch gap-3 sm:mt-7 sm:flex-row sm:justify-center lg:justify-start">
                 <button
                   type="button"
-                  onClick={tryForFree}
+                  onClick={startFree}
                   className="v2-btn-primary h-13 whitespace-nowrap px-7 text-base shadow-[0_8px_24px_rgb(86_79_208/0.3)]"
                 >
-                  Try it free
+                  {page.primaryCta}
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </button>
                 <a
                   href="#how"
                   className="inline-flex h-11 items-center justify-center whitespace-nowrap text-sm font-bold text-v2-link underline-offset-4 hover:underline sm:h-13 sm:rounded-full sm:border sm:border-v2-primary/35 sm:bg-white sm:px-7 sm:text-base sm:no-underline sm:hover:bg-v2-primary-light"
                 >
-                  See how it works
+                  {HERO_SECONDARY_CTA}
                 </a>
               </div>
+              {priceLine ? <p className="mt-3 text-sm font-semibold text-v2-navy">{priceLine}</p> : null}
 
-              <ul className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-v2-muted lg:justify-start">
-                {["No account to start", "First page in about a minute", "$5 credit when you sign up"].map(
-                  (t) => (
-                    <li key={t} className="inline-flex items-center gap-1.5">
-                      <Check className="h-4 w-4 text-v2-success-text" strokeWidth={2.5} aria-hidden />
-                      {t}
-                    </li>
-                  ),
-                )}
+              <ul className="mt-5 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-v2-muted lg:justify-start">
+                {page.trustBullets.map((t) => (
+                  <li key={t} className="inline-flex items-center gap-1.5">
+                    <Check className="h-4 w-4 text-v2-success-text" strokeWidth={2.5} aria-hidden />
+                    {t}
+                  </li>
+                ))}
               </ul>
             </div>
 
-            <PhotoToPageDemo />
+            <PhotoToPageDemo hero={page.hero} />
           </div>
         </section>
 
         {/* -------------------------------------------------- how it works */}
         <section id="how" className="scroll-mt-20 border-y border-gray-200 bg-white">
           <div className="v2-gutter-x mx-auto w-full max-w-6xl py-12 sm:py-16">
-            <SectionHeading
-              eyebrow="How it works"
-              title="Three steps. No design skills."
-              body="If you can send a photo, you can make a coloring book."
-            />
+            <SectionHeading eyebrow={HOW_IT_WORKS.eyebrow} title={HOW_IT_WORKS.title} body={HOW_IT_WORKS.body} />
             <ol className="mt-8 grid gap-4 sm:mt-10 md:grid-cols-3 md:gap-6">
-              {STEPS.map(({ icon: Icon, title, body }, i) => (
-                <li key={title} className="relative rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
-                  <span className="absolute right-4 top-4 text-4xl font-bold leading-none text-v2-primary/15 tabular-nums">
-                    {i + 1}
-                  </span>
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-v2-primary-light text-v2-primary">
-                    <Icon className="h-5 w-5" aria-hidden />
-                  </span>
-                  <h3 className="mt-4 text-lg font-semibold text-v2-ink">{title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-v2-muted">{body}</p>
-                </li>
-              ))}
+              {HOW_IT_WORKS.steps.map(({ icon, title, body }, i) => {
+                const Icon = ICONS[icon];
+                return (
+                  <li key={title} className="relative rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
+                    <span className="absolute right-4 top-4 text-4xl font-bold leading-none text-v2-primary/15 tabular-nums">
+                      {i + 1}
+                    </span>
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-v2-primary-light text-v2-primary">
+                      <Icon className="h-5 w-5" aria-hidden />
+                    </span>
+                    <h3 className="mt-4 text-lg font-semibold text-v2-ink">{title}</h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-v2-muted">{body}</p>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         </section>
@@ -219,55 +171,29 @@ export function V2LandingPage() {
         <section className="border-y border-gray-200 bg-white">
           <div className="v2-gutter-x mx-auto grid w-full max-w-6xl gap-10 py-12 sm:py-16 lg:grid-cols-2 lg:items-center">
             <div>
-              <SectionHeading
-                align="left"
-                eyebrow="Why families love it"
-                title="It's them on the page"
-                body="Generic coloring books are fine. A page of your kid, your dog and your backyard is the one that ends up on the fridge."
-              />
+              <SectionHeading align="left" eyebrow={WHY_FAMILIES.eyebrow} title={WHY_FAMILIES.title} body={WHY_FAMILIES.body} />
               <ul className="mt-7 space-y-4">
-                {[
-                  {
-                    icon: MessageSquareText,
-                    t: "Fix anything by typing",
-                    b: "“Thicker lines.” “Take out the stroller.” It redraws the page.",
-                  },
-                  {
-                    icon: Truck,
-                    t: "Real books, real paper",
-                    b: "Stapled booklets or paperbacks, printed in the US and shipped to you.",
-                  },
-                  {
-                    icon: ShieldCheck,
-                    t: "Your photos stay yours",
-                    b: "Stored privately in your account, never shared. Delete an album and it's really gone.",
-                  },
-                ].map(({ icon: Icon, t, b }) => (
-                  <li key={t} className="flex gap-3.5">
-                    <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
-                      <Icon className="h-4.5 w-4.5" aria-hidden />
-                    </span>
-                    <span>
-                      <span className="block font-semibold text-v2-ink">{t}</span>
-                      <span className="block text-sm text-v2-muted">{b}</span>
-                    </span>
-                  </li>
-                ))}
+                {WHY_FAMILIES.points.map(({ icon, title, body }) => {
+                  const Icon = ICONS[icon];
+                  return (
+                    <li key={title} className="flex gap-3.5">
+                      <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
+                        <Icon className="h-4.5 w-4.5" aria-hidden />
+                      </span>
+                      <span>
+                        <span className="block font-semibold text-v2-ink">{title}</span>
+                        <span className="block text-sm text-v2-muted">{body}</span>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
-              <BeforeAfter
-                className="mx-auto mb-6 max-w-sm"
-                photoSrc="/marketing/boys-photo.webp"
-                sheetSrc="/marketing/boys-sheet.webp"
-                photoAlt="Three boys in a field, one holding a catfish they caught"
-                sheetAlt="The same photo as a black-and-white coloring page"
-                width={900}
-                height={1200}
-              />
-              <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">Perfect for</p>
+              <BeforeAfter className="mx-auto mb-6 max-w-sm" pair={WHY_FAMILIES.example} />
+              <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">{WHY_FAMILIES.useCasesTitle}</p>
               <ul className="mt-3 flex flex-wrap gap-2">
-                {USE_CASES.map((u) => (
+                {WHY_FAMILIES.useCases.map((u) => (
                   <li
                     key={u}
                     className="rounded-full border border-gray-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-v2-navy"
@@ -277,15 +203,9 @@ export function V2LandingPage() {
                 ))}
               </ul>
               <div className="mt-6 rounded-xl bg-white p-4 shadow-sm">
-                <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">
-                  Photos that come out best
-                </p>
+                <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">{WHY_FAMILIES.bestPhotosTitle}</p>
                 <ul className="mt-2 space-y-1.5 text-sm text-v2-navy">
-                  {[
-                    "One to three people, facing the camera",
-                    "Daylight or a bright room",
-                    "A simple background — or ask to simplify it",
-                  ].map((t) => (
+                  {WHY_FAMILIES.bestPhotos.map((t) => (
                     <li key={t} className="flex items-start gap-2">
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-v2-success-text" strokeWidth={2.5} aria-hidden />
                       {t}
@@ -299,15 +219,12 @@ export function V2LandingPage() {
 
         {/* -------------------------------------------------------- products */}
         <section className="v2-gutter-x mx-auto w-full max-w-6xl py-12 sm:py-16">
-          <SectionHeading
-            eyebrow="What you can make"
-            title="From one page to a whole book"
-            body="Start free. Pay only when you want something printed and shipped."
-          />
+          <SectionHeading eyebrow={PRODUCTS.eyebrow} title={PRODUCTS.title} body={PRODUCTS.body} />
           <div className="mt-8 grid gap-4 sm:mt-10 md:grid-cols-3 md:gap-5">
-            {PRODUCTS.map(({ icon: Icon, name, tagline, price, points, cta, ...rest }) => {
-              const featured = "featured" in rest && rest.featured;
-              const note = "note" in rest ? rest.note : null;
+            {PRODUCTS.items.map(({ icon, name, tagline, price, points, cta, note, featured, badge }) => {
+              const Icon = ICONS[icon];
+              const priceText = fillCopy(price, values);
+              const noteText = note ? fillCopy(note, values) : null;
               return (
                 <article
                   key={name}
@@ -318,9 +235,9 @@ export function V2LandingPage() {
                       : "border-gray-200 shadow-sm",
                   )}
                 >
-                  {featured ? (
+                  {badge ? (
                     <span className="absolute -top-3 left-5 rounded-full bg-v2-primary px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
-                      Best for gifts
+                      {badge}
                     </span>
                   ) : null}
                   <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-v2-primary-light text-v2-primary">
@@ -328,7 +245,7 @@ export function V2LandingPage() {
                   </span>
                   <h3 className="mt-4 text-xl font-semibold text-v2-ink">{name}</h3>
                   <p className="text-sm text-v2-muted">{tagline}</p>
-                  <p className="mt-3 text-sm font-semibold text-v2-link">{price}</p>
+                  {priceText ? <p className="mt-3 text-sm font-semibold text-v2-link">{priceText}</p> : null}
                   <ul className="mt-4 space-y-2 text-sm text-v2-navy">
                     {points.map((p) => (
                       <li key={p} className="flex items-start gap-2">
@@ -339,13 +256,13 @@ export function V2LandingPage() {
                   </ul>
                   <button
                     type="button"
-                    onClick={tryForFree}
+                    onClick={startFree}
                     className={cn("mt-6 h-11 w-full", featured ? "v2-btn-primary" : "v2-btn-outline")}
                   >
                     {cta}
                   </button>
-                  {note ? (
-                    <p className="mt-2.5 text-center text-xs leading-snug text-v2-muted">{note}</p>
+                  {noteText ? (
+                    <p className="mt-2.5 text-center text-xs leading-snug text-v2-muted">{noteText}</p>
                   ) : null}
                 </article>
               );
@@ -353,26 +270,27 @@ export function V2LandingPage() {
           </div>
 
           <ul className="mt-6 grid gap-2 rounded-2xl border border-gray-200 bg-white p-4 text-sm text-v2-navy sm:mt-8 sm:grid-cols-3 sm:gap-4 sm:p-5">
-            {[
-              { icon: ShieldCheck, t: "Exact price shown before you pay" },
-              { icon: Truck, t: "Printed in the US and shipped to you" },
-              { icon: ImageIcon, t: "Photos stay private to your account" },
-            ].map(({ icon: Icon, t }) => (
-              <li key={t} className="flex items-center gap-2.5">
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
-                  <Icon className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="font-semibold">{t}</span>
-              </li>
-            ))}
+            {PRODUCTS.trustStrip.map(({ icon, text }) => {
+              const Icon = ICONS[icon];
+              return (
+                <li key={text} className="flex items-center gap-2.5">
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
+                    <Icon className="h-4 w-4" aria-hidden />
+                  </span>
+                  <span className="font-semibold">{text}</span>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
+        <Testimonials />
+
         {/* ------------------------------------------------------------- faq */}
         <section className="v2-gutter-x mx-auto w-full max-w-3xl py-12 sm:py-16">
-          <SectionHeading eyebrow="Questions" title="Good to know" />
+          <SectionHeading eyebrow={FAQ.eyebrow} title={FAQ.title} />
           <div className="mt-8 divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
-            {FAQ.map(({ q, a }) => (
+            {faq.map(({ q, a }) => (
               <details key={q} className="group px-5 py-4 open:bg-v2-bg/60">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold text-v2-ink [&::-webkit-details-marker]:hidden">
                   {q}
@@ -393,25 +311,25 @@ export function V2LandingPage() {
         <section className="v2-gutter-x mx-auto w-full max-w-6xl pb-12 sm:pb-16">
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-v2-primary to-[#4f2bc4] px-6 py-10 text-center text-white sm:px-10 sm:py-14">
             <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-white/10 blur-2xl" aria-hidden />
-            <h2 className="v2-brand-title text-3xl sm:text-4xl">Make your first page right now</h2>
-            <p className="mx-auto mt-3 max-w-md text-sm text-white/80 sm:text-base">
-              Pick a photo from your camera roll. You&apos;ll have a coloring page before the kettle boils.
-            </p>
-            <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white">
-              <Gift className="h-4 w-4" aria-hidden />
-              Sign up free and get a $5 credit toward your first book
-            </p>
+            <h2 className="v2-brand-title text-3xl sm:text-4xl">{FINAL_CTA.title}</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm text-white/80 sm:text-base">{FINAL_CTA.body}</p>
+            {fillCopy(FINAL_CTA.creditBadge, values) ? (
+              <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white">
+                <Gift className="h-4 w-4" aria-hidden />
+                {fillCopy(FINAL_CTA.creditBadge, values)}
+              </p>
+            ) : null}
             <div className="mt-7 flex flex-col items-center gap-3">
               <button
                 type="button"
-                onClick={tryForFree}
+                onClick={startFree}
                 className="inline-flex h-13 items-center justify-center gap-2 rounded-full bg-white px-8 text-base font-bold text-v2-primary shadow-lg transition hover:bg-v2-primary-light"
               >
-                Try it free
+                {intent === "default" ? FINAL_CTA.cta : page.primaryCta}
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </button>
               <Link href="/sign-in" className="text-sm font-semibold text-white/85 underline-offset-4 hover:underline">
-                Already have an account? Sign in
+                {FINAL_CTA.signIn}
               </Link>
             </div>
           </div>
@@ -424,7 +342,7 @@ export function V2LandingPage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            mainEntity: FAQ.map(({ q, a }) => ({
+            mainEntity: faq.map(({ q, a }) => ({
               "@type": "Question",
               name: q,
               acceptedAnswer: { "@type": "Answer", text: a },
@@ -433,24 +351,12 @@ export function V2LandingPage() {
         }}
       />
 
-      <footer className="border-t border-gray-200 bg-white py-6">
-        <div className="v2-gutter-x mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-2 text-xs text-v2-muted sm:flex-row">
-          <span>© {new Date().getFullYear()} Colorful Memories · LBC Innovation</span>
-          <span className="flex items-center gap-4">
-            <Link href="/terms" className="font-semibold text-v2-muted hover:text-v2-ink">
-              Terms &amp; privacy
-            </Link>
-            <Link href="/sign-in" className="font-semibold text-v2-link">
-              Already have an account? Sign in
-            </Link>
-          </span>
-        </div>
-      </footer>
+      <MarketingFooter stickyCta />
 
       {/* Phone-only sticky CTA */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-        <button type="button" onClick={tryForFree} className="v2-btn-primary h-12 w-full text-base">
-          Try it free — no account
+        <button type="button" onClick={startFree} className="v2-btn-primary h-12 w-full text-base">
+          {STICKY_CTA}
           <ArrowRight className="h-4 w-4" aria-hidden />
         </button>
       </div>
@@ -482,29 +388,34 @@ function SectionHeading({
   );
 }
 
-/** `srcSet` for a /marketing image that has resized `-<width>.webp` siblings next to the full-size file. */
-function marketingSrcSet(src: string, widths: number[], fullWidth: number): string {
-  const base = src.replace(/\.webp$/, "");
-  return [...widths.map((w) => `${base}-${w}.webp ${w}w`), `${src} ${fullWidth}w`].join(", ");
+/** Real customer quotes from content/testimonials.ts. Renders nothing until there is one. */
+function Testimonials() {
+  if (TESTIMONIALS.length === 0) return null;
+  return (
+    <section className="border-y border-gray-200 bg-white">
+      <div className="v2-gutter-x mx-auto w-full max-w-6xl py-12 sm:py-16">
+        <SectionHeading eyebrow="From families" title="What parents tell us" />
+        <ul className="mt-8 grid gap-4 sm:mt-10 md:grid-cols-3 md:gap-5">
+          {TESTIMONIALS.map((t) => (
+            <li key={`${t.firstName}-${t.consentDate}`} className="flex flex-col rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
+              {t.pair ? <BeforeAfter className="mb-4" pair={{ ...t.pair, srcSetWidths: [] }} /> : null}
+              <blockquote className="text-base leading-relaxed text-v2-ink">“{t.quote}”</blockquote>
+              <p className="mt-3 text-sm font-semibold text-v2-muted">
+                {t.firstName}, {t.relation}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
 }
 
 const BEFORE_AFTER_SIZES = "(min-width: 640px) 170px, 40vw";
-const HERO_STACK_SIZES = "(min-width: 1024px) 330px, (min-width: 640px) 280px, 185px";
 
-type BeforeAfterProps = {
-  photoSrc: string;
-  sheetSrc: string;
-  photoAlt: string;
-  sheetAlt: string;
-  /** Intrinsic size of both images (same aspect). */
-  width: number;
-  height: number;
-  eager?: boolean;
-  className?: string;
-};
-
-/** A real family photo beside the coloring page Colorful Memories made from it. */
-function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, eager, className }: BeforeAfterProps) {
+/** A real family photo beside the coloring page Colorful Memories made from it. Below the fold: lazy. */
+function BeforeAfter({ pair, className }: { pair: HeroPair; className?: string }) {
+  const { photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, srcSetWidths } = pair;
   const aspect = `${width}/${height}`;
   return (
     <div className={cn("grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3", className)}>
@@ -512,14 +423,14 @@ function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, ea
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={photoSrc}
-          srcSet={marketingSrcSet(photoSrc, [400, 800], width)}
+          srcSet={marketingSrcSet(photoSrc, srcSetWidths, width)}
           sizes={BEFORE_AFTER_SIZES}
           width={width}
           height={height}
           alt={photoAlt}
           style={{ aspectRatio: aspect }}
           className="block w-full object-cover"
-          loading={eager ? "eager" : "lazy"}
+          loading="lazy"
           decoding="async"
         />
         <figcaption className="px-3 py-2 text-center text-xs font-semibold text-v2-muted">Your photo</figcaption>
@@ -531,14 +442,14 @@ function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, ea
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={sheetSrc}
-          srcSet={marketingSrcSet(sheetSrc, [400, 800], width)}
+          srcSet={marketingSrcSet(sheetSrc, srcSetWidths, width)}
           sizes={BEFORE_AFTER_SIZES}
           width={width}
           height={height}
           alt={sheetAlt}
           style={{ aspectRatio: aspect }}
           className="block w-full object-cover"
-          loading={eager ? "eager" : "lazy"}
+          loading="lazy"
           decoding="async"
         />
         <figcaption className="px-3 py-2 text-center text-xs font-semibold text-v2-link">Coloring page</figcaption>
@@ -548,59 +459,55 @@ function BeforeAfter({ photoSrc, sheetSrc, photoAlt, sheetAlt, width, height, ea
 }
 
 /** Hero showcase: photo → coloring page (stacked) → a printed book. */
-function PhotoToPageDemo() {
+function PhotoToPageDemo({ hero }: { hero: HeroPair }) {
   return (
     <div className="relative mx-auto w-full max-w-md lg:max-w-none">
       <div className="flex items-center justify-center">
-        {/* photo with the coloring page laid over it — the hero of the hero */}
+        {/* photo with the coloring page laid over it: the hero of the hero */}
         <figure className="relative z-0 w-[15rem] shrink-0 sm:w-[23rem] lg:w-[27rem]">
           <div className="relative aspect-[5/4] w-full">
-          <div className="absolute left-0 top-0 aspect-[4/3] w-[76%] rotate-[-5deg] overflow-hidden rounded-xl border-4 border-white bg-white shadow-[0_12px_30px_rgb(10_16_26/0.18)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/marketing/hero-photo.webp"
-              srcSet={marketingSrcSet("/marketing/hero-photo.webp", [400, 800], 1200)}
-              sizes={HERO_STACK_SIZES}
-              width={1200}
-              height={900}
-              alt="A family of four smiling on a balcony above the beach"
-              className="block h-full w-full object-cover"
-              fetchPriority="high"
-            />
+            <div className="absolute left-0 top-0 aspect-[4/3] w-[76%] rotate-[-5deg] overflow-hidden rounded-xl border-4 border-white bg-white shadow-[0_12px_30px_rgb(10_16_26/0.18)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={hero.photoSrc}
+                srcSet={marketingSrcSet(hero.photoSrc, hero.srcSetWidths, hero.width)}
+                sizes={HERO_STACK_SIZES}
+                width={hero.width}
+                height={hero.height}
+                alt={hero.photoAlt}
+                className="block h-full w-full object-cover"
+                fetchPriority="high"
+              />
+            </div>
+            <div className="absolute bottom-0 right-0 aspect-[4/3] w-[76%] rotate-[4deg] overflow-hidden rounded-xl border-4 border-white bg-white shadow-[0_16px_36px_rgb(10_16_26/0.22)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={hero.sheetSrc}
+                srcSet={marketingSrcSet(hero.sheetSrc, hero.srcSetWidths, hero.width)}
+                sizes={HERO_STACK_SIZES}
+                width={hero.width}
+                height={hero.height}
+                alt={hero.sheetAlt}
+                className="block h-full w-full object-cover"
+                fetchPriority="high"
+              />
+            </div>
           </div>
-          <div className="absolute bottom-0 right-0 aspect-[4/3] w-[76%] rotate-[4deg] overflow-hidden rounded-xl border-4 border-white bg-white shadow-[0_16px_36px_rgb(10_16_26/0.22)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/marketing/hero-sheet.webp"
-              srcSet={marketingSrcSet("/marketing/hero-sheet.webp", [400, 800], 1200)}
-              sizes={HERO_STACK_SIZES}
-              width={1200}
-              height={900}
-              alt="The same photo as a black-and-white coloring page"
-              className="block h-full w-full object-cover"
-            />
-          </div>
-          </div>
-          <figcaption className="mt-3 text-center text-xs font-semibold text-v2-muted">
-            Photo → coloring page
-          </figcaption>
+          <figcaption className="mt-3 text-center text-xs font-semibold text-v2-muted">Photo → coloring page</figcaption>
         </figure>
 
         <span className="relative z-20 -mr-4 -ml-6 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-v2-primary text-white shadow-md ring-4 ring-v2-bg sm:-mx-5 sm:h-10 sm:w-10" aria-hidden>
           <ArrowRight className="h-4 w-4" />
         </span>
 
-        {/* the printed book — tucks under the stack's edge */}
+        {/* the printed book: tucks under the stack's edge */}
         <figure className="relative z-10 -ml-7 shrink-0 sm:-ml-3">
           <PrintedBook />
-          <figcaption className="mt-3 text-center text-xs font-semibold text-v2-link">
-            Your printed book
-          </figcaption>
+          <figcaption className="mt-3 text-center text-xs font-semibold text-v2-link">Your printed book</figcaption>
         </figure>
       </div>
       <p className="mt-5 text-center text-xs text-v2-muted">
-        Real pages made in the studio. Type a note like{" "}
-        <span className="font-semibold text-v2-ink">“thicker lines”</span> and it redraws.
+        {HERO_DEMO_NOTE[0]} <span className="font-semibold text-v2-ink">“{HERO_DEMO_NOTE[1]}”</span> {HERO_DEMO_NOTE[2]}
       </p>
     </div>
   );
@@ -631,9 +538,7 @@ function PrintedBook() {
             />
           </div>
           <div className="absolute inset-x-4 bottom-2.5 sm:inset-x-6 sm:bottom-3.5">
-            <p className="v2-wordmark truncate text-[12px] leading-tight text-white sm:text-[15px]">
-              Beach Days
-            </p>
+            <p className="v2-wordmark truncate text-[12px] leading-tight text-white sm:text-[15px]">Beach Days</p>
             <p className="mt-0.5 truncate text-[7.5px] font-semibold uppercase tracking-[0.12em] text-white/70 sm:text-[9px]">
               Colorful Memories
             </p>

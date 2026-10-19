@@ -13,6 +13,7 @@ import type { User } from "@/lib/api/types";
 import { DEFAULT_FEATURE_ACCESS } from "@/lib/auth/features";
 import * as api from "@/lib/api/client";
 import { clearImageCache } from "@/lib/v2/imageCache";
+import { isMarketingPath } from "@/lib/marketing/routes";
 
 export type AuthSessionState = "anonymous" | "authenticated" | "expired";
 
@@ -95,12 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // The session ended and could not be silently renewed (refresh token gone, revoked, or this is
   // an old sign-in that never had one): drop the dead token and send the user to sign in again.
+  // Marketing pages stay put: a returning visitor from an ad sees the page, not a sign-in wall.
   useEffect(() => {
     const handleExpired = (): void => {
       setUser(null);
       setSession("expired");
       const { pathname, search } = window.location;
-      if (pathname === SIGN_IN_PATH) return;
+      if (pathname === SIGN_IN_PATH || isMarketingPath(pathname)) return;
       const params = new URLSearchParams({ reason: "expired", next: `${pathname}${search}` });
       router.replace(`${SIGN_IN_PATH}?${params.toString()}`);
     };

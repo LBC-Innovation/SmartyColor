@@ -1,6 +1,8 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { after } from "next/server";
 import * as orders from "@/server/ordersService";
+import { trackPurchaseServer } from "@/server/marketing/serverTrack";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -22,6 +24,10 @@ export async function POST(request: Request, { params }: Params) {
   }
   if (result.error?.code === "INSUFFICIENT_CREDITS") {
     return jsonError(result.error.message, 402, result.error.code);
+  }
+  if (result.data) {
+    // Payment confirmed: the server copy of `purchase`, deduplicated with the browser's by order id.
+    after(() => trackPurchaseServer({ request, orderId: id, email: auth.user.email }));
   }
   return jsonResult(result, result.error ? 500 : 200);
 }

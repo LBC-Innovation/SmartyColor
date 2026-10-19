@@ -47,6 +47,7 @@ export type ShippingAddress = {
 export type BookOrderSummary = {
   id: string;
   projectTitle: string | null;
+  productId: string;
   productName: string;
   pageCount: number;
   status: BookOrderStatus;

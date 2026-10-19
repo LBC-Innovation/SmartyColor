@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Comic_Neue, Fredoka, Luckiest_Guy } from "next/font/google";
+import { Analytics } from "@/components/marketing/Analytics";
 import {
   PwaShellScript,
   PwaSplashDismissScript,
@@ -31,7 +32,11 @@ const APP_DESCRIPTION =
   "Turn family photos into coloring pages and printed coloring books.";
 const THEME_COLOR = "#7446f0";
 
+/** Canonical site. Share images and canonical URLs resolve here, whichever host served the page. */
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://colorfulmemories.net";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   applicationName: APP_NAME,
   title: APP_NAME,
   description: APP_DESCRIPTION,
@@ -42,6 +47,13 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    siteName: APP_NAME,
+  },
+  twitter: {
+    card: "summary_large_image",
   },
   icons: {
     icon: [
@@ -102,6 +114,7 @@ export default function RootLayout({
         </div>
         {children}
         <PwaSplashDismissScript />
+        <Analytics />
       </body>
     </html>
   );

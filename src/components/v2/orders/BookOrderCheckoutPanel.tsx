@@ -1,12 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, Wallet } from "lucide-react";
+import { Gift, Loader2, Wallet } from "lucide-react";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
 import type { BookOrderDetail } from "@/lib/orders/types";
+import { centsToValue, trackFormatForProduct } from "@/lib/marketing/events";
+import { trackPurchaseOnce } from "@/lib/track";
+import { HOLIDAY_LINE } from "@/content/marketing";
+import { fillCopy } from "@/lib/marketing/copy";
+import { holidayOrderBy } from "@/lib/marketing/holiday";
 
 type Props = {
   order: BookOrderDetail;
@@ -20,6 +25,8 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const totalCents = order.totalCents;
+  const holiday = holidayOrderBy();
+  const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
   const balanceCents = user?.creditsBalanceCents ?? 0;
 
   const { shortfallCents, canPlace } = useMemo(() => {
@@ -42,6 +49,13 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
       }
       return;
     }
+    trackPurchaseOnce({
+      value: centsToValue(order.totalCents ?? 0),
+      currency: "USD",
+      order_id: order.id,
+      format: trackFormatForProduct(order.productId),
+      is_gift: false,
+    });
     await refreshUser();
     await onOrderUpdated();
   }
@@ -55,6 +69,13 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
         Pay with your promo wallet balance. Your print job is already registered — placing the
         order charges credits and sends the book to production.
       </p>
+
+      {holidayLine && order.fulfillment !== "digital" ? (
+        <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-v2-navy">
+          <Gift className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
+          {holidayLine}
+        </p>
+      ) : null}
 
       <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
         <div className="rounded-lg bg-v2-bg-subtle px-3 py-2">

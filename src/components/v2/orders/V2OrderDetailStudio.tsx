@@ -109,7 +109,10 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
           ) : !user ? (
             <div className="v2-panel p-6 text-center">
               <p className="text-sm text-v2-muted">Sign in to view this order.</p>
-              <Link href="/sign-in" className="mt-4 inline-flex text-sm font-semibold text-v2-link">
+              <Link
+                href={`/sign-in?next=${encodeURIComponent(`/orders/${orderId}`)}`}
+                className="mt-4 inline-flex text-sm font-semibold text-v2-link"
+              >
                 Sign in
               </Link>
             </div>
