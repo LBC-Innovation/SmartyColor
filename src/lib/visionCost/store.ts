@@ -1,5 +1,5 @@
 import "server-only";
-import { getSupabaseAdmin } from "@/lib/supabase/service";
+import { getSupabaseAdmin, getSupabaseAuth } from "@/lib/supabase/service";
 import { supabaseServiceConfigured } from "@/lib/supabase/authServerConfig";
 import type { VisionErrorEvent, VisionUsageEvent } from "@/lib/visionCost/types";
 
@@ -74,8 +74,8 @@ export type VisionPersistedSummary = {
   available: boolean;
   periods: { today: VisionPeriodTotals; last7d: VisionPeriodTotals; last30d: VisionPeriodTotals; allTime: VisionPeriodTotals };
   byOperation: Array<{ operation: string; callCount: number; totalCostUsd: number }>;
-  recentEvents: Array<VisionUsageEvent & { userId: string | null; instanceId: string | null }>;
-  recentErrors: Array<VisionErrorEvent & { userId: string | null; instanceId: string | null }>;
+  recentEvents: Array<VisionUsageEvent & { userId: string | null; userEmail: string | null; instanceId: string | null }>;
+  recentErrors: Array<VisionErrorEvent & { userId: string | null; userEmail: string | null; instanceId: string | null }>;
 };
 
 const emptyTotals = (): VisionPeriodTotals => ({
@@ -149,6 +149,24 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
     if (at >= startOfToday.getTime()) periods.today.errorCount += 1;
   }
 
+  const recentEventRows = (events ?? []).slice(0, 200);
+  const userIds = [
+    ...new Set(
+      [...recentEventRows, ...(errors ?? [])]
+        .map((r) => r.user_id as string | null)
+        .filter((v): v is string => !!v),
+    ),
+  ];
+  const emails = new Map<string, string>();
+  await Promise.all(
+    userIds.map(async (id) => {
+      // Best effort: a row still shows without its user's email.
+      const { data: u } = await getSupabaseAuth().auth.admin.getUserById(id).catch(() => ({ data: null }));
+      if (u?.user?.email) emails.set(id, u.user.email);
+    }),
+  );
+  const emailFor = (r: Record<string, unknown>) => (r.user_id ? (emails.get(r.user_id as string) ?? null) : null);
+
   const toEvent = (r: Record<string, unknown>) => ({
     id: r.id as string,
     at: r.at as string,
@@ -161,6 +179,7 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
     totalCostUsd: Number(r.total_cost_usd ?? 0),
     hasImageOutput: Boolean(r.has_image_output),
     userId: (r.user_id as string | null) ?? null,
+    userEmail: emailFor(r),
     instanceId: (r.instance_id as string | null) ?? null,
   });
 
@@ -170,7 +189,7 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
     byOperation: [...byOp.entries()]
       .map(([operation, v]) => ({ operation, ...v }))
       .sort((a, b) => b.totalCostUsd - a.totalCostUsd),
-    recentEvents: (events ?? []).slice(0, 200).map(toEvent),
+    recentEvents: recentEventRows.map(toEvent),
     recentErrors: (errors ?? []).map((x) => ({
       id: x.id as string,
       at: x.at as string,
@@ -180,6 +199,7 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
       httpStatus: (x.http_status as number | null) ?? null,
       message: x.message as string,
       userId: (x.user_id as string | null) ?? null,
+      userEmail: emailFor(x),
       instanceId: (x.instance_id as string | null) ?? null,
     })),
   };
