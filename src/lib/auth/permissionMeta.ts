@@ -18,6 +18,7 @@ export const PERMISSION_META = [
   { key: "pricing:manage", name: "Manage prices", description: "Can see costs and set the markup and list price of everything customers pay for" },
   { key: "finance:view", name: "View financials", description: "Can open the financials dashboard: cash flow, profit and loss, and margins by product" },
   { key: "finance:manage", name: "Manage financials", description: "Can enter fixed and operating costs, card fees and the opening cash balance on the financials dashboard" },
+  { key: "marketing:testimonials", name: "Review customer stories", description: "Can read the photos and quotes customers send from the review email and approve them for the site" },
   { key: "costs:viewai", name: "View AI costs", description: "Can see what AI calls cost us on the AI costs page" },
   { key: "usermanage:selfmanage", name: "Full self-management", description: "Can manage their own profile, email, password and account (not their own permissions)" },
 ] as const;

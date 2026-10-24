@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { revisionDataUrlById } from "@/server/libraryImages";
 import { chargeableCents } from "@/server/pricingService";
 import { getObjectBytes, putObject, removeObjects } from "@/server/storage/libraryFiles";
+import { sendOrderEmails } from "@/server/email/lifecycleService";
 
 /** Digital books are always US Letter portrait, like the book-order preview. */
 const BOOK_PREFS: PrintPrefs = { ...defaultPrintPrefs, paper: "letter", orientation: "portrait" };
@@ -216,6 +217,7 @@ export async function createDigitalBookOrder(input: {
   }
 
   log("info", "Digital book ordered", { userId: input.userId, orderId, pageCount: pages.length });
+  await sendOrderEmails(orderId);
   return {
     data: data as { orderId: string; creditsBalanceCents: number; creditsAppliedCents: number },
     error: null,
