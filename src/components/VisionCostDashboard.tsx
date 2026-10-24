@@ -22,6 +22,14 @@ function usd(n: number) {
   return `$${n.toFixed(4)}`;
 }
 
+/** Persisted rows carry the user; in-memory session rows don't. */
+function userLabel(event: object) {
+  if (!("userId" in event)) return "—";
+  const { userId, userEmail } = event as { userId: string | null; userEmail?: string | null };
+  if (userEmail) return userEmail;
+  return userId ? userId.slice(0, 8) : "Guest";
+}
+
 const ERROR_KIND_LABEL: Record<VisionErrorKind, string> = {
   billing: "Billing",
   quota: "Quota",
@@ -325,7 +333,8 @@ export function VisionCostDashboard({
             <table className={cn("min-w-full border-collapse text-sm", bodyClass)}>
               <thead>
                 <tr className={cn("border-b text-left", isV2 ? "border-slate-200 text-v2-muted" : "border-ink/10 text-ink-soft")}>
-                  <th className="py-2 pr-4">Time</th>
+                  <th className="py-2 pr-4">Date</th>
+                  <th className="py-2 pr-4">User</th>
                   <th className="py-2 pr-4">Type</th>
                   <th className="py-2 pr-4">Operation</th>
                   <th className="py-2 pr-4">Status</th>
@@ -339,8 +348,9 @@ export function VisionCostDashboard({
                     className={isV2 ? "border-b border-slate-100 align-top" : "border-b border-ink/5 align-top"}
                   >
                     <td className="py-2 pr-4 whitespace-nowrap">
-                      {new Date(event.at).toLocaleTimeString()}
+                      {new Date(event.at).toLocaleString()}
                     </td>
+                    <td className="py-2 pr-4 whitespace-nowrap">{userLabel(event)}</td>
                     <td className="py-2 pr-4">
                       <span className={cn("v2-badge", ERROR_KIND_BADGE[event.kind])}>
                         {ERROR_KIND_LABEL[event.kind]}
@@ -369,7 +379,8 @@ export function VisionCostDashboard({
             <table className={cn("min-w-full border-collapse text-sm", bodyClass)}>
               <thead>
                 <tr className={cn("border-b text-left", isV2 ? "border-slate-200 text-v2-muted" : "border-ink/10 text-ink-soft")}>
-                  <th className="py-2 pr-4">Time</th>
+                  <th className="py-2 pr-4">Date</th>
+                  <th className="py-2 pr-4">User</th>
                   <th className="py-2 pr-4">Operation</th>
                   <th className="py-2 pr-4">Model</th>
                   <th className="py-2 pr-4">In</th>
@@ -384,8 +395,9 @@ export function VisionCostDashboard({
                     className={isV2 ? "border-b border-slate-100" : "border-b border-ink/5"}
                   >
                     <td className="py-2 pr-4 whitespace-nowrap">
-                      {new Date(event.at).toLocaleTimeString()}
+                      {new Date(event.at).toLocaleString()}
                     </td>
+                    <td className="py-2 pr-4 whitespace-nowrap">{userLabel(event)}</td>
                     <td className="py-2 pr-4">{event.operation}</td>
                     <td className="py-2 pr-4 font-mono text-xs">
                       {event.modelId}
