@@ -36,9 +36,14 @@ export function V2SheetGeneratingPlaceholder({
         className,
       )}
       aria-busy="true"
-      aria-live="polite"
-      aria-label={`Generating coloring sheet, ${elapsed} seconds`}
+      aria-label="Generating coloring page"
     >
+      {/* Announced once when it appears; the running counter below is visual only. */}
+      {!compact ? (
+        <span role="status" className="sr-only">
+          Tracing your photo. This takes about a minute.
+        </span>
+      ) : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={imageSrc}
@@ -52,6 +57,7 @@ export function V2SheetGeneratingPlaceholder({
       <div className="v2-sheet-generating-waves absolute inset-0" aria-hidden />
 
       <div
+        aria-hidden
         className={cn(
           "absolute inset-0 flex flex-col items-center justify-center",
           compact ? "gap-0.5" : "gap-1.5",

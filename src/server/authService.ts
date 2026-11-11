@@ -37,7 +37,9 @@ export async function register(
   const { data, error } = await getSupabaseAuth().auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: clientOrigin() },
+    // A confirmed sign-up lands on the sign-in page (never signed in from a URL), then the studio.
+    // This URL must be on the Supabase redirect allow-list.
+    options: { emailRedirectTo: `${clientOrigin()}/sign-in?confirmed=1&next=${encodeURIComponent("/studio")}` },
   });
   if (error) {
     log("warn", "Register failed", { email, error: error.message });
@@ -100,7 +102,7 @@ export async function passwordResetRequest(
   const options = redirectTo ? { redirectTo } : { redirectTo: `${clientOrigin()}/reset-password` };
   const { error } = await getSupabaseAuth().auth.resetPasswordForEmail(email, options);
   if (error) {
-    return { data: null, error: { message: error.message } };
+    return { data: null, error: { message: error.message, code: error.code } };
   }
   return { data: { success: true }, error: null };
 }

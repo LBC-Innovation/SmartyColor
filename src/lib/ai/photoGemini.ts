@@ -130,7 +130,7 @@ async function toSheet(
 ): Promise<GeneratedSheet> {
   const lineArtBase64 = await toPhotoLineArtPng(file.base64, { referenceBase64 });
   return {
-    title: showTitle ? "My photo coloring page" : "Coloring sheet",
+    title: showTitle ? "My photo coloring page" : "Coloring page",
     imageDataUrl: `data:image/png;base64,${lineArtBase64}`,
     mimeType: "image/png",
   };

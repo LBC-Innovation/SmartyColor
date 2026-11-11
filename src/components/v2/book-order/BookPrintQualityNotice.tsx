@@ -29,7 +29,7 @@ export function BookPrintQualityNotice({ pageNumbers, fit, className }: Props) {
       {one ? "its" : "their"} lines won&apos;t be as crisp as they could be.{" "}
       {fit === "full"
         ? "Choosing Framed prints the whole picture smaller and sharper."
-        : `Making ${one ? "a new coloring sheet for it" : "new coloring sheets for them"} in the studio will print sharper.`}
+        : `Making ${one ? "a new coloring page for it" : "new coloring pages for them"} in the studio will print sharper.`}
     </p>
   );
 }

@@ -44,7 +44,7 @@ export function BookOrderStepper({
             <button
               type="button"
               className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-1 text-xs font-semibold transition md:pr-2.5",
+                "v2-hit inline-flex h-7 items-center gap-1.5 rounded-full pl-1 pr-1 text-xs font-semibold transition md:pr-2.5",
                 active && "pr-2.5",
                 active && "bg-v2-primary-light text-v2-link",
                 done && "text-v2-navy",
@@ -54,7 +54,18 @@ export function BookOrderStepper({
               )}
               aria-current={active ? "step" : undefined}
               aria-disabled={!active && !openable ? true : undefined}
-              title={active ? undefined : openable ? `Go to ${BOOK_ORDER_STEP_LABEL[step]}` : "Finish the steps before this one first"}
+              aria-label={`Step ${i + 1} of ${steps.length}: ${BOOK_ORDER_STEP_LABEL[step]}, ${
+                active ? "current step" : done ? "done" : "not reached yet"
+              }`}
+              title={
+                active || done
+                  ? openable
+                    ? `Go to ${BOOK_ORDER_STEP_LABEL[step]}`
+                    : undefined
+                  : openable
+                    ? `Go to ${BOOK_ORDER_STEP_LABEL[step]}`
+                    : "Finish the steps before this one first"
+              }
               onClick={() => {
                 if (openable) onSelect?.(step);
               }}

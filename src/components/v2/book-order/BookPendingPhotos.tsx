@@ -15,17 +15,17 @@ type Props = {
 };
 
 /**
- * Photos in the chosen albums that have no coloring sheet yet. They can't
+ * Photos in the chosen albums that have no coloring page yet. They can't
  * print until they do, so each one can get its sheet right here.
  */
 export function BookPendingPhotos({ photos, busy, onGenerate, onMakePortrait, generateHint, portraitHint }: Props) {
   if (photos.length === 0) return null;
 
   return (
-    <section className="space-y-3 rounded-2xl border-2 border-dashed border-gray-200 p-3 sm:p-4" aria-label="Photos without a coloring sheet">
+    <section className="space-y-3 rounded-2xl border-2 border-dashed border-gray-200 p-3 sm:p-4" aria-label="Photos without a coloring page">
       <div>
         <h3 className="text-sm font-semibold text-v2-ink">
-          {photos.length} photo{photos.length === 1 ? "" : "s"} without a coloring sheet
+          {photos.length} photo{photos.length === 1 ? "" : "s"} without a coloring page
         </h3>
         <p className="mt-0.5 text-xs text-v2-muted">
           These aren&apos;t in your book yet. Generate a sheet and the page joins the book in album order.
@@ -44,7 +44,7 @@ export function BookPendingPhotos({ photos, busy, onGenerate, onMakePortrait, ge
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photo.imageUrl} alt={photo.title} className="h-full w-full object-contain p-2 opacity-80" />
                 <span className="absolute inset-x-1.5 top-1.5 truncate rounded-md bg-slate-900/70 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">
-                  No coloring sheet yet
+                  No coloring page yet
                 </span>
                 {busyLabel ? <BusyOverlay label={busyLabel} /> : null}
               </div>
@@ -57,7 +57,7 @@ export function BookPendingPhotos({ photos, busy, onGenerate, onMakePortrait, ge
                   title={generateHint}
                 >
                   <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                  Generate sheet
+                  Make coloring page
                 </button>
                 {landscape ? (
                   <button

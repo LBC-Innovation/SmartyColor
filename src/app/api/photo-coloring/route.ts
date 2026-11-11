@@ -7,6 +7,8 @@ import { normalizeCorrections, parsePhotoDataUrl } from "@/lib/ai/photoDataUrl";
 import { estimateJsonBodyBytes } from "@/lib/photo/payloadBudget";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
+import { toPublicErrorMessage } from "@/lib/security/publicError";
+import { checkGuestUsage, guestLimitResponse } from "@/server/guestUsageGuard";
 import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
 import { withVisionUser } from "@/lib/visionCost/context";
 import { addRevisionFromSheet, type RevisionMeta } from "@/server/libraryService";
@@ -83,22 +85,35 @@ export async function POST(request: Request) {
         return Response.json({ error: "Pick a photo first." }, { status: 400 });
       }
       parsePhotoDataUrl(body.photoDataUrl);
-      const photo = await ensurePhotoDataUrlForRequest(body.photoDataUrl, 1);
-      assertTotalJsonBodyWithinBudget(
-        estimateJsonBodyBytes({ photoDataUrl: photo.dataUrl }),
-      );
-      const sheet = await ai.photoToColoring({
-        photoDataUrl: photo.dataUrl,
-        printPrefs,
-        image,
-      });
-      return Response.json({ sheet });
+      // Guests are limited per day; checked before any work so refused requests cost nothing.
+      const usage = await checkGuestUsage(request, "page");
+      if (!usage.allowed) return guestLimitResponse(usage.scope, "page");
+      // True once the paid model is about to be called. A failure after that point is not refunded
+      // (blocked images and provider errors cost money), only failures before it are.
+      let modelCalled = false;
+      try {
+        const photo = await ensurePhotoDataUrlForRequest(body.photoDataUrl, 1);
+        assertTotalJsonBodyWithinBudget(
+          estimateJsonBodyBytes({ photoDataUrl: photo.dataUrl }),
+        );
+        modelCalled = true;
+        const sheet = await ai.photoToColoring({
+          photoDataUrl: photo.dataUrl,
+          printPrefs,
+          image,
+        });
+        return Response.json({ sheet });
+      } catch (error) {
+        // Preparing the photo failed before any paid call: the visitor keeps their free page.
+        if (!modelCalled) await usage.refund();
+        throw error;
+      }
     }
 
     if (body.mode === "correct") {
       if (!body.photoDataUrl?.trim() || !body.sheetDataUrl?.trim()) {
         return Response.json(
-          { error: "Need the photo and the current coloring sheet." },
+          { error: "Need the photo and the current coloring page." },
           { status: 400 },
         );
       }
@@ -127,35 +142,46 @@ export async function POST(request: Request) {
       }
       parsePhotoDataUrl(body.photoDataUrl);
       parsePhotoDataUrl(body.sheetDataUrl);
-      const photo = await ensurePhotoDataUrlForRequest(body.photoDataUrl, 2);
-      const currentSheet = await ensurePhotoDataUrlForRequest(
-        body.sheetDataUrl,
-        2,
-      );
-      assertTotalJsonBodyWithinBudget(
-        estimateJsonBodyBytes({
+      const usage = await checkGuestUsage(request, "edit");
+      if (!usage.allowed) return guestLimitResponse(usage.scope, "edit");
+      let modelCalled = false;
+      try {
+        const photo = await ensurePhotoDataUrlForRequest(body.photoDataUrl, 2);
+        const currentSheet = await ensurePhotoDataUrlForRequest(
+          body.sheetDataUrl,
+          2,
+        );
+        assertTotalJsonBodyWithinBudget(
+          estimateJsonBodyBytes({
+            photoDataUrl: photo.dataUrl,
+            sheetDataUrl: currentSheet.dataUrl,
+            extraText: corrections.join("\n"),
+          }),
+        );
+        modelCalled = true;
+        const sheet = await ai.correctPhotoColoring({
           photoDataUrl: photo.dataUrl,
           sheetDataUrl: currentSheet.dataUrl,
-          extraText: corrections.join("\n"),
-        }),
-      );
-      const sheet = await ai.correctPhotoColoring({
-        photoDataUrl: photo.dataUrl,
-        sheetDataUrl: currentSheet.dataUrl,
-        corrections,
-        printPrefs,
-        image,
-      });
-      return Response.json({ sheet });
+          corrections,
+          printPrefs,
+          image,
+        });
+        return Response.json({ sheet });
+      } catch (error) {
+        if (!modelCalled) await usage.refund();
+        throw error;
+      }
     }
 
     return Response.json({ error: "Unknown mode." }, { status: 400 });
   } catch (error) {
     const raw =
       error instanceof Error ? error.message : "The crayons jammed on that photo.";
+    // Friendly cases stay; anything else goes through the public-error filter so provider
+    // internals and keys never reach the browser. The full error is logged server-side.
     const message = /invalid json response/i.test(raw)
       ? "The image model had a temporary hiccup. Please try generating again."
-      : raw;
+      : toPublicErrorMessage(error, "The crayons jammed on that photo. Please try again.");
     console.error("[photo-coloring]", raw, error);
     return Response.json({ error: message }, { status: 500 });
   }
@@ -219,7 +245,7 @@ async function handleLibraryModeForUser(
       return Response.json({ error: current.error.message }, { status: current.error.code === "NOT_FOUND" ? 404 : 500 });
     }
     if (current.data!.photoId !== record.id || current.data!.kind === "photo") {
-      return Response.json({ error: "That version is not a coloring sheet of this photo." }, { status: 400 });
+      return Response.json({ error: "That version is not a coloring page of this photo." }, { status: 400 });
     }
   }
 
@@ -292,8 +318,8 @@ async function handleLibraryModeForUser(
       type: kind === "edit" ? "sheet_edited" : "sheet_generated",
       description:
         kind === "edit"
-          ? `Edited the coloring sheet for ${quoted(record.fileName, "a photo")} (free edit)`
-          : `Generated a coloring sheet from ${quoted(record.fileName, "a photo")}`,
+          ? `Edited the coloring page for ${quoted(record.fileName, "a photo")} (free edit)`
+          : `Generated a coloring page from ${quoted(record.fileName, "a photo")}`,
       referenceType: "library_photo",
       referenceId: record.id,
     });

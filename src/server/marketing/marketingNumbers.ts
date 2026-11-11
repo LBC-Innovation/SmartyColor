@@ -1,8 +1,9 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import type { BookBindingId } from "@/lib/print/bookBindings";
+import { BOOK_BINDINGS, type BookBindingId } from "@/lib/print/bookBindings";
+import type { NumbersInput } from "@/lib/marketing/copy";
 import { luluConfigured } from "@/server/lulu/config";
-import { pricePrintOrder } from "@/server/pricingService";
+import { chargeableCents, pricePrintOrder } from "@/server/pricingService";
 import { getPromoCreditSettings } from "@/server/promoCreditsService";
 
 /**
@@ -68,9 +69,66 @@ export async function getWelcomeCredit(): Promise<number | null> {
   }
 }
 
-export type MarketingNumbers = { referencePriceCents: number | null; welcomeCreditCents: number | null };
+// The print-at-home PDF's list price, read the same way checkout reads it (chargeableCents).
+const cachedDigitalPrice = unstable_cache(
+  async (): Promise<number> => {
+    const price = await chargeableCents("book.digital");
+    if (price.error) throw new Error(price.error.message);
+    return price.data;
+  },
+  ["marketing-digital-price-v1"],
+  { revalidate: DAY_SECONDS },
+);
+
+/** What a print-at-home PDF of a whole book costs, in cents; null if unknown or free. */
+export async function getDigitalBookPrice(): Promise<number | null> {
+  try {
+    const cents = await cachedDigitalPrice();
+    return cents > 0 ? cents : null;
+  } catch (e) {
+    log("warn", "Digital book price unavailable", { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+// What one new coloring page charges an account's credit, read the way checkout reads prices.
+const cachedPagePrice = unstable_cache(
+  async (): Promise<number> => {
+    const price = await chargeableCents("ai.sheet_generation");
+    if (price.error) throw new Error(price.error.message);
+    return price.data;
+  },
+  ["marketing-page-price-v1"],
+  { revalidate: DAY_SECONDS },
+);
+
+/** What a new coloring page costs an account, in cents; null if unknown or free. */
+export async function getPagePrice(): Promise<number | null> {
+  try {
+    const cents = await cachedPagePrice();
+    return cents > 0 ? cents : null;
+  } catch (e) {
+    log("warn", "Page price unavailable", { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+export type MarketingNumbers = NumbersInput;
 
 export async function getMarketingNumbers(): Promise<MarketingNumbers> {
-  const [referencePriceCents, welcomeCreditCents] = await Promise.all([getReferencePrice(), getWelcomeCredit()]);
-  return { referencePriceCents, welcomeCreditCents };
+  const [referencePriceCents, welcomeCreditCents, digitalPriceCents, pagePriceCents] = await Promise.all([
+    getReferencePrice(),
+    getWelcomeCredit(),
+    getDigitalBookPrice(),
+    getPagePrice(),
+  ]);
+  return {
+    referencePriceCents,
+    welcomeCreditCents,
+    digitalPriceCents,
+    pagePriceCents,
+    // The example behind "{price}": the same book REFERENCE_BOOK prices.
+    referencePages: REFERENCE_BOOK.pageCount,
+    referenceFormat: BOOK_BINDINGS[REFERENCE_BOOK.bindingId].shortLabel.toLowerCase(),
+  };
 }

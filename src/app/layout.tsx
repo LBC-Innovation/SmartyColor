@@ -6,6 +6,7 @@ import {
   PwaShellScript,
   PwaSplashDismissScript,
 } from "@/components/PwaShellScript";
+import { SITE_URL } from "@/lib/siteUrl";
 import "./globals.css";
 
 const fredoka = Fredoka({
@@ -31,9 +32,6 @@ const APP_NAME = "Colorful Memories";
 const APP_DESCRIPTION =
   "Turn family photos into coloring pages and printed coloring books.";
 const THEME_COLOR = "#7446f0";
-
-/** Canonical site. Share images and canonical URLs resolve here, whichever host served the page. */
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://colorfulmemories.net";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

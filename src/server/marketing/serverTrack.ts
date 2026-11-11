@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash, randomInt } from "node:crypto";
 import { readCookieFromHeader } from "@/lib/marketing/attribution";
+import { intentFromAttributionCookie } from "@/lib/marketing/copy";
 import { AD_OPT_OUT_COOKIE, centsToValue, trackFormatForProduct } from "@/lib/marketing/events";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 
@@ -82,6 +83,8 @@ export async function trackPurchaseServer(input: {
   const format = trackFormatForProduct(order.productId);
   const value = centsToValue(order.totalCents);
   const cookies = input.request.headers.get("cookie");
+  // Which landing page the buyer's last ad click arrived on, read from the cm_attr cookie. No query.
+  const intent = intentFromAttributionCookie(cookies);
   const sends: Promise<void>[] = [];
 
   if (pixelId && metaToken) {
@@ -98,7 +101,7 @@ export async function trackPurchaseServer(input: {
           event_id: order.id,
           action_source: "website",
           user_data: userData,
-          custom_data: { value, currency: "USD", order_id: order.id, format, is_gift: order.isGift },
+          custom_data: { value, currency: "USD", order_id: order.id, format, is_gift: order.isGift, intent },
         },
       ],
     };
@@ -121,6 +124,7 @@ export async function trackPurchaseServer(input: {
       currency: "USD",
       format,
       is_gift: order.isGift,
+      intent,
     };
     if (process.env.ANALYTICS_DEBUG === "1") params.debug_mode = true;
     sends.push(

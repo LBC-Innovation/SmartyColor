@@ -101,7 +101,7 @@ type SheetDrawOptions = {
 };
 
 /**
- * Draw one coloring sheet on a new PDF page. All placement comes from
+ * Draw one coloring page on a new PDF page. All placement comes from
  * `pageLayout`, the same engine the book preview uses, so every framed page
  * keeps the same equal margin on all sides. Placement is worked out on the
  * trimmed page and then shifted by the bleed, so a page with bleed and one
@@ -262,7 +262,7 @@ export async function sheetsToPdf(
   } = {},
 ) {
   if (pages.length === 0) {
-    throw new Error("Add at least one coloring sheet to the book.");
+    throw new Error("Add at least one coloring page to the book.");
   }
   const gutter = (options.gutterIn ?? 0) * POINTS_PER_INCH;
   const bleed = (options.bleedIn ?? 0) * POINTS_PER_INCH;

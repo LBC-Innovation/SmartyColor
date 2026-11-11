@@ -151,14 +151,14 @@ export function V2ProjectSwitcher({
 
   const label = !hydrated
     ? "Loading…"
-    : (activeProject?.name ?? "Select a project");
+    : (activeProject?.name ?? "Select an album");
 
   return (
     <div
       ref={rootRef}
       className={cn("flex h-9 min-w-0 flex-1 items-center gap-0.5 sm:relative", className)}
       role="group"
-      aria-label="Project"
+      aria-label="Album"
     >
       {editing ? (
         <div className="flex w-full min-w-0 items-center gap-2">
@@ -179,7 +179,7 @@ export function V2ProjectSwitcher({
               maxLength={80}
               enterKeyHint="done"
               autoCapitalize="words"
-              aria-label="Project name"
+              aria-label="Album name"
               className="h-9 w-full min-w-0 rounded-lg border border-v2-primary bg-white pl-3 pr-10 text-base font-semibold text-v2-ink outline-none ring-2 ring-v2-primary/20"
             />
             <button
@@ -195,7 +195,7 @@ export function V2ProjectSwitcher({
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-red-200 bg-white text-red-700 transition hover:bg-red-50"
+            className="v2-hit inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-red-200 bg-white text-red-700 transition hover:bg-red-50"
             style={{ viewTransitionName: "cm-project-edit" }}
             aria-label="Delete album"
             title="Delete album"
@@ -205,7 +205,7 @@ export function V2ProjectSwitcher({
           <button
             type="button"
             onClick={() => setEditing(false)}
-            className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white text-v2-navy transition hover:bg-v2-bg-subtle"
+            className="v2-hit inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-gray-200 bg-white text-v2-navy transition hover:bg-v2-bg-subtle"
             style={{ viewTransitionName: "cm-toolbar-cancel" }}
             aria-label="Cancel renaming"
             title="Cancel"
@@ -223,7 +223,7 @@ export function V2ProjectSwitcher({
             aria-haspopup="true"
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
-            className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 text-left transition hover:bg-v2-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+            className="v2-hit flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-v2-primary/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
             style={{ viewTransitionName: "cm-project-name" }}
           >
             {sharedWithMe ? (
@@ -231,7 +231,7 @@ export function V2ProjectSwitcher({
             ) : (
               <FolderOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
             )}
-            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-v2-ink">
+            <span className="line-clamp-2 min-w-0 flex-1 break-words text-[15px] font-semibold leading-tight text-v2-ink">
               {label}
             </span>
             <ChevronDown
@@ -262,8 +262,8 @@ export function V2ProjectSwitcher({
               onClick={startRename}
               className="v2-hit inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-v2-muted transition hover:bg-v2-primary/[0.06] hover:text-v2-ink"
               style={{ viewTransitionName: "cm-project-edit" }}
-              aria-label="Rename project"
-              title="Rename project"
+              aria-label="Rename album"
+              title="Rename album"
             >
               <Pencil className="h-4 w-4" aria-hidden />
             </button>
@@ -400,7 +400,7 @@ export function V2ProjectSwitcher({
       ) : null}
 
       {confirmLeave && activeProject ? (
-        <V2Modal onClose={() => !deleting && setConfirmLeave(false)} maxWidthClass="max-w-md">
+        <V2Modal onClose={() => !deleting && setConfirmLeave(false)} maxWidthClass="max-w-md" ariaLabel="Leave album">
           <div className="p-6">
             <h2 className="text-lg font-semibold text-v2-ink">Leave “{activeProject.name}”?</h2>
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">

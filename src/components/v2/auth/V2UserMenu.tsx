@@ -67,6 +67,7 @@ export function V2UserMenu() {
     return (
       <Link
         href="/sign-in"
+        aria-label="Sign in"
         className="v2-hit inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
       >
         <User className="h-4 w-4" aria-hidden />

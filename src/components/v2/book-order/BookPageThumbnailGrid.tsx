@@ -54,7 +54,7 @@ type Props = {
   onRemovePage: (pageId: string) => void;
   onInsertBlank: () => void;
   onInsertLined: () => void;
-  /** Redraw a landscape page as a portrait sheet. Omit to hide the button. */
+  /** Redraw a landscape page as a portrait page. Omit to hide the button. */
   onMakePortrait?: (pageId: string) => void;
   /** Pages with an AI job running on them, and what it is doing. */
   busy?: Record<string, string>;
@@ -184,7 +184,7 @@ function SortablePhotoTile({
             className="absolute inset-x-1.5 bottom-1.5 flex flex-col items-center rounded-md bg-amber-500/95 px-1.5 py-1 text-center text-[10px] font-semibold leading-tight text-white shadow-sm transition hover:bg-amber-600"
             onClick={onMakePortrait}
             title={portraitHint}
-            aria-label={`Make page ${tile.index + 1} a portrait sheet`}
+            aria-label={`Make page ${tile.index + 1} a portrait page`}
           >
             <span className="opacity-90">Landscape: rotated to fit</span>
             <span className="inline-flex items-center gap-1 underline underline-offset-2">

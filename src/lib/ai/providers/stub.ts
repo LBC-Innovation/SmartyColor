@@ -51,7 +51,7 @@ function stubPhotoSheet(
   extraLine?: string,
 ): GeneratedSheet {
   return {
-    title: "Photo coloring sheet (sample)",
+    title: "Photo coloring page (sample)",
     mimeType: "image/svg+xml",
     imageDataUrl: svgDataUrl(
       "From your photo",
@@ -170,7 +170,7 @@ export function createStubProvider(): ColoringAI {
     },
 
     async generate(input) {
-      const title = input.session.idea.slice(0, 42) || "My coloring sheet";
+      const title = input.session.idea.slice(0, 42) || "My coloring page";
       const sheet: GeneratedSheet = {
         title,
         mimeType: "image/svg+xml",

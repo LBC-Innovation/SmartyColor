@@ -257,7 +257,7 @@ async function migrateLegacySessionIfNeeded(): Promise<V2ProjectsMeta | null> {
   const legacy = await idbGet<StoredSession>(LEGACY_SESSION_KEY);
   if (!legacy) return null;
 
-  const project = newProjectMeta("My first project", legacy.photos?.length ?? 0);
+  const project = newProjectMeta("My first album", legacy.photos?.length ?? 0);
   await idbPut(projectSessionKey(project.id), legacy);
   const meta: V2ProjectsMeta = {
     activeProjectId: project.id,
@@ -279,7 +279,7 @@ async function ensureProjectsMeta(): Promise<V2ProjectsMeta> {
     return meta;
   }
 
-  const project = newProjectMeta("Untitled project");
+  const project = newProjectMeta("Untitled album");
   meta = {
     activeProjectId: project.id,
     projects: [project],
@@ -397,5 +397,5 @@ export async function clearV2StudioSession(): Promise<void> {
 }
 
 export function defaultNewProjectName(projectCount: number): string {
-  return `Project ${projectCount + 1}`;
+  return `Album ${projectCount + 1}`;
 }

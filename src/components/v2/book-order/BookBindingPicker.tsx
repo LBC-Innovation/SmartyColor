@@ -1,5 +1,6 @@
 "use client";
 
+import { useId, useRef, type KeyboardEvent } from "react";
 import { Check, Download, Loader2, Printer } from "lucide-react";
 import { formatCredits } from "@/lib/credits/money";
 import {
@@ -103,16 +104,49 @@ export function BookBindingPicker({
   digitalPriceCents = null,
 }: Props) {
   const filtering = contentPageCount > 0;
-  const fitCount = filtering
-    ? CARDS.filter((c) => bookFormatFit(contentPageCount, getBookFormat(c.id)).fits).length
-    : CARDS.length;
+  const idBase = useId();
+  const groupRef = useRef<HTMLDivElement>(null);
+  const isUnavailable = (card: Card) =>
+    filtering && !bookFormatFit(contentPageCount, getBookFormat(card.id)).fits;
+  const fitCount = CARDS.filter((c) => !isUnavailable(c)).length;
+  // Best fit first, then the other printed formats that work, then those that can't be picked,
+  // and print-at-home last.
+  const rank = (card: Card) =>
+    card.digital ? 3 : isUnavailable(card) ? 2 : card.id === recommendedId ? 0 : 1;
+  const ordered = CARDS.map((card, index) => ({ card, index }))
+    .sort((a, b) => rank(a.card) - rank(b.card) || a.index - b.index)
+    .map(({ card }) => card);
+  const selectedCard = ordered.find((c) => c.id === value && !isUnavailable(c));
+  const tabStopId = (selectedCard ?? ordered.find((c) => !isUnavailable(c)))?.id;
+
+  // Radio groups move with the arrow keys; Tab enters on the selected card only.
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
+    if (!keys.includes(event.key)) return;
+    const radios = Array.from(
+      groupRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)') ?? [],
+    );
+    const at = radios.findIndex((el) => el === document.activeElement);
+    if (at < 0 || radios.length === 0) return;
+    event.preventDefault();
+    const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
+    const target = radios[(at + step + radios.length) % radios.length];
+    target.focus();
+    target.click();
+  }
 
   return (
     // Each card is a subgrid over three shared rows (description, price, page
     // info), so a row is as tall as its tallest card and the prices always line
     // up, however the text above or below them wraps.
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="radiogroup" aria-label="Binding">
-      {CARDS.map((card) => {
+    <div
+      ref={groupRef}
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      role="radiogroup"
+      aria-label="Book format"
+      onKeyDown={onKeyDown}
+    >
+      {ordered.map((card) => {
         const fit = bookFormatFit(contentPageCount, getBookFormat(card.id));
         const unavailable = filtering && !fit.fits;
         const selected = value === card.id && !unavailable;
@@ -145,10 +179,13 @@ export function BookBindingPicker({
             type="button"
             role="radio"
             aria-checked={selected}
+            aria-labelledby={`${idBase}-${card.id}-title`}
+            aria-describedby={`${idBase}-${card.id}-price ${idBase}-${card.id}-info`}
+            tabIndex={card.id === tabStopId ? 0 : -1}
             disabled={unavailable}
             onClick={() => onChange(card.id)}
             className={cn(
-              "relative row-span-3 grid grid-rows-subgrid gap-y-0 rounded-2xl border-2 p-4 text-left transition sm:p-5",
+              "relative row-span-3 grid grid-rows-subgrid gap-y-0 rounded-2xl border-2 p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary sm:p-5",
               unavailable
                 ? "cursor-not-allowed border-gray-200 bg-v2-bg-subtle"
                 : selected
@@ -176,11 +213,14 @@ export function BookBindingPicker({
                   </span>
                 ) : null}
               </span>
-              <p className="mt-2 pr-8 text-lg font-bold text-v2-ink">{card.title}</p>
+              <p id={`${idBase}-${card.id}-title`} className="mt-2 pr-8 text-lg font-bold text-v2-ink">
+                {card.title}
+              </p>
               <p className="mt-1 text-sm text-v2-muted">{card.blurb}</p>
             </div>
 
             <p
+              id={`${idBase}-${card.id}-price`}
               className={cn(
                 "mt-4 flex h-7 items-baseline gap-1.5 text-2xl font-bold leading-none tabular-nums text-v2-ink",
                 unavailable && "opacity-50",
@@ -205,7 +245,7 @@ export function BookBindingPicker({
               )}
             </p>
             {/* The reason stays at full strength so it reads as the way to unlock the card. */}
-            <div className="mt-3 border-t border-gray-200 pt-3 text-xs leading-snug text-v2-muted">
+            <div id={`${idBase}-${card.id}-info`} className="mt-3 border-t border-gray-200 pt-3 text-xs leading-snug text-v2-muted">
               <p className="font-semibold text-v2-navy">{basis}</p>
               <p className="mt-0.5">{card.pageRule ?? card.detail}</p>
             </div>

@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import {
+  Check,
   CheckSquare,
   CloudUpload,
-  ImageIcon,
   Loader2,
+  ShieldCheck,
   Square,
   Trash2,
   Upload,
@@ -17,6 +18,9 @@ import { V2StudioToolbar } from "@/components/v2/V2StudioToolbar";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import type { V2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
+import { BEST_PHOTOS, STUDIO_EMPTY } from "@/content/marketing";
+import { fillCopy } from "@/lib/marketing/copy";
+import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
 
 type V2LibraryWorkspaceProps = {
   /** Hidden file input; the page clicks it from its own "upload" buttons too. */
@@ -29,14 +33,21 @@ type V2LibraryWorkspaceProps = {
   /** Enables "Delete pages" mode in the toolbar and list. */
   deletion?: V2LibraryDeletion;
   deleteDisabled?: boolean;
-  /** Control beside the "Your Photos" heading (Refresh, Generate all…). */
+  /** Control beside the "Your Photos" heading (Refresh, Make all pages…). */
   headerAction?: ReactNode;
   /** Pinned under the list — on phones it floats above the tab bar. */
   dock?: ReactNode;
   /** Desktop-only actions in the right half of the toolbar. */
   studioActions?: ReactNode;
-  /** Second line of the empty-library drop zone. */
-  uploadHint?: string;
+  /** The empty-library card. Defaults to the coloring-page onboarding; other studios bring their own words. */
+  emptyState?: {
+    title?: string;
+    line?: string;
+    /** Short tips under the button; an empty list hides them. */
+    tips?: string[];
+    /** Shows a "How it works" link that runs this. */
+    onHowItWorks?: () => void;
+  };
   /** The page's main pane: the right column on desktop, usually a full-screen view on phones. */
   children: ReactNode;
 };
@@ -45,7 +56,7 @@ type V2LibraryWorkspaceProps = {
  * The photo library sidebar every studio page shares: project switcher and
  * upload/delete toolbar, "Your Photos" list with drag reorder, and a pinned
  * call to action. On phones the list is the page itself and `children`
- * decide how they appear (My projects and Story book open full-screen views).
+ * decide how they appear (My albums and Story book open full-screen views).
  */
 export function V2LibraryWorkspace({
   fileInputRef,
@@ -58,10 +69,10 @@ export function V2LibraryWorkspace({
   headerAction,
   dock,
   studioActions,
-  uploadHint = "Drag and drop, or select files",
+  emptyState,
   children,
 }: V2LibraryWorkspaceProps) {
-  const { photos, pendingUploads, selectedId, replacePhotos } = useV2Studio();
+  const { photos, pendingUploads, selectedId, replacePhotos, cloud } = useV2Studio();
   /** While the project name is being edited the toolbar is given over to that. */
   const [renamingProject, setRenamingProject] = useState(false);
   // The dock floats over the end of the list; reserve exactly its height so it never hides a photo.
@@ -79,6 +90,7 @@ export function V2LibraryWorkspace({
   const uploading = pendingUploads.length > 0;
   const libraryPhotoCount = photos.length + pendingUploads.length;
   const deleteMode = deletion?.active ?? false;
+  const emptyTips = emptyState?.tips ?? BEST_PHOTOS.items;
 
   function openPicker() {
     fileInputRef.current?.click();
@@ -170,8 +182,8 @@ export function V2LibraryWorkspace({
                   disabled={deleteDisabled}
                   className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger v2-studio-toolbar-btn--icon"
                   style={{ viewTransitionName: "cm-toolbar-trash" }}
-                  title="Delete pages"
-                  aria-label="Delete pages"
+                  title="Delete photos"
+                  aria-label="Delete photos"
                 >
                   <Trash2 className="h-[18px] w-[18px] shrink-0" aria-hidden />
                 </button>
@@ -187,7 +199,7 @@ export function V2LibraryWorkspace({
         <div className="v2-photo-list-column flex w-full min-w-0 flex-1 flex-col bg-white lg:min-h-0 lg:overflow-hidden lg:w-[min(100%,22rem)] lg:max-w-sm lg:flex-none lg:border-r lg:border-gray-200 xl:w-80">
           <section className="flex flex-1 flex-col px-4 pt-3 sm:px-5 lg:min-h-0 lg:overflow-hidden lg:pt-4">
             <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-              <h2 className="text-base font-semibold tracking-tight text-v2-ink">
+              <h2 className="shrink-0 whitespace-nowrap text-base font-semibold tracking-tight text-v2-ink">
                 Your Photos
                 <span className="ml-1.5 font-medium text-v2-muted tabular-nums">
                   {libraryPhotoCount}
@@ -203,27 +215,58 @@ export function V2LibraryWorkspace({
               >
                 <div className="flex flex-col items-center gap-3 text-center">
                   <div className="v2-dropzone-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-v2-primary shadow-sm">
-                    <CloudUpload className="h-7 w-7" strokeWidth={1.5} />
+                    <CloudUpload className="h-7 w-7" strokeWidth={1.5} aria-hidden />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-v2-ink">Upload Photos</p>
-                    <p className="mt-0.5 text-xs text-v2-muted">{uploadHint}</p>
-                    <p className="mt-1 text-[11px] text-v2-muted">
-                      JPG, PNG, HEIC up to 20MB each
-                    </p>
+                    <h3 className="v2-brand-title text-lg text-v2-ink">{emptyState?.title ?? STUDIO_EMPTY.title}</h3>
+                    <p className="mt-1 text-sm text-v2-muted">{emptyState?.line ?? STUDIO_EMPTY.line}</p>
                   </div>
                   <button
                     type="button"
                     onClick={openPicker}
-                    className="v2-breathe inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-v2-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-v2-primary-dark"
+                    className="v2-btn-primary v2-breathe min-h-11 w-full"
                   >
                     {uploading ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                     ) : (
-                      <ImageIcon className="h-4 w-4" aria-hidden />
+                      <Upload className="h-4 w-4" aria-hidden />
                     )}
-                    Select Photos
+                    {STUDIO_EMPTY.button}
                   </button>
+
+                  {emptyTips.length > 0 ? (
+                  <div className="w-full text-left">
+                    <p className="text-xs font-semibold text-v2-navy">{BEST_PHOTOS.title}</p>
+                    <ul className="mt-1.5 space-y-1">
+                      {emptyTips.map((tip) => (
+                        <li key={tip} className="flex items-start gap-2 text-xs text-v2-muted">
+                          <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
+                          {tip}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  ) : null}
+
+                  <p className="text-[11px] leading-relaxed text-v2-muted">
+                    {fillCopy(STUDIO_EMPTY.formats, { size: formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES) })}
+                    <span className="hidden pointer-fine:inline"> {STUDIO_EMPTY.dragHint}</span>
+                  </p>
+                  {!cloud ? (
+                    <p className="flex items-start justify-center gap-1.5 text-[11px] leading-relaxed text-v2-muted">
+                      <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                      {STUDIO_EMPTY.guestNote}
+                    </p>
+                  ) : null}
+                  {emptyState?.onHowItWorks ? (
+                  <button
+                    type="button"
+                    onClick={emptyState.onHowItWorks}
+                    className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold text-v2-link underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+                  >
+                    {STUDIO_EMPTY.howItWorks}
+                  </button>
+                  ) : null}
                 </div>
               </V2UploadDropzone>
             ) : null}

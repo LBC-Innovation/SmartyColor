@@ -8,6 +8,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useModalLayer } from "@/components/v2/ui/useModalLayer";
+import { EDIT_SUGGESTIONS } from "@/content/marketing";
 import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 
 export type SheetEditMessage = {
@@ -15,6 +17,8 @@ export type SheetEditMessage = {
   role: "user" | "assistant";
   text: string;
   pending?: boolean;
+  /** The edit this message answers went through. */
+  done?: boolean;
 };
 
 type PreviewMode = "sheet" | "original";
@@ -44,6 +48,8 @@ export function V2SheetEditChat({
   const [previewMode, setPreviewMode] = useState<PreviewMode>("sheet");
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalLayer({ panelRef, onClose, active: open });
 
   useEffect(() => {
     if (!open) return;
@@ -51,15 +57,6 @@ export function V2SheetEditChat({
     setDraft("");
     inputRef.current?.focus();
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -73,6 +70,14 @@ export function V2SheetEditChat({
     if (!text || busy || disabled) return;
     onSend(text);
     setDraft("");
+  }
+
+  /** Starting points stay until an edit has gone through (a failed send keeps them); picking one only fills the box. */
+  const showSuggestions = !messages.some((message) => message.done);
+
+  function pickSuggestion(text: string) {
+    setDraft(text);
+    inputRef.current?.focus();
   }
 
   function togglePreview() {
@@ -92,7 +97,9 @@ export function V2SheetEditChat({
       onClick={onClose}
     >
       <div
-        className="flex h-[min(92dvh,880px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl shadow-slate-900/20"
+        ref={panelRef}
+        tabIndex={-1}
+        className="flex h-[min(92dvh,880px)] w-full max-w-6xl focus:outline-none flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl shadow-slate-900/20"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-5">
@@ -101,10 +108,10 @@ export function V2SheetEditChat({
               id="v2-sheet-edit-title"
               className="text-base font-semibold text-v2-ink sm:text-lg"
             >
-              Edit coloring sheet
+              Edit coloring page
             </h2>
             <p className="mt-0.5 text-xs text-v2-muted sm:text-sm">
-              Describe one change at a time — we refine the current sheet, not
+              Describe one change at a time — we refine the current page, not
               redraw from scratch.
             </p>
           </div>
@@ -123,7 +130,7 @@ export function V2SheetEditChat({
           <div className="relative flex max-h-[38dvh] min-h-0 flex-none flex-col lg:max-h-none lg:flex-[3] border-b border-gray-100 bg-v2-bg-subtle lg:border-b-0 lg:border-r">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100/80 px-4 py-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">
-                {showingSheet ? "Coloring sheet" : "Original photo"}
+                {showingSheet ? "Coloring page" : "Original photo"}
               </p>
               <button
                 type="button"
@@ -131,7 +138,7 @@ export function V2SheetEditChat({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-v2-primary/30 bg-white px-2.5 py-1.5 text-xs font-semibold text-v2-link transition hover:bg-v2-primary-light"
               >
                 <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />
-                {showingSheet ? "Show original" : "Show coloring sheet"}
+                {showingSheet ? "Show original" : "Show coloring page"}
               </button>
             </div>
             <div className="relative flex h-[30dvh] min-h-0 items-center justify-center p-3 lg:h-auto lg:flex-1 lg:p-4">
@@ -140,7 +147,7 @@ export function V2SheetEditChat({
                 src={showingSheet ? sheetImageUrl : originalPreviewUrl}
                 alt={
                   showingSheet
-                    ? "Coloring sheet preview"
+                    ? "Coloring page preview"
                     : "Original photo preview"
                 }
                 className="max-h-full max-w-full object-contain"
@@ -213,8 +220,23 @@ export function V2SheetEditChat({
                 submit();
               }}
             >
+              {showSuggestions ? (
+                <div role="group" aria-label="Suggested edits" className="mb-3 flex flex-wrap gap-2">
+                  {EDIT_SUGGESTIONS.map((text) => (
+                    <button
+                      key={text}
+                      type="button"
+                      disabled={busy || disabled}
+                      onClick={() => pickSuggestion(text)}
+                      className="inline-flex min-h-11 items-center rounded-full border border-v2-primary/30 bg-white px-3.5 text-sm font-semibold text-v2-link transition hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <label className="sr-only" htmlFor="v2-sheet-edit-input">
-                Describe a change to the coloring sheet
+                Describe a change to the coloring page
               </label>
               <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition focus-within:border-v2-primary/45 focus-within:ring-2 focus-within:ring-v2-primary/15">
                 <textarea

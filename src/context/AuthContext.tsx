@@ -13,7 +13,7 @@ import type { User } from "@/lib/api/types";
 import { DEFAULT_FEATURE_ACCESS } from "@/lib/auth/features";
 import * as api from "@/lib/api/client";
 import { clearImageCache } from "@/lib/v2/imageCache";
-import { isMarketingPath } from "@/lib/marketing/routes";
+import { isAuthPath, isMarketingPath } from "@/lib/marketing/routes";
 
 export type AuthSessionState = "anonymous" | "authenticated" | "expired";
 
@@ -102,7 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setSession("expired");
       const { pathname, search } = window.location;
-      if (pathname === SIGN_IN_PATH || isMarketingPath(pathname)) return;
+      // A reset link opened with a stale token in storage must not be bounced away from the hash.
+      if (isAuthPath(pathname) || isMarketingPath(pathname)) return;
       const params = new URLSearchParams({ reason: "expired", next: `${pathname}${search}` });
       router.replace(`${SIGN_IN_PATH}?${params.toString()}`);
     };

@@ -5,7 +5,7 @@ export type ActivityCategory = (typeof ACTIVITY_CATEGORIES)[number];
 
 export const ACTIVITY_CATEGORY_LABELS: Record<ActivityCategory, string> = {
   photos: "Photos",
-  sheets: "Coloring sheets",
+  sheets: "Coloring pages",
   albums: "Albums",
   orders: "Orders",
   wallet: "Wallet",
@@ -19,8 +19,8 @@ export const ACTIVITY_TYPES = {
     { id: "photo_portrait", label: "Portrait version" },
   ],
   sheets: [
-    { id: "sheet_generated", label: "Sheet generated" },
-    { id: "sheet_edited", label: "Sheet edited" },
+    { id: "sheet_generated", label: "Page made" },
+    { id: "sheet_edited", label: "Page edited" },
   ],
   albums: [
     { id: "album_created", label: "Album created" },

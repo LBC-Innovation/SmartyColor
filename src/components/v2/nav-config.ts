@@ -34,7 +34,7 @@ export const SIGNED_IN_HOME = "/home";
 
 export const v2TopNav: V2NavItem[] = [
   { id: "home", label: "Home", icon: Home, href: SIGNED_IN_HOME, feature: "projects", signedIn: true },
-  { id: "projects", label: "My projects", icon: ClipboardList, href: STUDIO_HOME, feature: "projects" },
+  { id: "projects", label: "My albums", icon: ClipboardList, href: STUDIO_HOME, feature: "projects" },
   { id: "storybook", label: "Story book", icon: BookOpen, href: "/storybook", feature: "storybook" },
   { id: "orders", label: "My orders", icon: Package, href: "/orders" },
 ];

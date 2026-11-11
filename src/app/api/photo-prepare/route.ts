@@ -9,10 +9,21 @@ import {
   PHOTO_SERVER_UPLOAD_MAX_BYTES,
 } from "@/lib/photo/payloadBudget";
 
+import { authenticateBearer } from "@/lib/auth/authenticate";
+import { toPublicErrorMessage } from "@/lib/security/publicError";
+import { checkGuestUsage, guestLimitResponse } from "@/server/guestUsageGuard";
+
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
+    // Server-side HEIC conversion is open to guests; a generous daily cap keeps it from being abused.
+    // Signed-in people are not limited (their session is checked, but a missing one is fine).
+    const session = await authenticateBearer(request.headers.get("authorization"));
+    if ("error" in session) {
+      const usage = await checkGuestUsage(request, "prepare");
+      if (!usage.allowed) return guestLimitResponse(usage.scope, "prepare");
+    }
     const form = await request.formData();
     const photo = form.get("photo");
     if (!(photo instanceof File)) {
@@ -61,8 +72,7 @@ export async function POST(request: Request) {
     const photoDataUrl = `data:image/jpeg;base64,${bytes.toString("base64")}`;
     return Response.json({ photoDataUrl });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not prepare that photo.";
+    const message = toPublicErrorMessage(error, "Could not prepare that photo.");
     return Response.json({ error: message }, { status: 500 });
   }
 }

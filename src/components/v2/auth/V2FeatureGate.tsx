@@ -8,6 +8,7 @@ import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { useAuth } from "@/context/AuthContext";
 import {
   DEFAULT_FEATURE_ACCESS,
+  STORY_MODE_PUBLIC,
   PRODUCT_FEATURES,
   featureLabel,
   type ProductFeature,
@@ -49,27 +50,24 @@ export function V2FeatureGate({
         ) : (
           <div className="v2-panel flex max-w-md flex-col items-center gap-3 p-8 text-center">
             <Lock className="h-10 w-10 text-v2-muted" aria-hidden />
-            <p className="text-sm font-semibold text-v2-ink">
-              {featureLabel(feature)} isn&apos;t turned on for your account
-            </p>
+            <h1 className="text-base font-semibold text-v2-ink">
+              {featureLabel(feature)} isn&apos;t open yet
+            </h1>
             <p className="text-sm text-v2-muted">
-              {user
-                ? "Access is granted one account at a time. Get in touch with us if you'd like it."
-                : "Sign in to an account that has access to open it."}
+              We&apos;re still getting it ready. Your albums and coloring pages are waiting in the studio.
             </p>
-            {!user ? (
+            <Link
+              href={fallback?.href ?? (feature === "projects" ? "/" : "/studio")}
+              className="v2-btn-primary mt-2 min-h-11"
+            >
+              {fallback ? `Go to ${fallback.name}` : feature === "projects" ? "Back to home" : "Go to my albums"}
+            </Link>
+            {!user && (feature !== "storybook" || STORY_MODE_PUBLIC) ? (
               <Link
                 href="/sign-in"
-                className="mt-2 inline-flex rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
+                className="inline-flex min-h-11 items-center px-3 text-sm font-semibold text-v2-link hover:underline"
               >
-                Sign in
-              </Link>
-            ) : fallback ? (
-              <Link
-                href={fallback.href}
-                className="mt-2 inline-flex rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
-              >
-                Go to {fallback.name}
+                I already have an account
               </Link>
             ) : null}
           </div>

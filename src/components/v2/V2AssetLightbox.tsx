@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { Columns2, Layers2, Loader2, Maximize2, Save, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -144,7 +145,7 @@ function LightboxOverlayPanel({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={sheetSrc}
-            alt="Coloring sheet overlay"
+            alt="Coloring page overlay"
             className="pointer-events-none absolute inset-0 h-full w-full object-contain"
             style={{ opacity: sheetOpacity }}
           />
@@ -174,24 +175,17 @@ export function V2AssetLightbox({
     overlayOpacity > 0 &&
     !saveOverlayRevisionBusy;
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalLayer({ panelRef, onClose });
 
   const title =
-    focus === "original" ? "Original photo" : "Coloring sheet";
+    focus === "original" ? "Original photo" : "Coloring page";
 
   return (
     <div
-      className="v2-safe-overlay fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-sm"
+      ref={panelRef}
+      tabIndex={-1}
+      className="v2-safe-overlay fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby="v2-lightbox-title"
@@ -212,7 +206,7 @@ export function V2AssetLightbox({
                 htmlFor="v2-lightbox-overlay-opacity"
                 className="shrink-0 text-xs font-medium text-white/70 sm:text-sm"
               >
-                Sheet
+                Page
               </label>
               <input
                 id="v2-lightbox-overlay-opacity"
@@ -228,7 +222,7 @@ export function V2AssetLightbox({
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={overlayOpacity}
-                aria-label="Coloring sheet overlay opacity"
+                aria-label="Coloring page overlay opacity"
               />
               <span className="w-9 shrink-0 text-right text-xs font-semibold tabular-nums text-white/90 sm:text-sm">
                 {overlayOpacity}%
@@ -303,9 +297,9 @@ export function V2AssetLightbox({
                 emphasized={focus === "original"}
               />
               <LightboxPanel
-                label="Coloring sheet"
+                label="Coloring page"
                 src={sheetSrc!}
-                alt="Coloring sheet"
+                alt="Coloring page"
                 emphasized={focus === "sheet"}
               />
             </>
@@ -318,9 +312,9 @@ export function V2AssetLightbox({
             />
           ) : sheetSrc ? (
             <LightboxPanel
-              label="Coloring sheet"
+              label="Coloring page"
               src={sheetSrc}
-              alt="Coloring sheet"
+              alt="Coloring page"
               emphasized
             />
           ) : null}

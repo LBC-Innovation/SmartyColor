@@ -5,6 +5,6 @@ export async function GET() {
   const numbers = await getMarketingNumbers();
   return Response.json(
     { data: numbers, error: null },
-    { headers: { "Cache-Control": "public, max-age=300, s-maxage=3600" } },
+    { headers: { "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=3600" } },
   );
 }

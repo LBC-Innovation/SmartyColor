@@ -432,7 +432,11 @@ export function V2StoryBookApp() {
         deletion={deletion}
         deleteDisabled={uploading}
         headerAction={cloud ? <V2LibraryRefreshButton disabled={uploading} /> : null}
-        uploadHint="Same library as My Projects — add trip photos here"
+        emptyState={{
+          title: "Add your trip photos",
+          line: "These are the same photos as in My albums. Add the ones for your story here.",
+          tips: [],
+        }}
         dock={
           <button type="button" onClick={openStoryPane} className="v2-photo-list-dock-cta">
             <BookOpen className="h-5 w-5 shrink-0" aria-hidden />

@@ -15,7 +15,7 @@ import type { V2PhotoEntry } from "@/lib/v2/studioTypes";
 type Shortfall = { cents: number; kind: SheetUsageKind };
 
 const SHORTFALL_FOR: Record<SheetUsageKind, string> = {
-  generation: "a coloring sheet",
+  generation: "a coloring page",
   edit: "this edit",
   portrait: "a portrait version",
 };

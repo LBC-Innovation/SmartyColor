@@ -7,7 +7,7 @@ import type { PrintPrefs } from "@/lib/print/settings";
 import { cn } from "@/lib/cn";
 
 type V2PrintSheetModalProps = {
-  /** The coloring sheet to preview. */
+  /** The coloring page to preview. */
   sheetSrc: string;
   printPrefs: PrintPrefs;
   /** Builds the print-ready PDF for this page (same file as the download). */
@@ -20,7 +20,7 @@ type PdfState =
   | { status: "ready"; url: string }
   | { status: "error"; message: string };
 
-const FILE_NAME = "colorful-memories-coloring-sheet.pdf";
+const FILE_NAME = "colorful-memories-coloring-page.pdf";
 
 /** Phones and tablets can't print a PDF from a hidden frame; they open it instead. */
 function prefersOpeningPdf() {
@@ -28,7 +28,7 @@ function prefersOpeningPdf() {
 }
 
 /**
- * Preview one coloring sheet on its paper, then print it or save it as a PDF.
+ * Preview one coloring page on its paper, then print it or save it as a PDF.
  * The PDF is made as soon as the dialog opens so both buttons respond at once.
  */
 export function V2PrintSheetModal({
@@ -142,7 +142,7 @@ export function V2PrintSheetModal({
             {/* eslint-disable-next-line @next/next/no-img-element -- data URLs and signed URLs */}
             <img
               src={sheetSrc}
-              alt="Coloring sheet print preview"
+              alt="Coloring page print preview"
               className="h-full w-full object-contain"
             />
           </div>
