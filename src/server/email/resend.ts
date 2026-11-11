@@ -8,6 +8,8 @@ export type OutgoingEmail = {
   html: string;
   text: string;
   replyTo?: string;
+  /** Extra headers, e.g. List-Unsubscribe on marketing mail. */
+  headers?: Record<string, string>;
   /** Files sent with the message (Resend allows 40 MB per email, after base64). */
   attachments?: { filename: string; content: Uint8Array }[];
 };
@@ -44,6 +46,7 @@ export async function sendEmail(message: OutgoingEmail): Promise<boolean> {
         html: message.html,
         text: message.text,
         ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(message.headers ? { headers: message.headers } : {}),
         ...(message.attachments?.length
           ? {
               attachments: message.attachments.map((a) => ({
