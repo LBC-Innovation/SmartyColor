@@ -30,6 +30,11 @@ import { BookOrderPriceBar } from "@/components/v2/book-order/BookOrderPriceBar"
 import { BookOrderStepper, type BookOrderStep } from "@/components/v2/book-order/BookOrderStepper";
 import { BookPageThumbnailGrid } from "@/components/v2/book-order/BookPageThumbnailGrid";
 import { BookPendingPhotos } from "@/components/v2/book-order/BookPendingPhotos";
+import { V2GuestGate } from "@/components/v2/auth/V2GuestGate";
+import { ACCOUNT_CREDIT_LINE, GUEST_GATES, PRICE_LINE } from "@/content/marketing";
+import { withNextParam } from "@/lib/auth/nextPath";
+import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
+import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
@@ -84,8 +89,8 @@ import {
 } from "@/lib/orders/shippingAddress";
 import type { DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import { centsToValue, trackFormat } from "@/lib/marketing/events";
-import { track, trackPageGenerated, trackPurchaseOnce } from "@/lib/track";
-import { HOLIDAY_LINE } from "@/content/marketing";
+import { track, trackBookStarted, trackPageGenerated, trackPurchaseOnce } from "@/lib/track";
+import { GIFT_NOTE_PLACEHOLDER, HOLIDAY_LINE } from "@/content/marketing";
 import { fillCopy, readIntent } from "@/lib/marketing/copy";
 import { GIFT_NOTE_MAX_CHARS, normalizeGiftNote, printableGiftNoteChars } from "@/lib/orders/giftNote";
 import { holidayOrderBy } from "@/lib/marketing/holiday";
@@ -271,7 +276,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   /** Set once the book is ordered (or its cart removed), so nothing saves it again. */
   const cartClosedRef = useRef(false);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
-  /** Photos in the chosen albums with no coloring sheet yet. */
+  /** Photos in the chosen albums with no coloring page yet. */
   const [pendingPhotos, setPendingPhotos] = useState<BookWizardPendingPhoto[]>([]);
   const albumOrderRef = useRef<string[]>([]);
   /** Photos with an AI job running, and what it is doing. */
@@ -305,10 +310,13 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const [shippingZip] = useState(() => readStoredQuoteShippingZip());
   const [address, setAddress] = useState<ShippingAddress>(() => readStoredAddress(ADDRESS_STORAGE_KEY));
   const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
-  const [shipDifferent, setShipDifferent] = useState(false);
+  // A gift visitor starts with the gift box ticked AND the ship-to form open, the same state ticking
+  // the box by hand produces (see the checkbox's onChange). A saved cart overrides both below.
+  const [startsAsGift] = useState(() => readIntent() === "gift");
+  const [shipDifferent, setShipDifferent] = useState(startsAsGift);
   const [shipTo, setShipTo] = useState<ShippingAddress>(() => readStoredAddress(SHIP_TO_STORAGE_KEY));
   /** Sent to someone else. Starts on for visitors who came in through the gift page. */
-  const [isGift, setIsGift] = useState(() => readIntent() === "gift");
+  const [isGift, setIsGift] = useState(startsAsGift);
   /** The gift note as typed; it prints as the book's first page. */
   const [giftNote, setGiftNote] = useState("");
   /** "Save this address for future orders": on when the account already has one saved. */
@@ -354,12 +362,14 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const binding = getBookFormat(bindingId);
   const holiday = holidayOrderBy();
   const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
+  const giftNotePlaceholder = holiday ? GIFT_NOTE_PLACEHOLDER.christmas : GIFT_NOTE_PLACEHOLDER.neutral;
   const bookStartedRef = useRef(false);
   useEffect(() => {
-    if (bookStartedRef.current || !user) return;
+    // Wait for a saved cart to finish restoring, so the format sent is the one actually chosen.
+    if (bookStartedRef.current || !user || restoring) return;
     bookStartedRef.current = true;
-    track("book_started", { format: trackFormat(bindingId) });
-  }, [user, bindingId]);
+    trackBookStarted(trackFormat(bindingId));
+  }, [user, bindingId, restoring]);
   // A gift note prints as page 1 and counts toward the page total (and price) like any page.
   const giftNoteText = !isDigital && isGift ? normalizeGiftNote(giftNote) : "";
   const giftNoteFits = contentCount + 1 <= binding.maxPages;
@@ -580,7 +590,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       removedIdsRef.current = new Set(Array.isArray(saved.removedIds) ? saved.removedIds : []);
       if (saved.coverDesign) setCoverDraft(normalizeCoverDesign(saved.coverDesign));
       setShipDifferent(saved.shipDifferent === true);
-      if (typeof saved.isGift === "boolean") setIsGift(saved.isGift);
+      // A saved cart wins over the landing-page default, so the two stay in step with what was saved.
+      setIsGift(saved.isGift === true);
       if (typeof saved.giftNote === "string") setGiftNote(printableGiftNoteChars(saved.giftNote));
       restorePagesRef.current = Array.isArray(saved.pages) ? saved.pages : [];
       const reached = (Array.isArray(saved.visited) ? saved.visited : []).filter(isStep);
@@ -632,7 +643,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const quotePageCount = plan.totalPages;
 
   useEffect(() => {
-    if (!quoteActive || isDigitalFormat(bindingId)) return;
+    if (!user || !quoteActive || isDigitalFormat(bindingId)) return;
     let cancelled = false;
     const t = window.setTimeout(() => {
       const zip = (addressComplete ? shippingAddress.postcode : shippingZip).trim();
@@ -680,7 +691,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
+  }, [user, quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
 
   // The customer's own address is a full delivery address unless they ship elsewhere.
   const validateOwnAddress = shipDifferent ? validateBillingAddress : validateShippingAddress;
@@ -698,7 +709,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const formatQuotesAsked = useRef(new Set<string>());
 
   useEffect(() => {
-    if (step !== "book" || loadingAlbums || loadingPages || contentCount === 0) return;
+    // Quotes need an account; a guest sees the sign-in gate instead.
+    if (!user || step !== "book" || loadingAlbums || loadingPages || contentCount === 0) return;
     for (const id of PRINT_BINDING_IDS) {
       const pageCount = formatPageCounts[id];
       const key = `${id}:${pageCount}`;
@@ -711,7 +723,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         setFormatQuotes((prev) => ({ ...prev, [key]: book ?? null }));
       });
     }
-  }, [step, loadingAlbums, loadingPages, contentCount, formatPageCounts]);
+  }, [user, step, loadingAlbums, loadingPages, contentCount, formatPageCounts]);
 
   const formatPrices = useMemo(() => {
     const prices: Partial<Record<BookBindingId, FormatPrice>> = {};
@@ -811,7 +823,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       return;
     }
     if (step === "pages" && plan.photoCount === 0) {
-      setError("Pick at least one album with a generated coloring sheet.");
+      setError("Pick at least one album with a generated coloring page.");
       return;
     }
     if (step === "proof" && !proofConfirmed) {
@@ -930,7 +942,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     setAddCreditShortfall(cents);
   }
 
-  // ---- coloring sheets drawn right here ----------------------------------------
+  // ---- coloring pages drawn right here ----------------------------------------
 
   /** True when the wallet covers it; otherwise opens add-credit and returns false. */
   function canAfford(cents: number): boolean {
@@ -981,7 +993,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   /** A fresh sheet goes in its photo's place: replacing the page it had, or joining the book. */
   async function placeSheet(id: string, photo: LibraryPhoto, projectId: string, projectName: string) {
     const entry = await bookEntryFromLibraryPhoto(photo, projectId, projectName);
-    if (!("page" in entry)) throw new Error("No coloring sheet came back. Please try again.");
+    if (!("page" in entry)) throw new Error("No coloring page came back. Please try again.");
     const page = entry.page;
     removedIdsRef.current.delete(id);
     setPendingPhotos((prev) => prev.filter((p) => p.id !== id));
@@ -995,7 +1007,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   function generateSheet(id: string) {
     const pending = pendingPhotos.find((p) => p.id === id);
     if (!pending || !canAfford(generateCents)) return;
-    void runPhotoJob(id, "Drawing the coloring sheet…", async () => {
+    void runPhotoJob(id, "Drawing the coloring page…", async () => {
       const photo = await callPhotoAi("/api/photo-coloring", {
         mode: "generate-library",
         photoId: pending.photoId,
@@ -1008,14 +1020,14 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     });
   }
 
-  /** Redraw a landscape photo as a portrait sheet, making its portrait version first if it has none. */
+  /** Redraw a landscape photo as a portrait page, making its portrait version first if it has none. */
   function makePortraitSheet(id: string) {
     const page = bookPages.find((p): p is BookWizardPhotoPage => p.kind === "photo" && p.id === id);
     const target = page ?? pendingPhotos.find((p) => p.id === id);
     if (!target) return;
     const known = target.portraitRevisionId;
     if (!canAfford(generateCents + (known ? 0 : portraitCents))) return;
-    void runPhotoJob(id, known ? "Drawing the portrait sheet…" : "Making a portrait version…", async () => {
+    void runPhotoJob(id, known ? "Drawing the portrait page…" : "Making a portrait version…", async () => {
       let sourceRevisionId = known;
       if (!sourceRevisionId) {
         const withPortrait = await callPhotoAi("/api/photo-portrait", { photoId: target.photoId });
@@ -1028,7 +1040,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         setBookPages((prev) =>
           prev.map((p) => (p.kind === "photo" && p.id === id ? { ...p, portraitRevisionId: portraitId } : p)),
         );
-        setBusyPhotos((prev) => ({ ...prev, [id]: "Drawing the portrait sheet…" }));
+        setBusyPhotos((prev) => ({ ...prev, [id]: "Drawing the portrait page…" }));
       }
       const photo = await callPhotoAi("/api/photo-coloring", {
         mode: "generate-library",
@@ -1044,10 +1056,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
 
   const generateHint = prices ? `Uses ${formatCredits(generateCents)} of credit` : "Uses credit";
   const portraitHint = prices
-    ? `Makes a portrait version of the photo, then draws a new sheet from it. Uses up to ${formatCredits(
+    ? `Makes a portrait version of the photo, then draws a new page from it. Uses up to ${formatCredits(
         generateCents + portraitCents,
       )} of credit.`
-    : "Makes a portrait version of the photo, then draws a new sheet from it.";
+    : "Makes a portrait version of the photo, then draws a new page from it.";
 
   /** The book's pages as the server stores them, or null if one isn't saved to the library. */
   function pageManifest(): DigitalBookPage[] | null {
@@ -1255,7 +1267,9 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
             <h1 className="v2-brand-title text-xl tracking-tight text-v2-ink sm:text-2xl">
               Create a coloring book
             </h1>
-            <BookOrderStepper steps={steps} current={step} canOpen={canOpenStep} onSelect={openStep} />
+            {user ? (
+              <BookOrderStepper steps={steps} current={step} canOpen={canOpenStep} onSelect={openStep} />
+            ) : null}
           </div>
         </header>
 
@@ -1264,12 +1278,26 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
             {authLoading ? (
               <p className="text-sm text-v2-muted">Loading…</p>
             ) : !user ? (
-              <div className="v2-panel p-6 text-center">
-                <p className="text-sm text-v2-muted">Sign in to create a book.</p>
-                <Link href="/sign-in?next=/studio/order" className="v2-btn-primary mt-4">
-                  Sign in
-                </Link>
-              </div>
+              /* Guest albums live in this browser, so ?project= means nothing in the cloud. After
+                 sign-up the pages move to the account and the studio's Make a book works again. */
+              <V2GuestGate
+                icon={BookOpen}
+                title={GUEST_GATES.book.title}
+                body={GUEST_GATES.book.body}
+                creditLine={ACCOUNT_CREDIT_LINE}
+                priceLine={PRICE_LINE}
+                primary={{
+                  label: GUEST_GATES.book.primary,
+                  href: withNextParam("/sign-up", STUDIO_PATH),
+                  onClick: requestMigrationAfterSignup,
+                }}
+                secondary={{
+                  label: GUEST_GATES.book.secondary,
+                  href: withNextParam("/sign-in", STUDIO_PATH),
+                  // Pages made as a guest come along on sign-in too.
+                  onClick: requestMigrationAfterSignup,
+                }}
+              />
             ) : (
               <>
                 {error ? (
@@ -1287,11 +1315,11 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                       <StepHeading
                         number={1}
                         title="Which album is this book for?"
-                        hint="Every photo with a coloring sheet becomes a page. Pick more than one album to combine them."
+                        hint="Every photo with a coloring page becomes a page. Pick more than one album to combine them."
                       />
                       {!loadingAlbums && projects.length === 0 ? (
                         <div className="v2-panel p-5 text-sm text-v2-muted">
-                          Create an album in the studio and generate coloring sheets first.{" "}
+                          Create an album in the studio and generate coloring pages first.{" "}
                           <Link href="/studio" className="font-semibold text-v2-link hover:underline">
                             Go to the studio
                           </Link>
@@ -1340,7 +1368,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                       ) : contentCount === 0 ? (
                         <div className="rounded-2xl border-2 border-dashed border-gray-200 px-5 py-8 text-center text-sm text-v2-muted">
                           {selectedProjectIds.length === 1 ? "This album doesn't" : "These albums don't"} have
-                          any coloring sheets yet.{" "}
+                          any coloring pages yet.{" "}
                           {visiblePending.length > 0 ? (
                             <>
                               Continue to <span className="font-semibold text-v2-ink">Arrange pages</span> to
@@ -1455,7 +1483,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                       </>
                     ) : selectedProjectIds.length > 0 && visiblePending.length === 0 ? (
                       <div className="v2-panel p-5 text-sm text-v2-muted">
-                        None of these photos has a coloring sheet yet. Go back to the studio and
+                        None of these photos has a coloring page yet. Go back to the studio and
                         tap <span className="font-semibold text-v2-ink">Generate</span> first.
                       </div>
                     ) : null}
@@ -1599,7 +1627,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                                   value={giftNote}
                                   disabled={!giftNoteFits && !giftNote}
                                   onChange={(e) => setGiftNote(printableGiftNoteChars(e.target.value))}
-                                  placeholder="Merry Christmas! Love, Grandma"
+                                  placeholder={giftNotePlaceholder}
                                 />
                                 <div className="mt-1 flex items-start justify-between gap-3 text-xs text-v2-muted">
                                   <p>

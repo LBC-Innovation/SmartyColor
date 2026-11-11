@@ -32,7 +32,7 @@ type PhotoTransformOptions = {
 };
 
 /**
- * Changes to the photo itself rather than its coloring sheet: mirroring it,
+ * Changes to the photo itself rather than its coloring page: mirroring it,
  * and adding an AI portrait version of a landscape photo to its versions.
  */
 export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOptions) {
@@ -173,7 +173,7 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
       }
       toast.success({
         title: "Portrait version ready",
-        message: "It's in this photo's versions. Generate a coloring sheet from it when you're ready.",
+        message: "It's in this photo's versions. Make a coloring page from it when you're ready.",
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not make a portrait version.");

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return new Response(Buffer.from(bytes), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": "attachment; filename=coloring-sheet.pdf",
+        "Content-Disposition": "attachment; filename=coloring-page.pdf",
       },
     });
   } catch (error) {

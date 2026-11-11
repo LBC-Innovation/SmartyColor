@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { Download, Loader2, Package, RefreshCw } from "lucide-react";
+import { V2GuestGate } from "@/components/v2/auth/V2GuestGate";
+import { GUEST_GATES } from "@/content/marketing";
+import { withNextParam } from "@/lib/auth/nextPath";
+import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { useAuth } from "@/context/AuthContext";
@@ -17,6 +21,11 @@ function formatMoney(cents: number | null): string {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);
+}
+
+/** Orders the customer started but has not paid for yet. */
+function isUnpaid(order: BookOrderSummary): boolean {
+  return order.status === "draft" || order.status === "awaiting_payment";
 }
 
 function orderTitle(order: BookOrderSummary): string {
@@ -73,29 +82,29 @@ export function V2MyOrdersStudio() {
                 print-at-home PDFs any time.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-v2-ink transition hover:bg-v2-bg-subtle disabled:opacity-50"
-            >
-              <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden />
-              Refresh
-            </button>
+            {user ? (
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-v2-ink transition hover:bg-v2-bg-subtle disabled:opacity-50"
+              >
+                <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden />
+                Refresh
+              </button>
+            ) : null}
           </header>
 
           {authLoading ? (
             <p className="text-sm text-v2-muted">Loading account…</p>
           ) : !user ? (
-            <div className="v2-panel p-6 text-center">
-              <p className="text-sm text-v2-muted">Sign in to view your orders.</p>
-              <Link
-                href="/sign-in?next=%2Forders"
-                className="mt-4 inline-flex rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
-              >
-                Sign in
-              </Link>
-            </div>
+            <V2GuestGate
+              icon={Package}
+              title={GUEST_GATES.orders.title}
+              body={GUEST_GATES.orders.body}
+              primary={{ label: GUEST_GATES.orders.primary, href: withNextParam("/sign-in", "/orders") }}
+              secondary={{ label: GUEST_GATES.orders.secondary, href: STUDIO_PATH }}
+            />
           ) : loading && orders.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-v2-muted">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -138,7 +147,11 @@ export function V2MyOrdersStudio() {
                       </div>
                       <V2OrderStatusBadge status={order.status} fulfillment={order.fulfillment} />
                     </div>
-                    {order.fulfillment !== "digital" &&
+                    {isUnpaid(order) ? (
+                      <p className="mt-3 text-sm text-v2-muted">
+                        You haven&apos;t paid for this order yet, so it hasn&apos;t been sent to print.
+                      </p>
+                    ) : order.fulfillment !== "digital" &&
                     formatDeliveryExpectation(
                       order.estimatedDeliveryMin,
                       order.estimatedDeliveryMax,
@@ -153,6 +166,13 @@ export function V2MyOrdersStudio() {
                       </p>
                     ) : null}
                   </Link>
+                  {isUnpaid(order) ? (
+                    <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
+                      <Link href={`/orders/${order.id}`} className="v2-btn-primary min-h-11 text-sm">
+                        Finish and pay
+                      </Link>
+                    </div>
+                  ) : null}
                   {order.fulfillment === "digital" && order.status === "paid" ? (
                     <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
                       <button

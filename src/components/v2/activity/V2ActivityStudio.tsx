@@ -268,7 +268,7 @@ export function V2ActivityStudio() {
                 Transaction history
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-v2-muted sm:text-base">
-                Everything on your account: photos, coloring sheets, albums, book orders and
+                Everything on your account: photos, coloring pages, albums, book orders and
                 wallet activity.
               </p>
             </div>

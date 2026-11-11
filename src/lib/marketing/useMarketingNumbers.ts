@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { NumbersInput } from "@/lib/marketing/copy";
 
-export type MarketingNumbers = { referencePriceCents: number | null; welcomeCreditCents: number | null };
+export type MarketingNumbers = NumbersInput;
 
 let cached: Promise<MarketingNumbers | null> | null = null;
 
 function load(): Promise<MarketingNumbers | null> {
+  // A failed request is not kept: the next mount tries again.
   cached ??= fetch("/api/marketing/numbers")
-    .then((r) => (r.ok ? (r.json() as Promise<{ data?: MarketingNumbers }>) : null))
+    .then((r) => {
+      if (!r.ok) throw new Error(`numbers ${r.status}`);
+      return r.json() as Promise<{ data?: MarketingNumbers }>;
+    })
     .then((body) => body?.data ?? null)
     .catch(() => {
       cached = null;

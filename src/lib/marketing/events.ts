@@ -1,3 +1,4 @@
+import type { CtaLocation, LandingIntent } from "@/content/marketing";
 import { bindingIdForProduct, DIGITAL_FORMAT, type BookFormatId } from "@/lib/print/bookBindings";
 
 /**
@@ -6,12 +7,19 @@ import { bindingIdForProduct, DIGITAL_FORMAT, type BookFormatId } from "@/lib/pr
  */
 export type TrackFormat = "stapled" | "paperback" | "spiral" | "digital";
 
+/** The landing page the visit started from ("default" for the homepage or anything unknown). */
+export type TrackIntent = LandingIntent;
+
 export type TrackEventParams = {
-  page_generated: { is_first: boolean; signed_in: boolean };
+  page_generated: { is_first: boolean; signed_in: boolean; intent: TrackIntent };
   sign_up: { method: string };
-  book_started: { format: TrackFormat };
+  book_started: { format: TrackFormat; intent: TrackIntent };
   checkout_started: { value: number; currency: string; page_count: number; format: TrackFormat; is_gift: boolean };
-  purchase: { value: number; currency: string; order_id: string; format: TrackFormat; is_gift: boolean };
+  purchase: { value: number; currency: string; order_id: string; format: TrackFormat; is_gift: boolean; intent: TrackIntent };
+  /** A tap on a marketing call to action, or the studio's "Turn this into a book" card. */
+  cta_click: { location: CtaLocation; intent: TrackIntent };
+  /** The partners page's email link was tapped or its address copied. Not a confirmed lead. */
+  partner_inquiry: { location: "hero" | "final" };
 };
 
 export type TrackEvent = keyof TrackEventParams;
@@ -49,6 +57,10 @@ export const VENDOR_EVENT_NAMES: Record<
   book_started: { ga4: "book_started", meta: { name: "AddToCart", custom: false }, pinterest: "addtocart" },
   checkout_started: { ga4: "begin_checkout", meta: { name: "InitiateCheckout", custom: false }, pinterest: null },
   purchase: { ga4: "purchase", meta: { name: "Purchase", custom: false }, pinterest: "checkout" },
+  // Custom on GA4 and Meta so they stay out of ad optimization; not sent to Pinterest.
+  cta_click: { ga4: "cta_click", meta: { name: "CtaClick", custom: true }, pinterest: null },
+  // A tap is intent, not a lead: custom events only, so it never trains ad optimization as a conversion.
+  partner_inquiry: { ga4: "partner_contact_click", meta: { name: "PartnerContactClick", custom: true }, pinterest: null },
 };
 
 /** Cookie set by "Do not sell or share my personal information". Honored in the browser and on the server. */

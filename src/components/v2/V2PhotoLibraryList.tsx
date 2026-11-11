@@ -73,7 +73,7 @@ function PendingLibraryRow({ label }: { label: string }) {
           <Loader2 className="h-6 w-6 animate-spin text-v2-primary" />
         </div>
         <div className="flex aspect-[4/3] items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-v2-bg-subtle">
-          <span className="text-[10px] font-medium text-v2-muted">Sheet</span>
+          <span className="text-[10px] font-medium text-v2-muted">Page</span>
         </div>
       </div>
     </div>
@@ -162,7 +162,7 @@ function PhotoLibraryRow({
                     event.stopPropagation();
                     onMove(-1);
                   }}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  className="v2-hit inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
                   aria-label="Move photo up"
                 >
                   <ChevronUp className="h-4 w-4" />
@@ -174,7 +174,7 @@ function PhotoLibraryRow({
                     event.stopPropagation();
                     onMove(1);
                   }}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
+                  className="v2-hit inline-flex h-10 w-10 items-center justify-center rounded-md text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-25"
                   aria-label="Move photo down"
                 >
                   <ChevronDown className="h-4 w-4" />
@@ -245,7 +245,7 @@ function PhotoLibraryRow({
             >
               <Sparkles className="h-5 w-5 text-v2-primary" />
               <span className="text-[10px] font-semibold text-v2-primary sm:text-xs">
-                Generate sheet
+                Make coloring page
               </span>
             </button>
           )}

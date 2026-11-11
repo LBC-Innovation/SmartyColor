@@ -211,7 +211,7 @@ export async function generateGeminiImageViaRest(
       }
 
       throw new Error(
-        "No coloring sheet image was returned. The photo may have been blocked — try another image.",
+        "No coloring page image was returned. The photo may have been blocked — try another image.",
       );
     } catch (error) {
       lastError = error;
@@ -221,7 +221,7 @@ export async function generateGeminiImageViaRest(
   const finalError =
     lastError instanceof Error
       ? lastError
-      : new Error("Could not generate a coloring sheet. Please try again.");
+      : new Error("Could not generate a coloring page. Please try again.");
   try {
     await recordVisionError({
       operation,

@@ -313,6 +313,25 @@ export async function register(email: string, password: string): Promise<ApiResu
   });
 }
 
+/** Emails a reset link. The server picks where the link lands; never pass a redirect from here. */
+export async function requestPasswordReset(email: string): Promise<ApiResult<{ success: boolean }>> {
+  return request<{ success: boolean }>("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+/** Sets a new password using the access token from the emailed link. */
+export async function confirmPasswordReset(
+  accessToken: string,
+  password: string,
+): Promise<ApiResult<{ success: boolean }>> {
+  return request<{ success: boolean }>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify({ access_token: accessToken, password }),
+  });
+}
+
 export async function logout(): Promise<ApiResult<{ success: boolean }>> {
   const result = await request<{ success: boolean }>("/auth/logout", { method: "POST" });
   clearToken();

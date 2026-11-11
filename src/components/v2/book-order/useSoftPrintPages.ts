@@ -24,7 +24,7 @@ function readImageSize(src: string): Promise<Size | null> {
 }
 
 /**
- * Book page numbers whose coloring sheet has too few pixels for the size it is
+ * Book page numbers whose coloring page has too few pixels for the size it is
  * printed at, so its lines would come out soft. Uses the same layout math as
  * the print file, so it flags exactly the pages the printer would.
  */

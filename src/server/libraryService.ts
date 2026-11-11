@@ -199,7 +199,7 @@ export async function listProjects(
 export async function createProject(userId: string, name: string): Promise<ApiResult<LibraryProject>> {
   const { data, error } = await db()
     .from("library_projects")
-    .insert({ user_id: userId, name: name.trim() || "Untitled project" })
+    .insert({ user_id: userId, name: name.trim() || "Untitled album" })
     .select("*")
     .single();
   if (error) return err(error.message);
@@ -207,7 +207,7 @@ export async function createProject(userId: string, name: string): Promise<ApiRe
     userId,
     category: "albums",
     type: "album_created",
-    description: `Created album ${quoted(data.name as string, "Untitled project")}`,
+    description: `Created album ${quoted(data.name as string, "Untitled album")}`,
     referenceType: "library_project",
     referenceId: data.id as string,
   });
@@ -225,7 +225,7 @@ export async function updateProject(
   if (access.role === "contributor") return updateContributorView(access, patch);
 
   const update: Row = {};
-  if (patch.name !== undefined) update.name = patch.name.trim() || "Untitled project";
+  if (patch.name !== undefined) update.name = patch.name.trim() || "Untitled album";
   if (patch.selectedPhotoId !== undefined) update.selected_photo_id = patch.selectedPhotoId;
   if (patch.studioLayout !== undefined) update.studio_layout = patch.studioLayout;
   if (patch.tripNarrative !== undefined) update.trip_narrative = patch.tripNarrative;
@@ -315,7 +315,7 @@ export async function deleteProject(userId: string, projectId: string): Promise<
     category: "albums",
     type: "album_deleted",
     description:
-      `Deleted album ${quoted(data.name as string, "Untitled project")}` +
+      `Deleted album ${quoted(data.name as string, "Untitled album")}` +
       (photos > 0 ? ` and its ${photos} ${photos === 1 ? "photo" : "photos"}` : ""),
     referenceType: "library_project",
     referenceId: projectId,
@@ -802,7 +802,7 @@ export async function loadRevisionBytes(
       error: null,
     };
   } catch (e) {
-    return err(e instanceof Error ? e.message : "Could not read sheet");
+    return err(e instanceof Error ? e.message : "Could not read page");
   }
 }
 
@@ -814,7 +814,7 @@ export async function addRevisionFromSheet(
   meta?: RevisionMeta,
 ): Promise<ApiResult<LibraryPhoto>> {
   const match = sheet.imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return err("Generated sheet was not an image");
+  if (!match) return err("Generated page was not an image");
   const mime = match[1];
   const bytes = Buffer.from(match[2], "base64");
   return addRevisionFromBytes(userId, photo, { bytes, mime, title: sheet.title, ...meta });
@@ -833,7 +833,7 @@ export async function addRevisionFromBytes(
   try {
     await putObject(path, input.bytes, input.mime);
   } catch (e) {
-    return err(e instanceof Error ? e.message : "Could not store sheet");
+    return err(e instanceof Error ? e.message : "Could not store page");
   }
   const { error } = await db().from("library_sheet_revisions").insert({
     id: revisionId,

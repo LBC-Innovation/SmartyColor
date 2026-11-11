@@ -2,7 +2,7 @@
 
 import { BookOpen } from "lucide-react";
 import { BOOK_NUDGE, PRICE_LINE } from "@/content/marketing";
-import { fillCopy, formatUsd } from "@/lib/marketing/copy";
+import { fillCopy, numberValues } from "@/lib/marketing/copy";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { getBookBinding, recommendBinding } from "@/lib/print/bookBindings";
 
@@ -22,9 +22,7 @@ export function V2BookNudge({ pageCount, disabled, onMakeBook }: { pageCount: nu
         min: String(binding.minPages),
         format: binding.shortLabel.toLowerCase(),
       })
-    : numbers?.referencePriceCents != null
-      ? fillCopy(PRICE_LINE, { price: formatUsd(numbers.referencePriceCents) })
-      : null;
+    : fillCopy(PRICE_LINE, numberValues(numbers));
 
   return (
     // Solid card so it stands out over the list; it takes its own clicks (the dock's fade doesn't).

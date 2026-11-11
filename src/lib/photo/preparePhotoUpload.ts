@@ -1,3 +1,4 @@
+import { authedFetch } from "@/lib/api/client";
 import { convertHeicFileToJpegBlob } from "@/lib/photo/convertHeic";
 import { compressImageDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
 import { dataUrlToBlob } from "@/lib/photo/dataUrlBlob";
@@ -19,12 +20,16 @@ function readBlobAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** The daily limit for guests: shown as is, never inside the "conversion failed" sentence. */
+class PhotoLimitError extends Error {}
+
 async function prepareViaServer(file: File, imageCount: 1 | 2): Promise<string> {
   const form = new FormData();
   form.append("photo", file, file.name || "photo.heic");
   form.append("imageCount", String(imageCount));
 
-  const response = await fetch("/api/photo-prepare", {
+  // Sends the session when there is one: the daily limit is for guests only.
+  const response = await authedFetch("/api/photo-prepare", {
     method: "POST",
     body: form,
   });
@@ -32,6 +37,9 @@ async function prepareViaServer(file: File, imageCount: 1 | 2): Promise<string> 
     photoDataUrl?: string;
     error?: string;
   };
+  if (response.status === 429) {
+    throw new PhotoLimitError(payload.error ?? "You've used today's free uploads. Create a free account to keep going.");
+  }
   if (!response.ok || !payload.photoDataUrl) {
     throw new Error(payload.error ?? "Could not prepare that photo.");
   }
@@ -77,6 +85,7 @@ export async function preparePhotoFileForApi(
         const photoDataUrl = await prepareViaServer(file, imageCount);
         return { previewBlob: dataUrlToBlob(photoDataUrl), photoDataUrl };
       } catch (error) {
+        if (error instanceof PhotoLimitError) throw error;
         const serverMsg =
           error instanceof Error ? error.message : "Server conversion failed.";
         throw heicServerFallbackError(file, serverMsg);

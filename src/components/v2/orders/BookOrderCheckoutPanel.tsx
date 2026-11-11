@@ -66,8 +66,10 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
         Place order
       </h2>
       <p className="mt-2 text-sm text-v2-muted">
-        Pay with your promo wallet balance. Your print job is already registered — placing the
-        order charges credits and sends the book to production.
+        This order is paid from your credit balance.{" "}
+        {order.fulfillment === "digital"
+          ? "Once it's placed, your PDF is ready to download."
+          : "Once it's placed, we send your book to the printer."}
       </p>
 
       {holidayLine && order.fulfillment !== "digital" ? (
@@ -97,22 +99,15 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
       </dl>
 
       {shortfallCents > 0 ? (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-          <p>
-            You need{" "}
-            <span className="font-semibold tabular-nums">{formatCredits(shortfallCents)}</span>{" "}
-            more to place this order.
-          </p>
-          <button
-            type="button"
-            className="v2-btn-primary mt-3 text-sm"
-            onClick={() => setAddCreditOpen(true)}
-          >
-            <Wallet className="h-4 w-4" aria-hidden />
-            Add {formatCredits(shortfallCents)} credit
-          </button>
-        </div>
+        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+          You need <span className="font-semibold tabular-nums">{formatCredits(shortfallCents)}</span>{" "}
+          more.
+        </p>
       ) : null}
+
+      <p role="status" className="sr-only">
+        {placing ? "Placing your order…" : ""}
+      </p>
 
       {error ? (
         <p className="mt-3 text-sm text-red-700" role="alert">
@@ -121,20 +116,37 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="v2-btn-primary text-sm"
-          disabled={!canPlace || placing || totalCents == null}
-          onClick={() => void handlePlaceOrder()}
-        >
-          {placing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-          Place order
-        </button>
-        {canPlace ? (
-          <button type="button" className="v2-btn-outline text-sm" onClick={() => setAddCreditOpen(true)}>
-            Add more credit
+        {shortfallCents > 0 ? (
+          <button
+            type="button"
+            className="v2-btn-primary min-h-11 w-full text-sm sm:w-auto"
+            onClick={() => setAddCreditOpen(true)}
+          >
+            <Wallet className="h-4 w-4" aria-hidden />
+            Add {formatCredits(shortfallCents)} and continue
           </button>
-        ) : null}
+        ) : (
+          <>
+            <button
+              type="button"
+              className="v2-btn-primary min-h-11 w-full text-sm sm:w-auto"
+              disabled={!canPlace || placing || totalCents == null}
+              onClick={() => void handlePlaceOrder()}
+            >
+              {placing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              {totalCents != null && totalCents > 0 ? `Place order · ${formatCredits(totalCents)}` : "Place order"}
+            </button>
+            {canPlace ? (
+              <button
+                type="button"
+                className="v2-btn-outline min-h-11 w-full text-sm sm:w-auto"
+                onClick={() => setAddCreditOpen(true)}
+              >
+                Add more credit
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
 
       {addCreditOpen ? (

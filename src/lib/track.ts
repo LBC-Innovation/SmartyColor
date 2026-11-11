@@ -1,4 +1,6 @@
+import type { CtaLocation } from "@/content/marketing";
 import { readCookieFromHeader } from "@/lib/marketing/attribution";
+import { intentFromAttributionCookie, readTrackIntent } from "@/lib/marketing/copy";
 import {
   AD_OPT_OUT_COOKIE,
   VENDOR_EVENT_NAMES,
@@ -42,7 +44,7 @@ export function anyTrackerConfigured(): boolean {
 }
 
 /** Pages where only a page view is sent: sign-in, sign-up, password reset and account settings. */
-const PAGE_VIEW_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/reset-password", "/account", "/auth"];
+const PAGE_VIEW_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password", "/account", "/auth"];
 
 export function isPageViewOnlyPath(pathname: string): boolean {
   return PAGE_VIEW_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -199,6 +201,15 @@ export function track<E extends TrackEvent>(event: E, params: TrackEventParams[E
 
 const PAGES_MADE_KEY = "cm_pages_made";
 
+/** How many coloring pages this device has made (0 when none, or when storage is blocked). */
+export function readPagesMade(): number {
+  try {
+    return Number(localStorage.getItem(PAGES_MADE_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Count a successful coloring page on this device and send `page_generated`. */
 export function trackPageGenerated(signedIn: boolean): void {
   let made = 0;
@@ -208,11 +219,23 @@ export function trackPageGenerated(signedIn: boolean): void {
   } catch {
     /* storage blocked: count as first */
   }
-  track("page_generated", { is_first: made === 0, signed_in: signedIn });
+  track("page_generated", { is_first: made === 0, signed_in: signedIn, intent: readTrackIntent() });
+}
+
+/** A tap on a marketing call to action. `intent` is the page or card the visitor is heading for. */
+export function trackCta(location: CtaLocation, intent: TrackEventParams["cta_click"]["intent"]): void {
+  track("cta_click", { location, intent });
+}
+
+/** Send `book_started` with the visit's landing intent. */
+export function trackBookStarted(format: TrackEventParams["book_started"]["format"]): void {
+  track("book_started", { format, intent: readTrackIntent() });
 }
 
 /** Send `purchase` from the browser once per order (the server sends its own copy). */
-export function trackPurchaseOnce(params: TrackEventParams["purchase"]): void {
+export function trackPurchaseOnce(input: Omit<TrackEventParams["purchase"], "intent">): void {
+  // Same source as the server copy (the cm_attr landing path), so the two agree when deduplicated.
+  const params: TrackEventParams["purchase"] = { ...input, intent: intentFromAttributionCookie(document.cookie) };
   const key = `cm_purchase_tracked:${params.order_id}`;
   try {
     if (localStorage.getItem(key)) return;

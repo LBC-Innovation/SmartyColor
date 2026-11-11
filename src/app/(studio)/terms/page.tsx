@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CONTACT_EMAIL } from "@/content/marketing";
 import { AdOptOutButton } from "@/components/marketing/AdOptOutButton";
 import { MarketingFooter } from "@/components/v2/marketing/MarketingFooter";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
@@ -70,7 +71,13 @@ export default function TermsPage() {
             <strong>Your photos and coloring pages.</strong> When you are signed in, the photos you upload,
             the coloring pages generated from them, and every revision you make are stored privately in your
             account in our cloud storage. Only you can access them. When you use the studio without an
-            account, nothing is uploaded — your photos stay in your browser.
+            account, your photo is sent to Google (see below) only to draw your page, and we don’t keep it. The
+            finished pages stay in your browser until you make an account.
+          </p>
+          <p>
+            <strong>Free-use limits.</strong> To limit free use, we keep a one-way scrambled (hashed) form
+            of your device’s network address for up to a week, for people who aren’t signed in. We never store
+            the address itself.
           </p>
           <p>
             <strong>Your orders.</strong> Book configuration, the shipping address you enter, order status and
@@ -81,7 +88,8 @@ export default function TermsPage() {
         <Section title="Who we share it with">
           <p>
             <strong>Google (Gemini).</strong> To turn a photo into a coloring page, the photo is sent to
-            Google’s Gemini API for processing. We send only what’s needed to draw the page.
+            Google’s Gemini API for processing. This applies with or without an account. We send only what’s
+            needed to draw the page.
           </p>
           <p>
             <strong>Lulu.</strong> When you order a printed book, your shipping address, contact email and the
@@ -94,8 +102,10 @@ export default function TermsPage() {
           <p>
             <strong>Google Analytics, Meta and Pinterest.</strong> To see which of our ads bring people to the
             site and lead to orders, these companies’ tags run on our pages. They receive which page you
-            visited, which ad or link you came from, and when you make a coloring page, create an account,
-            start a book, check out or place an order, with the order’s amount. When you place an order we
+            visited, which ad or link you came from, and when you make a coloring page, tap one of our “Try a free
+            coloring page” or sign-up buttons or the email link for businesses, create an account,
+            start a book, check out or place an order, with the order’s amount. They also get which of our
+            pages you started from (for example gift or birthday). When you place an order we
             also send Meta a scrambled (hashed) copy of your email address so it can match the order to its
             ad. They never receive your photos, coloring pages, album names, captions or anyone’s name.
           </p>
@@ -120,7 +130,6 @@ export default function TermsPage() {
           <p>We set these cookies ourselves:</p>
           <Table
             rows={[
-              ["cm_welcome_guide_dismissed", "Cookie · 1 year", "Remembers that you asked not to see the welcome guide again."],
               ["cm_attr", "Cookie · 30 days", "Which ad or link brought you here (campaign tags only), saved with your account or order when you create one."],
               ["cm_ads_optout", "Cookie · 2 years", "Remembers that you chose not to have your information sold or shared."],
             ]}
@@ -152,7 +161,9 @@ export default function TermsPage() {
               ["cm_shipping_address", "Local storage", "The last shipping address you typed, so you don’t re-enter it."],
               ["cm_quote_shipping_zip", "Local storage", "The ZIP used for a price estimate."],
               ["cm_guest_try_free", "Session storage", "Marks that you chose to try the studio without an account. Cleared when the tab closes."],
-              ["cm_intent", "Session storage", "Which page you started from (gift, story), so the next screens match. Cleared when the tab closes."],
+              ["cm_intent", "Session storage", "Which page you started from (gift, birthday, pets, businesses or story), so the next screens match. Cleared when the tab closes."],
+              ["cm_intent_named", "Session storage", "Marks that your first album was named after the page you started from. Cleared when the tab closes."],
+              ["cm_book_card_dismissed", "Session storage", "Remembers that you closed the “Turn this into a book” card. Cleared when the tab closes."],
               ["cm_pages_made", "Local storage", "How many coloring pages you’ve made on this device, so we know which is your first."],
               ["cm_save_prompt", "Local storage", "Remembers that you answered “Not now” to saving your pages."],
               ["cm_purchase_tracked:…", "Local storage", "Makes sure each order is reported to our analytics only once."],
@@ -185,8 +196,8 @@ export default function TermsPage() {
         <Section title="Contact">
           <p>
             Questions about your data? Email{" "}
-            <a href="mailto:hello@colorfulmemories.net" className="font-semibold text-v2-link">
-              hello@colorfulmemories.net
+            <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-v2-link">
+              {CONTACT_EMAIL}
             </a>
             .
           </p>

@@ -15,6 +15,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
+import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
+import { guestLimitScope, type GuestLimitScope } from "@/lib/guestLimit";
 import {
   V2AssetLightbox,
   type LightboxFocus,
@@ -34,10 +36,15 @@ import {
   type SheetEditMessage,
 } from "@/components/v2/V2SheetEditChat";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
-import { trackPageGenerated } from "@/lib/track";
+import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
+import { readPagesMade, trackPageGenerated } from "@/lib/track";
 import { V2BookNudge } from "@/components/v2/marketing/V2BookNudge";
 import { V2SavePromptCard } from "@/components/v2/marketing/V2SavePromptCard";
-import { authedFetch } from "@/lib/api/client";
+import { V2BookUpsellCard } from "@/components/v2/marketing/V2BookUpsellCard";
+import { INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
+import { readIntent } from "@/lib/marketing/copy";
+import { authedFetch, hasSessionToken } from "@/lib/api/client";
+import { friendlyRequestError } from "@/lib/api/networkError";
 import {
   entryFromLibraryPhoto,
   uploadRevisionToLibrary,
@@ -48,7 +55,6 @@ import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredi
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
 import { Columns2, LayoutGrid } from "lucide-react";
-import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
 import { unitPriceCents } from "@/lib/credits/pricing";
@@ -58,6 +64,7 @@ import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
 import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import {
+  type V2PhotoEntry,
   activeSheetVersion,
   activeSourceVersion,
   activeVersionPrintPrefs,
@@ -80,16 +87,23 @@ function createSheetRevision(sheet: GeneratedSheet): SheetVersion {
 
 type GenerateResult = "success" | "failed" | "skipped";
 
+/** Names the studio gives a new album before anyone has renamed it. */
+const PLACEHOLDER_ALBUM_NAME = /^(Untitled album|My first album|(Project|Album) \d+)$/;
+const INTENT_NAMED_KEY = "cm_intent_named";
+
 export function ColorfulMemoriesApp() {
   const toast = useV2Toast();
-  const router = useRouter();
   const welcomeGuide = useV2WelcomeGuide();
+  const router = useRouter();
   const sheetCredits = useSheetUsageCredits("/studio");
   const prices = usePriceList();
   const {
     hydrated,
     cloud,
     activeProjectId,
+    activeProject,
+    projects,
+    renameActiveProject,
     photos,
     photosRef,
     pendingUploads,
@@ -103,14 +117,30 @@ export function ColorfulMemoriesApp() {
   } = useV2Studio();
   /** Coloring pages in this album: the guest "Save this page" card and the book nudge read it. */
   const sheetCount = photos.filter((p) => p.sheet).length;
+  // A visitor who came from a landing page (gift, birthday, pets) gets their first, empty album
+  // named to match, once per visit. Only a placeholder name is replaced, never one they chose.
+  useEffect(() => {
+    if (!hydrated || !activeProject || projects.length !== 1 || photos.length > 0) return;
+    const name = INTENT_ALBUM_NAME[readIntent()];
+    if (!name || !PLACEHOLDER_ALBUM_NAME.test(activeProject.name)) return;
+    try {
+      if (sessionStorage.getItem(INTENT_NAMED_KEY)) return;
+      sessionStorage.setItem(INTENT_NAMED_KEY, "1");
+    } catch {
+      /* rename anyway */
+    }
+    renameActiveProject(name);
+  }, [hydrated, activeProject, projects.length, photos.length, renameActiveProject]);
   const deletion = useV2LibraryDeletion();
-  const ingestFiles = useV2PhotoIngest();
+  const ingestFiles = useV2PhotoIngest({ onAdded: autoGenerateFirstPage });
   const [printOpen, setPrintOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const generateAllRunRef = useRef(false);
   const coloringApiLockRef = useRef(false);
   const generateRequestIdRef = useRef<Map<string, string>>(new Map());
+  /** Set once the first-page shortcut has fired, so it can never run twice. */
+  const autoFirstPageRef = useRef(false);
   const photoTransforms = useV2PhotoTransforms({ sheetCredits, lockRef: coloringApiLockRef });
   const [lightboxFocus, setLightboxFocus] = useState<LightboxFocus | null>(
     null,
@@ -118,11 +148,23 @@ export function ColorfulMemoriesApp() {
   const [lightboxViewMode, setLightboxViewMode] =
     useState<LightboxViewMode>("single");
   const [savingOverlayRevision, setSavingOverlayRevision] = useState(false);
+  /** A guest ran into the daily limit; the modal offers a free account. */
+  const [guestLimit, setGuestLimit] = useState<{ scope: GuestLimitScope; kind: "page" | "edit" } | null>(null);
   const [editChatOpen, setEditChatOpen] = useState(false);
   const [editMessages, setEditMessages] = useState<SheetEditMessage[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   /** Below lg the studio is a full-screen view opened by tapping a photo. */
-  const [mobileStudioOpen, setMobileStudioOpen] = useState(false);
+  /**
+   * After a reload our history entry is still there (marked in history.state), so the phone studio view
+   * reopens with it; Back then closes the view instead of doing nothing.
+   */
+  const [restoredStudioView] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      (window.history.state as { cmStudioView?: boolean } | null)?.cmStudioView === true &&
+      !window.matchMedia("(min-width: 1024px)").matches,
+  );
+  const [mobileStudioOpen, setMobileStudioOpen] = useState(restoredStudioView);
   /** Studio shows every photo as a sortable grid instead of the photo/sheet panes. */
   const [gridView, setGridView] = useState(false);
   /** Set while the rail's "Original" entry is selected; see originalViewKey. */
@@ -157,9 +199,41 @@ export function ColorfulMemoriesApp() {
   const activeSheet =
     viewingOriginal || activeVersion?.kind === "photo" ? null : selected?.sheet ?? null;
 
+  /**
+   * On phones the studio view is a full-screen layer, so the browser Back button should close it
+   * rather than leave the page. Opening pushes one history entry; Back (popstate) closes the view,
+   * and the on-screen arrow goes back through history so no stray entry is left. Desktop shows the
+   * studio all the time and never pushes.
+   */
+  const studioHistoryRef = useRef(restoredStudioView);
+
+  function openMobileStudio() {
+    setMobileStudioOpen(true);
+    if (studioHistoryRef.current || window.matchMedia("(min-width: 1024px)").matches) return;
+    studioHistoryRef.current = true;
+    window.history.pushState({ cmStudioView: true }, "", window.location.href);
+  }
+
+  function closeMobileStudio() {
+    if (studioHistoryRef.current) {
+      window.history.back(); // the popstate listener closes the view
+    } else {
+      setMobileStudioOpen(false);
+    }
+  }
+
+  useEffect(() => {
+    const onPop = () => {
+      studioHistoryRef.current = false;
+      setMobileStudioOpen(false);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   function openPhoto(id: string) {
     setSelectedId(id);
-    setMobileStudioOpen(true);
+    openMobileStudio();
   }
 
   useEffect(() => {
@@ -258,6 +332,14 @@ export function ColorfulMemoriesApp() {
       if (generateRequestIdRef.current.get(photoId) !== requestId) {
         return "skipped";
       }
+      const limit = guestLimitScope(response.status, payload.code);
+      if (limit) {
+        setGuestLimit({ scope: limit, kind: "page" });
+        mutatePhotos((prev) =>
+          prev.map((entry) => (entry.id === photoId ? { ...entry, generating: false } : entry)),
+        );
+        return "failed";
+      }
       if (sheetCredits.applyResponse(response.status, payload, "generation")) {
         mutatePhotos((prev) =>
           prev.map((entry) =>
@@ -267,14 +349,14 @@ export function ColorfulMemoriesApp() {
         return "failed";
       }
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not make a coloring sheet.");
+        throw new Error(payload.error ?? "Could not make a coloring page.");
       }
       if (payload.photo) {
         const fresh = await entryFromLibraryPhoto(payload.photo);
         mutatePhotos((prev) => prev.map((entry) => (entry.id === photoId ? fresh : entry)));
       } else {
         if (!payload.sheet) {
-          throw new Error("No coloring sheet came back.");
+          throw new Error("No coloring page came back.");
         }
         const revision: SheetVersion = {
           ...createSheetRevision(payload.sheet),
@@ -297,7 +379,7 @@ export function ColorfulMemoriesApp() {
       trackPageGenerated(Boolean(photo.remote));
       if (!options?.batch) {
         toast.success({
-          title: "Coloring sheet ready!",
+          title: "Coloring page ready!",
           message:
             "Your photo has been converted to a high-quality coloring page.",
         });
@@ -311,9 +393,7 @@ export function ColorfulMemoriesApp() {
           ),
         );
       }
-      toast.error(
-        err instanceof Error ? err.message : "Something went wrong.",
-      );
+      toast.error(friendlyRequestError(err, "Something went wrong."));
       return "failed";
     } finally {
       coloringApiLockRef.current = false;
@@ -321,6 +401,23 @@ export function ColorfulMemoriesApp() {
         generateRequestIdRef.current.delete(photoId);
       }
     }
+  }
+
+  /**
+   * A guest who has never made a page gets their first one without hunting for the "Generate
+   * sheet" tile: the first photo of the batch is selected and drawn straight away, and on phones
+   * the studio opens so they watch it happen. Guests only, because generating spends a signed-in
+   * person's credit. Failures take the usual path (toast, then the retry button in the studio).
+   */
+  function autoGenerateFirstPage(added: V2PhotoEntry[]) {
+    const first = added[0];
+    if (!first || autoFirstPageRef.current) return;
+    if (cloud || hasSessionToken() || readPagesMade() > 0) return;
+    if (generateAllRunRef.current || coloringApiLockRef.current) return;
+    if (photosRef.current.some((entry) => entry.generating || entry.correcting)) return;
+    autoFirstPageRef.current = true;
+    openMobileStudio();
+    void generateForPhoto(first.id, { select: true });
   }
 
   function clearAllGeneratingFlags() {
@@ -347,7 +444,7 @@ export function ColorfulMemoriesApp() {
 
   function openSheetEditChat() {
     if (!activeSheet) {
-      toast.error("Generate a coloring sheet before making edits.");
+      toast.error("Make a coloring page before making edits.");
       return;
     }
     setEditMessages((current) =>
@@ -357,7 +454,7 @@ export function ColorfulMemoriesApp() {
             {
               id: newId(),
               role: "assistant",
-              text: "Tell me what to adjust on this sheet. I'll change only what you describe.",
+              text: "Tell me what to adjust on this page. I'll change only what you describe.",
             },
           ],
     );
@@ -395,7 +492,7 @@ export function ColorfulMemoriesApp() {
       {
         id: pendingId,
         role: "assistant",
-        text: "Applying your change to the sheet…",
+        text: "Applying your change to the page…",
         pending: true,
       },
     ]);
@@ -408,7 +505,7 @@ export function ColorfulMemoriesApp() {
       if (photo.remote) {
         const revisions = normalizeV2SheetRevisions(photo);
         const revisionId = photo.activeRevisionId ?? revisions[revisions.length - 1]?.id;
-        if (!revisionId) throw new Error("No sheet to edit yet.");
+        if (!revisionId) throw new Error("No page to edit yet.");
         body = { mode: "correct-library", photoId: photo.remote.photoId, revisionId, corrections: [trimmed] };
       } else {
         const sheetDataUrl = await prepareSheetDataUrlForApi(photo.sheet.imageDataUrl, 2);
@@ -433,7 +530,13 @@ export function ColorfulMemoriesApp() {
         code?: string;
         creditsBalanceCents?: number;
       };
-      outOfCredit = sheetCredits.applyResponse(response.status, payload, "edit");
+      const limit = guestLimitScope(response.status, payload.code);
+      if (limit) {
+        outOfCredit = true; // the modal explains; no extra toast
+        setGuestLimit({ scope: limit, kind: "edit" });
+      } else {
+        outOfCredit = sheetCredits.applyResponse(response.status, payload, "edit");
+      }
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not apply that edit.");
       }
@@ -443,7 +546,7 @@ export function ColorfulMemoriesApp() {
         updatePhoto(photo.id, { ...fresh, correcting: false }, { persist: false });
       } else {
         if (!payload.sheet) {
-          throw new Error("No updated sheet came back.");
+          throw new Error("No updated page came back.");
         }
         const prior = photosRef.current.find((entry) => entry.id === photo.id);
         const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
@@ -462,15 +565,15 @@ export function ColorfulMemoriesApp() {
             ? {
                 ...message,
                 pending: false,
-                text: "Updated! Check the coloring sheet preview for your change.",
+                done: true,
+                text: "Updated! Check the coloring page preview for your change.",
               }
             : message,
         ),
       );
     } catch (err) {
       updatePhoto(photo.id, { correcting: false });
-      const message =
-        err instanceof Error ? err.message : "Could not apply that edit.";
+      const message = friendlyRequestError(err, "Could not apply that edit.");
       if (!outOfCredit) toast.error(message);
       setEditMessages((prev) =>
         prev.map((entry) =>
@@ -518,7 +621,7 @@ export function ColorfulMemoriesApp() {
         updatePhoto(photo.id, fresh, { persist: false });
         toast.success({
           title: "Revision saved",
-          message: `Added a ${opacityPercent}% color overlay to your sheet history.`,
+          message: `Added a ${opacityPercent}% color overlay to your page history.`,
         });
         return;
       }
@@ -533,7 +636,7 @@ export function ColorfulMemoriesApp() {
       });
       toast.success({
         title: "Revision saved",
-        message: `Added a ${opacityPercent}% color overlay to your sheet history.`,
+        message: `Added a ${opacityPercent}% color overlay to your page history.`,
       });
     } catch (err) {
       toast.error(
@@ -596,7 +699,7 @@ export function ColorfulMemoriesApp() {
 
   /** The print-ready PDF for the sheet on screen. */
   async function makeSelectedPdf(): Promise<Blob> {
-    if (!selected?.sheet || !activeSheet) throw new Error("Pick a coloring sheet first.");
+    if (!selected?.sheet || !activeSheet) throw new Error("Pick a coloring page first.");
     const response = await authedFetch("/api/pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -642,7 +745,7 @@ export function ColorfulMemoriesApp() {
   function buyBook() {
     if (!hasAnySheet) {
       toast.error(
-        "Generate at least one coloring sheet before creating your book.",
+        "Make at least one coloring page before creating your book.",
       );
       return;
     }
@@ -662,11 +765,6 @@ export function ColorfulMemoriesApp() {
   const showSheetPane = studioLayout === "sheet" || studioLayout === "both";
   const activeRevisionId = activeVersion?.id ?? null;
 
-  // First visit: walk new users through the workspace.
-  useEffect(() => {
-    if (hydrated) welcomeGuide.openIfNotDismissed();
-  }, [hydrated, welcomeGuide]);
-
   if (!hydrated) {
     return (
       <V2StudioFrame>
@@ -682,6 +780,18 @@ export function ColorfulMemoriesApp() {
 
   const studioOpen = mobileStudioOpen && Boolean(selected);
 
+  // Under a finished page only: not while it draws, edits or is missing.
+  const bookCard =
+    sheetReady && !busy ? (
+      <V2BookUpsellCard
+        pageCount={sheetCount}
+        canMakeBook={canBuyBook}
+        onMakeBook={buyBook}
+        onAddPhotos={() => fileRef.current?.click()}
+        className={cloud ? "lg:hidden" : undefined}
+      />
+    ) : null;
+
   const refreshButton = (
     <V2LibraryRefreshButton disabled={uploading || generatingAll || anyGenerating} />
   );
@@ -694,14 +804,14 @@ export function ColorfulMemoriesApp() {
         type="button"
         disabled={!canGenerateAll}
         onClick={() => void generateAllSheets()}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-v2-primary/30 bg-v2-primary-light px-3.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="v2-hit inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-v2-primary/30 bg-v2-primary-light px-3.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {generatingAll ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
         ) : (
           <Sparkles className="h-4 w-4" aria-hidden />
         )}
-        Generate all
+        Make all pages
         {needsSheetCount > 0 && !generatingAll ? (
           <span className="rounded-full bg-v2-primary/15 px-1.5 text-xs font-bold tabular-nums">
             {needsSheetCount}
@@ -799,12 +909,12 @@ export function ColorfulMemoriesApp() {
             disabled={sheetCorrecting}
             onClick={() => openLightbox("sheet")}
             className="relative flex h-full min-h-0 w-full flex-1 cursor-zoom-in items-center justify-center transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary disabled:cursor-wait"
-            aria-label="View coloring sheet full screen"
+            aria-label="View coloring page full screen"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={activeSheet.imageDataUrl}
-              alt="Generated coloring sheet"
+              alt="Generated coloring page"
               className="pointer-events-none max-h-full max-w-full object-contain"
             />
           </button>
@@ -833,10 +943,10 @@ export function ColorfulMemoriesApp() {
             {!selected
               ? "Select a photo from your library to get started."
               : viewingOriginal
-                ? "This is your original photo. Generate a coloring sheet from it, or pick a version."
+                ? "This is your original photo. Make a coloring page from it, or pick a version."
                 : activeVersion?.kind === "photo"
-                  ? "This portrait version doesn’t have a coloring sheet yet."
-                : "This photo doesn’t have a coloring sheet yet."}
+                  ? "This portrait version doesn’t have a coloring page yet."
+                : "This photo doesn’t have a coloring page yet."}
           </p>
           <button
             type="button"
@@ -845,7 +955,7 @@ export function ColorfulMemoriesApp() {
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
           >
             <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-            Generate coloring sheet
+            Make coloring page
           </button>
         </div>
       )}
@@ -856,6 +966,7 @@ export function ColorfulMemoriesApp() {
     <V2StudioFrame pageScroll>
       {/* Phones: nothing here clips or scrolls — the frame scrolls the whole page. */}
       <V2LibraryWorkspace
+        emptyState={{ onHowItWorks: welcomeGuide.open, line: STUDIO_EMPTY.lineByIntent[readIntent()] }}
         fileInputRef={fileRef}
         onFiles={(files) => void ingestFiles(files)}
         onSelectPhoto={openPhoto}
@@ -878,7 +989,7 @@ export function ColorfulMemoriesApp() {
               className="v2-photo-list-dock-cta"
             >
               <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
-              Create Book
+              Make a book
             </button>
           )
         }
@@ -911,7 +1022,7 @@ export function ColorfulMemoriesApp() {
               className="v2-studio-toolbar-btn v2-studio-toolbar-btn--primary"
             >
               <PencilLine className="h-4 w-4 shrink-0" aria-hidden />
-              Edit sheet
+              Edit page
             </button>
             {selected ? (
               <button
@@ -921,7 +1032,7 @@ export function ColorfulMemoriesApp() {
                 className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
               >
                 <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                Delete page
+                Delete photo
               </button>
             ) : null}
           </>
@@ -941,8 +1052,8 @@ export function ColorfulMemoriesApp() {
                 <header className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2 sm:px-5 lg:px-6 lg:py-3">
                   <button
                     type="button"
-                    onClick={() => setMobileStudioOpen(false)}
-                    className="-ml-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-bg-subtle lg:hidden"
+                    onClick={closeMobileStudio}
+                    className="-ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-bg-subtle lg:hidden"
                     aria-label="Back to photos"
                   >
                     <ChevronLeft className="h-6 w-6" aria-hidden />
@@ -964,8 +1075,8 @@ export function ColorfulMemoriesApp() {
                       type="button"
                       role="switch"
                       aria-checked={gridView}
-                      aria-label={gridView ? "Showing all photos as a grid" : "Showing the selected photo and sheet"}
-                      title={gridView ? "Switch to sheet view" : "Switch to grid view"}
+                      aria-label={gridView ? "Showing all photos as a grid" : "Showing the selected photo and page"}
+                      title={gridView ? "Switch to page view" : "Switch to grid view"}
                       onClick={() => setGridView((v) => !v)}
                       className={cn(
                         "v2-hit relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
@@ -1020,7 +1131,11 @@ export function ColorfulMemoriesApp() {
                   )}
                 </div>
 
-                {!cloud && hydrated ? <V2SavePromptCard pageCount={sheetCount} /> : null}
+                {/* One next-step card at a time: a guest's "Save this page" card while it is due,
+                    otherwise "Turn this into a book". Signed-in people only get the book card, and
+                    on desktop the list's own book nudge already says it, so the card hides there. */}
+                {!cloud && hydrated ? <V2SavePromptCard pageCount={sheetCount} fallback={bookCard} /> : null}
+                {cloud ? bookCard : null}
 
                 {/* Phone-only: revisions + page actions */}
                 {showRevisionSidebar && selected && !gridView ? (
@@ -1065,7 +1180,7 @@ export function ColorfulMemoriesApp() {
                       className="v2-studio-action v2-studio-action--primary"
                     >
                       <PencilLine className="h-5 w-5" aria-hidden />
-                      Edit sheet
+                      Edit page
                     </button>
                     <button
                       type="button"
@@ -1146,6 +1261,9 @@ export function ColorfulMemoriesApp() {
       ) : null}
 
       {sheetCredits.addCreditModal}
+      {guestLimit ? (
+        <V2GuestLimitModal scope={guestLimit.scope} kind={guestLimit.kind} onClose={() => setGuestLimit(null)} />
+      ) : null}
       {deletion.modal}
     </V2StudioFrame>
   );

@@ -10,26 +10,19 @@ import {
 } from "react";
 import {
   ArrowRight,
-  BookOpen,
   ChevronLeft,
-  LayoutPanelLeft,
-  MessageSquareText,
+  Printer,
   Sparkles,
   Upload,
   X,
 } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2BrandMark } from "@/components/v2/ui/V2BrandLogo";
-import {
-  readWelcomeGuideDismissed,
-  writeWelcomeGuideDismissed,
-} from "@/lib/v2/welcomeGuide";
 import { cn } from "@/lib/cn";
 
 type GuideContextValue = {
+  /** The guide only opens when the person asks for it (account menu, "How it works"). */
   open: () => void;
-  /** Opens only if the user hasn't asked us not to. */
-  openIfNotDismissed: () => void;
 };
 
 const GuideContext = createContext<GuideContextValue | null>(null);
@@ -49,79 +42,37 @@ type Step = {
 
 const STEPS: Step[] = [
   {
-    icon: LayoutPanelLeft,
-    title: "Welcome! Here's your workspace",
-    body: (
-      <>
-        <p>
-          <strong>Your Photos</strong> on the left is your library — every picture you add lives
-          there. The <strong>Studio</strong> on the right shows the selected photo next to its
-          coloring page. On a phone, tap a photo to open the studio.
-        </p>
-        <p className="mt-2">
-          The <strong>project</strong> menu at the top of the library switches between albums or
-          starts a new one.
-        </p>
-      </>
-    ),
-  },
-  {
     icon: Upload,
-    title: "Upload your photos",
+    title: "Add a photo",
     body: (
-      <>
-        <p>
-          Tap <strong>Select Photos</strong> or the upload button in the library toolbar — or drag
-          pictures straight in. iPhone HEIC files work fine.
-        </p>
-        <p className="mt-2">
-          Clear, well-lit shots with one to three people come out best. Signed in, your photos are
-          saved privately to your account; as a guest they stay on this device.
-        </p>
-      </>
+      <p>
+        Tap <strong>Choose a photo</strong> and pick one from your phone or computer. Clear,
+        well-lit photos of one to three people come out best.
+      </p>
     ),
   },
   {
     icon: Sparkles,
-    title: "Generate coloring sheets",
+    title: "Get your coloring page",
     body: (
       <>
-        <p>
-          Tap <strong>Generate sheet</strong> on any photo, or <strong>Generate all</strong> to do
-          the whole library at once. Each one takes about a minute.
+        <p>We turn your photo into a coloring page in about a minute.</p>
+        <p className="mt-2">
+          Want a change? Tap <strong>Edit page</strong> and type it, like{" "}
+          <em>&ldquo;thicker lines&rdquo;</em> or <em>&ldquo;remove the car&rdquo;</em>.
         </p>
       </>
     ),
     visual: <PhotoToSheet />,
   },
   {
-    icon: MessageSquareText,
-    title: "Make simple edits",
+    icon: Printer,
+    title: "Print it or make a book",
     body: (
       <>
         <p>
-          Open a photo and tap <strong>Edit sheet</strong>. Type what you want changed —
-          <em> “thicker lines”</em>, <em>“remove the car in the back”</em> — and it redraws.
-        </p>
-        <p className="mt-2">
-          Every version is kept in the <strong>Revisions</strong> strip, so you can always go back.
-        </p>
-      </>
-    ),
-  },
-  {
-    icon: BookOpen,
-    title: "Arrange and create a book",
-    body: (
-      <>
-        <p>
-          Tap <strong>Create Book</strong>. Choose how you want it first, then pick which albums
-          go in, drag pages into order, flip or remove any you don&apos;t want.
-        </p>
-        <p className="mt-2">
-          Pick a <strong>stapled booklet</strong> or <strong>paperback</strong> and we&apos;ll mail
-          it, or a <strong>print-at-home PDF</strong> for $1 you can download again anytime from
-          My orders.
+          Print your page at home for free. Or tap <strong>Make a book</strong> to turn a
+          collection of pages into a printed book.
         </p>
       </>
     ),
@@ -132,73 +83,34 @@ export function V2WelcomeGuideProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const open = useCallback(() => setIsOpen(true), []);
-  const openIfNotDismissed = useCallback(() => {
-    if (!readWelcomeGuideDismissed()) setIsOpen(true);
-  }, []);
+  const close = useCallback(() => setIsOpen(false), []);
 
-  const value = useMemo(() => ({ open, openIfNotDismissed }), [open, openIfNotDismissed]);
+  const value = useMemo(() => ({ open }), [open]);
 
   return (
     <GuideContext.Provider value={value}>
       {children}
-      {isOpen ? <WelcomeGuideModal onClose={() => setIsOpen(false)} /> : null}
+      {isOpen ? <WelcomeGuideModal onClose={close} /> : null}
     </GuideContext.Provider>
   );
 }
 
 function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0);
-  const [askingDismiss, setAskingDismiss] = useState(false);
   const step = STEPS[index];
   const last = index === STEPS.length - 1;
   const Icon = step.icon;
 
-  function finish() {
-    // Completing the tour counts as "seen" — don't nag next time.
-    writeWelcomeGuideDismissed();
-    onClose();
-  }
-
-  function dismissForever() {
-    writeWelcomeGuideDismissed();
-    onClose();
-  }
-
-  if (askingDismiss) {
-    return (
-      <V2Modal
-        onClose={() => setAskingDismiss(false)}
-        maxWidthClass="max-w-sm"
-        title={<h2 className="text-lg font-semibold text-v2-ink">Show this guide next time?</h2>}
-      >
-        <div className="px-5 py-4 sm:px-6 sm:py-5">
-          <p className="text-sm text-v2-muted">
-            You can always reopen it from <strong className="text-v2-ink">Welcome guide</strong> in
-            your account menu.
-          </p>
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <button type="button" className="v2-btn-outline h-11" onClick={dismissForever}>
-              No, don&apos;t show again
-            </button>
-            <button type="button" className="v2-btn-primary h-11" onClick={onClose}>
-              Yes, remind me
-            </button>
-          </div>
-        </div>
-      </V2Modal>
-    );
-  }
-
   return (
-    <V2Modal onClose={() => setAskingDismiss(true)} maxWidthClass="max-w-lg">
+    <V2Modal onClose={onClose} maxWidthClass="max-w-lg" ariaLabel="How it works">
       <div className="relative px-5 pb-5 pt-5 sm:px-7 sm:pb-6 sm:pt-6">
         <button
           type="button"
-          onClick={() => setAskingDismiss(true)}
-          className="absolute right-3 top-3 rounded-full p-2 text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink"
+          onClick={onClose}
+          className="absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
           aria-label="Close guide"
         >
-          <X className="h-5 w-5" />
+          <X className="h-5 w-5" aria-hidden />
         </button>
 
         <div className="flex items-center gap-3">
@@ -236,7 +148,7 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 onClick={() => setIndex((i) => i - 1)}
-                className="inline-flex h-11 items-center gap-1 rounded-full px-3 text-sm font-semibold text-v2-navy hover:bg-v2-bg-subtle"
+                className="inline-flex h-11 items-center gap-1 rounded-full px-3 text-sm font-semibold text-v2-navy hover:bg-v2-bg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden />
                 Back
@@ -244,15 +156,15 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
             ) : (
               <button
                 type="button"
-                onClick={() => setAskingDismiss(true)}
-                className="inline-flex h-11 items-center rounded-full px-3 text-sm font-semibold text-v2-muted hover:bg-v2-bg-subtle"
+                onClick={onClose}
+                className="inline-flex h-11 items-center rounded-full px-3 text-sm font-semibold text-v2-muted hover:bg-v2-bg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
               >
                 Skip
               </button>
             )}
             <button
               type="button"
-              onClick={() => (last ? finish() : setIndex((i) => i + 1))}
+              onClick={() => (last ? onClose() : setIndex((i) => i + 1))}
               className="v2-btn-primary h-11 px-5"
             >
               {last ? "Start creating" : "Next"}

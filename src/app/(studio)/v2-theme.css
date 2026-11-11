@@ -63,7 +63,28 @@ body:has(.v2-shell) {
     position: relative;
   }
 
-  .v2-hit::after {
+  /* For controls that sit flush against each other: grow the hit area up and down only, so a tap near
+     a shared edge still lands on the button it is closest to. */
+  .v2-hit-y:not(.absolute, .fixed, .sticky) {
+    position: relative;
+  }
+
+  .v2-hit-y::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: max(100%, 2.75rem);
+    transform: translateY(-50%);
+  }
+
+  .v2-photo-tool:not(.absolute, .fixed, .sticky) {
+    position: relative;
+  }
+
+  .v2-hit::after,
+  .v2-photo-tool::after {
     content: "";
     position: absolute;
     top: 50%;
@@ -894,5 +915,15 @@ body:has(.v2-shell) {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+}
+
+/* Keep the generating and drag-over states visible without the looping movement. */
+@media (prefers-reduced-motion: reduce) {
+  .v2-sheet-generating-waves::before,
+  .v2-sheet-generating-waves::after,
+  .v2-dropzone-active,
+  .v2-dropzone-active .v2-dropzone-icon {
+    animation: none;
   }
 }

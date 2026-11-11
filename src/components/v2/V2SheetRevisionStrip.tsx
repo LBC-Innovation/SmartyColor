@@ -70,7 +70,7 @@ export function V2SheetRevisionStrip({
           : "flex-row items-center gap-2",
         className,
       )}
-      aria-label="Photo and coloring sheet versions"
+      aria-label="Photo and coloring page versions"
     >
       <p
         className={cn(

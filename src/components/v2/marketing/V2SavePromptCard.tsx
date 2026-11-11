@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CloudUpload } from "lucide-react";
 import { SAVE_PROMPT } from "@/content/marketing";
@@ -15,9 +15,10 @@ import {
 
 /**
  * Inline card (not a modal) under a guest's coloring page: save it to a free account. Shown after
- * the first page and, after one "Not now", once more after the third.
+ * the first page and, after one "Not now", once more after the third. While it is not due,
+ * `fallback` (the studio's "Turn this into a book" card) takes its place, so only one shows.
  */
-export function V2SavePromptCard({ pageCount }: { pageCount: number }) {
+export function V2SavePromptCard({ pageCount, fallback = null }: { pageCount: number; fallback?: ReactNode }) {
   const router = useRouter();
   const [stage, setStage] = useState<ReturnType<typeof readSavePromptStage> | null>(null);
 
@@ -30,7 +31,9 @@ export function V2SavePromptCard({ pageCount }: { pageCount: number }) {
   const due = stage != null && savePromptDue(stage, pageCount);
   const creditCents = useMarketingNumbers(due)?.welcomeCreditCents ?? null;
 
-  if (!due || stage == null) return null;
+  // Until the saved stage is read, show nothing, so neither card flashes in and swaps.
+  if (stage == null) return null;
+  if (!due) return <>{fallback}</>;
 
   const title =
     (creditCents != null ? fillCopy(SAVE_PROMPT.title, { credit: formatUsd(creditCents) }) : null) ??

@@ -2,7 +2,7 @@
 export const PRODUCT_FEATURES = [
   {
     key: "projects",
-    name: "My projects",
+    name: "My albums",
     description: "Can turn photos into coloring pages and arrange them into books",
     href: "/studio",
   },
@@ -19,6 +19,12 @@ export type FeatureAccess = Record<ProductFeature, boolean>;
 
 /** What an account gets until an admin changes it. Guests get the same. */
 export const DEFAULT_FEATURE_ACCESS: FeatureAccess = { projects: true, storybook: false };
+
+/**
+ * Whether story mode is on for everyone, guests included. Marketing (the product card, footer link,
+ * /story page and sitemap) follows this one flag, so turning the default on shows it everywhere.
+ */
+export const STORY_MODE_PUBLIC = DEFAULT_FEATURE_ACCESS.storybook;
 
 /** Reads the toggles saved on an account, falling back to the default for any that are unset. */
 export function storedFeatureAccess(raw: unknown): FeatureAccess {

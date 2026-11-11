@@ -70,7 +70,7 @@ async function toSheet(
 ): Promise<GeneratedSheet> {
   const lineArtBase64 = await toLineArtPng(file.base64);
   return {
-    title: showTitle ? title : "Coloring sheet",
+    title: showTitle ? title : "Coloring page",
     imageDataUrl: `data:image/png;base64,${lineArtBase64}`,
     mimeType: "image/png",
   };
@@ -141,8 +141,8 @@ export function createGeminiProvider(): ColoringAI {
       const title = session.printPrefs.showTitle
         ? planTexts[0]?.split(",")[0] ||
           session.idea.slice(0, 42) ||
-          "My coloring sheet"
-        : "Coloring sheet";
+          "My coloring page"
+        : "Coloring page";
       const prompt = buildGeneratePrompt({
         idea: session.idea,
         likes: planTexts,

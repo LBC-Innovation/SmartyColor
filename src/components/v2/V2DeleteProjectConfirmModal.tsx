@@ -21,7 +21,7 @@ export function V2DeleteProjectConfirmModal({
   const photos = photoCount === 1 ? "1 photo" : `${photoCount} photos`;
 
   return (
-    <V2Modal onClose={() => !busy && onCancel()} maxWidthClass="max-w-md">
+    <V2Modal onClose={() => !busy && onCancel()} maxWidthClass="max-w-md" ariaLabel="Delete album">
       <div className="p-6">
         <div className="flex gap-4">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
@@ -32,7 +32,7 @@ export function V2DeleteProjectConfirmModal({
               Delete “{projectName}”?
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">
-              This album and all {photos} in it — including their coloring sheets and
+              This album and all {photos} in it — including their coloring pages and
               revisions — will be permanently deleted.
             </p>
             <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-900">

@@ -97,8 +97,8 @@ export function useV2LibraryDeletion(): V2LibraryDeletion {
     toast.success({
       message:
         ids.length === 1
-          ? "Page permanently deleted."
-          : `${ids.length} pages permanently deleted.`,
+          ? "Photo permanently deleted."
+          : `${ids.length} photos permanently deleted.`,
     });
     if (skipped > 0) {
       toast.info(

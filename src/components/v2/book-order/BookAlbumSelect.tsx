@@ -116,7 +116,7 @@ export function BookAlbumSelect({
             const on = selectedIds.includes(project.id);
             const sheets = sheetCounts[project.id];
             const empty = sheets === 0;
-            // An album with no coloring sheets adds nothing to the book; one already on can still be turned off.
+            // An album with no coloring pages adds nothing to the book; one already on can still be turned off.
             const unavailable = empty && !on;
             return (
               <li key={project.id} role="option" aria-selected={on} aria-disabled={unavailable}>
@@ -142,7 +142,7 @@ export function BookAlbumSelect({
                       {sheets == null
                         ? "Counting…"
                         : empty
-                          ? "No coloring sheets yet"
+                          ? "No coloring pages yet"
                           : `${sheets} coloring page${sheets === 1 ? "" : "s"} · ${project.photoCount} photo${project.photoCount === 1 ? "" : "s"}`}
                     </span>
                   </span>

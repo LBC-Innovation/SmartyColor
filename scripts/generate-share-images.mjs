@@ -93,13 +93,13 @@ async function textLayers(page) {
   return layers;
 }
 
-/** A tilted white-bordered print of an image. */
-async function polaroid(src, width, angle) {
+/** A tilted white-bordered print of an image, cropped to `aspect` (width / height) so nothing is cut off. */
+async function polaroid(src, width, angle, aspect) {
   const border = 12;
-  const inner = await sharp(path.join(PUBLIC_DIR, src))
-    .resize(width - border * 2, Math.round((width - border * 2) * 0.75), { fit: "cover" })
-    .toBuffer();
-  const height = Math.round((width - border * 2) * 0.75) + border * 2;
+  const innerWidth = width - border * 2;
+  const innerHeight = Math.round(innerWidth / aspect);
+  const inner = await sharp(path.join(PUBLIC_DIR, src)).resize(innerWidth, innerHeight, { fit: "cover" }).toBuffer();
+  const height = innerHeight + border * 2;
   const edge = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="#d9dce3"/></svg>`,
   );
@@ -111,14 +111,18 @@ async function polaroid(src, width, angle) {
 }
 
 async function build(page) {
-  const photo = await polaroid(page.hero.photoSrc, 430, -5);
-  const sheet = await polaroid(page.hero.sheetSrc, 430, 4);
+  // A portrait pair keeps its whole frame: 3:4 prints, smaller so they fit the 630px height.
+  const portrait = page.hero.height > page.hero.width;
+  const aspect = page.hero.width / page.hero.height;
+  const size = portrait ? 300 : 430;
+  const photo = await polaroid(page.hero.photoSrc, size, -5, aspect);
+  const sheet = await polaroid(page.hero.sheetSrc, size, 4, aspect);
   const out = path.join(PUBLIC_DIR, page.shareImage);
   await mkdir(path.dirname(out), { recursive: true });
   await sharp({ create: { width: W, height: H, channels: 4, background: BG } })
     .composite([
-      { input: photo, left: 630, top: 56 },
-      { input: sheet, left: 720, top: 248 },
+      { input: photo, left: portrait ? 640 : 630, top: portrait ? 90 : 56 },
+      { input: sheet, left: portrait ? 800 : 720, top: portrait ? 150 : 248 },
       ...(await textLayers(page)),
     ])
     .png({ compressionLevel: 9 })

@@ -30,7 +30,7 @@ export function V2DeletePagesConfirmModal({
 
   if (!open || pageCount < 1) return null;
 
-  const noun = pageCount === 1 ? "page" : "pages";
+  const noun = pageCount === 1 ? "photo" : "photos";
 
   return (
     <div
@@ -57,9 +57,8 @@ export function V2DeletePagesConfirmModal({
               Permanently delete {pageCount} {noun}?
             </h2>
             <p id="v2-delete-pages-desc" className="mt-2 text-sm leading-relaxed text-v2-muted">
-              All photos and coloring sheets for{" "}
-              {pageCount === 1 ? "this page" : "these pages"} will be permanently
-              deleted. This action cannot be undone and content cannot be restored.
+              {pageCount === 1 ? "This photo and its coloring page" : "These photos and their coloring pages"}{" "}
+              will be permanently deleted. This action cannot be undone and content cannot be restored.
             </p>
           </div>
         </div>
