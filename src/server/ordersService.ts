@@ -19,7 +19,12 @@ import type { DigitalBookPage } from "@/lib/orders/types";
 import { bindingIdForProduct, type BookBindingId } from "@/lib/print/bookBindings";
 import { normalizeCoverDesign, type BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
-import { buildPrintFiles, createCoverFrontUpload, parsePrintPages } from "@/server/printBookService";
+import {
+  buildPrintFiles,
+  createCoverFrontUpload,
+  parsePrintPages,
+  printOrderPaths,
+} from "@/server/printBookService";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { quoted, recordActivity } from "@/server/activityService";
 import { luluConfigured } from "@/server/lulu/config";
@@ -33,7 +38,8 @@ import {
 } from "@/server/lulu/printJobs";
 import { buildLuluPrintJobPayload, validateLuluPayload } from "@/lib/print/luluPayload";
 import { getBookBinding } from "@/lib/print/bookBindings";
-import { signedReadUrls } from "@/server/storage/libraryFiles";
+import { getObjectBytes, signedReadUrls } from "@/server/storage/libraryFiles";
+import sharp from "sharp";
 import { clientOrigin } from "@/lib/auth/clientOrigin";
 import { getSupabaseAuth } from "@/lib/supabase/service";
 import { sendEmail } from "@/server/email/resend";
@@ -638,6 +644,24 @@ export async function placeBookOrderWithCredits(input: {
   return { data: payload, error: null };
 }
 
+/** The order's front cover as a small JPEG for the confirmation email, or null if it has none. */
+async function emailCoverThumb(
+  userId: string,
+  orderId: string,
+): Promise<{ jpeg: Uint8Array; width: number; height: number } | null> {
+  try {
+    const { bytes } = await getObjectBytes(printOrderPaths.coverFront(userId, orderId));
+    const { data, info } = await sharp(bytes)
+      .resize({ width: 192, withoutEnlargement: true })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer({ resolveWithObject: true });
+    return { jpeg: new Uint8Array(data), width: info.width, height: info.height };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Emails the customer their order details once a printed-book order is placed. Idempotent: a
  * `confirmation_email_sent` order event marks it done, and an order that already has one is
@@ -680,6 +704,7 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
           address.country_code && address.country_code !== "US" ? address.country_code : "",
         ].filter(Boolean)
       : [formatShippingAddress(address) || "On file"];
+    const coverThumb = await emailCoverThumb(order.user_id as string, orderId);
     const ok = await sendEmail(
       orderConfirmationEmail({
         to,
@@ -695,6 +720,7 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
         totalCents: order.total_cents as number | null,
         orderUrl: `${clientOrigin()}/orders/${orderId}`,
         cancelUrl: `${clientOrigin()}/orders/${orderId}?cancel=1`,
+        coverThumb,
       }),
     );
     if (!ok) return;

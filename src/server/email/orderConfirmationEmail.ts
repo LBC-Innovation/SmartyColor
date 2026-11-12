@@ -1,6 +1,10 @@
 import "server-only";
 import { CONTACT_EMAIL } from "@/content/marketing";
 import type { OutgoingEmail } from "@/server/email/resend";
+import { EMAIL_LOGO_HEIGHT, EMAIL_LOGO_PNG_BASE64, EMAIL_LOGO_WIDTH } from "@/server/email/brandLogo";
+
+const LOGO_CID = "cm-logo";
+const COVER_CID = "book-cover";
 
 function escapeHtml(value: string): string {
   return value
@@ -50,6 +54,8 @@ export type OrderConfirmationInput = {
   orderUrl: string;
   /** Opens the order page with the cancel dialog up. */
   cancelUrl: string;
+  /** A small JPEG of the book's front cover; left out when the order has none. */
+  coverThumb?: { jpeg: Uint8Array; width: number; height: number } | null;
 };
 
 /** Sent once when a printed-book order is paid and on its way to the printer. */
@@ -75,19 +81,32 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
     "Changed your mind? You can cancel for a full refund to your wallet until your book goes into production, usually about an hour after you order.";
   const cta = "View your order";
   const url = escapeHtml(input.orderUrl);
+  // Shown at half its pixel size so it stays sharp on high-density screens.
+  const cover = input.coverThumb
+    ? { width: Math.round(input.coverThumb.width / 2), height: Math.round(input.coverThumb.height / 2) }
+    : null;
 
   const rowHtml = ([k, v]: [string, string], bold = false) =>
     `<tr><td style="padding:3px 0;color:#64748b;">${escapeHtml(k)}</td><td align="right" style="padding:3px 0;${bold ? "font-weight:700;" : "font-weight:600;"}color:#0a101a;">${escapeHtml(v)}</td></tr>`;
 
   const html = `<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
   <body style="margin:0;padding:0;background:#f4f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0a101a;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:32px 16px;">
       <tr>
         <td align="center">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;">
             <tr>
-              <td style="padding:32px 32px 8px;">
+              <td style="padding:28px 32px 0;">
+                <img src="cid:${LOGO_CID}" width="${EMAIL_LOGO_WIDTH}" height="${EMAIL_LOGO_HEIGHT}" alt="Colorful Memories" style="display:block;border:0;outline:none;text-decoration:none;width:${EMAIL_LOGO_WIDTH}px;max-width:100%;height:auto;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 8px;">
                 <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Order confirmation</p>
                 <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;color:#0a101a;">Thanks for placing an order!</h1>
               </td>
@@ -101,7 +120,10 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
               <td style="padding:20px 32px 0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f1ff;border-radius:12px;">
                   <tr>
-                    <td style="padding:14px 16px;font-size:15px;line-height:1.5;">
+${cover ? `                    <td width="${cover.width + 16}" valign="top" style="padding:14px 0 14px 16px;">
+                      <img src="cid:${COVER_CID}" width="${cover.width}" height="${cover.height}" alt="Cover of ${escapeHtml(input.title)}" style="display:block;border:0;border-radius:6px;box-shadow:0 1px 3px rgba(15,23,42,0.18);width:${cover.width}px;height:${cover.height}px;">
+                    </td>
+` : ""}                    <td valign="top" style="padding:14px 16px;font-size:15px;line-height:1.5;">
                       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;">
                         ${details.map((d) => rowHtml(d)).join("\n                        ")}
                       </table>
@@ -174,5 +196,22 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
     `${cancelNote} Cancel this order: ${input.cancelUrl}`,
   ].join("\n");
 
-  return { to: input.to, subject, html, text, replyTo: CONTACT_EMAIL };
+  const attachments: NonNullable<OutgoingEmail["attachments"]> = [
+    {
+      filename: "colorful-memories.png",
+      content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"),
+      contentId: LOGO_CID,
+      contentType: "image/png",
+    },
+  ];
+  if (input.coverThumb) {
+    attachments.push({
+      filename: "book-cover.jpg",
+      content: input.coverThumb.jpeg,
+      contentId: COVER_CID,
+      contentType: "image/jpeg",
+    });
+  }
+
+  return { to: input.to, subject, html, text, replyTo: CONTACT_EMAIL, attachments };
 }
