@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { V2WorkingOverlay } from "@/components/v2/V2WorkingOverlay";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { EDIT_SUGGESTIONS } from "@/content/marketing";
 import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
@@ -153,15 +154,7 @@ export function V2SheetEditChat({
                 className="max-h-full max-w-full object-contain"
               />
               {busy ? (
-                <div
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/80 p-4 text-center backdrop-blur-[2px]"
-                  aria-busy="true"
-                >
-                  <Loader2 className="h-10 w-10 animate-spin text-v2-primary" />
-                  <span className="text-sm font-medium text-v2-navy">
-                    Applying your edit…
-                  </span>
-                </div>
+                <V2WorkingOverlay variant="edit" label="Applying your edit to the coloring page." />
               ) : null}
             </div>
           </div>

@@ -53,6 +53,7 @@ import type { LibraryPhoto } from "@/lib/library/types";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
+import { V2WorkingOverlay } from "@/components/v2/V2WorkingOverlay";
 import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
 import { Columns2, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -887,15 +888,11 @@ export function ColorfulMemoriesApp() {
         </div>
       ) : null}
       {makingPortrait ? (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-white/75 p-4 text-center backdrop-blur-[1px]"
-          aria-busy="true"
-        >
-          <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
-          <span className="text-sm font-medium text-v2-navy">
-            Making a portrait version…
-          </span>
-        </div>
+        <V2WorkingOverlay
+          variant="portrait"
+          label="Making a portrait version of your photo."
+          className="rounded-xl"
+        />
       ) : null}
     </div>
   );
@@ -913,21 +910,14 @@ export function ColorfulMemoriesApp() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
+              key={activeSheet.imageDataUrl.slice(-48)}
               src={activeSheet.imageDataUrl}
               alt="Generated coloring page"
-              className="pointer-events-none max-h-full max-w-full object-contain"
+              className="v2-sheet-reveal pointer-events-none max-h-full max-w-full object-contain"
             />
           </button>
           {sheetCorrecting ? (
-            <div
-              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/75 p-4 text-center backdrop-blur-[1px]"
-              aria-busy="true"
-            >
-              <Loader2 className="h-8 w-8 animate-spin text-v2-primary" />
-              <span className="text-sm font-medium text-v2-navy">
-                Applying your edits…
-              </span>
-            </div>
+            <V2WorkingOverlay variant="edit" label="Applying your edits to the coloring page." />
           ) : null}
         </div>
       ) : sheetBusy && selected ? (
