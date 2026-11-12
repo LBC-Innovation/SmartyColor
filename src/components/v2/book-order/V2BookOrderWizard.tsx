@@ -1273,14 +1273,13 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     if (api.isError(placed)) {
       setPlacing(false);
       setConfirmOpen(false);
-      if (placed.error.code === "INSUFFICIENT_CREDITS") {
-        // The printer's final price came in above the balance: let them top up on the order page.
-        void refreshUser();
-        await closeCart();
-        router.push(`/orders/${orderId}?confirmed=1`);
-        return;
-      }
-      setError(placed.error.message);
+      // The book is saved and waiting for payment, so it can no longer be edited here. The order
+      // page's checkout panel lets them top up (if the printer's final price came in above the
+      // balance) or try paying again.
+      if (placed.error.code === "INSUFFICIENT_CREDITS") void refreshUser();
+      else console.error(`[order] place ${orderId} failed: ${placed.error.message}`);
+      await closeCart();
+      router.push(`/orders/${orderId}?confirmed=1`);
       return;
     }
     trackPurchaseOnce({
