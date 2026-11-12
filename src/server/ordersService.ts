@@ -38,7 +38,14 @@ import { clientOrigin } from "@/lib/auth/clientOrigin";
 import { getSupabaseAuth } from "@/lib/supabase/service";
 import { sendEmail } from "@/server/email/resend";
 import { orderConfirmationEmail } from "@/server/email/orderConfirmationEmail";
+import { orderCanceledEmail } from "@/server/email/orderCanceledEmail";
 import { formatShippingAddress } from "@/lib/orders/shippingAddress";
+import {
+  ADMIN_CANCELABLE_STATUSES,
+  CUSTOMER_CANCELABLE_STATUSES,
+  DEAD_LULU_STATUSES,
+  customerCanCancel,
+} from "@/lib/orders/cancelWindow";
 
 /** Lulu fetches the print PDFs asynchronously (can be hours later); keep the links alive 7 days. */
 const PRINT_FILE_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -76,6 +83,10 @@ type OrderRow = {
   delivered_at: string | null;
   created_at: string;
   updated_at: string;
+  lulu_production_due_at?: string | null;
+  refunded_cents?: number | null;
+  canceled_at?: string | null;
+  cancel_reason?: string | null;
   print_products?: { name: string } | { name: string }[] | null;
 };
 
@@ -113,6 +124,14 @@ function mapSummary(row: OrderRow): BookOrderSummary {
     trackingUrls: row.tracking_urls ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    luluProductionDueAt: row.lulu_production_due_at ?? null,
+    canCancel: customerCanCancel({
+      status: row.status,
+      fulfillment: row.fulfillment ?? "print",
+      luluStatusName: row.lulu_status_name,
+      luluProductionDueAt: row.lulu_production_due_at ?? null,
+    }),
+    refundedCents: row.refunded_cents ?? null,
   };
 }
 
@@ -152,6 +171,8 @@ function mapDetail(row: OrderRow, events: EventRow[]): BookOrderDetail {
     deliveredAt: row.delivered_at,
     luluStatusMessage: row.lulu_status_message,
     luluPrintJobId: row.lulu_print_job_id,
+    canceledAt: row.canceled_at ?? null,
+    cancelReason: row.cancel_reason ?? null,
     timeline,
     events: mapEvents(events),
     deliveryExpectation: formatDeliveryExpectation(
@@ -673,6 +694,7 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
         taxCents: order.tax_cents as number | null,
         totalCents: order.total_cents as number | null,
         orderUrl: `${clientOrigin()}/orders/${orderId}`,
+        cancelUrl: `${clientOrigin()}/orders/${orderId}?cancel=1`,
       }),
     );
     if (!ok) return;
@@ -683,6 +705,52 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
     });
   } catch (e) {
     console.error(`[orders] confirmation email ${orderId} failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** Tells the customer their order was canceled and refunded. Once per order; never throws. */
+export async function sendOrderCanceledEmail(orderId: string): Promise<void> {
+  try {
+    const db = getSupabaseAdmin();
+    const { data: sent } = await db
+      .from("book_order_events")
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("kind", "cancel_email_sent")
+      .limit(1);
+    if (sent && sent.length > 0) return;
+
+    const { data: order } = await db.from("book_orders").select("*").eq("id", orderId).maybeSingle();
+    if (!order || order.status !== "canceled") return;
+    // Nothing worth an email for an order that was never paid.
+    if (!order.paid_at) return;
+
+    let to = ((order.contact_email as string | null) ?? "").trim();
+    if (!to) {
+      const { data: auth } = await getSupabaseAuth().auth.admin.getUserById(order.user_id as string);
+      to = auth.user?.email?.trim() ?? "";
+    }
+    if (!to) return;
+
+    const ok = await sendEmail(
+      orderCanceledEmail({
+        to,
+        orderId,
+        title: (order.project_title as string | null)?.trim() || "Coloring book",
+        refundedCents: (order.refunded_cents as number | null) ?? 0,
+        canceledByAdmin: Boolean(order.canceled_by) && order.canceled_by !== order.user_id,
+        reason: (order.cancel_reason as string | null) ?? null,
+        orderUrl: `${clientOrigin()}/orders/${orderId}`,
+      }),
+    );
+    if (!ok) return;
+    await appendOrderEvent(orderId, {
+      kind: "cancel_email_sent",
+      title: "Cancellation email sent",
+      detail: "We emailed you that this order was canceled.",
+    });
+  } catch (e) {
+    console.error(`[orders] cancel email ${orderId} failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -792,6 +860,7 @@ export async function submitOrderToLulu(
       .from("book_orders")
       .update({
         lulu_print_job_id: job.id,
+        lulu_production_due_at: job.production_due_time ?? null,
         lulu_status_name: job.status?.name ?? "CREATED",
         lulu_status_message: job.status?.message ?? null,
         lulu_status_changed_at: now,
@@ -821,7 +890,6 @@ export async function submitOrderToLulu(
 }
 
 /** Lulu job states that can never print, so the order may be rebuilt and sent again. */
-const DEAD_LULU_STATUSES = ["REJECTED", "CANCELED", "ERROR"];
 
 /**
  * Admin: rebuilds the print PDFs of a failed order from its stored pages and cover, then submits
@@ -928,12 +996,6 @@ export async function rebuildAndResubmitOrderToLulu(
   return submitOrderToLulu(orderId);
 }
 
-const TERMINAL_STATUSES: BookOrderStatus[] = [
-  "shipped",
-  "delivered",
-  "canceled",
-  "refunded",
-];
 
 export async function listOrdersForUser(userId: string): Promise<ApiResult<BookOrderSummary[]>> {
   const { data, error } = await getSupabaseAdmin()
@@ -943,6 +1005,7 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
       id, user_id, product_id, project_title, page_count, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, tracking_number, tracking_urls,
       estimated_delivery_min, estimated_delivery_max, created_at, updated_at,
+      lulu_production_due_at, refunded_cents,
       print_products ( name )
     `,
     )
@@ -982,6 +1045,7 @@ export async function getOrderForUser(
       estimated_delivery_min, estimated_delivery_max, estimated_dispatch_min,
       estimated_dispatch_max, contact_email, shipping_address, billing_address, is_gift, gift_note, cover_pdf_path, paid_at,
       submitted_to_lulu_at, shipped_at, delivered_at, created_at, updated_at,
+      lulu_production_due_at, refunded_cents, canceled_at, cancel_reason,
       print_products ( name )
     `,
     )
@@ -1049,8 +1113,10 @@ export async function syncOrderFromLulu(
       lulu_status_message: job.status?.message ?? null,
       lulu_status_changed_at: changedAt,
     };
+    if (job.production_due_time) updates.lulu_production_due_at = job.production_due_time;
 
-    if (mapped) updates.status = mapped;
+    // An order we canceled stays canceled whatever Lulu reports next.
+    if (mapped && order.status !== "canceled") updates.status = mapped;
     if (tracking.trackingNumber) updates.tracking_number = tracking.trackingNumber;
     if (tracking.trackingUrls.length) updates.tracking_urls = tracking.trackingUrls;
     if (tracking.carrier) updates.carrier = tracking.carrier;
@@ -1125,6 +1191,7 @@ type AdminOrderRow = OrderRow & {
 function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
   return {
     id: row.id,
+    userId: row.user_id,
     projectTitle: row.project_title,
     productName: productName(row),
     pageCount: row.page_count,
@@ -1136,8 +1203,19 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     luluPrintJobId: row.lulu_print_job_id,
     luluStatusName: row.lulu_status_name,
     fulfillment: row.fulfillment ?? "print",
+    contactEmail: row.contact_email ?? null,
+    cancelReason: row.cancel_reason ?? null,
+    refundedCents: row.refunded_cents ?? null,
+    luluProductionDueAt: row.lulu_production_due_at ?? null,
   };
 }
+
+const ADMIN_ORDER_COLUMNS = `
+      id, user_id, project_title, page_count, status, total_cents, created_at, contact_email,
+      canceled_at, cancel_reason, refunded_cents, deleted_at, lulu_print_job_id, lulu_status_name,
+      lulu_production_due_at, fulfillment,
+      print_products ( name )
+    `;
 
 export async function listOrdersForAdmin(
   userId: string,
@@ -1145,13 +1223,7 @@ export async function listOrdersForAdmin(
 ): Promise<ApiResult<AdminUserOrderSummary[]>> {
   let query = getSupabaseAdmin()
     .from("book_orders")
-    .select(
-      `
-      id, project_title, page_count, status, total_cents, created_at,
-      canceled_at, deleted_at, lulu_print_job_id, lulu_status_name, fulfillment,
-      print_products ( name )
-    `,
-    )
+    .select(ADMIN_ORDER_COLUMNS)
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
@@ -1163,77 +1235,208 @@ export async function listOrdersForAdmin(
   if (error) return { data: null, error: { message: error.message } };
 
   return {
-    data: (data as AdminOrderRow[]).map(mapAdminOrder),
+    data: (data as unknown as AdminOrderRow[]).map(mapAdminOrder),
     error: null,
   };
+}
+
+/** Every customer's orders, newest first, for the admin Orders page. Drafts and quotes are left out. */
+export async function listAllOrdersForAdmin(options?: {
+  status?: BookOrderStatus | "active";
+  limit?: number;
+}): Promise<ApiResult<AdminUserOrderSummary[]>> {
+  let query = getSupabaseAdmin()
+    .from("book_orders")
+    .select(ADMIN_ORDER_COLUMNS)
+    .is("deleted_at", null)
+    .not("status", "in", "(draft,quoted)")
+    .order("created_at", { ascending: false })
+    .limit(Math.min(Math.max(options?.limit ?? 200, 1), 500));
+  if (options?.status === "active") {
+    query = query.in("status", ["awaiting_payment", "paid", "submitting_to_lulu", "submitted_to_lulu", "in_production", "failed"]);
+  } else if (options?.status) {
+    query = query.eq("status", options.status);
+  }
+
+  const { data, error } = await query;
+  if (error) return { data: null, error: { message: error.message } };
+  const rows = (data as unknown as AdminOrderRow[]).map(mapAdminOrder);
+
+  const emails = new Map<string, string | null>();
+  await Promise.all(
+    [...new Set(rows.map((r) => r.userId))].map(async (id) => {
+      try {
+        const { data: auth } = await getSupabaseAuth().auth.admin.getUserById(id);
+        emails.set(id, auth.user?.email ?? null);
+      } catch {
+        emails.set(id, null);
+      }
+    }),
+  );
+  return { data: rows.map((r) => ({ ...r, userEmail: emails.get(r.userId) ?? null })), error: null };
+}
+
+export type CancelOrderResult = { status: BookOrderStatus; refundedCents: number };
+
+/**
+ * Cancels a print order while Lulu still allows it (its production delay hasn't run out), cancels
+ * the Lulu print job, and puts what the order charged back in the customer's wallet.
+ *
+ * Order of operations: Lulu first (the step that can be refused), then one database transaction
+ * that marks the order canceled and refunds. If the database step fails after Lulu canceled, a
+ * retry finishes it: the RPC refunds an already-canceled order that wasn't refunded yet.
+ */
+export async function cancelBookOrder(input: {
+  orderId: string;
+  /** Scope to the customer's own order. Omit for admins. */
+  userId?: string;
+  actor: { kind: "customer" | "admin"; id: string };
+  reason?: string | null;
+}): Promise<ApiResult<CancelOrderResult>> {
+  const db = getSupabaseAdmin();
+  let query = db.from("book_orders").select("*").eq("id", input.orderId);
+  if (input.userId) query = query.eq("user_id", input.userId);
+  const { data: order, error } = await query.maybeSingle();
+
+  if (error) return { data: null, error: { message: error.message } };
+  if (!order || (order.deleted_at && input.actor.kind === "customer")) {
+    return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  }
+
+  const reason = (input.reason ?? "").trim().slice(0, 1000) || null;
+  const status = order.status as BookOrderStatus;
+  const isAdmin = input.actor.kind === "admin";
+  const alreadyCanceled = status === "canceled";
+  const notCancelable = (message: string) => ({
+    data: null,
+    error: { message, code: "NOT_CANCELABLE" },
+  });
+
+  if (alreadyCanceled && (order.refunded_at || !order.paid_at || !order.credits_applied)) {
+    return { data: { status: "canceled", refundedCents: 0 }, error: null };
+  }
+  if (!alreadyCanceled) {
+    if (status === "submitting_to_lulu") {
+      return notCancelable("Your book is being sent to the printer right now. Try again in a minute.");
+    }
+    if (!isAdmin && (order.fulfillment ?? "print") === "digital") {
+      return notCancelable("Print-at-home books are delivered right away, so they can't be canceled.");
+    }
+    const allowed = isAdmin ? ADMIN_CANCELABLE_STATUSES : CUSTOMER_CANCELABLE_STATUSES;
+    if (!allowed.includes(status)) {
+      return notCancelable(
+        status === "in_production" || status === "shipped" || status === "delivered"
+          ? "This book has already gone into production, so it can no longer be canceled."
+          : `An order that is ${statusLabel(status).toLowerCase()} can't be canceled.`,
+      );
+    }
+  }
+
+  const jobId = order.lulu_print_job_id as number | null;
+  const luluStatus = ((order.lulu_status_name as string | null) ?? "").toUpperCase();
+  let canceledAtLulu = false;
+  if (!alreadyCanceled && jobId && !DEAD_LULU_STATUSES.includes(luluStatus)) {
+    if (!luluConfigured()) return { data: null, error: { message: "Lulu API is not configured" } };
+    try {
+      const job = await fetchLuluPrintJob(jobId);
+      const live = (job.status?.name ?? "").toUpperCase();
+      if (!DEAD_LULU_STATUSES.includes(live)) {
+        if (job.is_cancellable === false) {
+          await syncOrderFromLulu(input.orderId);
+          return notCancelable(
+            "This book has already gone into production at the printer, so it can no longer be canceled.",
+          );
+        }
+        await cancelLuluPrintJob(jobId);
+        canceledAtLulu = true;
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Lulu cancel failed";
+      console.error(`[orders] cancel ${input.orderId}: Lulu job ${jobId}: ${message}`);
+      return {
+        data: null,
+        error: { message: "The printer wouldn't cancel this book. It may already be in production." },
+      };
+    }
+  }
+
+  const { data: rpc, error: rpcError } = await db.rpc("cancel_and_refund_book_order", {
+    p_order_id: input.orderId,
+    p_canceled_by: input.actor.id,
+    p_reason: reason ?? "",
+    p_allowed_statuses: isAdmin ? ADMIN_CANCELABLE_STATUSES : CUSTOMER_CANCELABLE_STATUSES,
+  });
+  if (rpcError) {
+    console.error(
+      `[orders] cancel ${input.orderId}: refund step failed${canceledAtLulu ? " after Lulu canceled the job" : ""}: ${rpcError.message}`,
+    );
+    return {
+      data: null,
+      error: {
+        message: canceledAtLulu
+          ? "The printer canceled your book, but your refund didn't go through. Try again, or contact us."
+          : rpcError.message,
+      },
+    };
+  }
+  const refundedCents = Number((rpc as { refundedCents?: number } | null)?.refundedCents ?? 0);
+
+  if (jobId) {
+    await db
+      .from("book_orders")
+      .update({
+        lulu_status_name: "CANCELED",
+        lulu_status_message: isAdmin ? "Canceled by admin" : "Canceled by customer",
+        lulu_status_changed_at: new Date().toISOString(),
+      })
+      .eq("id", input.orderId);
+  }
+
+  if (!alreadyCanceled) {
+    const who = isAdmin ? "Canceled by Colorful Memories." : "You canceled this order.";
+    const refund = refundedCents > 0 ? ` ${usdCents(refundedCents)} was returned to your wallet.` : "";
+    await appendOrderEvent(input.orderId, {
+      kind: isAdmin ? "admin_cancel" : "customer_cancel",
+      title: "Order canceled",
+      detail: `${who}${refund}`,
+      metadata: { actorId: input.actor.id, reason, refundedCents, luluPrintJobId: jobId },
+    });
+    await recordActivity({
+      userId: order.user_id as string,
+      category: "orders",
+      type: "order_canceled",
+      description: `Order for ${quoted(order.project_title as string | null, "a printed book")} was canceled`,
+      referenceType: "book_order",
+      referenceId: input.orderId,
+    });
+  } else if (refundedCents > 0) {
+    await appendOrderEvent(input.orderId, {
+      kind: "order_refund",
+      title: "Refunded",
+      detail: `${usdCents(refundedCents)} was returned to your wallet.`,
+      metadata: { actorId: input.actor.id, refundedCents },
+    });
+  }
+
+  return { data: { status: "canceled", refundedCents }, error: null };
+}
+
+function usdCents(cents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
 export async function cancelOrderAsAdmin(input: {
   userId: string;
   orderId: string;
   adminId: string;
-}): Promise<ApiResult<{ status: BookOrderStatus }>> {
-  const { data: order, error } = await getSupabaseAdmin()
-    .from("book_orders")
-    .select("*")
-    .eq("id", input.orderId)
-    .eq("user_id", input.userId)
-    .maybeSingle();
-
-  if (error) return { data: null, error: { message: error.message } };
-  if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
-  if (order.deleted_at) {
-    return { data: null, error: { message: "Order is hidden" } };
-  }
-  if (order.status === "canceled" || order.canceled_at) {
-    return { data: { status: "canceled" }, error: null };
-  }
-  if (TERMINAL_STATUSES.includes(order.status as BookOrderStatus)) {
-    return {
-      data: null,
-      error: { message: `Cannot cancel an order with status “${order.status}”` },
-    };
-  }
-
-  if (order.lulu_print_job_id && luluConfigured()) {
-    try {
-      await cancelLuluPrintJob(order.lulu_print_job_id);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Lulu cancel failed";
-      return { data: null, error: { message } };
-    }
-  }
-
-  const now = new Date().toISOString();
-  const { error: updateError } = await getSupabaseAdmin()
-    .from("book_orders")
-    .update({
-      status: "canceled",
-      canceled_at: now,
-      canceled_by: input.adminId,
-      lulu_status_name: "CANCELED",
-      lulu_status_message: "Canceled by admin",
-    })
-    .eq("id", input.orderId);
-
-  if (updateError) return { data: null, error: { message: updateError.message } };
-
-  await appendOrderEvent(input.orderId, {
-    kind: "admin_cancel",
-    title: "Order canceled",
-    detail: "Canceled by an administrator.",
-    metadata: { adminId: input.adminId },
-  });
-  await recordActivity({
+  reason?: string | null;
+}): Promise<ApiResult<CancelOrderResult>> {
+  return cancelBookOrder({
+    orderId: input.orderId,
     userId: input.userId,
-    category: "orders",
-    type: "order_canceled",
-    description: `Order for ${quoted(order.project_title as string | null, "a printed book")} was canceled`,
-    referenceType: "book_order",
-    referenceId: input.orderId,
+    actor: { kind: "admin", id: input.adminId },
+    reason: input.reason,
   });
-
-  return { data: { status: "canceled" }, error: null };
 }
 
 export async function softDeleteOrderAsAdmin(input: {

@@ -51,6 +51,13 @@ export const v2BottomNav: V2NavItem[] = [
 export const v2AdminNav: V2NavItem[] = [
   { id: "users", label: "Users", icon: Users, href: "/admin/users", permission: "usermanage:listusers" },
   {
+    id: "orders",
+    label: "Orders",
+    icon: Package,
+    href: "/admin/orders",
+    permission: "usermanage:manageorders",
+  },
+  {
     id: "finance",
     label: "Financials",
     icon: LineChart,

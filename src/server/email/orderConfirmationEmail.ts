@@ -48,6 +48,8 @@ export type OrderConfirmationInput = {
   taxCents: number | null;
   totalCents: number | null;
   orderUrl: string;
+  /** Opens the order page with the cancel dialog up. */
+  cancelUrl: string;
 };
 
 /** Sent once when a printed-book order is paid and on its way to the printer. */
@@ -69,6 +71,8 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
   if (input.taxCents != null) money.push(["Sales tax", usd(input.taxCents)]);
   const total = input.totalCents != null ? usd(input.totalCents) : null;
   const follow = `We'll keep your order page up to date as the printer reports progress. Questions? Reply to this email or write to ${CONTACT_EMAIL}.`;
+  const cancelNote =
+    "Changed your mind? You can cancel for a full refund to your wallet until your book goes into production, usually about an hour after you order.";
   const cta = "View your order";
   const url = escapeHtml(input.orderUrl);
 
@@ -130,8 +134,13 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 32px 32px;">
+              <td style="padding:28px 32px 24px;">
                 <a href="${url}" style="display:inline-block;background:#7446f0;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:13px 24px;border-radius:999px;">${cta}</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 32px 32px;font-size:14px;line-height:1.55;color:#64748b;border-top:1px solid #e5e7eb;">
+                <p style="margin:20px 0 0;">${escapeHtml(cancelNote)} <a href="${escapeHtml(input.cancelUrl)}" style="color:#7446f0;font-weight:600;">Cancel this order</a></p>
               </td>
             </tr>
           </table>
@@ -161,6 +170,8 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
     follow,
     "",
     `${cta}: ${input.orderUrl}`,
+    "",
+    `${cancelNote} Cancel this order: ${input.cancelUrl}`,
   ].join("\n");
 
   return { to: input.to, subject, html, text, replyTo: CONTACT_EMAIL };

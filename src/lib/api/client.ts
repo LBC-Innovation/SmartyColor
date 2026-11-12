@@ -644,12 +644,37 @@ export function adminListUserOrders(
   return request<AdminUserOrderSummary[]>(`/admin/users/${userId}/orders${qs}`);
 }
 
+export type CancelOrderData = { status: string; refundedCents: number };
+
+/** Customer: cancel a print order before production; the wallet is refunded. */
+export function cancelOrder(orderId: string, reason: string): Promise<ApiResult<CancelOrderData>> {
+  return request<CancelOrderData>(`/orders/${orderId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/** Admin: cancel any customer's order before production; the wallet is refunded. */
+export function adminCancelOrder(orderId: string, reason: string): Promise<ApiResult<CancelOrderData>> {
+  return request<CancelOrderData>(`/admin/orders/${orderId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function adminListAllOrders(status?: string): Promise<ApiResult<AdminUserOrderSummary[]>> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<AdminUserOrderSummary[]>(`/admin/orders${qs}`);
+}
+
 export function adminCancelUserOrder(
   userId: string,
   orderId: string,
-): Promise<ApiResult<{ status: string }>> {
-  return request<{ status: string }>(`/admin/users/${userId}/orders/${orderId}/cancel`, {
+  reason?: string,
+): Promise<ApiResult<CancelOrderData>> {
+  return request<CancelOrderData>(`/admin/users/${userId}/orders/${orderId}/cancel`, {
     method: "POST",
+    body: JSON.stringify({ reason: reason ?? "" }),
   });
 }
 

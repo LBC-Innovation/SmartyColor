@@ -14,7 +14,14 @@ const STAGE_COPY: Record<string, string> = {
 };
 
 /** Thank-you header and "what happens next" guide for a printed-book order that was just placed. */
-export function OrderPlacedThanks({ order }: { order: BookOrderDetail }) {
+export function OrderPlacedThanks({
+  order,
+  onCancel,
+}: {
+  order: BookOrderDetail;
+  /** Set while the order can still be canceled. */
+  onCancel?: () => void;
+}) {
   const contact = order.contactEmail?.trim();
   const dispatch = order.estimatedDispatchMax ?? order.estimatedDispatchMin;
   return (
@@ -97,6 +104,24 @@ export function OrderPlacedThanks({ order }: { order: BookOrderDetail }) {
         </a>
         .
       </p>
+
+      {onCancel ? (
+        <p className="mt-3 text-sm text-v2-muted">
+          Changed your mind? You can cancel for a full refund to your wallet until your book goes
+          into production
+          {order.luluProductionDueAt
+            ? `, around ${new Date(order.luluProductionDueAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+            : ", usually about an hour after you order"}
+          .{" "}
+          <button
+            type="button"
+            onClick={onCancel}
+            className="font-semibold text-rose-700 underline-offset-2 hover:underline"
+          >
+            Cancel order
+          </button>
+        </p>
+      ) : null}
     </section>
   );
 }

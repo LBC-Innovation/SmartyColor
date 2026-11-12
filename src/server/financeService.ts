@@ -100,6 +100,7 @@ type OrderRow = {
   paid_at: string | null;
   submitted_to_lulu_at: string | null;
   canceled_at: string | null;
+  refunded_at: string | null;
 };
 
 type PriceRow = {
@@ -244,7 +245,7 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       db
         .from("book_orders")
         .select(
-          "id, status, fulfillment, product_id, price_sku, credits_applied, lulu_cost_cents, paid_at, submitted_to_lulu_at, canceled_at",
+          "id, status, fulfillment, product_id, price_sku, credits_applied, lulu_cost_cents, paid_at, submitted_to_lulu_at, canceled_at, refunded_at",
         )
         .order("created_at", { ascending: true })
         .range(from, to),
@@ -312,6 +313,8 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
   const buckets = new Map<string, { paid: number; promo: number }>();
   /** Charges still refundable, per account + reference, newest last. */
   const charges = new Map<string, Array<{ sku: string; paid: number; promo: number }>>();
+  /** What each canceled order took from the wallet, so its refund goes back the same way. */
+  const canceledCharges = new Map<string, { paid: number; promo: number }>();
   let paidTotal = 0;
   let promoTotal = 0;
 
@@ -334,6 +337,7 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       // A canceled order's charge isn't refunded automatically, but it isn't earned either:
       // it stays out of sales and is flagged in the insights as possibly owed back.
       if (order && (order.canceled_at || order.status === "canceled")) {
+        canceledCharges.set(`${e.user_id}:${e.reference_id}`, { paid: fromPaid, promo: fromPromo });
         paidTotal += b.paid - beforePaid;
         promoTotal += b.promo - beforePromo;
         wallet.push({ at, paid: paidTotal, promo: promoTotal });
@@ -356,6 +360,13 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
         list.push({ sku, paid: fromPaid, promo: fromPromo });
         charges.set(key, list);
       }
+    } else if (e.reason === "order_refund" && e.delta > 0) {
+      // A canceled order's charge going back: it never counted as a sale, so it isn't a negative
+      // one either. Put each part back where it came from (paid stays paid, promo stays promo).
+      const charge = e.reference_id ? canceledCharges.get(`${e.user_id}:${e.reference_id}`) : undefined;
+      const backPromo = charge ? Math.min(charge.promo, e.delta) : 0;
+      b.promo += backPromo;
+      b.paid += e.delta - backPromo;
     } else if (e.reason === "usage_refund" && e.delta > 0) {
       const list = e.reference_id ? charges.get(`${e.user_id}:${e.reference_id}`) : undefined;
       const charge = list?.findLast((c) => c.paid + c.promo > 0);
@@ -404,7 +415,7 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
   for (const o of orders) {
     if (o.fulfillment !== "print") continue;
     if (o.canceled_at || o.status === "canceled") {
-      if (o.paid_at && o.credits_applied > 0) {
+      if (o.paid_at && o.credits_applied > 0 && !o.refunded_at) {
         canceledCharged.count += 1;
         canceledCharged.cents += o.credits_applied;
       }
@@ -817,7 +828,7 @@ function buildInsights(
     out.push({
       tone: "warning",
       title: `${d.canceledCharged.count} canceled print order${d.canceledCharged.count === 1 ? "" : "s"} still charged`,
-      detail: `${usd(d.canceledCharged.cents)} was taken from wallets for orders that were later canceled. It's left out of sales, but canceling doesn't refund the wallet; if these customers should get it back, add it on the Users page.`,
+      detail: `${usd(d.canceledCharged.cents)} was taken from wallets for orders that were later canceled. It's left out of sales. These were canceled before refunds were automatic; if these customers should get it back, add it on the Users page.`,
     });
   }
 

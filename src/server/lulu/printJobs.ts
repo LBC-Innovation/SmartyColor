@@ -24,6 +24,12 @@ export type LuluPrintJob = {
     tracking_id?: string;
     tracking_urls?: string[];
   }>;
+  /** Lulu's own answer to "can this still be canceled?" (false once production starts). */
+  is_cancellable?: boolean;
+  /** Minutes between payment and production. */
+  production_delay?: number;
+  /** When production starts; null until the job is paid. */
+  production_due_time?: string | null;
 };
 
 export async function fetchLuluPrintJob(printJobId: number): Promise<LuluPrintJob> {

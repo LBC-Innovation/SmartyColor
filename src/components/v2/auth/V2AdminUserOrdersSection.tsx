@@ -8,6 +8,8 @@ import { formatCredits } from "@/lib/credits/money";
 import { statusLabel } from "@/lib/orders/fulfillmentTimeline";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import { cn } from "@/lib/cn";
+import { adminCanCancel } from "@/lib/orders/cancelWindow";
+import { CancelOrderModal } from "@/components/v2/orders/CancelOrderModal";
 
 export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
   const [orders, setOrders] = useState<AdminUserOrderSummary[]>([]);
@@ -15,6 +17,7 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [includeHidden, setIncludeHidden] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<AdminUserOrderSummary | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,17 +35,6 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
-
-  async function cancelOrder(orderId: string): Promise<void> {
-    setBusyId(orderId);
-    const result = await api.adminCancelUserOrder(userId, orderId);
-    setBusyId(null);
-    if (api.isError(result)) {
-      setError(result.error.message);
-      return;
-    }
-    await load();
-  }
 
   async function submitToLulu(orderId: string, rebuild = false): Promise<void> {
     setBusyId(orderId);
@@ -96,8 +88,7 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
             {orders.map((order) => {
               const hidden = Boolean(order.deletedAt);
               const canceled = order.status === "canceled" || Boolean(order.canceledAt);
-              const canCancel =
-                !hidden && !canceled && !["shipped", "delivered", "refunded"].includes(order.status);
+              const canCancel = !canceled && adminCanCancel(order);
               // A failed order always resubmits with freshly built files, so a retry never resends a
               // file Lulu already rejected (or one left behind by a rebuild that failed part way).
               const luluJobDead =
@@ -164,13 +155,9 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
                           type="button"
                           disabled={busyId === order.id}
                           className="v2-btn-sm v2-btn-outline inline-flex items-center gap-1"
-                          onClick={() => void cancelOrder(order.id)}
+                          onClick={() => setCancelling(order)}
                         >
-                          {busyId === order.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                          ) : (
-                            <XCircle className="h-3.5 w-3.5" aria-hidden />
-                          )}
+                          <XCircle className="h-3.5 w-3.5" aria-hidden />
                           Cancel
                         </button>
                       ) : null}
@@ -182,7 +169,7 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
                           onClick={() => {
                             if (
                               window.confirm(
-                                "Hide this order? It will disappear from the user's My Orders list and will no longer sync with Lulu.",
+                                "Hide this order? It will disappear from the user's My Orders list and will no longer sync with Lulu. A paid order that can still be canceled is canceled and refunded first.",
                               )
                             ) {
                               void hideOrder(order.id);
@@ -201,6 +188,21 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
           </ul>
         )}
       </div>
+      {cancelling ? (
+        <CancelOrderModal
+          mode="admin"
+          orderId={cancelling.id}
+          title={cancelling.projectTitle}
+          totalCents={["draft", "quoted", "awaiting_payment"].includes(cancelling.status) ? null : cancelling.totalCents}
+          deadline={cancelling.luluProductionDueAt}
+          customerLabel={cancelling.contactEmail}
+          onClose={() => setCancelling(null)}
+          onCanceled={() => {
+            setCancelling(null);
+            void load();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

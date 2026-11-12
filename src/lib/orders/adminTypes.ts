@@ -13,4 +13,11 @@ export type AdminUserOrderSummary = {
   luluPrintJobId: number | null;
   luluStatusName: string | null;
   fulfillment: BookFulfillment;
+  userId: string;
+  /** Present on the all-orders admin list. */
+  userEmail?: string | null;
+  contactEmail: string | null;
+  cancelReason: string | null;
+  refundedCents: number | null;
+  luluProductionDueAt: string | null;
 };
