@@ -11,5 +11,6 @@ export type AdminUserOrderSummary = {
   canceledAt: string | null;
   deletedAt: string | null;
   luluPrintJobId: number | null;
+  luluStatusName: string | null;
   fulfillment: BookFulfillment;
 };

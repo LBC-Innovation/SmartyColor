@@ -46,6 +46,12 @@ export type ShippingAddress = {
   email?: string;
 };
 
+/** Lulu's "did you mean" for an entered address; it only warns and never blocks an order. */
+export type AddressSuggestion = {
+  warnings: { code: string; message: string }[];
+  suggested: Partial<ShippingAddress>;
+};
+
 export type BookOrderSummary = {
   id: string;
   projectTitle: string | null;

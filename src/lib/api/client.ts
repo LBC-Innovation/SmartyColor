@@ -4,7 +4,7 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
-import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
+import type { AddressSuggestion, BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import type {
   CreditLedgerEntry,
   CreditTopUpConfirmation,
@@ -450,6 +450,8 @@ export type OrderQuoteData = {
   shippingPostcode?: string | null;
   shippingLevel?: string;
   quoteError?: string | null;
+  /** Lulu's "did you mean" for the street address sent with the quote. */
+  addressSuggestion?: AddressSuggestion | null;
 };
 
 /** The address the customer saved for future orders; null when they haven't saved one. */
@@ -653,9 +655,11 @@ export function adminCancelUserOrder(
 
 export function adminSubmitOrderToLulu(
   orderId: string,
+  options?: { rebuild?: boolean },
 ): Promise<ApiResult<{ status: string; luluPrintJobId?: number }>> {
   return request<{ status: string; luluPrintJobId?: number }>(`/admin/orders/${orderId}/submit-lulu`, {
     method: "POST",
+    ...(options?.rebuild ? { body: JSON.stringify({ rebuild: true }) } : {}),
   });
 }
 

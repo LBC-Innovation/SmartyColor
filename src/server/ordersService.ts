@@ -746,6 +746,114 @@ export async function submitOrderToLulu(
   }
 }
 
+/** Lulu job states that can never print, so the order may be rebuilt and sent again. */
+const DEAD_LULU_STATUSES = ["REJECTED", "CANCELED", "ERROR"];
+
+/**
+ * Admin: rebuilds the print PDFs of a failed order from its stored pages and cover, then submits
+ * it to Lulu again. Allowed only when the order is `failed` and its Lulu job is dead (or it never
+ * had one). The order is claimed with a conditional update before any work starts, so a double
+ * click cannot create two print jobs: the second caller finds the order no longer `failed`.
+ */
+export async function rebuildAndResubmitOrderToLulu(
+  orderId: string,
+): Promise<ApiResult<{ status: BookOrderStatus; luluPrintJobId?: number }>> {
+  const db = getSupabaseAdmin();
+  const { data: order, error } = await db.from("book_orders").select("*").eq("id", orderId).maybeSingle();
+  if (error) return { data: null, error: { message: error.message } };
+  if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  if (order.deleted_at) return { data: null, error: { message: "Order is hidden", code: "INVALID_STATE" } };
+  if ((order.fulfillment ?? "print") === "digital") {
+    return { data: null, error: { message: "Digital orders are not printed", code: "INVALID_STATE" } };
+  }
+  if (order.status !== "failed") {
+    return { data: null, error: { message: `Order is ${order.status}, only failed orders can be rebuilt`, code: "INVALID_STATE" } };
+  }
+  const oldJobId = order.lulu_print_job_id as number | null;
+  const oldLuluStatus = order.lulu_status_name as string | null;
+  if (oldJobId && !DEAD_LULU_STATUSES.includes((oldLuluStatus ?? "").toUpperCase())) {
+    return {
+      data: null,
+      error: {
+        message: `Lulu job ${oldJobId} is ${oldLuluStatus ?? "still active"}; only rejected or canceled jobs can be replaced`,
+        code: "INVALID_STATE",
+      },
+    };
+  }
+
+  const bindingId = bindingIdForProduct(order.product_id as string);
+  const pages = bindingId ? parsePrintPages(order.print_pages, bindingId) : null;
+  if (!bindingId || !pages?.data || pages.data.length !== order.page_count || !order.cover_design) {
+    return {
+      data: null,
+      error: { message: "This order has no stored pages or cover to rebuild from.", code: "BOOK_INCOMPLETE" },
+    };
+  }
+
+  // Claim the order: only one concurrent caller gets a row back. Clearing the old job id here is
+  // what lets submitOrderToLulu create a new job.
+  const now = new Date().toISOString();
+  let claim = db
+    .from("book_orders")
+    .update({
+      status: "paid",
+      lulu_print_job_id: null,
+      lulu_status_name: null,
+      lulu_status_message: null,
+      lulu_status_changed_at: null,
+      submitted_to_lulu_at: null,
+      updated_at: now,
+    })
+    .eq("id", orderId)
+    .eq("status", "failed");
+  claim = oldJobId ? claim.eq("lulu_print_job_id", oldJobId) : claim.is("lulu_print_job_id", null);
+  const { data: claimed, error: claimError } = await claim.select("id");
+  if (claimError) return { data: null, error: { message: claimError.message } };
+  if (!claimed || claimed.length === 0) {
+    return { data: null, error: { message: "Order is already being resubmitted", code: "INVALID_STATE" } };
+  }
+
+  const markFailed = async (message: string): Promise<ApiResult<never>> => {
+    console.error(`[lulu] rebuild ${orderId} failed: ${message}`);
+    await db
+      .from("book_orders")
+      .update({ status: "failed", lulu_status_message: message.slice(0, 1000), updated_at: new Date().toISOString() })
+      .eq("id", orderId);
+    return { data: null, error: { message } };
+  };
+
+  try {
+    const files = await buildPrintFiles({
+      userId: order.user_id as string,
+      orderId,
+      bindingId,
+      pages: pages.data,
+      cover: normalizeCoverDesign(order.cover_design),
+    });
+    if (files.error) return await markFailed(files.error.message);
+
+    const { error: saveError } = await db
+      .from("book_orders")
+      .update({
+        interior_pdf_path: files.data!.interiorPdfPath,
+        cover_pdf_path: files.data!.coverPdfPath,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId);
+    if (saveError) return await markFailed(saveError.message);
+  } catch (e) {
+    return await markFailed(e instanceof Error ? e.message : "Could not rebuild the print files");
+  }
+
+  await appendOrderEvent(orderId, {
+    kind: "print_files_rebuilt",
+    title: "Print files rebuilt",
+    detail: "We rebuilt your book's print files and are sending it to the printer again.",
+    metadata: { replacedLuluPrintJobId: oldJobId, replacedLuluStatus: oldLuluStatus },
+  });
+  return submitOrderToLulu(orderId);
+}
+
 const TERMINAL_STATUSES: BookOrderStatus[] = [
   "shipped",
   "delivered",
@@ -952,6 +1060,7 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     canceledAt: row.canceled_at,
     deletedAt: row.deleted_at,
     luluPrintJobId: row.lulu_print_job_id,
+    luluStatusName: row.lulu_status_name,
     fulfillment: row.fulfillment ?? "print",
   };
 }
@@ -965,7 +1074,7 @@ export async function listOrdersForAdmin(
     .select(
       `
       id, project_title, page_count, status, total_cents, created_at,
-      canceled_at, deleted_at, lulu_print_job_id, fulfillment,
+      canceled_at, deleted_at, lulu_print_job_id, lulu_status_name, fulfillment,
       print_products ( name )
     `,
     )

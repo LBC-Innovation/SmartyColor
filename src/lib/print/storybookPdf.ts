@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { PDFDocument, rgb, type PDFFont } from "pdf-lib";
 import {
   PRINT_MARGIN_PT,
   paperSizePt,
@@ -6,6 +6,7 @@ import {
   placeImageInBox,
 } from "@/lib/print/pageLayout";
 import type { PrintPrefs } from "@/lib/print/settings";
+import { embedStorybookFonts } from "@/lib/print/fonts/load";
 
 /**
  * Builds the story book PDF: a title page, one page per photo with its
@@ -158,10 +159,7 @@ export async function buildStorybookPdf(input: StorybookPdfInput): Promise<Uint8
     throw new Error("Add at least one story page.");
   }
   const pdf = await PDFDocument.create();
-  const fonts: Fonts = {
-    regular: await pdf.embedFont(StandardFonts.Helvetica),
-    bold: await pdf.embedFont(StandardFonts.HelveticaBold),
-  };
+  const fonts: Fonts = await embedStorybookFonts(pdf);
   drawTitlePage(pdf, fonts, input);
   for (const page of input.pages) {
     await drawStoryPage(pdf, fonts, page);

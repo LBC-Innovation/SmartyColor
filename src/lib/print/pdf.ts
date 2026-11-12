@@ -1,6 +1,5 @@
 import {
   PDFDocument,
-  StandardFonts,
   type PDFFont,
   type PDFPage,
   type PDFRef,
@@ -28,6 +27,7 @@ import {
   type PageRotation,
 } from "@/lib/print/pageLayout";
 import type { PrintPrefs } from "@/lib/print/settings";
+import { embedNoteFont } from "@/lib/print/fonts/load";
 
 /**
  * A grayscale picture already compressed for the PDF: rows of `bitsPerComponent`
@@ -268,7 +268,7 @@ export async function sheetsToPdf(
   const bleed = (options.bleedIn ?? 0) * POINTS_PER_INCH;
   const pdf = await PDFDocument.create();
   const noteFont = pages.some((p) => "pageKind" in p && p.pageKind === "note")
-    ? await pdf.embedFont(StandardFonts.TimesRomanItalic)
+    ? await embedNoteFont(pdf)
     : null;
   for (const [index, page] of pages.entries()) {
     const box = gutter > 0 ? bookPageBox(...paperSizePt(page.printPrefs), index + 1, gutter) : undefined;

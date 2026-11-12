@@ -12,6 +12,7 @@ import {
   type BookCoverDesign,
 } from "@/lib/print/bookCover";
 import { buildCoverPdf } from "@/lib/print/coverPdf";
+import { findUnembeddedFonts } from "@/lib/print/pdfFonts";
 import { crispInkEdges } from "@/lib/print/lineArt";
 import {
   BOOK_BLEED_IN,
@@ -200,6 +201,20 @@ export async function buildPrintFiles(input: {
       pageCount: input.pages.length,
       backgroundColor: input.cover.backgroundColor,
     });
+    // Lulu rejects any file with a font that isn't embedded, so catch that here, before upload.
+    for (const [label, bytes] of [["interior", interior.data!], ["cover", cover]] as const) {
+      const unembedded = await findUnembeddedFonts(bytes);
+      if (unembedded.length > 0) {
+        console.error(`[print] ${label} PDF has unembedded fonts: ${unembedded.join(", ")}`);
+        return {
+          data: null,
+          error: {
+            message: "The print files couldn't be prepared because of a font problem. Please contact support.",
+            code: "PRINT_FONTS_NOT_EMBEDDED",
+          },
+        };
+      }
+    }
     const interiorPdfPath = printOrderPaths.interiorPdf(input.userId, input.orderId);
     const coverPdfPath = printOrderPaths.coverPdf(input.userId, input.orderId);
     await Promise.all([

@@ -44,10 +44,10 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
     await load();
   }
 
-  async function submitToLulu(orderId: string): Promise<void> {
+  async function submitToLulu(orderId: string, rebuild = false): Promise<void> {
     setBusyId(orderId);
     setError(null);
-    const result = await api.adminSubmitOrderToLulu(orderId);
+    const result = await api.adminSubmitOrderToLulu(orderId, { rebuild });
     setBusyId(null);
     if (api.isError(result)) setError(result.error.message);
     await load();
@@ -98,6 +98,11 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
               const canceled = order.status === "canceled" || Boolean(order.canceledAt);
               const canCancel =
                 !hidden && !canceled && !["shipped", "delivered", "refunded"].includes(order.status);
+              const luluJobDead =
+                order.status === "failed" &&
+                Boolean(order.luluPrintJobId) &&
+                ["REJECTED", "CANCELED", "ERROR"].includes((order.luluStatusName ?? "").toUpperCase());
+              const canRebuildAndResubmit = !hidden && order.fulfillment !== "digital" && luluJobDead;
               const canSubmitToLulu =
                 !hidden &&
                 order.fulfillment !== "digital" &&
@@ -140,6 +145,19 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
                             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                           ) : null}
                           {order.status === "failed" ? "Retry Lulu submission" : "Submit to Lulu"}
+                        </button>
+                      ) : null}
+                      {canRebuildAndResubmit ? (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          className="v2-btn-sm v2-btn-outline inline-flex items-center gap-1"
+                          onClick={() => void submitToLulu(order.id, true)}
+                        >
+                          {busyId === order.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : null}
+                          Rebuild files and resubmit
                         </button>
                       ) : null}
                       {canCancel ? (

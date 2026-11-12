@@ -1,5 +1,6 @@
 import "server-only";
 import type { ApiResult } from "@/lib/api/types";
+import type { AddressSuggestion } from "@/lib/orders/types";
 import { getBookBinding, type BookBindingId } from "@/lib/print/bookBindings";
 import {
   MAX_FREE_QUOTA,
@@ -233,6 +234,7 @@ export type PrintOrderPricing = {
   markupPct: number;
   shippingLevel: string;
   price: PrintPriceBreakdown;
+  addressSuggestion: AddressSuggestion | null;
 };
 
 export async function pricePrintOrder(input: {
@@ -267,7 +269,13 @@ export async function pricePrintOrder(input: {
     price.totalCents = price.costTotalCents;
   }
   return {
-    data: { sku, markupPct: item.data.billable ? item.data.markupPct : 0, shippingLevel: quote.shippingLevel, price },
+    data: {
+      sku,
+      markupPct: item.data.billable ? item.data.markupPct : 0,
+      shippingLevel: quote.shippingLevel,
+      price,
+      addressSuggestion: quote.addressSuggestion,
+    },
     error: null,
   };
 }
