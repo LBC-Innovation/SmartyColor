@@ -27,9 +27,16 @@ import { pricePrintOrder } from "@/server/pricingService";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import {
   cancelLuluPrintJob,
+  createLuluPrintJob,
   extractTrackingFromPrintJob,
   fetchLuluPrintJob,
 } from "@/server/lulu/printJobs";
+import { buildLuluPrintJobPayload, validateLuluPayload } from "@/lib/print/luluPayload";
+import { getBookBinding } from "@/lib/print/bookBindings";
+import { signedReadUrls } from "@/server/storage/libraryFiles";
+
+/** Lulu fetches the print PDFs asynchronously (can be hours later); keep the links alive 7 days. */
+const PRINT_FILE_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 type OrderRow = {
   id: string;
@@ -605,6 +612,140 @@ export async function placeBookOrderWithCredits(input: {
   return { data: payload, error: null };
 }
 
+/**
+ * Sends a paid physical order to Lulu (POST /print-jobs/). Safe to call twice: the status flip
+ * to submitting_to_lulu is conditional, so only one caller proceeds. Never throws; failures set
+ * status `failed` (retryable by an admin) and are shown on the order timeline. No auto-refund.
+ */
+export async function submitOrderToLulu(
+  orderId: string,
+): Promise<ApiResult<{ status: BookOrderStatus; luluPrintJobId?: number }>> {
+  const db = getSupabaseAdmin();
+  try {
+    const { data: order, error } = await db
+      .from("book_orders")
+      .select("*")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error) return { data: null, error: { message: error.message } };
+    if (!order) return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+    if (order.deleted_at) return { data: null, error: { message: "Order is hidden", code: "INVALID_STATE" } };
+    if ((order.fulfillment ?? "print") === "digital") {
+      return { data: null, error: { message: "Digital orders are not printed", code: "INVALID_STATE" } };
+    }
+    if (order.lulu_print_job_id) {
+      return { data: { status: order.status as BookOrderStatus, luluPrintJobId: order.lulu_print_job_id }, error: null };
+    }
+    if (order.status !== "paid" && order.status !== "failed") {
+      return { data: null, error: { message: `Order is ${order.status}, not ready to submit`, code: "INVALID_STATE" } };
+    }
+    if (!luluConfigured()) {
+      console.error(`[lulu] submit ${orderId}: Lulu API is not configured`);
+      return { data: null, error: { message: "Lulu API is not configured" } };
+    }
+
+    // Claim the order: exactly one concurrent caller gets a row back.
+    const { data: claimed, error: claimError } = await db
+      .from("book_orders")
+      .update({ status: "submitting_to_lulu", updated_at: new Date().toISOString() })
+      .eq("id", orderId)
+      .eq("status", order.status)
+      .is("lulu_print_job_id", null)
+      .select("id");
+    if (claimError) return { data: null, error: { message: claimError.message } };
+    if (!claimed || claimed.length === 0) {
+      return { data: null, error: { message: "Order is already being submitted", code: "INVALID_STATE" } };
+    }
+
+    const fail = async (message: string): Promise<ApiResult<never>> => {
+      console.error(`[lulu] submit ${orderId} failed: ${message}`);
+      await db
+        .from("book_orders")
+        .update({
+          status: "failed",
+          lulu_status_message: message.slice(0, 1000),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", orderId);
+      await appendOrderEvent(orderId, {
+        kind: "lulu_submit_failed",
+        title: "Printing hit a snag",
+        detail: "We couldn't send your book to the printer yet. Our team has been notified and will retry.",
+        metadata: { error: message.slice(0, 1000) },
+      });
+      return { data: null, error: { message } };
+    };
+
+    const bindingId = bindingIdForProduct(order.product_id as string);
+    if (!bindingId) return fail(`Unknown print product ${order.product_id}`);
+    if (!order.interior_pdf_path || !order.cover_pdf_path) return fail("Order has no print files");
+
+    const address = order.shipping_address as ShippingAddress | null;
+    if (!address) return fail("Order has no shipping address");
+    const contactEmail = ((order.contact_email as string | null) || address.email || "").trim();
+
+    const urls = await signedReadUrls(
+      [order.interior_pdf_path as string, order.cover_pdf_path as string],
+      PRINT_FILE_URL_TTL_SECONDS,
+    );
+    const interiorUrl = urls.get(order.interior_pdf_path as string);
+    const coverUrl = urls.get(order.cover_pdf_path as string);
+    if (!interiorUrl || !coverUrl) return fail("Could not sign print file URLs");
+
+    const payload = buildLuluPrintJobPayload({
+      orderId: (order.lulu_external_id as string | null) ?? orderId,
+      title: (order.project_title as string | null) || "Coloring book",
+      contactEmail,
+      shippingLevel: order.shipping_level as string,
+      shippingAddress: address,
+      podPackageId: getBookBinding(bindingId).podPackageId,
+      interiorUrl,
+      coverUrl,
+    });
+    const invalid = validateLuluPayload(payload);
+    if (invalid) return fail(invalid);
+
+    let job;
+    try {
+      job = await createLuluPrintJob(payload);
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : "Lulu print job creation failed");
+    }
+    if (typeof job.id !== "number") return fail("Lulu did not return a print job id");
+
+    const now = new Date().toISOString();
+    const { error: saveError } = await db
+      .from("book_orders")
+      .update({
+        lulu_print_job_id: job.id,
+        lulu_status_name: job.status?.name ?? "CREATED",
+        lulu_status_message: job.status?.message ?? null,
+        lulu_status_changed_at: now,
+        status: "submitted_to_lulu",
+        submitted_to_lulu_at: now,
+        updated_at: now,
+      })
+      .eq("id", orderId);
+    if (saveError) {
+      // The job exists at Lulu; record loudly so it is not submitted again by hand.
+      console.error(`[lulu] submit ${orderId}: print job ${job.id} created but DB save failed: ${saveError.message}`);
+      return { data: null, error: { message: saveError.message } };
+    }
+
+    await appendOrderEvent(orderId, {
+      kind: "submitted_to_lulu",
+      title: "Sent to the printer",
+      detail: "Your book is in the print queue.",
+      metadata: { luluPrintJobId: job.id },
+    });
+    return { data: { status: "submitted_to_lulu", luluPrintJobId: job.id }, error: null };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Lulu submission failed";
+    console.error(`[lulu] submit ${orderId} threw: ${message}`);
+    return { data: null, error: { message } };
+  }
+}
+
 const TERMINAL_STATUSES: BookOrderStatus[] = [
   "shipped",
   "delivered",
@@ -811,6 +952,7 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     canceledAt: row.canceled_at,
     deletedAt: row.deleted_at,
     luluPrintJobId: row.lulu_print_job_id,
+    fulfillment: row.fulfillment ?? "print",
   };
 }
 
@@ -823,7 +965,7 @@ export async function listOrdersForAdmin(
     .select(
       `
       id, project_title, page_count, status, total_cents, created_at,
-      canceled_at, deleted_at, lulu_print_job_id,
+      canceled_at, deleted_at, lulu_print_job_id, fulfillment,
       print_products ( name )
     `,
     )
@@ -986,4 +1128,28 @@ export async function createDraftCoverUpload(userId: string, orderId: string): P
   } catch (e) {
     return { data: null, error: { message: e instanceof Error ? e.message : "Could not start the cover upload." } };
   }
+}
+
+/** Safety net for missed Lulu webhooks: refresh every order Lulu may still be changing. */
+export async function syncActiveLuluOrders(): Promise<{ checked: number; failed: number }> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("book_orders")
+    .select("id")
+    .in("status", ["submitted_to_lulu", "in_production", "shipped"])
+    .not("lulu_print_job_id", "is", null)
+    .is("deleted_at", null)
+    .limit(200);
+  if (error) {
+    console.error(`[lulu-sync] list failed: ${error.message}`);
+    return { checked: 0, failed: 0 };
+  }
+  let failed = 0;
+  for (const row of data ?? []) {
+    const r = await syncOrderFromLulu(row.id as string);
+    if (r.error) {
+      failed += 1;
+      console.error(`[lulu-sync] ${row.id}: ${r.error.message}`);
+    }
+  }
+  return { checked: data?.length ?? 0, failed };
 }

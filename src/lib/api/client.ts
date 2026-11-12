@@ -651,6 +651,14 @@ export function adminCancelUserOrder(
   });
 }
 
+export function adminSubmitOrderToLulu(
+  orderId: string,
+): Promise<ApiResult<{ status: string; luluPrintJobId?: number }>> {
+  return request<{ status: string; luluPrintJobId?: number }>(`/admin/orders/${orderId}/submit-lulu`, {
+    method: "POST",
+  });
+}
+
 export function adminHideUserOrder(
   userId: string,
   orderId: string,

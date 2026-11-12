@@ -28,6 +28,10 @@ export async function POST(request: Request, { params }: Params) {
   if (result.data) {
     // Payment confirmed: the server copy of `purchase`, deduplicated with the browser's by order id.
     after(() => trackPurchaseServer({ request, orderId: id, email: auth.user.email }));
+    // Hand the paid order to Lulu after the response; failures are recorded on the order, never thrown.
+    after(async () => {
+      await orders.submitOrderToLulu(id);
+    });
   }
   return jsonResult(result, result.error ? 500 : 200);
 }

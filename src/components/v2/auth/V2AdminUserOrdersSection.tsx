@@ -44,6 +44,15 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
     await load();
   }
 
+  async function submitToLulu(orderId: string): Promise<void> {
+    setBusyId(orderId);
+    setError(null);
+    const result = await api.adminSubmitOrderToLulu(orderId);
+    setBusyId(null);
+    if (api.isError(result)) setError(result.error.message);
+    await load();
+  }
+
   async function hideOrder(orderId: string): Promise<void> {
     setBusyId(orderId);
     const result = await api.adminHideUserOrder(userId, orderId);
@@ -89,6 +98,11 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
               const canceled = order.status === "canceled" || Boolean(order.canceledAt);
               const canCancel =
                 !hidden && !canceled && !["shipped", "delivered", "refunded"].includes(order.status);
+              const canSubmitToLulu =
+                !hidden &&
+                order.fulfillment !== "digital" &&
+                !order.luluPrintJobId &&
+                (order.status === "paid" || order.status === "failed");
               return (
                 <li key={order.id} className={cn("px-4 py-3", hidden && "bg-gray-50/80 opacity-75")}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -115,6 +129,19 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
                       </Link>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
+                      {canSubmitToLulu ? (
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          className="v2-btn-sm v2-btn-outline inline-flex items-center gap-1"
+                          onClick={() => void submitToLulu(order.id)}
+                        >
+                          {busyId === order.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : null}
+                          {order.status === "failed" ? "Retry Lulu submission" : "Submit to Lulu"}
+                        </button>
+                      ) : null}
                       {canCancel ? (
                         <button
                           type="button"
