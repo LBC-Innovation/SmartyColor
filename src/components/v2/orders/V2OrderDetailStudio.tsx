@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Download, ExternalLink, Loader2, Pencil, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, Pencil, RefreshCw, XCircle } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
 import { BookOrderCheckoutPanel } from "@/components/v2/orders/BookOrderCheckoutPanel";
+import { OrderPlacedThanks } from "@/components/v2/orders/OrderPlacedThanks";
+import { CancelOrderModal } from "@/components/v2/orders/CancelOrderModal";
 import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
@@ -35,16 +37,22 @@ function formatAddress(a: ShippingAddress): string {
 }
 
 export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const searchParams = useSearchParams();
   const justConfirmed = searchParams.get("confirmed") === "1";
   const [order, setOrder] = useState<BookOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [placedHere, setPlacedHere] = useState(false);
   const [confirmingCheckout, setConfirmingCheckout] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const purchased = searchParams.get("purchased") === "1";
+  const justPlaced = searchParams.get("placed") === "1" || placedHere;
+  // `?cancel=1` (the link in the confirmation email) opens the cancel dialog once the order loads.
+  const askedToCancel = searchParams.get("cancel") === "1";
+  const [cancelOpen, setCancelOpen] = useState(askedToCancel);
+  const [canceledNotice, setCanceledNotice] = useState<string | null>(null);
 
   async function downloadPdf(title: string, file?: "interior" | "cover") {
     setDownloading(true);
@@ -110,7 +118,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
             <div className="v2-panel p-6 text-center">
               <p className="text-sm text-v2-muted">Sign in to view this order.</p>
               <Link
-                href={`/sign-in?next=${encodeURIComponent(`/orders/${orderId}`)}`}
+                href={`/sign-in?next=${encodeURIComponent(`/orders/${orderId}${askedToCancel ? "?cancel=1" : ""}`)}`}
                 className="mt-4 inline-flex text-sm font-semibold text-v2-link"
               >
                 Sign in
@@ -127,6 +135,32 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
             </div>
           ) : order ? (
             <>
+              {justPlaced &&
+              order.fulfillment !== "digital" &&
+              !["draft", "quoted", "awaiting_payment", "failed", "canceled", "refunded"].includes(
+                order.status,
+              ) ? (
+                <OrderPlacedThanks
+                  order={order}
+                  onCancel={order.canCancel ? () => setCancelOpen(true) : undefined}
+                />
+              ) : null}
+
+              {canceledNotice ? (
+                <div
+                  role="status"
+                  className="v2-panel mb-4 flex items-start gap-2 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900"
+                >
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  {canceledNotice}
+                </div>
+              ) : askedToCancel && !order.canCancel && order.status !== "canceled" ? (
+                <div className="v2-panel mb-4 flex items-start gap-2 border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  This order can no longer be canceled because your book has gone into production. If
+                  something is wrong with it, write to us and we&apos;ll help.
+                </div>
+              ) : null}
               <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h1 className="v2-brand-title text-2xl tracking-tight text-v2-ink sm:text-3xl">
@@ -228,7 +262,56 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
               ) : null}
 
               {order.status === "awaiting_payment" ? (
-                <BookOrderCheckoutPanel order={order} onOrderUpdated={() => load(false)} />
+                <BookOrderCheckoutPanel
+                  order={order}
+                  onPlaced={() => setPlacedHere(true)}
+                  onOrderUpdated={() => load(false)}
+                />
+              ) : null}
+
+              {order.status === "canceled" ? (
+                <section className="v2-panel mb-4 border-gray-200 bg-gray-50 p-4 sm:p-5">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                    <XCircle className="h-4 w-4" aria-hidden />
+                    Canceled
+                  </h2>
+                  <p className="mt-2 text-sm text-v2-ink">
+                    This order was canceled
+                    {order.canceledAt
+                      ? ` on ${new Date(order.canceledAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+                      : ""}
+                    . It won&apos;t be printed or shipped.
+                    {order.refundedCents
+                      ? ` ${formatCredits(order.refundedCents)} was returned to your wallet.`
+                      : ""}
+                  </p>
+                  {order.cancelReason ? (
+                    <p className="mt-2 text-sm text-v2-muted">Reason: “{order.cancelReason}”</p>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {order.canCancel && !justPlaced ? (
+                <section className="v2-panel mb-4 flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-v2-ink">Changed your mind?</h2>
+                    <p className="mt-0.5 text-sm text-v2-muted">
+                      You can cancel for a full refund to your wallet until your book goes into
+                      production
+                      {order.luluProductionDueAt
+                        ? `, around ${new Date(order.luluProductionDueAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                        : ""}
+                      .
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCancelOpen(true)}
+                    className="v2-btn-outline shrink-0 text-sm text-rose-700"
+                  >
+                    Cancel order
+                  </button>
+                </section>
               ) : null}
 
               {order.fulfillment !== "digital" && order.deliveryExpectation ? (
@@ -398,6 +481,25 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
           ) : null}
         </div>
       </main>
+      {cancelOpen && order?.canCancel ? (
+        <CancelOrderModal
+          orderId={order.id}
+          title={order.projectTitle}
+          totalCents={order.totalCents}
+          deadline={order.luluProductionDueAt}
+          onClose={() => setCancelOpen(false)}
+          onCanceled={(result) => {
+            setCancelOpen(false);
+            setCanceledNotice(
+              result.refundedCents > 0
+                ? `Your order is canceled and ${formatCredits(result.refundedCents)} is back in your wallet. We've emailed you a confirmation.`
+                : "Your order is canceled. We've emailed you a confirmation.",
+            );
+            void refreshUser();
+            void load(false);
+          }}
+        />
+      ) : null}
       {editingAddress && order ? (
         <EditShippingAddressModal
           orderId={order.id}

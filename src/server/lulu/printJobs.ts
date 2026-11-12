@@ -1,4 +1,5 @@
 import { luluFetch } from "@/server/lulu/client";
+import type { LuluPrintJobPayload } from "@/lib/print/luluPayload";
 
 export type LuluPrintJobStatus = {
   name?: string;
@@ -23,10 +24,27 @@ export type LuluPrintJob = {
     tracking_id?: string;
     tracking_urls?: string[];
   }>;
+  /** Lulu's own answer to "can this still be canceled?" (false once production starts). */
+  is_cancellable?: boolean;
+  /** Minutes between payment and production. */
+  production_delay?: number;
+  /** When production starts; null until the job is paid. */
+  production_due_time?: string | null;
 };
 
 export async function fetchLuluPrintJob(printJobId: number): Promise<LuluPrintJob> {
   return luluFetch<LuluPrintJob>(`/print-jobs/${printJobId}/`);
+}
+
+/**
+ * Creates the print job (POST /print-jobs/). Lulu downloads the interior and cover from the
+ * source URLs asynchronously, so those must stay valid for days (see PRINT_FILE_URL_TTL_SECONDS).
+ */
+export async function createLuluPrintJob(payload: LuluPrintJobPayload): Promise<LuluPrintJob> {
+  return luluFetch<LuluPrintJob>("/print-jobs/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 /** Cancel an unpaid (or cancel-eligible) Lulu print job. */

@@ -1,4 +1,4 @@
-import type { BookOrderStatus, BookPaymentMethod } from "@/lib/orders/types";
+import type { BookFulfillment, BookOrderStatus, BookPaymentMethod } from "@/lib/orders/types";
 
 export type AdminUserOrderSummary = {
   id: string;
@@ -11,4 +11,13 @@ export type AdminUserOrderSummary = {
   canceledAt: string | null;
   deletedAt: string | null;
   luluPrintJobId: number | null;
+  luluStatusName: string | null;
+  fulfillment: BookFulfillment;
+  userId: string;
+  /** Present on the all-orders admin list. */
+  userEmail?: string | null;
+  contactEmail: string | null;
+  cancelReason: string | null;
+  refundedCents: number | null;
+  luluProductionDueAt: string | null;
 };

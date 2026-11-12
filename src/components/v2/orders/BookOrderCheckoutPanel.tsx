@@ -16,9 +16,11 @@ import { holidayOrderBy } from "@/lib/marketing/holiday";
 type Props = {
   order: BookOrderDetail;
   onOrderUpdated: () => void | Promise<void>;
+  /** Called after a successful placement, so the page can show its thank-you view. */
+  onPlaced?: () => void;
 };
 
-export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
+export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Props) {
   const { user, refreshUser } = useAuth();
   const [placing, setPlacing] = useState(false);
   const [addCreditOpen, setAddCreditOpen] = useState(false);
@@ -57,6 +59,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated }: Props) {
       is_gift: order.isGift,
     });
     await refreshUser();
+    if (order.fulfillment !== "digital") onPlaced?.();
     await onOrderUpdated();
   }
 

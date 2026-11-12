@@ -4,7 +4,7 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 import type { BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
-import type { BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
+import type { AddressSuggestion, BookOrderDetail, BookOrderSummary, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import type {
   CreditLedgerEntry,
   CreditTopUpConfirmation,
@@ -450,6 +450,8 @@ export type OrderQuoteData = {
   shippingPostcode?: string | null;
   shippingLevel?: string;
   quoteError?: string | null;
+  /** Lulu's "did you mean" for the street address sent with the quote. */
+  addressSuggestion?: AddressSuggestion | null;
 };
 
 /** The address the customer saved for future orders; null when they haven't saved one. */
@@ -642,12 +644,47 @@ export function adminListUserOrders(
   return request<AdminUserOrderSummary[]>(`/admin/users/${userId}/orders${qs}`);
 }
 
+export type CancelOrderData = { status: string; refundedCents: number };
+
+/** Customer: cancel a print order before production; the wallet is refunded. */
+export function cancelOrder(orderId: string, reason: string): Promise<ApiResult<CancelOrderData>> {
+  return request<CancelOrderData>(`/orders/${orderId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/** Admin: cancel any customer's order before production; the wallet is refunded. */
+export function adminCancelOrder(orderId: string, reason: string): Promise<ApiResult<CancelOrderData>> {
+  return request<CancelOrderData>(`/admin/orders/${orderId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function adminListAllOrders(status?: string): Promise<ApiResult<AdminUserOrderSummary[]>> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<AdminUserOrderSummary[]>(`/admin/orders${qs}`);
+}
+
 export function adminCancelUserOrder(
   userId: string,
   orderId: string,
-): Promise<ApiResult<{ status: string }>> {
-  return request<{ status: string }>(`/admin/users/${userId}/orders/${orderId}/cancel`, {
+  reason?: string,
+): Promise<ApiResult<CancelOrderData>> {
+  return request<CancelOrderData>(`/admin/users/${userId}/orders/${orderId}/cancel`, {
     method: "POST",
+    body: JSON.stringify({ reason: reason ?? "" }),
+  });
+}
+
+export function adminSubmitOrderToLulu(
+  orderId: string,
+  options?: { rebuild?: boolean },
+): Promise<ApiResult<{ status: string; luluPrintJobId?: number }>> {
+  return request<{ status: string; luluPrintJobId?: number }>(`/admin/orders/${orderId}/submit-lulu`, {
+    method: "POST",
+    ...(options?.rebuild ? { body: JSON.stringify({ rebuild: true }) } : {}),
   });
 }
 

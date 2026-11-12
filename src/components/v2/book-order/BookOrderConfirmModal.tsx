@@ -79,7 +79,7 @@ export function BookOrderConfirmModal({
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">
               {digital
                 ? "Your credits are charged now and the PDF downloads right away. You can download it again anytime from My orders."
-                : "We'll set up the print job and take you to payment. Nothing is charged until you pay on the next screen."}
+                : "Your credits are charged now and your book goes straight to the printer. You'll get a confirmation email, and you can follow your order's progress anytime from My orders."}
             </p>
           </div>
         </div>
@@ -145,7 +145,7 @@ export function BookOrderConfirmModal({
             className="v2-btn-primary min-h-11 text-sm disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            {digital ? "Pay & download" : "Continue to payment"}
+            {digital ? "Pay & download" : "Confirm order"}
           </button>
         </div>
       </div>

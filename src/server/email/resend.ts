@@ -9,7 +9,13 @@ export type OutgoingEmail = {
   text: string;
   replyTo?: string;
   /** Files sent with the message (Resend allows 40 MB per email, after base64). */
-  attachments?: { filename: string; content: Uint8Array }[];
+  attachments?: {
+    filename: string;
+    content: Uint8Array;
+    /** Set to show the file inline: reference it in the HTML as `<img src="cid:<contentId>">`. */
+    contentId?: string;
+    contentType?: string;
+  }[];
 };
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -49,6 +55,8 @@ export async function sendEmail(message: OutgoingEmail): Promise<boolean> {
               attachments: message.attachments.map((a) => ({
                 filename: a.filename,
                 content: Buffer.from(a.content).toString("base64"),
+                ...(a.contentId ? { content_id: a.contentId } : {}),
+                ...(a.contentType ? { content_type: a.contentType } : {}),
               })),
             }
           : {}),

@@ -27,9 +27,19 @@ export function luluBasicAuthHeader(): string {
   return `Basic ${raw}`;
 }
 
+/**
+ * Lulu signs webhooks (Lulu-HMAC-SHA256) with the webhook owner's API secret, i.e. the client
+ * secret. LULU_WEBHOOK_SECRET is an optional extra candidate, never a replacement.
+ */
+export function luluWebhookSecrets(): string[] {
+  const out = [process.env.LULU_CLIENT_SECRET, process.env.LULU_WEBHOOK_SECRET]
+    .map((s) => s?.trim())
+    .filter((s): s is string => Boolean(s));
+  return [...new Set(out)];
+}
+
 export function luluWebhookSecret(): string | null {
-  const secret = process.env.LULU_WEBHOOK_SECRET ?? process.env.LULU_CLIENT_SECRET;
-  return secret?.trim() || null;
+  return luluWebhookSecrets()[0] ?? null;
 }
 
 export const DEFAULT_POD_PACKAGE_ID =

@@ -79,6 +79,7 @@ import type {
 import type { PageFit } from "@/lib/print/pageLayout";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
+import { BookAddressSuggestion, applySuggestion } from "@/components/v2/book-order/BookAddressSuggestion";
 import {
   EMPTY_SHIPPING_ADDRESS,
   isShippingAddressComplete,
@@ -87,7 +88,7 @@ import {
   validateShippingAddress,
   type ShippingAddressErrors,
 } from "@/lib/orders/shippingAddress";
-import type { DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
+import type { AddressSuggestion, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import { centsToValue, trackFormat } from "@/lib/marketing/events";
 import { track, trackBookStarted, trackPageGenerated, trackPurchaseOnce } from "@/lib/track";
 import { GIFT_NOTE_PLACEHOLDER, HOLIDAY_LINE } from "@/content/marketing";
@@ -336,6 +337,10 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   /** The exact book (pages, cover, binding) the customer last confirmed in the proof step. */
   const [confirmedProofKey, setConfirmedProofKey] = useState<string | null>(null);
   const [printQuote, setPrintQuote] = useState<BindingQuote | null>(null);
+  /** The printer's "did you mean" for the delivery address, with the address it was made for. */
+  const [addressSuggestion, setAddressSuggestion] = useState<{ key: string; suggestion: AddressSuggestion } | null>(null);
+  /** Address keys whose suggestion the customer already answered. */
+  const [answeredSuggestions, setAnsweredSuggestions] = useState<string[]>([]);
   const [addCreditShortfall, setAddCreditShortfall] = useState<number | null>(null);
 
   const [flipOpen, setFlipOpen] = useState(false);
@@ -642,6 +647,22 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
   const quoteActive = step !== "book" && !isDigital && plan.totalPages >= 1 && !overCapacity;
   const quotePageCount = plan.totalPages;
 
+  /** Identifies the address as typed, so a suggestion is only shown for the address it was made for. */
+  const suggestionKey = [
+    shippingAddress.street1,
+    shippingAddress.street2,
+    shippingAddress.city,
+    shippingAddress.state_code,
+    shippingAddress.postcode,
+    shippingAddress.country_code,
+  ]
+    .map((v) => (v ?? "").trim().toLowerCase())
+    .join("|");
+  const visibleSuggestion =
+    !isDigital && addressSuggestion?.key === suggestionKey && !answeredSuggestions.includes(suggestionKey)
+      ? addressSuggestion.suggestion
+      : null;
+
   useEffect(() => {
     if (!user || !quoteActive || isDigitalFormat(bindingId)) return;
     let cancelled = false;
@@ -650,6 +671,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       const shipping = addressComplete
         ? {
             shippingAddress: {
+              street1: shippingAddress.street1,
+              street2: shippingAddress.street2,
               city: shippingAddress.city,
               state_code: shippingAddress.state_code,
               postcode: shippingAddress.postcode,
@@ -673,6 +696,9 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
         .fetchOrderQuote({ bindingId, pageCount: quotePageCount, ...shipping })
         .then((result) => {
           if (cancelled) return;
+          // Only a quote made for a typed street can carry a suggestion; any other clears it.
+          const suggestion = api.isError(result) ? null : (result.data.addressSuggestion ?? null);
+          setAddressSuggestion(suggestion && addressComplete ? { key: suggestionKey, suggestion } : null);
           setPrintQuote(
             api.isError(result)
               ? { totalCents: null, printCents: null, shippingCents: null, taxCents: null, loading: false, error: result.error.message }
@@ -691,7 +717,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [user, quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
+  }, [user, quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, suggestionKey, shippingAddress.street1, shippingAddress.street2, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
 
   // The customer's own address is a full delivery address unless they ship elsewhere.
   const validateOwnAddress = shipDifferent ? validateBillingAddress : validateShippingAddress;
@@ -771,6 +797,18 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     const errors = validateOwnAddress(next);
     setAddressErrors(errors);
     if (Object.keys(errors).length === 0) clearAddressError(OWN_ADDRESS_ERRORS);
+  }
+
+  function answerSuggestion(use: boolean) {
+    if (!visibleSuggestion) return;
+    const answered = suggestionKey;
+    if (use) {
+      // Same path as a manual edit: stored, and the changed fields trigger a fresh quote.
+      const next = applySuggestion(shippingAddress, visibleSuggestion);
+      if (shipDifferent) updateShipTo(next);
+      else updateAddress(next);
+    }
+    setAnsweredSuggestions((prev) => [...prev, answered]);
   }
 
   function updateShipTo(next: ShippingAddress) {
@@ -1218,8 +1256,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     }
 
     const confirmed = await api.confirmDraftBookOrder(orderId);
-    setPlacing(false);
     if (api.isError(confirmed)) {
+      setPlacing(false);
       setError(confirmed.error.message);
       setConfirmOpen(false);
       return;
@@ -1229,9 +1267,33 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     } catch {
       /* ignore */
     }
+
+    // Pay from the wallet right away; the server then sends the book to the printer.
+    const placed = await api.placeBookOrder(orderId);
+    if (api.isError(placed)) {
+      setPlacing(false);
+      setConfirmOpen(false);
+      // The book is saved and waiting for payment, so it can no longer be edited here. The order
+      // page's checkout panel lets them top up (if the printer's final price came in above the
+      // balance) or try paying again.
+      if (placed.error.code === "INSUFFICIENT_CREDITS") void refreshUser();
+      else console.error(`[order] place ${orderId} failed: ${placed.error.message}`);
+      await closeCart();
+      router.push(`/orders/${orderId}?confirmed=1`);
+      return;
+    }
+    trackPurchaseOnce({
+      value: centsToValue(placed.data.creditsAppliedCents || quoteCents || 0),
+      currency: "USD",
+      order_id: orderId,
+      format: trackFormat(bindingId),
+      is_gift: isGift,
+    });
+    await refreshUser();
     await closeCart();
+    setPlacing(false);
     setConfirmOpen(false);
-    router.push(`/orders/${orderId}?confirmed=1`);
+    router.push(`/orders/${orderId}?placed=1`);
   }
 
   // ---- render --------------------------------------------------------------
@@ -1658,6 +1720,15 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                             section={shipDifferent ? "billing" : "shipping"}
                             hideContact={shipDifferent}
                           />
+                          {visibleSuggestion && !shipDifferent ? (
+                            <BookAddressSuggestion
+                              className="mt-3"
+                              entered={address}
+                              suggestion={visibleSuggestion}
+                              onUse={() => answerSuggestion(true)}
+                              onKeep={() => answerSuggestion(false)}
+                            />
+                          ) : null}
                           <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-v2-navy">
                             <input
                               type="checkbox"
@@ -1691,6 +1762,15 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                                 onChange={updateShipTo}
                                 errors={shipToErrors}
                               />
+                              {visibleSuggestion ? (
+                                <BookAddressSuggestion
+                                  className="mt-3"
+                                  entered={shipTo}
+                                  suggestion={visibleSuggestion}
+                                  onUse={() => answerSuggestion(true)}
+                                  onKeep={() => answerSuggestion(false)}
+                                />
+                              ) : null}
                             </>
                           ) : null}
                         </>

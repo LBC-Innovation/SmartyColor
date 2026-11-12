@@ -10,6 +10,7 @@ import { withNextParam } from "@/lib/auth/nextPath";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
+import { CancelOrderModal } from "@/components/v2/orders/CancelOrderModal";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatDeliveryExpectation } from "@/lib/orders/fulfillmentTimeline";
@@ -33,11 +34,12 @@ function orderTitle(order: BookOrderSummary): string {
 }
 
 export function V2MyOrdersStudio() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const [orders, setOrders] = useState<BookOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<BookOrderSummary | null>(null);
   const toast = useV2Toast();
 
   async function downloadPdf(order: BookOrderSummary) {
@@ -173,6 +175,24 @@ export function V2MyOrdersStudio() {
                       </Link>
                     </div>
                   ) : null}
+                  {order.canCancel ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
+                      <p className="text-xs text-v2-muted">
+                        Can be canceled for a full refund until production starts
+                        {order.luluProductionDueAt
+                          ? `, around ${new Date(order.luluProductionDueAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                          : ""}
+                        .
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setCancelling(order)}
+                        className="v2-btn-outline h-10 text-sm text-rose-700"
+                      >
+                        Cancel order
+                      </button>
+                    </div>
+                  ) : null}
                   {order.fulfillment === "digital" && order.status === "paid" ? (
                     <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
                       <button
@@ -196,6 +216,27 @@ export function V2MyOrdersStudio() {
           )}
         </div>
       </main>
+      {cancelling ? (
+        <CancelOrderModal
+          orderId={cancelling.id}
+          title={cancelling.projectTitle}
+          totalCents={cancelling.totalCents}
+          deadline={cancelling.luluProductionDueAt}
+          onClose={() => setCancelling(null)}
+          onCanceled={(result) => {
+            setCancelling(null);
+            toast.success({
+              title: "Order canceled",
+              message:
+                result.refundedCents > 0
+                  ? `${formatMoney(result.refundedCents)} is back in your wallet. We've emailed you a confirmation.`
+                  : "We've emailed you a confirmation.",
+            });
+            void refreshUser();
+            void load();
+          }}
+        />
+      ) : null}
     </V2StudioFrame>
   );
 }

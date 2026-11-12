@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as orders from "@/server/ordersService";
@@ -16,14 +17,20 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const { id, orderId } = await params;
+  const body = (await request.json().catch(() => null)) as { reason?: unknown } | null;
   const result = await orders.cancelOrderAsAdmin({
     userId: id,
     orderId,
     adminId: auth.user.id,
+    reason: typeof body?.reason === "string" ? body.reason : null,
   });
+  if (!result.error) after(() => orders.sendOrderCanceledEmail(orderId));
 
   if (result.error?.code === "NOT_FOUND") {
     return jsonError(result.error.message, 404, result.error.code);
+  }
+  if (result.error?.code === "NOT_CANCELABLE") {
+    return jsonError(result.error.message, 409, result.error.code);
   }
   return jsonResult(result, result.error ? 400 : 200);
 }

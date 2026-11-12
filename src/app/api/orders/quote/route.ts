@@ -14,7 +14,14 @@ export async function POST(request: Request) {
     pageCount?: number;
     shippingPostcode?: string;
     shippingLevel?: string;
-    shippingAddress?: { city?: string; state_code?: string; postcode?: string; country_code?: string };
+    shippingAddress?: {
+      street1?: string;
+      street2?: string;
+      city?: string;
+      state_code?: string;
+      postcode?: string;
+      country_code?: string;
+    };
   };
 
   if (!isPrintBindingId(body.bindingId)) {
@@ -46,6 +53,8 @@ export async function POST(request: Request) {
   }
 
   let shippingAddressOverride: {
+    street1?: string;
+    street2?: string;
     city: string;
     state_code: string;
     postcode: string;
@@ -54,10 +63,15 @@ export async function POST(request: Request) {
   let resolvedPostcode: string | null = null;
 
   const addr = body.shippingAddress;
+  // The street goes to Lulu only so it can suggest a corrected address; quotes don't depend on it.
+  const street1 = typeof addr?.street1 === "string" ? addr.street1.trim() : "";
+  const street2 = typeof addr?.street2 === "string" ? addr.street2.trim() : "";
+  const streetFields = street1 ? { street1, ...(street2 ? { street2 } : {}) } : {};
   if (addr && addr.city?.trim() && addr.postcode?.trim() && (addr.country_code ?? "US") === "US" && addr.state_code?.trim()) {
     const usPostcode = normalizeUsPostcode(addr.postcode) ?? addr.postcode.trim();
     resolvedPostcode = usPostcode;
     shippingAddressOverride = {
+      ...streetFields,
       city: addr.city.trim(),
       state_code: addr.state_code.trim().toUpperCase(),
       postcode: usPostcode,
@@ -66,6 +80,7 @@ export async function POST(request: Request) {
   } else if (addr && addr.city?.trim() && addr.postcode?.trim() && addr.country_code && addr.country_code !== "US") {
     resolvedPostcode = addr.postcode.trim();
     shippingAddressOverride = {
+      ...streetFields,
       city: addr.city.trim(),
       state_code: addr.state_code?.trim().toUpperCase() ?? "",
       postcode: resolvedPostcode,
@@ -125,6 +140,7 @@ export async function POST(request: Request) {
         shippingPostcode: resolvedPostcode,
         shippingLevel: priced.data.shippingLevel,
         quoteError: null,
+        addressSuggestion: priced.data.addressSuggestion,
       },
       error: null,
     });

@@ -46,6 +46,12 @@ export type ShippingAddress = {
   email?: string;
 };
 
+/** Lulu's "did you mean" for an entered address; it only warns and never blocks an order. */
+export type AddressSuggestion = {
+  warnings: { code: string; message: string }[];
+  suggested: Partial<ShippingAddress>;
+};
+
 export type BookOrderSummary = {
   id: string;
   projectTitle: string | null;
@@ -64,6 +70,12 @@ export type BookOrderSummary = {
   trackingUrls: string[];
   createdAt: string;
   updatedAt: string;
+  /** Lulu's production delay ends here; after that the book can't be canceled. */
+  luluProductionDueAt: string | null;
+  /** The customer may cancel (a hint; the server re-checks with Lulu). */
+  canCancel: boolean;
+  /** Credits returned to the wallet when the order was canceled. */
+  refundedCents: number | null;
 };
 
 export type BookOrderEvent = {
@@ -101,6 +113,8 @@ export type BookOrderDetail = BookOrderSummary & {
   deliveredAt: string | null;
   luluStatusMessage: string | null;
   luluPrintJobId: number | null;
+  canceledAt: string | null;
+  cancelReason: string | null;
   timeline: FulfillmentStep[];
   events: BookOrderEvent[];
   deliveryExpectation: string | null;
