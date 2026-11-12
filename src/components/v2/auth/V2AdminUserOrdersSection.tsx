@@ -98,16 +98,15 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
               const canceled = order.status === "canceled" || Boolean(order.canceledAt);
               const canCancel =
                 !hidden && !canceled && !["shipped", "delivered", "refunded"].includes(order.status);
+              // A failed order always resubmits with freshly built files, so a retry never resends a
+              // file Lulu already rejected (or one left behind by a rebuild that failed part way).
               const luluJobDead =
-                order.status === "failed" &&
-                Boolean(order.luluPrintJobId) &&
+                !order.luluPrintJobId ||
                 ["REJECTED", "CANCELED", "ERROR"].includes((order.luluStatusName ?? "").toUpperCase());
-              const canRebuildAndResubmit = !hidden && order.fulfillment !== "digital" && luluJobDead;
+              const canRebuildAndResubmit =
+                !hidden && order.fulfillment !== "digital" && order.status === "failed" && luluJobDead;
               const canSubmitToLulu =
-                !hidden &&
-                order.fulfillment !== "digital" &&
-                !order.luluPrintJobId &&
-                (order.status === "paid" || order.status === "failed");
+                !hidden && order.fulfillment !== "digital" && !order.luluPrintJobId && order.status === "paid";
               return (
                 <li key={order.id} className={cn("px-4 py-3", hidden && "bg-gray-50/80 opacity-75")}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -144,7 +143,7 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
                           {busyId === order.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                           ) : null}
-                          {order.status === "failed" ? "Retry Lulu submission" : "Submit to Lulu"}
+                          Submit to Lulu
                         </button>
                       ) : null}
                       {canRebuildAndResubmit ? (
