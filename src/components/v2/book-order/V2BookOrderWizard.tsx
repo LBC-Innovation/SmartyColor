@@ -1256,8 +1256,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     }
 
     const confirmed = await api.confirmDraftBookOrder(orderId);
-    setPlacing(false);
     if (api.isError(confirmed)) {
+      setPlacing(false);
       setError(confirmed.error.message);
       setConfirmOpen(false);
       return;
@@ -1267,9 +1267,34 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     } catch {
       /* ignore */
     }
+
+    // Pay from the wallet right away; the server then sends the book to the printer.
+    const placed = await api.placeBookOrder(orderId);
+    if (api.isError(placed)) {
+      setPlacing(false);
+      setConfirmOpen(false);
+      if (placed.error.code === "INSUFFICIENT_CREDITS") {
+        // The printer's final price came in above the balance: let them top up on the order page.
+        void refreshUser();
+        await closeCart();
+        router.push(`/orders/${orderId}?confirmed=1`);
+        return;
+      }
+      setError(placed.error.message);
+      return;
+    }
+    trackPurchaseOnce({
+      value: centsToValue(placed.data.creditsAppliedCents || quoteCents || 0),
+      currency: "USD",
+      order_id: orderId,
+      format: trackFormat(bindingId),
+      is_gift: isGift,
+    });
+    await refreshUser();
     await closeCart();
+    setPlacing(false);
     setConfirmOpen(false);
-    router.push(`/orders/${orderId}?confirmed=1`);
+    router.push(`/orders/${orderId}?placed=1`);
   }
 
   // ---- render --------------------------------------------------------------

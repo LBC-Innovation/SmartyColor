@@ -34,6 +34,11 @@ import {
 import { buildLuluPrintJobPayload, validateLuluPayload } from "@/lib/print/luluPayload";
 import { getBookBinding } from "@/lib/print/bookBindings";
 import { signedReadUrls } from "@/server/storage/libraryFiles";
+import { clientOrigin } from "@/lib/auth/clientOrigin";
+import { getSupabaseAuth } from "@/lib/supabase/service";
+import { sendEmail } from "@/server/email/resend";
+import { orderConfirmationEmail } from "@/server/email/orderConfirmationEmail";
+import { formatShippingAddress } from "@/lib/orders/shippingAddress";
 
 /** Lulu fetches the print PDFs asynchronously (can be hours later); keep the links alive 7 days. */
 const PRINT_FILE_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -610,6 +615,75 @@ export async function placeBookOrderWithCredits(input: {
   await recordOrderPlacedEvent(input.orderId);
 
   return { data: payload, error: null };
+}
+
+/**
+ * Emails the customer their order details once a printed-book order is placed. Idempotent: a
+ * `confirmation_email_sent` order event marks it done, and an order that already has one is
+ * skipped. Never throws and never affects the order; a failed send is logged and can be retried
+ * by the next caller.
+ */
+export async function sendOrderConfirmationEmail(orderId: string): Promise<void> {
+  try {
+    const db = getSupabaseAdmin();
+    const { data: sent } = await db
+      .from("book_order_events")
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("kind", "confirmation_email_sent")
+      .limit(1);
+    if (sent && sent.length > 0) return;
+
+    const { data: order } = await db.from("book_orders").select("*").eq("id", orderId).maybeSingle();
+    if (!order || order.deleted_at) return;
+    if ((order.fulfillment ?? "print") === "digital") return;
+    if (order.status === "draft" || order.status === "quoted" || order.status === "awaiting_payment") return;
+
+    let to = ((order.contact_email as string | null) ?? "").trim();
+    if (!to) {
+      const { data: auth } = await getSupabaseAuth().auth.admin.getUserById(order.user_id as string);
+      to = auth.user?.email?.trim() ?? "";
+    }
+    if (!to) {
+      console.error(`[orders] confirmation email ${orderId}: no recipient`);
+      return;
+    }
+
+    const bindingId = bindingIdForProduct(order.product_id as string);
+    const address = order.shipping_address as ShippingAddress | null;
+    const shipTo = address
+      ? [
+          address.name,
+          [address.street1, address.street2].filter(Boolean).join(", "),
+          [address.city, address.state_code, address.postcode].filter(Boolean).join(" "),
+          address.country_code && address.country_code !== "US" ? address.country_code : "",
+        ].filter(Boolean)
+      : [formatShippingAddress(address) || "On file"];
+    const ok = await sendEmail(
+      orderConfirmationEmail({
+        to,
+        orderId,
+        title: (order.project_title as string | null)?.trim() || "Coloring book",
+        bindingLabel: bindingId ? getBookBinding(bindingId).shortLabel : "Printed book",
+        pageCount: order.page_count as number,
+        isGift: order.is_gift === true,
+        shipTo,
+        printCents: order.subtotal_cents as number | null,
+        shippingCents: order.shipping_cents as number | null,
+        taxCents: order.tax_cents as number | null,
+        totalCents: order.total_cents as number | null,
+        orderUrl: `${clientOrigin()}/orders/${orderId}`,
+      }),
+    );
+    if (!ok) return;
+    await appendOrderEvent(orderId, {
+      kind: "confirmation_email_sent",
+      title: "Confirmation email sent",
+      detail: "We emailed your order details.",
+    });
+  } catch (e) {
+    console.error(`[orders] confirmation email ${orderId} failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 /**

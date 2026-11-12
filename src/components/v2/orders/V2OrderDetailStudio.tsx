@@ -8,6 +8,7 @@ import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
 import { BookOrderCheckoutPanel } from "@/components/v2/orders/BookOrderCheckoutPanel";
+import { OrderPlacedThanks } from "@/components/v2/orders/OrderPlacedThanks";
 import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
@@ -41,10 +42,12 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<BookOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [placedHere, setPlacedHere] = useState(false);
   const [confirmingCheckout, setConfirmingCheckout] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const purchased = searchParams.get("purchased") === "1";
+  const justPlaced = searchParams.get("placed") === "1" || placedHere;
 
   async function downloadPdf(title: string, file?: "interior" | "cover") {
     setDownloading(true);
@@ -127,6 +130,13 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
             </div>
           ) : order ? (
             <>
+              {justPlaced &&
+              order.fulfillment !== "digital" &&
+              !["draft", "quoted", "awaiting_payment", "failed", "canceled", "refunded"].includes(
+                order.status,
+              ) ? (
+                <OrderPlacedThanks order={order} />
+              ) : null}
               <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h1 className="v2-brand-title text-2xl tracking-tight text-v2-ink sm:text-3xl">
@@ -228,7 +238,11 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
               ) : null}
 
               {order.status === "awaiting_payment" ? (
-                <BookOrderCheckoutPanel order={order} onOrderUpdated={() => load(false)} />
+                <BookOrderCheckoutPanel
+                  order={order}
+                  onPlaced={() => setPlacedHere(true)}
+                  onOrderUpdated={() => load(false)}
+                />
               ) : null}
 
               {order.fulfillment !== "digital" && order.deliveryExpectation ? (
