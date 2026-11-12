@@ -25,6 +25,37 @@ const FALLBACK_RATES: Record<
   },
 };
 
+/**
+ * OpenAI GPT Image rates (USD per 1M tokens), from OpenAI's published pricing
+ * as of November 2026. OpenAI has no machine-readable price list, so these are
+ * fixed here — check them against the OpenAI usage dashboard when prices change.
+ */
+const OPENAI_IMAGE_RATES: Record<
+  string,
+  Omit<ModelRateSnapshot, "modelId" | "source">
+> = {
+  "gpt-image-2.5-flare": {
+    inputUsdPerMTok: 5,
+    inputImageUsdPerMTok: 8,
+    outputTextUsdPerMTok: 30,
+    outputImageUsdPerMTok: 30,
+  },
+  "gpt-image-2.5-sunburst": {
+    inputUsdPerMTok: 5,
+    inputImageUsdPerMTok: 8,
+    outputTextUsdPerMTok: 30,
+    outputImageUsdPerMTok: 30,
+  },
+};
+
+/** Rate for an OpenAI image model; dated snapshots (…-2026-09-08) use their base model's rate. */
+export function openaiImageRate(modelId: string): ModelRateSnapshot {
+  const base =
+    Object.keys(OPENAI_IMAGE_RATES).find((id) => modelId.startsWith(id)) ??
+    "gpt-image-2.5-flare";
+  return { modelId, ...OPENAI_IMAGE_RATES[base], source: "openai-pricing" };
+}
+
 function pricingLookupIds(modelId: string): string[] {
   const ids = new Set<string>([modelId]);
   if (modelId.endsWith("-preview")) {
@@ -164,8 +195,14 @@ export function costForUsage(
   hasImageOutput: boolean,
   /** When the provider reports output tokens by modality, price each at its own rate. */
   split?: { imageOutputTokens: number; textOutputTokens: number },
+  /** Image share of inputTokens, priced at inputImageUsdPerMTok when the rate has one. */
+  imageInputTokens = 0,
 ): { inputCostUsd: number; outputCostUsd: number; totalCostUsd: number } {
-  const inputCostUsd = (inputTokens / 1_000_000) * rate.inputUsdPerMTok;
+  const imageIn =
+    rate.inputImageUsdPerMTok != null ? Math.min(imageInputTokens, inputTokens) : 0;
+  const inputCostUsd =
+    ((inputTokens - imageIn) / 1_000_000) * rate.inputUsdPerMTok +
+    (imageIn / 1_000_000) * (rate.inputImageUsdPerMTok ?? 0);
   let outputCostUsd: number;
   if (split && rate.outputImageUsdPerMTok != null) {
     outputCostUsd =

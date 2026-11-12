@@ -2,6 +2,7 @@ import type { LanguageModel } from "ai";
 import {
   costForUsage,
   fetchGoogleGeminiRatesForModels,
+  openaiImageRate,
 } from "@/lib/visionCost/rates";
 import { appendVisionCostLogLine } from "@/lib/visionCost/log";
 import { VISION_COST_LOG_FILE } from "@/lib/visionCost/paths";
@@ -83,7 +84,9 @@ async function writeSessionHeader(state: SessionState) {
   }
   for (const rate of state.modelRates.values()) {
     await appendVisionCostLogLine(
-      `Rate ${rate.modelId}: input=$${rate.inputUsdPerMTok}/MTok text_out=$${rate.outputTextUsdPerMTok}/MTok` +
+      `Rate ${rate.modelId}: input=$${rate.inputUsdPerMTok}/MTok` +
+        (rate.inputImageUsdPerMTok != null ? ` image_in=$${rate.inputImageUsdPerMTok}/MTok` : "") +
+        ` text_out=$${rate.outputTextUsdPerMTok}/MTok` +
         (rate.outputImageUsdPerMTok != null
           ? ` image_out=$${rate.outputImageUsdPerMTok}/MTok`
           : "") +
@@ -108,6 +111,10 @@ export async function ensureVisionCostSession(): Promise<void> {
     for (const rate of rates) {
       state.modelRates.set(rate.modelId, rate);
     }
+    if (process.env.IMAGE_PROVIDER?.trim().toLowerCase() === "openai") {
+      const openaiModel = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2.5-flare";
+      state.modelRates.set(openaiModel, openaiImageRate(openaiModel));
+    }
     await writeSessionHeader(state);
   })();
 
@@ -122,6 +129,12 @@ function rateForModel(modelId: string): ModelRateSnapshot {
   const state = getState();
   const direct = state.modelRates.get(modelId);
   if (direct) return direct;
+  // Never price an OpenAI call at a Gemini rate.
+  if (modelId.startsWith("gpt-image")) {
+    const rate = openaiImageRate(modelId);
+    state.modelRates.set(modelId, rate);
+    return rate;
+  }
   for (const [key, value] of state.modelRates) {
     if (modelId.startsWith(key) || key.startsWith(modelId)) return value;
   }
@@ -145,6 +158,8 @@ export async function recordVisionUsage(input: {
   /** Output tokens by modality when the provider reports them. */
   imageOutputTokens?: number;
   textOutputTokens?: number;
+  /** Image share of inputTokens, for vendors that price image input separately. */
+  imageInputTokens?: number;
 }) {
   await ensureVisionCostSession();
   const state = getState();
@@ -162,6 +177,7 @@ export async function recordVisionUsage(input: {
     input.outputTokens,
     input.hasImageOutput,
     split,
+    input.imageInputTokens ?? 0,
   );
 
   const event: VisionUsageEvent = {

@@ -14,6 +14,7 @@ import {
   type PhotoImageSizeHint,
 } from "@/lib/session/photoTypes";
 import { withVisionUser } from "@/lib/visionCost/context";
+import { startRequestTimer, type RequestTimer } from "@/server/requestTiming";
 import { bytesToDataUrl, photoDataUrlById } from "@/server/libraryImages";
 import { addRevisionFromBytes } from "@/server/libraryService";
 import {
@@ -74,11 +75,20 @@ async function handleLibraryPhoto(request: Request, photoId: unknown) {
   if (typeof photoId !== "string" || !photoId) {
     return Response.json({ error: "photoId is required." }, { status: 400 });
   }
-  return withVisionUser(userId, async () => handleLibraryPhotoForUser(userId, photoId));
+  const timer = startRequestTimer("photo-portrait");
+  try {
+    const response = await withVisionUser(userId, async () => handleLibraryPhotoForUser(userId, photoId, timer));
+    timer.done({ status: response.status });
+    return response;
+  } catch (error) {
+    timer.done({ status: "error" });
+    throw error;
+  }
 }
 
-async function handleLibraryPhotoForUser(userId: string, photoId: string) {
+async function handleLibraryPhotoForUser(userId: string, photoId: string, timer: RequestTimer) {
   const source = await photoDataUrlById(userId, photoId);
+  timer.mark("loadPhoto");
   if (source.error) {
     return Response.json({ error: source.error.message }, { status: source.error.code === "NOT_FOUND" ? 404 : 500 });
   }
@@ -89,6 +99,7 @@ async function handleLibraryPhotoForUser(userId: string, photoId: string) {
 
   // Don't spend on the model for a wallet that can't cover it.
   const quote = await quoteSheetUsage(userId, "portrait", 0);
+  timer.mark("quote");
   if (quote.error) return Response.json({ error: quote.error.message }, { status: 500 });
   if (!quote.data.affordable) {
     return Response.json(
@@ -102,8 +113,11 @@ async function handleLibraryPhotoForUser(userId: string, photoId: string) {
     image: record.width && record.height ? { width: record.width, height: record.height } : undefined,
   });
 
+  timer.mark("model");
+
   // Charge only once there is a photo to hand over; refund if it can't be saved.
   const charge = await chargeSheetUsage(userId, record.id, "portrait");
+  timer.mark("charge");
   if (charge.error) {
     if (charge.error.code === INSUFFICIENT_CREDITS_CODE) {
       return Response.json(
@@ -127,6 +141,7 @@ async function handleLibraryPhotoForUser(userId: string, photoId: string) {
         orientation: "portrait",
       },
     );
+    timer.mark("store");
   } catch (error) {
     await refundSheetUsage(userId, record.id, "portrait", charge.data.chargedCents);
     throw error;

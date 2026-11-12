@@ -12,7 +12,9 @@ export type ModelRateSnapshot = {
   inputUsdPerMTok: number;
   outputTextUsdPerMTok: number;
   outputImageUsdPerMTok: number | null;
-  source: "google-pricing" | "fallback";
+  /** Separate rate for image input tokens (OpenAI); input uses inputUsdPerMTok when absent. */
+  inputImageUsdPerMTok?: number | null;
+  source: "google-pricing" | "openai-pricing" | "fallback";
 };
 
 export type VisionUsageEvent = {

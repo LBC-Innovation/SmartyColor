@@ -1,5 +1,3 @@
-import { trackVisionGenerateText } from "@/lib/visionCost/trackGenerateText";
-import { google } from "@ai-sdk/google";
 import sharp from "sharp";
 import {
   buildPhotoColoringPrompt,
@@ -16,6 +14,7 @@ import {
   type PhotoLayout,
 } from "@/lib/photo/orientation";
 import type { ParsedPhoto } from "@/lib/ai/photoDataUrl";
+import { createImageGenerator, type ImageReference } from "@/lib/ai/image";
 import type { ColoringAI } from "@/lib/ai/types";
 import { toPhotoLineArtPng } from "@/lib/print/lineArt";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
@@ -29,37 +28,6 @@ import {
 } from "@/lib/session/photoTypes";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
-import {
-  generateGeminiImageViaRest,
-  geminiImageAttempts,
-  type GeminiImageAttempt,
-} from "@/lib/ai/geminiImageGenerateRest";
-
-const googleSafety = {
-  google: {
-    safetySettings: [
-      {
-        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT" as const,
-        threshold: "BLOCK_LOW_AND_ABOVE" as const,
-      },
-      {
-        category: "HARM_CATEGORY_DANGEROUS_CONTENT" as const,
-        threshold: "BLOCK_MEDIUM_AND_ABOVE" as const,
-      },
-      {
-        category: "HARM_CATEGORY_HATE_SPEECH" as const,
-        threshold: "BLOCK_MEDIUM_AND_ABOVE" as const,
-      },
-      {
-        category: "HARM_CATEGORY_HARASSMENT" as const,
-        threshold: "BLOCK_MEDIUM_AND_ABOVE" as const,
-      },
-    ],
-  },
-};
-
-const imageModel =
-  process.env.GEMINI_IMAGE_MODEL?.trim() || "gemini-3.1-flash-image";
 
 async function layoutForPhotoBytes(
   bytes: Buffer,
@@ -85,20 +53,52 @@ async function layoutForPhotoBytes(
 }
 
 /**
- * Bake EXIF rotation into the pixels so the model sees the same upright photo
- * the layout was measured from. Anything sharp cannot decode passes through.
+ * Longest edge (px) of an image sent to the model. The models shrink inputs to
+ * about this size anyway, so sending a full-resolution camera photo only adds
+ * upload and processing time (5–13 s per request in testing). Override with
+ * IMAGE_INPUT_MAX_EDGE.
  */
-async function uprightPhoto(photo: ParsedPhoto): Promise<ParsedPhoto> {
+function modelInputMaxEdge(): number {
+  const raw = Number.parseInt(process.env.IMAGE_INPUT_MAX_EDGE ?? "", 10);
+  return Number.isFinite(raw) && raw >= 512 ? raw : 1536;
+}
+
+/**
+ * The photo as the model should see it: upright (EXIF rotation baked in, so it
+ * matches the layout measured from it) and no larger than the model needs.
+ * Anything sharp cannot decode passes through unchanged.
+ */
+async function photoForModel(photo: ParsedPhoto): Promise<ParsedPhoto> {
   try {
     const meta = await sharp(photo.bytes).metadata();
-    if (!meta.orientation || meta.orientation === 1) return photo;
+    const maxEdge = modelInputMaxEdge();
+    const rotated = Boolean(meta.orientation && meta.orientation !== 1);
+    const oversized = Math.max(meta.width ?? 0, meta.height ?? 0) > maxEdge;
+    if (!rotated && !oversized) return photo;
     const bytes = await sharp(photo.bytes)
       .rotate()
-      .jpeg({ quality: 92, mozjpeg: true })
+      .resize({ width: maxEdge, height: maxEdge, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 88, mozjpeg: true })
       .toBuffer();
     return { bytes, base64: bytes.toString("base64"), mediaType: "image/jpeg" };
   } catch {
     return photo;
+  }
+}
+
+/** A previous coloring sheet as the model should see it: kept as PNG (crisp lines), capped in size. */
+async function sheetForModel(sheet: ParsedPhoto): Promise<ParsedPhoto> {
+  try {
+    const meta = await sharp(sheet.bytes).metadata();
+    const maxEdge = modelInputMaxEdge();
+    if (Math.max(meta.width ?? 0, meta.height ?? 0) <= maxEdge) return sheet;
+    const bytes = await sharp(sheet.bytes)
+      .resize({ width: maxEdge, height: maxEdge, fit: "inside" })
+      .png({ compressionLevel: 6 })
+      .toBuffer();
+    return { bytes, base64: bytes.toString("base64"), mediaType: "image/png" };
+  } catch {
+    return sheet;
   }
 }
 
@@ -136,115 +136,6 @@ async function toSheet(
   };
 }
 
-type ReferenceImage = {
-  base64: string;
-  mediaType: string;
-  caption: string;
-};
-
-type MessageContent = Array<
-  | { type: "text"; text: string }
-  | { type: "file"; data: string; mediaType: string }
->;
-
-function isRetryableGeminiError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /invalid json response|unable to process input image|invalid argument|internal error|resource exhausted|fetch failed|ECONNRESET|503|429|502|504/i.test(
-    message,
-  );
-}
-
-function buildImageProviderOptions(
-  layout: PhotoLayout,
-  options: GeminiImageAttempt = {},
-) {
-  const imageConfig: { aspectRatio: PhotoLayout["aspectRatio"]; imageSize?: string } =
-    {
-      aspectRatio: layout.aspectRatio,
-    };
-  if (options.imageSize) {
-    imageConfig.imageSize = options.imageSize;
-  }
-
-  return {
-    ...googleSafety,
-    google: {
-      ...googleSafety.google,
-      responseModalities: options.responseModalities ?? ["TEXT", "IMAGE"],
-      imageConfig,
-    },
-  };
-}
-
-function pickImageFile(
-  files: Array<{ base64: string; mediaType: string }>,
-) {
-  const imageFiles = files.filter((item) => item.mediaType.startsWith("image/"));
-  return imageFiles.length > 0 ? imageFiles[imageFiles.length - 1] : undefined;
-}
-
-function messageContentToRestParts(content: MessageContent) {
-  return content.map((part) =>
-    part.type === "text"
-      ? { text: part.text }
-      : {
-          inlineData: {
-            mimeType: part.mediaType,
-            data: part.data,
-          },
-        },
-  );
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function generateImageFileFromReferences(
-  operation: VisionCostOperation,
-  content: MessageContent,
-  layout: PhotoLayout,
-): Promise<{ base64: string; mediaType: string }> {
-  const attempts = geminiImageAttempts();
-
-  let lastError: unknown;
-  for (let index = 0; index < attempts.length; index++) {
-    const attempt = attempts[index];
-    if (index > 0) {
-      await sleep(350);
-    }
-    try {
-      const result = await trackVisionGenerateText(operation, {
-        model: google(imageModel),
-        messages: [{ role: "user", content }],
-        providerOptions: buildImageProviderOptions(layout, attempt),
-        maxRetries: 2,
-      });
-      const file = pickImageFile(result.files);
-      if (file) return file;
-      throw new Error("No image file in model response.");
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableGeminiError(error)) {
-        break;
-      }
-    }
-  }
-
-  try {
-    return await generateGeminiImageViaRest(
-      messageContentToRestParts(content),
-      layout,
-      operation,
-    );
-  } catch (restError) {
-    if (lastError instanceof Error && isRetryableGeminiError(lastError)) {
-      throw restError;
-    }
-    throw lastError instanceof Error ? lastError : restError;
-  }
-}
-
 async function isWrongWayRound(
   file: { base64: string },
   layout: PhotoLayout,
@@ -262,7 +153,7 @@ async function isWrongWayRound(
 async function drawFromReferences(
   operation: VisionCostOperation,
   prompt: string,
-  references: ReferenceImage[],
+  references: ImageReference[],
   photoBytes: Buffer,
   printPrefs: PrintPrefs,
   hint?: PhotoImageSizeHint,
@@ -270,31 +161,16 @@ async function drawFromReferences(
   weightReferenceBase64?: string,
 ): Promise<GeneratedSheet> {
   const layout = await layoutForPhotoBytes(photoBytes, printPrefs, hint);
+  const images = createImageGenerator();
+  const request = { operation, prompt, references, layout, purpose: "lineArt" as const };
 
-  const content: MessageContent = [];
-
-  for (const ref of references) {
-    content.push({ type: "text", text: ref.caption });
-    content.push({
-      type: "file",
-      data: ref.base64,
-      mediaType: ref.mediaType,
-    });
-  }
-  content.push({ type: "text", text: prompt });
-
-  let file = await generateImageFileFromReferences(operation, content, layout);
+  let file = await images.generate(request);
 
   // The model sometimes ignores the requested aspect ratio. Check, retry once
   // with a firm correction, then fit onto the right canvas as a last resort.
   if (await isWrongWayRound(file, layout)) {
     try {
-      const retried = await generateImageFileFromReferences(
-        operation,
-        [...content, { type: "text", text: photoLayoutRetryNote(layout) }],
-        layout,
-      );
-      file = retried;
+      file = await images.generate({ ...request, followUps: [photoLayoutRetryNote(layout)] });
     } catch {
       /* keep the first image; it is fitted below */
     }
@@ -317,13 +193,13 @@ function portraitLayoutFor(source: PhotoLayout): PhotoLayout {
   };
 }
 
-export function createPhotoGeminiHandlers(): Pick<
+export function createPhotoHandlers(): Pick<
   ColoringAI,
   "photoToColoring" | "correctPhotoColoring" | "photoToPortrait"
 > {
   return {
     async photoToPortrait(input: PhotoPortraitRequest): Promise<GeneratedPhoto> {
-      const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
+      const photo = await photoForModel(parsePhotoDataUrl(input.photoDataUrl));
       const source = await layoutForPhotoBytes(
         photo.bytes,
         { ...defaultPrintPrefs, orientation: "landscape" },
@@ -333,28 +209,30 @@ export function createPhotoGeminiHandlers(): Pick<
         throw new Error(PHOTO_NOT_LANDSCAPE_MESSAGE);
       }
       const target = portraitLayoutFor(source);
-      const content: MessageContent = [
-        {
-          type: "text",
-          text: "REFERENCE PHOTOGRAPH — the people and key content here must all appear in the result, unchanged.",
-        },
-        { type: "file", data: photo.base64, mediaType: photo.mediaType },
-        { type: "text", text: buildPhotoPortraitPrompt(source, target) },
-      ];
+      const images = createImageGenerator();
+      const request = {
+        operation: "photoToPortrait" as const,
+        prompt: buildPhotoPortraitPrompt(source, target),
+        references: [
+          {
+            base64: photo.base64,
+            mediaType: photo.mediaType,
+            caption:
+              "REFERENCE PHOTOGRAPH — the people and key content here must all appear in the result, unchanged.",
+          },
+        ],
+        layout: target,
+        purpose: "photo" as const,
+      };
 
-      let file = await generateImageFileFromReferences("photoToPortrait", content, target);
+      let file = await images.generate(request);
       if (await isWrongWayRound(file, target)) {
-        file = await generateImageFileFromReferences(
-          "photoToPortrait",
-          [
-            ...content,
-            {
-              type: "text",
-              text: `CORRECTION: the previous attempt was not portrait. Produce the same photograph again on a PORTRAIT canvas (${target.aspectRatio}) that is taller than it is wide. Do not rotate the scene or turn it on its side.`,
-            },
+        file = await images.generate({
+          ...request,
+          followUps: [
+            `CORRECTION: the previous attempt was not portrait. Produce the same photograph again on a PORTRAIT canvas (${target.aspectRatio}) that is taller than it is wide. Do not rotate the scene or turn it on its side.`,
           ],
-          target,
-        );
+        });
         // Padding a photo onto a white canvas is not a portrait photo; let the caller retry.
         if (await isWrongWayRound(file, target)) {
           throw new Error("Could not reframe this photo as a portrait. Please try again.");
@@ -374,7 +252,7 @@ export function createPhotoGeminiHandlers(): Pick<
     },
 
     async photoToColoring(input: PhotoColoringGenerateRequest) {
-      const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
+      const photo = await photoForModel(parsePhotoDataUrl(input.photoDataUrl));
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const prompt = buildPhotoColoringPrompt(input.printPrefs, layout);
 
@@ -396,8 +274,9 @@ export function createPhotoGeminiHandlers(): Pick<
     },
 
     async correctPhotoColoring(input: PhotoColoringCorrectRequest) {
-      const photo = await uprightPhoto(parsePhotoDataUrl(input.photoDataUrl));
+      const photo = await photoForModel(parsePhotoDataUrl(input.photoDataUrl));
       const sheet = parsePhotoDataUrl(input.sheetDataUrl);
+      const sheetInput = await sheetForModel(sheet);
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const prompt = buildPhotoCorrectionPrompt(
         input.printPrefs,
@@ -415,8 +294,8 @@ export function createPhotoGeminiHandlers(): Pick<
             caption: "ORIGINAL PHOTOGRAPH — ground truth for what should appear.",
           },
           {
-            base64: sheet.base64,
-            mediaType: sheet.mediaType,
+            base64: sheetInput.base64,
+            mediaType: sheetInput.mediaType,
             caption:
               "PREVIOUS COLORING ATTEMPT — match its line weight and layout exactly for unchanged areas. Output one full replacement sheet; do not draw on top of this image or retrace existing lines.",
           },

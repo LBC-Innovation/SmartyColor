@@ -264,7 +264,11 @@ export function VisionCostDashboard({
             <li key={rate.modelId} className={rateItemClass}>
               <p className="font-mono text-sm font-semibold">{rate.modelId}</p>
               <p className={cn("mt-1", labelClass)}>
-                Input {usd(rate.inputUsdPerMTok)} · Text output{" "}
+                Input {usd(rate.inputUsdPerMTok)}
+                {rate.inputImageUsdPerMTok != null
+                  ? ` · Image input ${usd(rate.inputImageUsdPerMTok)}`
+                  : null}{" "}
+                · Text output{" "}
                 {usd(rate.outputTextUsdPerMTok)}
                 {rate.outputImageUsdPerMTok != null
                   ? ` · Image output ${usd(rate.outputImageUsdPerMTok)}`
