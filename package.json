@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bakeoff": "node --env-file=.env.local --import ./scripts/image-bakeoff/alias-loader.mjs scripts/image-bakeoff/run.mts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.47",

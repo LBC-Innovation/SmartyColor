@@ -1,5 +1,4 @@
 import { generateText, Output } from "ai";
-import { trackVisionGenerateText } from "@/lib/visionCost/trackGenerateText";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import { toLineArtPng } from "@/lib/print/lineArt";
@@ -9,7 +8,9 @@ import {
   isScenePlanPoint,
   REFINE_SYSTEM_PROMPT,
 } from "@/lib/ai/prompts";
-import { createPhotoGeminiHandlers } from "@/lib/ai/photoGemini";
+import { createImageGenerator } from "@/lib/ai/image";
+import { createPhotoHandlers } from "@/lib/ai/photoHandlers";
+import type { PhotoLayout } from "@/lib/photo/orientation";
 import type { ColoringAI } from "@/lib/ai/types";
 import type { FeedbackPoint, FeedbackTurn, GeneratedSheet } from "@/lib/session/types";
 
@@ -55,12 +56,16 @@ const googleSafety = {
 
 const refineModel =
   process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
-const imageModel =
-  process.env.GEMINI_IMAGE_MODEL?.trim() ||
-  "gemini-3.1-flash-image-preview";
 
 function newId() {
   return crypto.randomUUID();
+}
+
+/** Canvas for a text-to-image sheet; only orientation and aspect ratio matter. */
+function sheetLayout(orientation: "portrait" | "landscape"): PhotoLayout {
+  return orientation === "landscape"
+    ? { orientation, aspectRatio: "4:3", width: 1600, height: 1200 }
+    : { orientation, aspectRatio: "3:4", width: 1200, height: 1600 };
 }
 
 async function toSheet(
@@ -77,7 +82,7 @@ async function toSheet(
 }
 
 export function createGeminiProvider(): ColoringAI {
-  const photo = createPhotoGeminiHandlers();
+  const photo = createPhotoHandlers();
 
   return {
     ...photo,
@@ -150,35 +155,17 @@ export function createGeminiProvider(): ColoringAI {
         title,
       });
 
-      const aspectRatio =
-        session.printPrefs.orientation === "landscape" ? "4:3" : "3:4";
-
-      const imageOptions = {
-        ...googleSafety,
-        google: {
-          ...googleSafety.google,
-          responseModalities: ["TEXT", "IMAGE"],
-          imageConfig: {
-            aspectRatio,
-            imageSize: "2K",
-          },
-        },
+      const images = createImageGenerator();
+      const request = {
+        operation: "generateImage" as const,
+        prompt,
+        references: [],
+        layout: sheetLayout(session.printPrefs.orientation),
+        purpose: "lineArt" as const,
       };
 
       try {
-        const result = await trackVisionGenerateText("generateImage", {
-          model: google(imageModel),
-          prompt,
-          providerOptions: imageOptions,
-        });
-
-        const file = result.files.find((item) =>
-          item.mediaType.startsWith("image/"),
-        );
-        if (!file) {
-          throw new Error("No picture came back.");
-        }
-
+        const file = await images.generate(request);
         return toSheet(file, title, session.printPrefs.showTitle);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -189,20 +176,12 @@ export function createGeminiProvider(): ColoringAI {
           throw error;
         }
 
-        const retry = await trackVisionGenerateText("generateImage", {
-          model: google(imageModel),
-          prompt: `${prompt}
-
-The last try was blocked for looking too much like a protected brand. Redraw the SAME request as a near look-alike coloring-page outline: keep the same character type, costume shapes, colors-as-empty-regions, pose, gear, companion, and setting so a kid would still say "that's what I asked for." Change only logos, brand text, and exact trademark emblems. Do not invent a totally different character or scene. Black outlines on white only — no filled color.`,
-          providerOptions: imageOptions,
+        const file = await images.generate({
+          ...request,
+          followUps: [
+            `The last try was blocked for looking too much like a protected brand. Redraw the SAME request as a near look-alike coloring-page outline: keep the same character type, costume shapes, colors-as-empty-regions, pose, gear, companion, and setting so a kid would still say "that's what I asked for." Change only logos, brand text, and exact trademark emblems. Do not invent a totally different character or scene. Black outlines on white only — no filled color.`,
+          ],
         });
-
-        const file = retry.files.find((item) =>
-          item.mediaType.startsWith("image/"),
-        );
-        if (!file) {
-          throw new Error("No picture came back.");
-        }
         return toSheet(file, title, session.printPrefs.showTitle);
       }
     },

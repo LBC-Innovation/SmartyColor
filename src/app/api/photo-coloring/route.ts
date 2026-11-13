@@ -11,6 +11,7 @@ import { toPublicErrorMessage } from "@/lib/security/publicError";
 import { checkGuestUsage, guestLimitResponse } from "@/server/guestUsageGuard";
 import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
 import { withVisionUser } from "@/lib/visionCost/context";
+import { startRequestTimer, type RequestTimer } from "@/server/requestTiming";
 import { addRevisionFromSheet, type RevisionMeta } from "@/server/libraryService";
 import { quoted, recordActivity } from "@/server/activityService";
 import {
@@ -198,12 +199,21 @@ async function handleLibraryMode(
     return Response.json({ error: "photoId is required." }, { status: 400 });
   }
 
-  return withVisionUser(userId, async () => handleLibraryModeForUser(userId, body));
+  const timer = startRequestTimer("photo-coloring", { mode: body.mode });
+  try {
+    const response = await withVisionUser(userId, async () => handleLibraryModeForUser(userId, body, timer));
+    timer.done({ status: response.status });
+    return response;
+  } catch (error) {
+    timer.done({ status: "error" });
+    throw error;
+  }
 }
 
 async function handleLibraryModeForUser(
   userId: string,
   body: Extract<Body, { mode: "generate-library" | "correct-library" }>,
+  timer: RequestTimer,
 ) {
   const kind: SheetUsageKind = body.mode === "generate-library" ? "generation" : "edit";
   let corrections: string[] = [];
@@ -218,6 +228,7 @@ async function handleLibraryModeForUser(
   }
 
   const photo = await photoDataUrlById(userId, body.photoId);
+  timer.mark("loadPhoto");
   if (photo.error) {
     return Response.json({ error: photo.error.message }, { status: photo.error.code === "NOT_FOUND" ? 404 : 500 });
   }
@@ -228,6 +239,7 @@ async function handleLibraryModeForUser(
 
   // Don't spend on the model for a wallet that can't cover it.
   const quote = await quoteSheetUsage(userId, kind, record.editCount);
+  timer.mark("quote");
   if (quote.error) return Response.json({ error: quote.error.message }, { status: 500 });
   if (!quote.data.affordable) {
     return Response.json(
@@ -241,6 +253,7 @@ async function handleLibraryModeForUser(
   let current;
   if (body.mode === "correct-library") {
     current = await revisionDataUrlById(userId, body.revisionId);
+    timer.mark("loadSheet");
     if (current.error) {
       return Response.json({ error: current.error.message }, { status: current.error.code === "NOT_FOUND" ? 404 : 500 });
     }
@@ -256,6 +269,7 @@ async function handleLibraryModeForUser(
   let meta: RevisionMeta | undefined;
   if (sourceRevisionId) {
     const version = await revisionDataUrlById(userId, sourceRevisionId);
+    timer.mark("loadSourceVersion");
     if (version.error) {
       return Response.json({ error: version.error.message }, { status: version.error.code === "NOT_FOUND" ? 404 : 500 });
     }
@@ -287,8 +301,11 @@ async function handleLibraryModeForUser(
         image: source.image,
       });
 
+  timer.mark("model");
+
   // Charge only once there is a sheet to hand over; refund if it can't be saved.
   const charge = await chargeSheetUsage(userId, record.id, kind);
+  timer.mark("charge");
   if (charge.error) {
     if (charge.error.code === INSUFFICIENT_CREDITS_CODE) {
       return Response.json(
@@ -302,6 +319,7 @@ async function handleLibraryModeForUser(
   let stored;
   try {
     stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet, meta);
+    timer.mark("store");
   } catch (error) {
     await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
     throw error;
