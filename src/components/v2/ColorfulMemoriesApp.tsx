@@ -650,10 +650,10 @@ export function ColorfulMemoriesApp() {
             ) : null}
           </main>
 
-          {/* Your book: sticky column on desktop */}
-          <aside className="hidden min-h-0 border-l border-gray-200 bg-white lg:block lg:w-[40%] lg:overflow-y-auto" aria-label="Your book">
+          {/* The book order: sticky column on desktop */}
+          <aside className="hidden min-h-0 border-l border-gray-200 bg-white lg:block lg:w-[40%] lg:overflow-y-auto" aria-label="Complete your book order">
             <div className="p-5 xl:p-6">
-              <h2 className="v2-brand-title mb-2 text-xl text-v2-ink">Your book</h2>
+              <h2 className="v2-brand-title mb-2 text-xl text-v2-ink">Complete your book order</h2>
               {panel("column")}
             </div>
           </aside>
@@ -695,7 +695,7 @@ export function ColorfulMemoriesApp() {
 
       {sheetOpen && !desktop ? (
         <BottomSheet
-          title="Your book"
+          title="Complete your book order"
           onClose={() => setSheetOpen(false)}
           footer={order.signedIn && hasBookPage ? <ConfirmButton order={order} blocker={blocker} onConfirm={openConfirm} /> : undefined}
         >
