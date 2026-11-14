@@ -38,3 +38,38 @@ export type ShippingChoice = {
   deliveryMin: string | null;
   deliveryMax: string | null;
 };
+
+/** Speeds expected to arrive sooner than the chosen one (by their latest date, then earliest). */
+export function fasterShippingChoices(choices: ShippingChoice[], level: string): ShippingChoice[] {
+  const current = choices.find((c) => c.level === level);
+  const currentEnd = current?.deliveryMax ?? current?.deliveryMin;
+  if (!currentEnd) return [];
+  return choices.filter((c) => {
+    if (c.level === level) return false;
+    const end = c.deliveryMax ?? c.deliveryMin;
+    return Boolean(end && end < currentEnd);
+  });
+}
+
+/** "get it faster via 2 other options" */
+export function fasterShippingPrompt(count: number): string {
+  return `get it faster via ${count} other ${count === 1 ? "option" : "options"}`;
+}
+
+/**
+ * Scrolls the visible "Shipping speed" picker into view once it has been drawn (the Ship to step
+ * may only just be opening, or the phone sheet sliding up).
+ */
+export function scrollToShippingSpeeds(delayMs = 0): void {
+  window.setTimeout(() => {
+    requestAnimationFrame(() => {
+      const target = Array.from(document.querySelectorAll<HTMLElement>("[data-shipping-speed]")).find(
+        (el) => el.offsetParent !== null,
+      );
+      if (!target) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+      target.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
+    });
+  }, delayMs);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
+import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Gift, Loader2, X } from "lucide-react";
@@ -500,6 +500,7 @@ function Overview({
       Edit
     </button>
   );
+  const fasterCount = order.isDigital ? 0 : fasterShippingChoices(order.shippingChoices, order.shippingLevel).length;
   return (
     <div className="mx-auto max-w-xl space-y-4 px-4 py-5">
       <div className="flex gap-4">
@@ -569,6 +570,24 @@ function Overview({
       {!order.isDigital && formatDeliveryRange(order.deliveryEstimate) ? (
         <p className="text-sm text-v2-ink">
           <span className="font-semibold">Estimated delivery:</span> {formatDeliveryRange(order.deliveryEstimate)}
+          {fasterCount > 0 ? (
+            <>
+              {" "}
+              (
+              <button
+                type="button"
+                className="font-semibold text-v2-link underline underline-offset-2 hover:no-underline"
+                onClick={() => {
+                  onEditRow("ship");
+                  // The dialog closes and, on phones, the order sheet slides up first.
+                  scrollToShippingSpeeds(350);
+                }}
+              >
+                {fasterShippingPrompt(fasterCount)}
+              </button>
+              )
+            </>
+          ) : null}
           <span className="block text-xs text-v2-muted">The printer&apos;s estimate, not a guarantee.</span>
         </p>
       ) : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
+import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
@@ -242,6 +242,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   const blocker = confirmBlocker(order);
 
   const coverChoices = order.coverPictures.slice(0, 6);
+  const fasterCount = fasterShippingChoices(order.shippingChoices, order.shippingLevel).length;
   /** One of their own pages, shown both ways in the fit picker. */
   const fitSample = order.plan.allPages.find((p): p is BookWizardPhotoPage => p.kind === "photo") ?? null;
 
@@ -577,6 +578,24 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
               <Truck className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
               <span>
                 <span className="font-semibold">Estimated delivery:</span> {formatDeliveryRange(order.deliveryEstimate)}
+                {fasterCount > 0 ? (
+                  <>
+                    {" "}
+                    (
+                    <button
+                      type="button"
+                      className="font-semibold text-v2-link underline underline-offset-2 hover:no-underline"
+                      onClick={() => {
+                        order.touch();
+                        onOpenRow("ship");
+                        scrollToShippingSpeeds();
+                      }}
+                    >
+                      {fasterShippingPrompt(fasterCount)}
+                    </button>
+                    )
+                  </>
+                ) : null}
               </span>
             </p>
           ) : null}
@@ -635,7 +654,7 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
   if (choices.length < 2) return null;
   const current = choices.find((c) => c.level === order.shippingLevel) ?? choices[0];
   return (
-    <fieldset>
+    <fieldset data-shipping-speed className="scroll-mt-3">
       <legend className="text-sm font-semibold text-v2-ink">Shipping speed</legend>
       <p className="mt-0.5 text-xs text-v2-muted">
         Dates include printing time and are the printer&apos;s estimate{order.addressComplete ? "" : " until your address is complete"}.
