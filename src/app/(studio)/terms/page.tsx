@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 // Analytics, advertising and opt-out wording below is a draft for Zach (or counsel) to approve. Not legal advice.
-const UPDATED = "October 17, 2026";
+const UPDATED = "November 14, 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -175,9 +175,51 @@ export default function TermsPage() {
 
         <Section title="Deleting your information">
           <p>
-            Deleting an album in the studio permanently deletes its photos and coloring pages from our
-            storage. Deleting your account removes your account, every album and image, and your order
-            history, except records we must keep for completed purchases.
+            <strong>Deleting a photo.</strong> When you delete a photo, we permanently delete it from our
+            storage, along with every coloring page and version made from it. Any share link to one of its
+            pages stops working. This can’t be undone. If a delete doesn’t go through, the photo stays in your
+            album and the app tells you, so you can try again.
+          </p>
+          <p>
+            <strong>Deleting an album.</strong> Deleting an album permanently deletes all of its photos and
+            coloring pages in the same way. In an album someone has shared with you, you can delete the photos
+            you added. The album’s owner can delete any photo in it.
+          </p>
+          <p>
+            <strong>What deleting doesn’t reach.</strong> Some copies are made on purpose and stay after the
+            original is deleted:
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong>Books you’ve ordered.</strong> We keep the PDF of each book you order with the order, so
+              we can help with reprints and questions about it. For printed books, Lulu also receives a copy to
+              print from, under its own policies.
+            </li>
+            <li>
+              <strong>Copies you’ve made.</strong> A year album holds its own copies of the photos and pages
+              you put in it. Delete them there too if you want them gone.
+            </li>
+            <li>
+              <strong>Pages you’ve sent.</strong> Anything you’ve emailed to family, or that someone saved
+              from a share link before it stopped working, stays with them.
+            </li>
+            <li>
+              <strong>Google.</strong> Photos sent to Google’s Gemini to draw or edit a page are handled under
+              Google’s API terms. Deleting a photo here doesn’t change what Google has already received.
+            </li>
+            <li>
+              <strong>Your activity history.</strong> Your account’s activity list keeps a short note that
+              you deleted something, including the photo’s file name and album name, until your account is
+              deleted.
+            </li>
+          </ul>
+          <p>
+            <strong>Deleting your account.</strong> Email us at{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-v2-link">
+              {CONTACT_EMAIL}
+            </a>{" "}
+            and we’ll delete your account, every album, photo and coloring page, the book files we kept, and
+            your activity history. We keep records of completed purchases where we’re required to.
           </p>
         </Section>
 
