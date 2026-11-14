@@ -36,30 +36,72 @@ export async function summarizeLocalLibrary(): Promise<LocalLibrarySummary> {
   }
 }
 
-export type MigrationProgress = { done: number; total: number; label: string };
+export type MigrationProgress = {
+  done: number;
+  total: number;
+  label: string;
+  /** Name of the album the current photo belongs to. */
+  album: string;
+};
+
+export type MigrationResult = {
+  projects: number;
+  photos: number;
+  /** Account album now holding the album the guest had open, so the studio can open it next. */
+  activeProjectId: string | null;
+};
+
+/**
+ * A brand-new account starts with one empty album the studio made for it. The guest's
+ * album takes that slot (and its name) instead of sitting next to an empty one.
+ */
+async function findStarterAlbum(): Promise<string | null> {
+  const res = await library.listProjects();
+  if (res.error) throw new Error(res.error.message);
+  const list = res.data!;
+  if (list.length !== 1) return null;
+  const only = list[0];
+  return only.role === "owner" && only.photoCount === 0 ? only.id : null;
+}
 
 export async function migrateLocalLibraryToCloud(
   onProgress?: (p: MigrationProgress) => void,
-): Promise<{ projects: number; photos: number }> {
+): Promise<MigrationResult> {
   const meta = await loadV2ProjectsMeta();
-  const sessions = await Promise.all(
+  const loaded = await Promise.all(
     meta.projects.map(async (p) => ({ meta: p, session: await loadV2ProjectSession(p.id) })),
   );
+  // The album the guest had open goes first, so it is the one that reuses the starter album.
+  const sessions = [
+    ...loaded.filter((s) => s.meta.id === meta.activeProjectId),
+    ...loaded.filter((s) => s.meta.id !== meta.activeProjectId),
+  ];
   const total = sessions.reduce((n, s) => n + s.session.photos.filter((ph) => !ph.remote).length, 0);
   let done = 0;
   let migratedProjects = 0;
+  let activeCloudProjectId: string | null = null;
+  let starterAlbumId = total > 0 ? await findStarterAlbum() : null;
 
   for (const { meta: project, session } of sessions) {
     const localPhotos = session.photos.filter((ph) => !ph.remote);
     if (localPhotos.length === 0) continue;
 
-    const created = await library.createProject(project.name);
-    if (created.error) throw new Error(created.error.message);
-    const cloudProjectId = created.data!.id;
+    let cloudProjectId: string;
+    if (starterAlbumId) {
+      const renamed = await library.updateProject(starterAlbumId, { name: project.name });
+      if (renamed.error) throw new Error(renamed.error.message);
+      cloudProjectId = starterAlbumId;
+      starterAlbumId = null;
+    } else {
+      const created = await library.createProject(project.name);
+      if (created.error) throw new Error(created.error.message);
+      cloudProjectId = created.data!.id;
+    }
+    activeCloudProjectId ??= cloudProjectId;
     migratedProjects += 1;
 
     for (const photo of localPhotos) {
-      onProgress?.({ done, total, label: photo.fileName ?? "photo" });
+      onProgress?.({ done, total, label: photo.fileName ?? "photo", album: project.name });
       const blob = dataUrlToBlob(photo.photoDataUrl);
       const mime = blob.type || "image/jpeg";
       const size = await readBlobImageSize(blob);
@@ -116,7 +158,7 @@ export async function migrateLocalLibraryToCloud(
         await primeImageCache(revTicket.data!.path, sheetBlob);
       }
       done += 1;
-      onProgress?.({ done, total, label: photo.fileName ?? "photo" });
+      onProgress?.({ done, total, label: photo.fileName ?? "photo", album: project.name });
     }
   }
 
@@ -129,5 +171,5 @@ export async function migrateLocalLibraryToCloud(
     projects: [{ id: freshId, name: defaultNewProjectName(0), updatedAt: new Date().toISOString(), photoCount: 0 }],
   });
 
-  return { projects: migratedProjects, photos: done };
+  return { projects: migratedProjects, photos: done, activeProjectId: activeCloudProjectId };
 }

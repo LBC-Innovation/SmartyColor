@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BookOpen, CheckCircle2, CloudUpload, Loader2, X } from "lucide-react";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useV2Toast } from "@/components/v2/V2Toast";
+import { V2MigrationProgressModal } from "@/components/v2/V2MigrationProgressModal";
 import { takeMigrationRequest } from "@/lib/marketing/savePrompt";
 import {
   migrateLocalLibraryToCloud,
@@ -91,6 +92,9 @@ export function V2LibraryMigrationBanner() {
     setBusy(true);
     try {
       const result = await migrateLocalLibraryToCloud(setProgress);
+      // Open the album they were working on as a guest, not the account's starter album.
+      // The progress dialog stays up ("Opening …") until it has loaded.
+      await reload({ activeProjectId: result.activeProjectId });
       if (auto) setMovedAuto({ photos: result.photos });
       else {
         toast.success({
@@ -99,7 +103,6 @@ export function V2LibraryMigrationBanner() {
         });
       }
       setSummary(null);
-      await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not move your photos. Nothing was deleted.");
     } finally {
@@ -119,6 +122,8 @@ export function V2LibraryMigrationBanner() {
 
   const count = summary.photos;
   return (
+    <>
+    {busy ? <V2MigrationProgressModal progress={progress} /> : null}
     <div className="shrink-0 border-b border-v2-primary/20 bg-v2-primary-light px-4 py-2.5 sm:px-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <p role="status" className="flex min-w-0 flex-1 items-start gap-2 text-sm text-v2-ink">
@@ -160,5 +165,6 @@ export function V2LibraryMigrationBanner() {
         </div>
       </div>
     </div>
+    </>
   );
 }
