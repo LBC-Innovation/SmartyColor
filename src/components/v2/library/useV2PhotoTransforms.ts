@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import type { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
+import type { PhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { authedFetch } from "@/lib/api/client";
 import * as library from "@/lib/library/client";
 import type { LibraryPhoto } from "@/lib/library/types";
@@ -28,14 +29,16 @@ import {
 type PhotoTransformOptions = {
   sheetCredits: ReturnType<typeof useSheetUsageCredits>;
   /** Shared with sheet generation, so a photo never changes under a sheet being drawn from it. */
-  lockRef: RefObject<boolean>;
+  lockRef?: RefObject<boolean>;
+  /** Per-photo locks: other photos stay free while this one changes. Wins over `lockRef`. */
+  locks?: PhotoLocks;
 };
 
 /**
  * Changes to the photo itself rather than its coloring page: mirroring it,
  * and adding an AI portrait version of a landscape photo to its versions.
  */
-export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOptions) {
+export function useV2PhotoTransforms({ sheetCredits, lockRef, locks }: PhotoTransformOptions) {
   const toast = useV2Toast();
   const { photosRef, updatePhoto, trackPreviewUrl } = useV2Studio();
   const [mirroringId, setMirroringId] = useState<string | null>(null);
@@ -43,8 +46,19 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
 
   function idle(photoId: string): V2PhotoEntry | null {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
-    if (!photo || lockRef.current || photo.generating || photo.correcting) return null;
+    const locked = locks ? locks.has(photoId) : Boolean(lockRef?.current);
+    if (!photo || locked || photo.generating || photo.correcting) return null;
     return photo;
+  }
+
+  function lock(photoId: string) {
+    if (locks) locks.acquire(photoId);
+    else if (lockRef) lockRef.current = true;
+  }
+
+  function unlock(photoId: string) {
+    if (locks) locks.release(photoId);
+    else if (lockRef) lockRef.current = false;
   }
 
   /** Flip the photo left-to-right, and every version of it so they still match. */
@@ -52,7 +66,7 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
     const photo = idle(photoId);
     if (!photo) return;
 
-    lockRef.current = true;
+    lock(photoId);
     setMirroringId(photoId);
     try {
       if (photo.remote) {
@@ -103,7 +117,7 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not mirror that photo.");
     } finally {
-      lockRef.current = false;
+      unlock(photoId);
       setMirroringId(null);
     }
   }
@@ -114,7 +128,7 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
     if (!photo || photoOrientation(photo) !== "landscape") return;
     if (!sheetCredits.canAfford("portrait", photo)) return;
 
-    lockRef.current = true;
+    lock(photoId);
     setPortraitId(photoId);
     try {
       const response = await authedFetch(
@@ -178,7 +192,7 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not make a portrait version.");
     } finally {
-      lockRef.current = false;
+      unlock(photoId);
       setPortraitId(null);
     }
   }

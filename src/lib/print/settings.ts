@@ -13,6 +13,18 @@ export type PrintPrefs = {
   showTitle: boolean;
   funBorder: boolean;
   nameLine: boolean;
+  /**
+   * How this photo's page goes into a book. Kept with the print preferences because the library
+   * already stores those as-is for every photo, so no new column is needed.
+   */
+  book?: BookPagePrefs;
+};
+
+/** A page's place in the book: left out (kept in the album, not printed) and how it fills the page. */
+export type BookPagePrefs = {
+  leftOut?: boolean;
+  /** "full" fills the page edge to edge; absent or "framed" sits inside the margin. */
+  fit?: "framed" | "full";
 };
 
 export const defaultPrintPrefs: PrintPrefs = {
