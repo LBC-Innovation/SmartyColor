@@ -55,6 +55,7 @@ import {
   explainBookPagePadding,
 } from "@/lib/print/bookPagePlan";
 import type { BookWizardNotePage, BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import type { PageFit } from "@/lib/print/pageLayout";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { unitPriceCents } from "@/lib/credits/pricing";
 import { usePriceList } from "@/lib/pricing/usePriceList";
@@ -66,6 +67,8 @@ type StudioCartState = BookCartState & {
   proofKey?: string | null;
   /** The total they agreed to; a different total on return means asking again. */
   quotedCents?: number | null;
+  /** True once the customer picked Framed or Edge to edge themselves (older carts always say "framed"). */
+  pageFitChosen?: boolean;
 };
 
 export type PlacedOrder = {
@@ -96,7 +99,7 @@ export function proofPageKey(page: BookWizardPage): string {
  * reorders them. Moved out of the old book wizard; the order calls and money flow are unchanged.
  */
 export function useBookOrder({
-  pages: photoPages,
+  pages: galleryPages,
   pagesStillDrawing,
   projectId,
   projectTitle,
@@ -120,6 +123,16 @@ export function useBookOrder({
   const prices = usePriceList();
   const digitalCents = useMemo(() => unitPriceCents(prices, "book.digital"), [prices]);
   const signedIn = Boolean(user);
+
+  // ---- picture fit -----------------------------------------------------------
+  // One choice for the whole book, like the old wizard: nothing is picked for the customer. Until
+  // they pick, pages are laid out framed (nothing cut off).
+  const [chosenPageFit, setChosenPageFit] = useState<PageFit | null>(null);
+  const pageFit: PageFit = chosenPageFit ?? "framed";
+  const photoPages = useMemo(
+    () => galleryPages.map((page) => (page.fit === pageFit ? page : { ...page, fit: pageFit })),
+    [galleryPages, pageFit],
+  );
 
   // ---- format ----------------------------------------------------------------
   const [storedFormat] = useState(() => readStoredFormat());
@@ -472,6 +485,7 @@ export function useBookOrder({
       if (saved.coverDesign) setCoverDraft(normalizeCoverDesign(saved.coverDesign));
       setShipDifferent(saved.shipDifferent === true);
       setIsGift(saved.isGift === true);
+      if (saved.pageFitChosen) setChosenPageFit(saved.pageFit === "full" ? "full" : "framed");
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
       if (album && album !== projectId) onRestoreProject?.(album);
@@ -496,7 +510,8 @@ export function useBookOrder({
       selectedProjectIds: projectId ? [projectId] : [],
       bindingId,
       bindingTouched: chosenBindingId != null,
-      pageFit: "framed",
+      pageFit,
+      pageFitChosen: chosenPageFit != null,
       pages: cartPages(photoPages),
       removedIds: [],
       coverDesign: coverDraft,
@@ -515,7 +530,7 @@ export function useBookOrder({
       thumbRevisionId: firstPhoto?.revisionId ?? null,
       state,
     };
-  }, [plan, projectId, bindingId, chosenBindingId, photoPages, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
+  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
 
   const cartReady = signedIn && !restoring && touched && contentCount > 0;
 
@@ -799,6 +814,10 @@ export function useBookOrder({
     chooseFormat,
     formatPrices,
     digitalCents,
+    // picture fit
+    pageFit,
+    pageFitChosen: chosenPageFit != null,
+    choosePageFit: setChosenPageFit,
     formatFits,
     overCapacity,
     // pages

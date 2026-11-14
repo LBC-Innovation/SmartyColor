@@ -581,3 +581,16 @@ the version's orientation exactly, 90° steps are fine. The book preview must al
 - The insufficient-credit fallback that sends people to `/orders/<id>?confirmed=1` skips the thanks
   screen; that is acceptable, but the order page must still show the existing
   `OrderPlacedThanks` there once it is paid.
+
+### 12.16 Owner changes after the first build (2026-11-14)
+
+- Nothing in the buy flow is chosen for the customer: format and picture fit both start empty and
+  must be picked. Picking one opens and scrolls to the next step.
+- **Fit / Fill is not in the page editor.** It is one choice for the whole book ("Framed" or "Edge to
+  edge"), in the order panel's Pages step, using `BookPageFitPicker` with the customer's own page
+  shown both ways (as the old wizard did).
+- Gallery cards with a finished page have a **printer** button beside ⋮. It opens "Print or share"
+  (`PagePrintShareModal`): print through the browser's print dialog, download the PDF, or send the
+  page by email (server email with the share link and a "Create a free account" invitation) or by
+  text message (`sms:` link with the share link). Guests are asked to create an account to send.
+  The shared page (`/p/<token>`) now asks visitors who aren't signed in to create a free account.

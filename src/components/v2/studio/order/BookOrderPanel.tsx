@@ -6,6 +6,7 @@ import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, 
 import { BookBindingPicker } from "@/components/v2/book-order/BookBindingPicker";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
+import { BookPageFitPicker } from "@/components/v2/book-order/BookPageFitPicker";
 import { BookPrintQualityNotice } from "@/components/v2/book-order/BookPrintQualityNotice";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import { BookAddressSuggestion } from "@/components/v2/book-order/BookAddressSuggestion";
@@ -24,6 +25,8 @@ import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { GIFT_NOTE_MAX_CHARS } from "@/lib/orders/giftNote";
 import { getBookFormat, isDigitalFormat, type BookBindingId, type BookFormatId } from "@/lib/print/bookBindings";
 import { bookFormatFit } from "@/lib/print/bookPagePlan";
+import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import type { PageFit } from "@/lib/print/pageLayout";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 
 export type OrderRow = "format" | "pages" | "cover" | "ship";
@@ -123,6 +126,7 @@ export function confirmBlocker(order: BookOrder): string | null {
   if (!order.signedIn) return "Create a free account to finish your book.";
   if (order.contentCount === 0) return "Make at least one coloring page first.";
   if (!order.formatChosen) return "Choose a book format.";
+  if (!order.pageFitChosen) return "Choose how pictures sit on the page.";
   if (order.pagesStillDrawing > 0)
     return `${order.pagesStillDrawing} ${order.pagesStillDrawing === 1 ? "page is" : "pages are"} still being made.`;
   if (order.overCapacity) return `${order.binding.shortLabel} holds up to ${order.binding.maxPages} pages.`;
@@ -176,6 +180,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     const digital = isDigitalFormat(id);
     const fitsNext = bookFormatFit(order.contentCount, spec).fits;
     const pagesNeedLook =
+      !order.pageFitChosen ||
       !fitsNext ||
       order.contentCount > spec.maxPages ||
       order.pagesStillDrawing > 0 ||
@@ -183,13 +188,27 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     if (pagesNeedLook) {
       onOpenRow("pages");
       scrollToAnchor(`${idBase}-pages`);
-    } else if (!digital && order.signedIn) {
+    } else {
+      advancePastPages(digital);
+    }
+  }
+
+  /** After the Pages step: the cover for a printed book (signed in), otherwise the total. */
+  function advancePastPages(digital: boolean) {
+    if (!digital && order.signedIn) {
       onOpenRow("cover");
       scrollToAnchor(`${idBase}-cover`);
     } else {
       onOpenRow(null);
       scrollToAnchor(`${idBase}-next`);
     }
+  }
+
+  /** Framed or edge to edge was picked: on to the next step, like the format. */
+  function pickPageFit(fit: PageFit) {
+    order.touch();
+    order.choosePageFit(fit);
+    advancePastPages(order.isDigital);
   }
 
   if (order.contentCount === 0 && order.pagesStillDrawing === 0) {
@@ -204,7 +223,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
 
   const formatState = !order.formatChosen ? "todo" : order.contentCount > 0 && fit.fits && !fit.tooMany ? "done" : "warn";
   const pagesState =
-    order.contentCount === 0 || fit.tooMany || order.pagesStillDrawing > 0 || shortBy > 0 ? "warn" : "done";
+    !order.pageFitChosen ? "todo" : order.contentCount === 0 || fit.tooMany || order.pagesStillDrawing > 0 || shortBy > 0 ? "warn" : "done";
   const coverTitleIsAutomatic = isAutomaticAlbumName(order.coverDesign.text ?? "");
   const coverState = coverTitleIsAutomatic ? "warn" : "done";
   const shipState = order.addressesReady ? "done" : "todo";
@@ -221,6 +240,8 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   const blocker = confirmBlocker(order);
 
   const coverChoices = order.coverPictures.slice(0, 6);
+  /** One of their own pages, shown both ways in the fit picker. */
+  const fitSample = order.plan.allPages.find((p): p is BookWizardPhotoPage => p.kind === "photo") ?? null;
 
   return (
     <div>
@@ -255,13 +276,25 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         id={`${idBase}-pages`}
         number={2}
         label="Pages"
-        summary={`${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
+        summary={`${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"} · ${
+          !order.pageFitChosen ? "choose a fit" : order.pageFit === "full" ? "edge to edge" : "framed"
+        }`}
         state={pagesState}
         open={order.formatChosen && openRow === "pages"}
         onToggle={() => toggle("pages")}
         disabled={!order.formatChosen}
       >
         <div className="space-y-2 text-sm text-v2-ink">
+          {fitSample ? (
+            <div className="mb-3">
+              <BookPageFitPicker
+                value={order.pageFitChosen ? order.pageFit : null}
+                onChange={pickPageFit}
+                sample={fitSample}
+                binding={order.binding}
+              />
+            </div>
+          ) : null}
           <p>
             {order.contentCount} coloring {order.contentCount === 1 ? "page" : "pages"} in the order of your gallery
             {order.giftNotePage ? ", plus your gift note on page 1" : ""}.

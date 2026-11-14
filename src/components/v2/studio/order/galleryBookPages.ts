@@ -58,7 +58,8 @@ export function galleryBook(photos: V2PhotoEntry[], projectId: string | null, pr
       ...(photo.remote ? { photoSource: { storagePath: photo.remote.storagePath, url: photo.previewUrl } } : {}),
       sheetOrientation: version.orientation ?? photoOrientation(photo),
       rotation: 0,
-      ...(photo.printPrefs.book?.fit === "full" ? { fit: "full" as const } : { fit: "framed" as const }),
+      // Framed or edge to edge is one choice for the whole book, made in the order panel.
+      fit: "framed" as const,
     });
     positionByPhotoId.set(photo.id, pages.length);
   }

@@ -6,8 +6,7 @@ import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
-import { V2PrintSheetModal } from "@/components/v2/V2PrintSheetModal";
-import { V2SharePageModal } from "@/components/v2/share/V2SharePageModal";
+import { PagePrintShareModal } from "@/components/v2/studio/PagePrintShareModal";
 import { V2SheetEditChat } from "@/components/v2/V2SheetEditChat";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
@@ -356,8 +355,9 @@ export function ColorfulMemoriesApp() {
   // ---- editor ------------------------------------------------------------------------
   const [editor, setEditor] = useState<{ photoId: string; view: EditorView } | null>(null);
   const [editChatOpen, setEditChatOpen] = useState(false);
-  const [printOpen, setPrintOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  /** The photo whose page is in the "Print or share" dialog (from a card or the editor). */
+  const [outputFor, setOutputFor] = useState<string | null>(null);
+  const outputPhoto = outputFor ? photos.find((p) => p.id === outputFor) : null;
   const [undo, setUndo] = useState<{ photoId: string; revisionId: string } | null>(null);
   const editorIndex = editor ? photos.findIndex((p) => p.id === editor.photoId) : -1;
   const editorPhoto = editorIndex >= 0 ? photos[editorIndex] : null;
@@ -436,8 +436,7 @@ export function ColorfulMemoriesApp() {
   }
 
   // ---- printing ----------------------------------------------------------------------
-  async function makeEditorPdf(): Promise<Blob> {
-    const photo = editorPhoto;
+  async function makePagePdf(photo: V2PhotoEntry | null | undefined): Promise<Blob> {
     const version = photo ? activeSheetVersion({ ...photo, sheetRevisions: normalizeV2SheetRevisions(photo) }) : null;
     if (!photo?.sheet || !version) throw new Error("Pick a coloring page first.");
     const response = await authedFetch(
@@ -639,6 +638,7 @@ export function ColorfulMemoriesApp() {
                     gen.setBookPrefs(id, { leftOut: !p?.printPrefs.book?.leftOut });
                   }}
                   onDelete={deletePhoto}
+                  onPrint={setOutputFor}
                   onReorder={replacePhotos}
                 />
               )}
@@ -715,7 +715,7 @@ export function ColorfulMemoriesApp() {
           makeCostLabel={makeCost}
           editCostLabel={editCost}
           leftOut={editorPhoto.printPrefs.book?.leftOut === true}
-          canShare={Boolean(cloud && editorPhoto.remote && editorPhoto.canDelete !== false && activePageVersion(editorPhoto))}
+          canShare={Boolean(activePageVersion(editorPhoto))}
           onClose={closeEditor}
           onPrev={editorIndex > 0 ? () => moveEditor(-1) : null}
           onNext={editorIndex < photos.length - 1 ? () => moveEditor(1) : null}
@@ -725,7 +725,6 @@ export function ColorfulMemoriesApp() {
           }}
           onDrawAgain={() => makePages([editorPhoto.id], { addVersion: true })}
           onQuickFix={(kind) => void quickFix(kind)}
-          onSetFit={(fit) => gen.setBookPrefs(editorPhoto.id, { fit })}
           onSelectRevision={(revisionId) => {
             setUndo(null);
             gen.selectRevision(editorPhoto.id, revisionId);
@@ -735,8 +734,8 @@ export function ColorfulMemoriesApp() {
             gen.startEditChat();
             setEditChatOpen(true);
           }}
-          onPrint={() => setPrintOpen(true)}
-          onShare={() => setShareOpen(true)}
+          onPrint={() => setOutputFor(editorPhoto.id)}
+          onShare={() => setOutputFor(editorPhoto.id)}
           onToggleLeftOut={() => gen.setBookPrefs(editorPhoto.id, { leftOut: !editorPhoto.printPrefs.book?.leftOut })}
           onDelete={() => {
             closeEditor();
@@ -766,21 +765,19 @@ export function ColorfulMemoriesApp() {
         />
       ) : null}
 
-      {printOpen && editorPhoto?.sheet ? (
-        <V2PrintSheetModal
-          sheetSrc={editorPhoto.sheet.imageDataUrl}
-          printPrefs={activeVersionPrintPrefs(editorPhoto)}
-          makePdf={makeEditorPdf}
-          onClose={() => setPrintOpen(false)}
-        />
-      ) : null}
-
-      {shareOpen && editorPhoto?.remote && activePageVersion(editorPhoto) && editorPhoto.sheet ? (
-        <V2SharePageModal
-          photoId={editorPhoto.remote.photoId}
-          revisionId={activePageVersion(editorPhoto)!.id}
-          sheetSrc={editorPhoto.sheet.imageDataUrl}
-          onClose={() => setShareOpen(false)}
+      {outputPhoto?.sheet && activePageVersion(outputPhoto) ? (
+        <PagePrintShareModal
+          key={`${outputPhoto.id}:${activePageVersion(outputPhoto)!.id}`}
+          sheetSrc={outputPhoto.sheet.imageDataUrl}
+          makePdf={() => makePagePdf(outputPhoto)}
+          share={
+            !cloud || !outputPhoto.remote
+              ? { kind: "guest" }
+              : outputPhoto.canDelete === false
+                ? { kind: "not-owner" }
+                : { kind: "ready", photoId: outputPhoto.remote.photoId, revisionId: activePageVersion(outputPhoto)!.id }
+          }
+          onClose={() => setOutputFor(null)}
         />
       ) : null}
 

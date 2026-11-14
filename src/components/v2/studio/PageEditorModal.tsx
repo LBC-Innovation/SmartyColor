@@ -60,7 +60,6 @@ type Props = {
   onMake: () => void;
   onDrawAgain: () => void;
   onQuickFix: (kind: QuickFixKind) => void;
-  onSetFit: (fit: "framed" | "full") => void;
   onSelectRevision: (revisionId: string) => void;
   onFlipPhotoToo: () => void;
   onEditWithNote: () => void;
@@ -109,7 +108,6 @@ export function PageEditorModal(props: Props) {
   const view: EditorView = !hasPage ? "photo" : viewFor.id === photo.id ? viewFor.view : "page";
   const [zoomed, setZoomed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const fit = photo.printPrefs.book?.fit === "full" ? "full" : "framed";
   const bolder = bolderLevel(pageVersion?.sheet.title);
   const firstPage = revisions.find((r) => r.kind !== "photo");
 
@@ -346,24 +344,6 @@ export function PageEditorModal(props: Props) {
                     <RotateCw className="h-4 w-4" aria-hidden />
                     Rotate
                   </button>
-                  <div className="col-span-1 inline-flex min-h-11 overflow-hidden rounded-xl border border-gray-200 bg-white" role="group" aria-label="Fit or fill the page">
-                    {(["framed", "full"] as const).map((f) => (
-                      <button
-                        key={f}
-                        type="button"
-                        aria-pressed={fit === f}
-                        disabled={busy}
-                        onClick={() => props.onSetFit(f)}
-                        className={cn(
-                          "flex-1 text-sm font-semibold",
-                          fit === f ? "bg-v2-primary text-white" : "text-v2-navy",
-                        )}
-                        title={f === "framed" ? "Fit inside the margins" : "Fill the page edge to edge"}
-                      >
-                        {f === "framed" ? "Fit" : "Fill"}
-                      </button>
-                    ))}
-                  </div>
                   <button
                     type="button"
                     className={fixButton}
