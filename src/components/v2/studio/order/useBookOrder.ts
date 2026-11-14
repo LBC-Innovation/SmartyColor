@@ -289,7 +289,8 @@ export function useBookOrder({
   const [printQuote, setPrintQuote] = useState<BindingQuote | null>(null);
   const [addressSuggestion, setAddressSuggestion] = useState<{ key: string; suggestion: AddressSuggestion } | null>(null);
   const [answeredSuggestions, setAnsweredSuggestions] = useState<string[]>([]);
-  const quoteActive = signedIn && !isDigital && plan.totalPages >= 1 && !overCapacity;
+  // No quote until the customer has picked a format themselves: nothing is chosen for them.
+  const quoteActive = signedIn && chosenBindingId != null && !isDigital && plan.totalPages >= 1 && !overCapacity;
   const quotePageCount = plan.totalPages;
   const suggestionKey = [
     shippingAddress.street1,
@@ -412,7 +413,9 @@ export function useBookOrder({
     return out;
   }, [formatPageCounts, formatQuotes, signedIn]);
 
-  const selectedQuote: BindingQuote | null = isDigital
+  const selectedQuote: BindingQuote | null = chosenBindingId == null
+    ? null
+    : isDigital
     ? { totalCents: digitalCents, printCents: null, shippingCents: null, taxCents: null, loading: digitalCents == null, error: null }
     : printQuote;
   const quoteCents = selectedQuote?.totalCents ?? null;
@@ -790,6 +793,8 @@ export function useBookOrder({
     binding,
     isDigital,
     chosenBindingId,
+    /** False until the customer picks a format; there is no default. */
+    formatChosen: chosenBindingId != null,
     recommendedFormat,
     chooseFormat,
     formatPrices,

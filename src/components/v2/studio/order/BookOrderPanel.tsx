@@ -22,7 +22,8 @@ import { holidayOrderBy } from "@/lib/marketing/holiday";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { GIFT_NOTE_MAX_CHARS } from "@/lib/orders/giftNote";
-import type { BookBindingId } from "@/lib/print/bookBindings";
+import { getBookFormat, isDigitalFormat, type BookBindingId, type BookFormatId } from "@/lib/print/bookBindings";
+import { bookFormatFit } from "@/lib/print/bookPagePlan";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 
 export type OrderRow = "format" | "pages" | "cover" | "ship";
@@ -84,7 +85,7 @@ function Row({
 }) {
   const regionId = `${id}-region`;
   return (
-    <section className="border-b border-gray-100 last:border-b-0">
+    <section id={id} className="scroll-mt-3 border-b border-gray-100 last:border-b-0">
       <h3>
         <button
           type="button"
@@ -121,6 +122,7 @@ function Money({ label, cents, loading }: { label: string; cents: number | null;
 export function confirmBlocker(order: BookOrder): string | null {
   if (!order.signedIn) return "Create a free account to finish your book.";
   if (order.contentCount === 0) return "Make at least one coloring page first.";
+  if (!order.formatChosen) return "Choose a book format.";
   if (order.pagesStillDrawing > 0)
     return `${order.pagesStillDrawing} ${order.pagesStillDrawing === 1 ? "page is" : "pages are"} still being made.`;
   if (order.overCapacity) return `${order.binding.shortLabel} holds up to ${order.binding.maxPages} pages.`;
@@ -150,6 +152,46 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     onOpenRow(openRow === row ? null : row);
   }
 
+  /** Bring a part of the panel into view once React has drawn the row that just opened. */
+  function scrollToAnchor(anchorId: string) {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        document.getElementById(anchorId)?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" }),
+      ),
+    );
+  }
+
+  /**
+   * A format was picked (by click or Enter, not by arrowing through the group): open the next
+   * step that needs the customer and scroll to it. Pages only when they need a look for this
+   * format; otherwise straight on to the cover (printed), or the total (PDF, or a guest's
+   * account card).
+   */
+  function pickFormat(id: BookFormatId, via: "click" | "arrow") {
+    order.touch();
+    order.chooseFormat(id);
+    if (via !== "click") return;
+    const spec = getBookFormat(id);
+    const digital = isDigitalFormat(id);
+    const fitsNext = bookFormatFit(order.contentCount, spec).fits;
+    const pagesNeedLook =
+      !fitsNext ||
+      order.contentCount > spec.maxPages ||
+      order.pagesStillDrawing > 0 ||
+      (!digital && order.contentCount < spec.minPages);
+    if (pagesNeedLook) {
+      onOpenRow("pages");
+      scrollToAnchor(`${idBase}-pages`);
+    } else if (!digital && order.signedIn) {
+      onOpenRow("cover");
+      scrollToAnchor(`${idBase}-cover`);
+    } else {
+      onOpenRow(null);
+      scrollToAnchor(`${idBase}-next`);
+    }
+  }
+
   if (order.contentCount === 0 && order.pagesStillDrawing === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-center">
@@ -160,7 +202,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     );
   }
 
-  const formatState = order.contentCount > 0 && fit.fits && !fit.tooMany ? "done" : "warn";
+  const formatState = !order.formatChosen ? "todo" : order.contentCount > 0 && fit.fits && !fit.tooMany ? "done" : "warn";
   const pagesState =
     order.contentCount === 0 || fit.tooMany || order.pagesStillDrawing > 0 || shortBy > 0 ? "warn" : "done";
   const coverTitleIsAutomatic = isAutomaticAlbumName(order.coverDesign.text ?? "");
@@ -192,22 +234,19 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         id={`${idBase}-format`}
         number={1}
         label="Format"
-        summary={`${order.binding.shortLabel} · ${order.plan.totalPages} pages`}
+        summary={order.formatChosen ? `${order.binding.shortLabel} · ${order.plan.totalPages} pages` : "Choose a format"}
         state={formatState}
         open={openRow === "format"}
         onToggle={() => toggle("format")}
       >
         <BookBindingPicker
           layout="list"
-          value={order.bindingId}
+          value={order.formatChosen ? order.bindingId : null}
           prices={order.formatPrices}
           contentPageCount={order.contentCount}
           recommendedId={order.recommendedFormat}
           digitalPriceCents={order.digitalCents}
-          onChange={(id) => {
-            order.touch();
-            order.chooseFormat(id);
-          }}
+          onChange={pickFormat}
         />
         {examplePrice ? <p className="mt-3 text-xs text-v2-muted">{examplePrice}</p> : null}
       </Row>
@@ -218,8 +257,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         label="Pages"
         summary={`${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
         state={pagesState}
-        open={openRow === "pages"}
+        open={order.formatChosen && openRow === "pages"}
         onToggle={() => toggle("pages")}
+        disabled={!order.formatChosen}
       >
         <div className="space-y-2 text-sm text-v2-ink">
           <p>
@@ -274,8 +314,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             label="Cover"
             summary={coverTitleIsAutomatic ? "Check your cover title" : coverSummary}
             state={coverState}
-            open={openRow === "cover"}
+            open={order.formatChosen && openRow === "cover"}
             onToggle={() => toggle("cover")}
+            disabled={!order.formatChosen}
           >
             <div className="space-y-3">
               <label className="block text-sm font-semibold text-v2-ink" htmlFor={`${idBase}-title`}>
@@ -360,8 +401,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             label="Ship to"
             summary={shipSummary}
             state={shipState}
-            open={openRow === "ship"}
+            open={order.formatChosen && openRow === "ship"}
             onToggle={() => toggle("ship")}
+            disabled={!order.formatChosen}
           >
             <div className="space-y-4">
               <div className="rounded-xl border border-gray-200 bg-v2-bg-subtle/60 p-3">
@@ -456,6 +498,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         <p className="border-b border-gray-100 py-3 text-sm text-v2-muted">Delivered as a download in My orders.</p>
       ) : null}
 
+      <div id={`${idBase}-next`} className="scroll-mt-3" aria-hidden />
       {!order.signedIn ? (
         <div className="mt-3 rounded-2xl border border-v2-primary/25 bg-v2-primary-light/60 p-4 text-center">
           <p className="text-sm font-semibold text-v2-ink">Create a free account to finish your book. Your pages come with you.</p>

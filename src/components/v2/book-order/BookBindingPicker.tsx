@@ -34,8 +34,10 @@ export type FormatPrice = {
 };
 
 type Props = {
-  value: BookFormatId;
-  onChange: (id: BookFormatId) => void;
+  /** Null while nothing is picked: no card is selected and the first available one takes Tab. */
+  value: BookFormatId | null;
+  /** `via` says whether a click/Enter picked it or an arrow key moved through the group. */
+  onChange: (id: BookFormatId, via: "click" | "arrow") => void;
   /** Live prices for the printed formats; a format without one shows no price. */
   prices?: Partial<Record<BookBindingId, FormatPrice>>;
   /** Pages the customer has chosen so far (0 before they pick any). */
@@ -135,7 +137,8 @@ export function BookBindingPicker({
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
     const target = radios[(at + step + radios.length) % radios.length];
     target.focus();
-    target.click();
+    const id = target.dataset.formatId as BookFormatId | undefined;
+    if (id) onChange(id, "arrow");
   }
 
   return (
@@ -186,7 +189,8 @@ export function BookBindingPicker({
             aria-describedby={`${idBase}-${card.id}-price ${idBase}-${card.id}-info`}
             tabIndex={card.id === tabStopId ? 0 : -1}
             disabled={unavailable}
-            onClick={() => onChange(card.id)}
+            data-format-id={card.id}
+            onClick={() => onChange(card.id, "click")}
             className={cn(
               "relative row-span-3 grid grid-rows-subgrid gap-y-0 rounded-2xl border-2 p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary sm:p-5",
               unavailable
