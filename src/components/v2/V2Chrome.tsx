@@ -21,7 +21,7 @@ import {
 } from "@/components/v2/nav-config";
 
 /** Drops the product lines this account (or a guest) doesn't have turned on. */
-function useVisibleNav(items: V2NavItem[]) {
+export function useVisibleNav(items: V2NavItem[]) {
   const { user } = useAuth();
   const access = user?.features ?? DEFAULT_FEATURE_ACCESS;
   return {

@@ -44,6 +44,8 @@ type Props = {
   recommendedId?: BookFormatId;
   /** The print-at-home PDF's price, from the price list. */
   digitalPriceCents?: number | null;
+  /** "list" stacks the cards in one column, for narrow panels and sheets. */
+  layout?: "grid" | "list";
 };
 
 type Card = {
@@ -102,6 +104,7 @@ export function BookBindingPicker({
   contentPageCount = 0,
   recommendedId,
   digitalPriceCents = null,
+  layout = "grid",
 }: Props) {
   const filtering = contentPageCount > 0;
   const idBase = useId();
@@ -141,7 +144,7 @@ export function BookBindingPicker({
     // up, however the text above or below them wraps.
     <div
       ref={groupRef}
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className={layout === "list" ? "grid gap-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-4"}
       role="radiogroup"
       aria-label="Book format"
       onKeyDown={onKeyDown}
