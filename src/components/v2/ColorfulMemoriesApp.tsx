@@ -536,14 +536,14 @@ export function ColorfulMemoriesApp() {
           <main
             ref={galleryRef}
             aria-label="Studio"
-            className={`relative w-full min-w-0 px-4 pt-2 lg:w-[60%] lg:overflow-y-auto lg:px-6 lg:pb-8 ${
+            className={`relative w-full min-w-0 px-4 lg:w-[60%] lg:overflow-y-auto lg:px-6 lg:pb-8 ${
               showBookBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
             }`}
             onDragOver={onDragOver}
             onDragLeave={() => setDropping(false)}
             onDrop={onDrop}
           >
-            <div className="sticky top-0 z-20 -mx-4 bg-v2-bg/95 px-4 pb-2 backdrop-blur lg:-mx-6 lg:px-6">
+            <div className="sticky top-0 z-20 -mx-4 bg-v2-bg/95 px-4 pb-2 pt-2 backdrop-blur lg:-mx-6 lg:px-6">
               <StudioHeader
                 pageCount={order.contentCount}
                 photoCount={photos.length}
