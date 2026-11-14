@@ -30,7 +30,25 @@ export type LuluPrintJob = {
   production_delay?: number;
   /** When production starts; null until the job is paid. */
   production_due_time?: string | null;
+  /** Lulu's own dispatch and arrival window for this job (plain dates), when it gives one. */
+  estimated_shipping_dates?: {
+    dispatch_min?: string | null;
+    dispatch_max?: string | null;
+    arrival_min?: string | null;
+    arrival_max?: string | null;
+  } | null;
 };
+
+/** Estimated-date columns to update from a print job; empty when the job carries none. */
+export function deliveryUpdatesFromPrintJob(job: LuluPrintJob): Record<string, string> {
+  const dates = job.estimated_shipping_dates;
+  const updates: Record<string, string> = {};
+  if (dates?.arrival_min) updates.estimated_delivery_min = dates.arrival_min;
+  if (dates?.arrival_max) updates.estimated_delivery_max = dates.arrival_max;
+  if (dates?.dispatch_min) updates.estimated_dispatch_min = dates.dispatch_min;
+  if (dates?.dispatch_max) updates.estimated_dispatch_max = dates.dispatch_max;
+  return updates;
+}
 
 export async function fetchLuluPrintJob(printJobId: number): Promise<LuluPrintJob> {
   return luluFetch<LuluPrintJob>(`/print-jobs/${printJobId}/`);

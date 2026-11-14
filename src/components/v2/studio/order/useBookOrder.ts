@@ -362,6 +362,8 @@ export function useBookOrder({
                 taxCents: result.data.taxCents ?? null,
                 loading: false,
                 error: result.data.quoteError ?? null,
+                deliveryMin: result.data.estimatedDeliveryMin ?? null,
+                deliveryMax: result.data.estimatedDeliveryMax ?? null,
               },
         );
       });
@@ -814,6 +816,11 @@ export function useBookOrder({
     chooseFormat,
     formatPrices,
     digitalCents,
+    /** The printer's estimated delivery window for a printed book; null for the PDF or before a quote. */
+    deliveryEstimate:
+      !isDigital && printQuote && (printQuote.deliveryMin || printQuote.deliveryMax)
+        ? { min: printQuote.deliveryMin ?? null, max: printQuote.deliveryMax ?? null }
+        : null,
     // picture fit
     pageFit,
     pageFitChosen: chosenPageFit != null,

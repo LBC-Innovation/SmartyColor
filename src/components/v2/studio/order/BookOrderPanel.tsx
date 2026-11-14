@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
-import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette } from "lucide-react";
+import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
 import { BookBindingPicker } from "@/components/v2/book-order/BookBindingPicker";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
@@ -18,6 +18,7 @@ import { GIFT_NOTE_PLACEHOLDER, GUEST_GATES, HOLIDAY_LINE, PRICE_LINE } from "@/
 import { withNextParam } from "@/lib/auth/nextPath";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
+import { formatDeliveryRange } from "@/lib/orders/deliveryEstimate";
 import { fillCopy, numberValues } from "@/lib/marketing/copy";
 import { holidayOrderBy } from "@/lib/marketing/holiday";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
@@ -569,8 +570,20 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
               </dd>
             </div>
           </dl>
+          {!order.isDigital && order.deliveryEstimate && formatDeliveryRange(order.deliveryEstimate) ? (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-v2-ink">
+              <Truck className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
+              <span>
+                <span className="font-semibold">Estimated delivery:</span> {formatDeliveryRange(order.deliveryEstimate)}
+              </span>
+            </p>
+          ) : null}
           {!order.isDigital && !order.addressComplete ? (
-            <p className="mt-1 text-xs text-v2-muted">Shipping and tax are estimated until the address is complete.</p>
+            <p className="mt-1 text-xs text-v2-muted">
+              Shipping, tax and delivery dates are estimated until the address is complete.
+            </p>
+          ) : !order.isDigital && order.deliveryEstimate ? (
+            <p className="mt-1 text-xs text-v2-muted">Delivery dates are the printer&apos;s estimate, not a guarantee.</p>
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
           {order.balanceCents != null ? (

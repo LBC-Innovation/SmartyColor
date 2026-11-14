@@ -452,6 +452,9 @@ export type OrderQuoteData = {
   quoteError?: string | null;
   /** Lulu's "did you mean" for the street address sent with the quote. */
   addressSuggestion?: AddressSuggestion | null;
+  /** The printer's estimated delivery window (YYYY-MM-DD) for this address and shipping level. */
+  estimatedDeliveryMin?: string | null;
+  estimatedDeliveryMax?: string | null;
 };
 
 /** The address the customer saved for future orders; null when they haven't saved one. */

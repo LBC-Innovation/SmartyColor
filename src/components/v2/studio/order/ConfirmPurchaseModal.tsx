@@ -16,6 +16,7 @@ import { proofPageKey, type BookOrder } from "@/components/v2/studio/order/useBo
 import * as api from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
+import { formatDeliveryRange } from "@/lib/orders/deliveryEstimate";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import { bookOpenSpreads } from "@/lib/print/bookCover";
 import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
@@ -49,11 +50,6 @@ function useWide() {
     return () => mq.removeEventListener("change", sync);
   }, []);
   return wide;
-}
-
-function formatDay(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /** Proof, overview and thank-you in one dialog: full screen on phones, large on desktop. */
@@ -569,6 +565,12 @@ function Overview({
         {order.shortfallCents > 0 ? <Line label="Credit to add" cents={order.shortfallCents} /> : null}
         {balanceAfter != null ? <Line label="Credit left after" cents={balanceAfter} /> : null}
       </dl>
+      {!order.isDigital && formatDeliveryRange(order.deliveryEstimate) ? (
+        <p className="text-sm text-v2-ink">
+          <span className="font-semibold">Estimated delivery:</span> {formatDeliveryRange(order.deliveryEstimate)}
+          <span className="block text-xs text-v2-muted">The printer&apos;s estimate, not a guarantee.</span>
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -600,9 +602,8 @@ function ThanksScreen({
   const placed = order.placed!;
   const toast = useV2Toast();
   const shortId = placed.orderId.slice(0, 8).toUpperCase();
-  const from = delivery?.min ? formatDay(delivery.min) : "";
-  const to = delivery?.max ? formatDay(delivery.max) : "";
-  const range = from && to ? (from === to ? from : `${from} – ${to}`) : from || to;
+  // The dates saved on the order, else the ones the customer was just shown with the price.
+  const range = formatDeliveryRange(delivery) || formatDeliveryRange(order.deliveryEstimate);
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-5 py-10 text-center" role="status">
       <CheckCircle2 className="cm-fade-in h-14 w-14 text-emerald-600" aria-hidden />

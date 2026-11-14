@@ -132,9 +132,15 @@ export function formatDeliveryExpectation(
   return "Delivery estimate will appear once your order is sent to the printer.";
 }
 
+/** Plain dates from Lulu ("2026-11-27") are calendar days, not UTC midnight: read them in local time. */
+function parseDay(value: string): Date {
+  const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return plain ? new Date(Number(plain[1]), Number(plain[2]) - 1, Number(plain[3])) : new Date(value);
+}
+
 function formatDateRange(minIso: string, maxIso: string): string {
-  const min = new Date(minIso);
-  const max = new Date(maxIso);
+  const min = parseDay(minIso);
+  const max = parseDay(maxIso);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   const sameMonth =
     min.getFullYear() === max.getFullYear() && min.getMonth() === max.getMonth();

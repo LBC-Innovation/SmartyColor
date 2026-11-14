@@ -33,9 +33,11 @@ import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import {
   cancelLuluPrintJob,
   createLuluPrintJob,
+  deliveryUpdatesFromPrintJob,
   extractTrackingFromPrintJob,
   fetchLuluPrintJob,
 } from "@/server/lulu/printJobs";
+import { estimateLuluDelivery } from "@/server/lulu/shippingOptions";
 import { buildLuluPrintJobPayload, validateLuluPayload } from "@/lib/print/luluPayload";
 import { getBookBinding } from "@/lib/print/bookBindings";
 import { getObjectBytes, signedReadUrls } from "@/server/storage/libraryFiles";
@@ -640,8 +642,54 @@ export async function placeBookOrderWithCredits(input: {
   };
 
   await recordOrderPlacedEvent(input.orderId);
+  // Before answering, so the thank-you screen and the confirmation email can show the dates.
+  await saveDeliveryEstimate(input.orderId);
 
   return { data: payload, error: null };
+}
+
+/**
+ * Stores the printer's estimated dispatch and delivery window on a paid order, for the address
+ * and shipping level it was placed with. Best effort: a slow or failed answer leaves the dates
+ * empty (the order page then says a date will follow), and the print job's own dates replace
+ * these once Lulu has the job.
+ */
+async function saveDeliveryEstimate(orderId: string): Promise<void> {
+  try {
+    const db = getSupabaseAdmin();
+    const { data: order, error } = await db
+      .from("book_orders")
+      .select("product_id, page_count, shipping_level, shipping_address")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error || !order) return;
+    const bindingId = bindingIdForProduct(order.product_id as string);
+    if (!bindingId) return;
+    const address = (order.shipping_address ?? {}) as Partial<ShippingAddress>;
+    const estimate = await estimateLuluDelivery({
+      podPackageId: getBookBinding(bindingId).podPackageId,
+      pageCount: order.page_count as number,
+      shippingLevel: (order.shipping_level as string) || "MAIL",
+      address: {
+        country_code: address.country_code ?? "US",
+        state_code: address.state_code,
+        postcode: address.postcode,
+        city: address.city,
+      },
+    });
+    if (!estimate) return;
+    await db
+      .from("book_orders")
+      .update({
+        estimated_delivery_min: estimate.deliveryMin,
+        estimated_delivery_max: estimate.deliveryMax,
+        estimated_dispatch_min: estimate.dispatchMin,
+        estimated_dispatch_max: estimate.dispatchMax,
+      })
+      .eq("id", orderId);
+  } catch (e) {
+    console.warn(`[order] delivery estimate for ${orderId} not saved: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 /** The order's front cover as a small JPEG for the confirmation email, or null if it has none. */
@@ -887,6 +935,7 @@ export async function submitOrderToLulu(
       .update({
         lulu_print_job_id: job.id,
         lulu_production_due_at: job.production_due_time ?? null,
+        ...deliveryUpdatesFromPrintJob(job),
         lulu_status_name: job.status?.name ?? "CREATED",
         lulu_status_message: job.status?.message ?? null,
         lulu_status_changed_at: now,
@@ -1140,6 +1189,7 @@ export async function syncOrderFromLulu(
       lulu_status_changed_at: changedAt,
     };
     if (job.production_due_time) updates.lulu_production_due_at = job.production_due_time;
+    Object.assign(updates, deliveryUpdatesFromPrintJob(job));
 
     // An order we canceled stays canceled whatever Lulu reports next.
     if (mapped && order.status !== "canceled") updates.status = mapped;

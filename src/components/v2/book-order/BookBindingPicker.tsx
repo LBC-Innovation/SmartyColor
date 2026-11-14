@@ -20,6 +20,9 @@ export type BindingQuote = {
   taxCents: number | null;
   loading: boolean;
   error: string | null;
+  /** The printer's estimated delivery window (YYYY-MM-DD), when the quote came with one. */
+  deliveryMin?: string | null;
+  deliveryMax?: string | null;
 };
 
 /** What one printed format costs for the book as it stands, before shipping and tax. */

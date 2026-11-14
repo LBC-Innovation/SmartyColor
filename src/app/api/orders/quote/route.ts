@@ -2,6 +2,8 @@ import { jsonError, jsonResult } from "@/lib/api/respond";
 import { getBookBinding, isPrintBindingId } from "@/lib/print/bookBindings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { luluConfigured } from "@/server/lulu/config";
+import { defaultQuoteShippingAddress } from "@/server/lulu/costCalculation";
+import { estimateLuluDelivery } from "@/server/lulu/shippingOptions";
 import { pricePrintOrder } from "@/server/pricingService";
 import { lookupUsPostcode, normalizeUsPostcode } from "@/server/shipping/usPostcodeLookup";
 
@@ -119,12 +121,21 @@ export async function POST(request: Request) {
 
   try {
     // The customer's price: Lulu's cost with our markup on the book, from the price catalog.
-    const priced = await pricePrintOrder({
-      bindingId: body.bindingId,
-      pageCount: body.pageCount,
-      shippingLevel: body.shippingLevel,
-      shippingAddress: shippingAddressOverride,
-    });
+    // The printer's delivery dates come from a separate Lulu call; ask at the same time.
+    const [priced, delivery] = await Promise.all([
+      pricePrintOrder({
+        bindingId: body.bindingId,
+        pageCount: body.pageCount,
+        shippingLevel: body.shippingLevel,
+        shippingAddress: shippingAddressOverride,
+      }),
+      estimateLuluDelivery({
+        podPackageId: binding.podPackageId,
+        pageCount: body.pageCount,
+        shippingLevel: body.shippingLevel ?? "MAIL",
+        address: shippingAddressOverride ?? defaultQuoteShippingAddress(),
+      }),
+    ]);
     if (priced.error) throw new Error(priced.error.message);
     const { price } = priced.data;
     return jsonResult({
@@ -141,6 +152,8 @@ export async function POST(request: Request) {
         shippingLevel: priced.data.shippingLevel,
         quoteError: null,
         addressSuggestion: priced.data.addressSuggestion,
+        estimatedDeliveryMin: delivery?.deliveryMin ?? null,
+        estimatedDeliveryMax: delivery?.deliveryMax ?? null,
       },
       error: null,
     });
