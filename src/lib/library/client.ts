@@ -170,6 +170,14 @@ export function sharePage(photoId: string, revisionId: string) {
   });
 }
 
+/** Email the page's share link to someone (turns the link on if it is off). */
+export function emailPageShare(photoId: string, input: { revisionId: string; email: string; note?: string }) {
+  return api.request<{ share: PageShare }>(`${base}/photos/${photoId}/share/email`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function stopSharingPage(photoId: string) {
   return api.request<{ revoked: boolean }>(`${base}/photos/${photoId}/share`, { method: "DELETE" });
 }

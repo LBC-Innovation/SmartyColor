@@ -11,6 +11,7 @@ import {
   Check,
   Clock,
   EllipsisVertical,
+  Printer,
   Pencil,
   RotateCcw,
   Trash2,
@@ -41,6 +42,8 @@ export type GalleryCardProps = {
   onMove: (to: MoveTarget) => void;
   onToggleLeftOut: () => void;
   onDelete: () => void;
+  /** Opens print, download and send for a finished page. */
+  onPrint: () => void;
   onToggleSelect: () => void;
   /** Pointer and touch listeners that start a drag (long-press on phones). */
   dragListeners?: HTMLAttributes<HTMLElement>;
@@ -197,6 +200,7 @@ export function GalleryCard({
   onMove,
   onToggleLeftOut,
   onDelete,
+  onPrint,
   onToggleSelect,
   dragListeners,
   keyboardHandle,
@@ -360,7 +364,23 @@ export function GalleryCard({
           {selected ? <Check className="h-4 w-4" /> : null}
         </span>
       ) : (
-        <CardMenu
+        <>
+          {hasPage ? (
+            <button
+              type="button"
+              className="absolute right-11 top-0 z-10 flex h-11 w-11 items-center justify-center"
+              aria-label={`Print or share the coloring page for ${label}`}
+              title="Print or share"
+              onClick={onPrint}
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-v2-navy shadow-sm">
+                <Printer className="h-4 w-4" aria-hidden />
+              </span>
+            </button>
+          ) : null}
+          <CardMenu
           index={index}
           count={count}
           leftOut={leftOut}
@@ -370,6 +390,7 @@ export function GalleryCard({
           onToggleLeftOut={onToggleLeftOut}
           onDelete={onDelete}
         />
+        </>
       )}
 
       {caption ? (

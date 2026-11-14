@@ -48,6 +48,8 @@ type Props = {
   onCancel: (id: string) => void;
   onToggleLeftOut: (id: string) => void;
   onDelete: (id: string) => void;
+  /** Print, download or send a finished page. */
+  onPrint: (id: string) => void;
   onReorder: (next: V2PhotoEntry[]) => void;
 };
 
@@ -103,6 +105,7 @@ export function StudioGallery({
   onCancel,
   onToggleLeftOut,
   onDelete,
+  onPrint,
   onReorder,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -175,6 +178,7 @@ export function StudioGallery({
       onMove: (to) => move(photo.id, to),
       onToggleLeftOut: () => onToggleLeftOut(photo.id),
       onDelete: () => onDelete(photo.id),
+      onPrint: () => onPrint(photo.id),
     };
   }
 
