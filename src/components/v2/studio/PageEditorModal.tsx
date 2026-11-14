@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   BookMinus,
   BookPlus,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
-  Ellipsis,
   Eraser,
   FlipHorizontal2,
   History,
   Loader2,
+  MessageSquareText,
   PencilLine,
   Printer,
   RefreshCw,
@@ -32,7 +33,7 @@ import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { useLayerHistory } from "@/components/v2/studio/useLayerHistory";
 import { activePageVersion, pageSourceVersion, pageVersions } from "@/components/v2/studio/order/galleryBookPages";
 import { cn } from "@/lib/cn";
-import { BOLDER_MAX_LEVEL, bolderLevel, type QuickFixKind } from "@/lib/photo/sheetQuickFixes";
+import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import type { CardState } from "@/components/v2/studio/GalleryCard";
 import {
   normalizeV2SheetRevisions,
@@ -62,7 +63,6 @@ type Props = {
   onDrawAgain: () => void;
   onQuickFix: (kind: QuickFixKind) => void;
   onSelectRevision: (revisionId: string) => void;
-  onFlipPhotoToo: () => void;
   onEditWithNote: () => void;
   /** Print through the browser's print dialog; Download saves the PDF; Share opens sending. */
   onPrint: () => void;
@@ -79,9 +79,66 @@ type Props = {
   onUndo?: () => void;
 };
 
+/** One row in the tools panel: an icon tile, what it does, and (on the right) what it costs. */
+function ActionRow({
+  icon,
+  label,
+  detail,
+  onClick,
+  disabled,
+  primary,
+  danger,
+}: {
+  icon: ReactNode;
+  label: string;
+  detail?: string | null;
+  onClick: () => void;
+  disabled?: boolean;
+  primary?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40",
+        primary ? "bg-v2-primary-light/60 text-v2-ink hover:bg-v2-primary-light" : "text-v2-navy hover:bg-v2-bg-subtle",
+        danger && "text-red-700",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg [&>svg]:h-4 [&>svg]:w-4",
+          primary ? "bg-v2-primary text-white" : danger ? "bg-red-50 text-red-700" : "bg-v2-bg-subtle text-v2-navy",
+        )}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">{label}</span>
+      {detail ? (
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold",
+            primary ? "bg-white text-v2-link" : "bg-v2-bg-subtle text-v2-muted",
+          )}
+        >
+          {detail}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+const panelCard = "overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm";
+const panelHeading = "mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-v2-muted";
+
 /**
- * The page editor: the coloring page large, free quick fixes, paid changes, and the rest. Phones get
- * it full screen; desktop a large dialog. Back closes it, ‹ › and swipe move between pages.
+ * The page editor: the coloring page large, a print and share toolbar on top, and a panel of tools
+ * (quick fixes, changes to the drawing, the rest). Phones get it full screen; desktop a large
+ * dialog. Back closes it, ‹ › and swipe move between pages.
  */
 export function PageEditorModal(props: Props) {
   const {
@@ -117,7 +174,6 @@ export function PageEditorModal(props: Props) {
   const view: EditorView = !hasPage ? "photo" : viewFor.id === photo.id ? viewFor.view : "page";
   const [zoomed, setZoomed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const bolder = bolderLevel(pageVersion?.sheet.title);
   const firstPage = revisions.find((r) => r.kind !== "photo");
 
   // A new page on show starts unzoomed.
@@ -158,51 +214,45 @@ export function PageEditorModal(props: Props) {
   const shownSrc = view === "page" && pageVersion ? pageVersion.sheet.imageDataUrl : photoSrc;
   const fixDisabled = busy || !hasPage;
   const ShapeIcon = props.shape?.label.includes("landscape") ? RectangleHorizontal : RectangleVertical;
-  const shapeButton = props.shape ? (
-    <button type="button" className="v2-btn-outline min-h-11 w-full text-sm" disabled={busy || state === "queued"} onClick={props.onChangeShape}>
-      <ShapeIcon className="h-4 w-4" aria-hidden />
-      {props.shape.label}
-      {props.shape.costLabel ? <span className="font-normal text-v2-muted">· {props.shape.costLabel}</span> : null}
-    </button>
+  const shapeRow = props.shape ? (
+    <ActionRow
+      icon={<ShapeIcon />}
+      label={props.shape.label}
+      detail={props.shape.costLabel}
+      disabled={busy || state === "queued"}
+      onClick={props.onChangeShape}
+    />
   ) : null;
 
-  const fixButton =
-    "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-v2-navy transition hover:border-v2-primary/40 disabled:cursor-not-allowed disabled:opacity-40";
-  const actionButton =
-    "inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm font-semibold text-v2-navy hover:bg-v2-bg-subtle disabled:opacity-40";
+  const fixTile =
+    "flex min-h-12 flex-1 items-center justify-center gap-2 px-3 text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle disabled:cursor-not-allowed disabled:opacity-40";
+  const toolbarButton =
+    "inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-gray-200 bg-white px-3.5 text-sm font-semibold text-v2-navy shadow-sm transition hover:border-v2-primary/40 hover:bg-v2-bg-subtle disabled:cursor-not-allowed disabled:opacity-40";
 
   const otherActions = (
-    <>
-      <button type="button" className={actionButton} disabled={fixDisabled} onClick={() => props.onQuickFix("clean")}>
-        <Eraser className="h-4 w-4 text-v2-muted" aria-hidden />
-        Lighter and cleaner
-      </button>
-      <button
-        type="button"
-        className={actionButton}
-        disabled={busy || !firstPage || firstPage.id === pageVersion?.id}
-        onClick={() => firstPage && props.onSelectRevision(firstPage.id)}
-      >
-        <History className="h-4 w-4 text-v2-muted" aria-hidden />
-        Restore original
-      </button>
-      <button type="button" className={actionButton} disabled={busy} onClick={props.onFlipPhotoToo}>
-        <FlipHorizontal2 className="h-4 w-4 text-v2-muted" aria-hidden />
-        Flip the photo too
-      </button>
+    <div className={cn(panelCard, "divide-y divide-gray-100")}>
+      {hasPage ? (
+        <ActionRow icon={<Eraser />} label="Lighter and cleaner" detail="Free" disabled={fixDisabled} onClick={() => props.onQuickFix("clean")} />
+      ) : null}
+      {hasPage ? (
+        <ActionRow
+          icon={<History />}
+          label="Restore original"
+          disabled={busy || !firstPage || firstPage.id === pageVersion?.id}
+          onClick={() => firstPage && props.onSelectRevision(firstPage.id)}
+        />
+      ) : null}
       {hasPage || leftOut ? (
-        <button type="button" className={actionButton} onClick={props.onToggleLeftOut}>
-          {leftOut ? <BookPlus className="h-4 w-4 text-v2-muted" aria-hidden /> : <BookMinus className="h-4 w-4 text-v2-muted" aria-hidden />}
-          {leftOut ? "Put back in book" : "Leave out of book"}
-        </button>
+        <ActionRow
+          icon={leftOut ? <BookPlus /> : <BookMinus />}
+          label={leftOut ? "Put back in book" : "Leave out of book"}
+          onClick={props.onToggleLeftOut}
+        />
       ) : null}
       {photo.canDelete !== false ? (
-        <button type="button" className={cn(actionButton, "text-red-700")} disabled={busy} onClick={props.onDelete}>
-          <Trash2 className="h-4 w-4" aria-hidden />
-          Delete photo
-        </button>
+        <ActionRow icon={<Trash2 />} label="Delete photo" danger disabled={busy} onClick={props.onDelete} />
       ) : null}
-    </>
+    </div>
   );
 
   return (
@@ -227,6 +277,37 @@ export function PageEditorModal(props: Props) {
             <ChevronRight className="h-5 w-5" aria-hidden />
           </button>
         </header>
+
+        {hasPage ? (
+          <div
+            role="toolbar"
+            aria-label="Print and share"
+            className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-gray-100 bg-v2-bg-subtle/70 px-3 py-2 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
+          >
+            <button type="button" className={toolbarButton} disabled={busy || props.pdfBusy != null} onClick={props.onPrint}>
+              {props.pdfBusy === "print" ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <Printer className="h-4 w-4" aria-hidden />
+              )}
+              Print
+            </button>
+            <button type="button" className={toolbarButton} disabled={busy || props.pdfBusy != null} onClick={props.onDownload}>
+              {props.pdfBusy === "download" ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden />
+              )}
+              Download
+            </button>
+            {canShare ? (
+              <button type="button" className={toolbarButton} disabled={busy} onClick={props.onShare}>
+                <Share2 className="h-4 w-4" aria-hidden />
+                Share
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:overflow-hidden">
           {/* Picture */}
@@ -332,21 +413,21 @@ export function PageEditorModal(props: Props) {
             ) : null}
           </div>
 
-          {/* Tools */}
-          <div className="shrink-0 space-y-4 border-t border-gray-100 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 lg:overflow-y-auto lg:border-l lg:border-t-0">
+          {/* Tools: a control panel of grouped cards */}
+          <div className="shrink-0 space-y-4 border-t border-gray-100 bg-v2-bg-subtle/60 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 lg:overflow-y-auto lg:border-l lg:border-t-0">
             {hasPage ? (
               <section aria-labelledby="quick-fixes">
-                <h3 id="quick-fixes" className="mb-2 text-xs font-semibold uppercase tracking-wider text-v2-muted">
+                <h3 id="quick-fixes" className={panelHeading}>
                   Quick fixes
                 </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" className={fixButton} disabled={fixDisabled} onClick={() => props.onQuickFix("flip")}>
+                <div className={cn(panelCard, "flex divide-x divide-gray-100")}>
+                  <button type="button" className={fixTile} disabled={fixDisabled} onClick={() => props.onQuickFix("flip")}>
                     <FlipHorizontal2 className="h-4 w-4" aria-hidden />
                     Flip
                   </button>
                   <button
                     type="button"
-                    className={fixButton}
+                    className={fixTile}
                     disabled={fixDisabled}
                     onClick={() => props.onQuickFix("rotate")}
                     title="Turns the page upside down"
@@ -354,89 +435,52 @@ export function PageEditorModal(props: Props) {
                     <RotateCw className="h-4 w-4" aria-hidden />
                     Rotate
                   </button>
-                  <button
-                    type="button"
-                    className={fixButton}
-                    disabled={fixDisabled || bolder >= BOLDER_MAX_LEVEL}
-                    onClick={() => props.onQuickFix("bolder")}
-                  >
-                    <PencilLine className="h-4 w-4" aria-hidden />
-                    Bolder lines
-                  </button>
                 </div>
               </section>
             ) : null}
 
             {hasPage ? (
               <section aria-labelledby="change-drawing">
-                <h3 id="change-drawing" className="mb-2 text-xs font-semibold uppercase tracking-wider text-v2-muted">
+                <h3 id="change-drawing" className={panelHeading}>
                   Change the drawing
                 </h3>
-                <div className="grid gap-2">
-                  <button type="button" className="v2-btn-primary min-h-11 w-full text-sm" disabled={busy} onClick={props.onEditWithNote}>
-                    <PencilLine className="h-4 w-4" aria-hidden />
-                    Edit with a note
-                    {editCostLabel ? <span className="font-normal opacity-90">· {editCostLabel}</span> : null}
-                  </button>
-                  <button type="button" className="v2-btn-outline min-h-11 w-full text-sm" disabled={busy || state === "queued"} onClick={props.onDrawAgain}>
-                    {state === "drawing" ? (
-                      <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" aria-hidden />
-                    )}
-                    Draw it again
-                    {makeCostLabel ? <span className="font-normal text-v2-muted">· {makeCostLabel}</span> : null}
-                  </button>
-                  {shapeButton}
+                <div className={cn(panelCard, "divide-y divide-gray-100")}>
+                  <ActionRow
+                    primary
+                    icon={<MessageSquareText />}
+                    label="Chat to edit"
+                    detail={editCostLabel}
+                    disabled={busy}
+                    onClick={props.onEditWithNote}
+                  />
+                  <ActionRow
+                    icon={state === "drawing" ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <RefreshCw />}
+                    label="Draw it again"
+                    detail={makeCostLabel}
+                    disabled={busy || state === "queued"}
+                    onClick={props.onDrawAgain}
+                  />
+                  {shapeRow}
                 </div>
               </section>
             ) : null}
 
-            {!hasPage && props.shape ? <div className="grid">{shapeButton}</div> : null}
+            {!hasPage && props.shape ? <div className={panelCard}>{shapeRow}</div> : null}
 
-            {hasPage ? (
-              <section aria-labelledby="print-share">
-                <h3 id="print-share" className="mb-2 text-xs font-semibold uppercase tracking-wider text-v2-muted">
-                  Print and share
-                </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  <button type="button" className={fixButton} disabled={busy || props.pdfBusy != null} onClick={props.onPrint}>
-                    {props.pdfBusy === "print" ? (
-                      <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-                    ) : (
-                      <Printer className="h-4 w-4" aria-hidden />
-                    )}
-                    Print
-                  </button>
-                  <button type="button" className={fixButton} disabled={busy || props.pdfBusy != null} onClick={props.onDownload}>
-                    {props.pdfBusy === "download" ? (
-                      <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-                    ) : (
-                      <Download className="h-4 w-4" aria-hidden />
-                    )}
-                    Download
-                  </button>
-                  {canShare ? (
-                    <button type="button" className={fixButton} disabled={busy} onClick={props.onShare}>
-                      <Share2 className="h-4 w-4" aria-hidden />
-                      Share
-                    </button>
-                  ) : null}
-                </div>
-              </section>
-            ) : null}
-
-            <section>
+            <section aria-labelledby="more-actions">
+              <h3 id="more-actions" className={cn(panelHeading, "hidden lg:block")}>
+                More
+              </h3>
               <button
                 type="button"
-                className="inline-flex min-h-11 w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-v2-navy lg:hidden"
+                className="mb-2 inline-flex min-h-11 w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-3 text-sm font-semibold text-v2-navy shadow-sm lg:hidden"
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen((v) => !v)}
               >
                 More
-                <Ellipsis className="h-4 w-4" aria-hidden />
+                <ChevronDown className={cn("h-4 w-4 transition", moreOpen && "rotate-180")} aria-hidden />
               </button>
-              <div className={cn("mt-1 flex-col", moreOpen ? "flex" : "hidden lg:flex")}>{otherActions}</div>
+              <div className={cn(moreOpen ? "block" : "hidden lg:block")}>{otherActions}</div>
             </section>
           </div>
         </div>

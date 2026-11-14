@@ -92,13 +92,20 @@ export function useV2LibraryDeletion(): V2LibraryDeletion {
       }
       return;
     }
-    removePhotosByIds(ids);
     exit();
-    toast.success({
-      message:
-        ids.length === 1
-          ? "Photo permanently deleted."
-          : `${ids.length} photos permanently deleted.`,
+    void removePhotosByIds(ids).then(({ deleted, failed }) => {
+      if (deleted > 0) {
+        toast.success({
+          message: deleted === 1 ? "Photo permanently deleted." : `${deleted} photos permanently deleted.`,
+        });
+      }
+      if (failed > 0) {
+        toast.error(
+          failed === 1
+            ? "That photo couldn't be deleted, so it's been put back. Please try again."
+            : `${failed} photos couldn't be deleted, so they've been put back. Please try again.`,
+        );
+      }
     });
     if (skipped > 0) {
       toast.info(

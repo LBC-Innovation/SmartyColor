@@ -600,7 +600,33 @@ export function ColorfulMemoriesApp() {
         })()
       : "Free"
     : null;
-  const makeCost = signedIn ? (pagePriceCents != null ? formatCredits(pagePriceCents) : null) : "Free";
+  // What the next edit in the chat will cost, said under the box so a paid edit is never a surprise.
+  const editNotice = (() => {
+    if (!editorPhoto?.remote || !signedIn || !prices) return null;
+    const free = freeEditsPerSheet(prices);
+    const used = editorPhoto.editCount ?? 0;
+    const paidCents = sheetUsageCostCents(prices, "edit", Math.max(used, free));
+    const paid = paidCents != null ? formatCredits(paidCents) : null;
+    if (free > 0 && used < free) {
+      const left = free - used;
+      return {
+        tone: "info" as const,
+        text:
+          left === 1
+            ? `1 free edit left on this page${paid ? `, then ${paid} per edit` : ""}.`
+            : `${left} of ${free} free edits left on this page.`,
+      };
+    }
+    if (!paid) return null;
+    return {
+      tone: "cost" as const,
+      text:
+        free > 0
+          ? `You've used your ${free} free edits on this page. Each edit from here costs ${paid}.`
+          : `Each edit costs ${paid}.`,
+    };
+  })();
+  const makeCost = signedIn ?(pagePriceCents != null ? formatCredits(pagePriceCents) : null) : "Free";
   const bookPriceLabel =
     order.signedIn && order.quoteCents != null && !order.quoteLoading
       ? order.isDigital
@@ -850,7 +876,6 @@ export function ColorfulMemoriesApp() {
             setUndo(null);
             gen.selectRevision(editorPhoto.id, revisionId);
           }}
-          onFlipPhotoToo={() => void photoTransforms.mirrorPhoto(editorPhoto.id)}
           onEditWithNote={() => {
             gen.startEditChat();
             setEditChatOpen(true);
@@ -893,6 +918,7 @@ export function ColorfulMemoriesApp() {
           onSend={(text) => void gen.applySheetEdit(editorPhoto.id, text)}
           busy={Boolean(editorPhoto.correcting)}
           disabled={!activePageVersion(editorPhoto)}
+          costNotice={editNotice}
         />
       ) : null}
 

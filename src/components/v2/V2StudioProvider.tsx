@@ -56,6 +56,9 @@ type PendingUpload = { id: string };
  *  - "cloud": signed-in; the Supabase library is the source of truth and
  *    IndexedDB is only an image cache.
  */
+/** How a delete went: photos gone for good, and photos the server kept (they are back on screen). */
+export type PhotoRemovalResult = { deleted: number; failed: number };
+
 export type V2StudioMode = "local" | "cloud";
 
 type V2StudioContextValue = {
@@ -110,7 +113,11 @@ type V2StudioContextValue = {
   /** Patch one entry; persisted fields sync to the cloud unless `persist: false`. */
   updatePhoto: (id: string, patch: Partial<V2PhotoEntry>, opts?: { persist?: boolean }) => void;
   appendPhoto: (entry: V2PhotoEntry) => void;
-  removePhotosByIds: (ids: string[]) => void;
+  /**
+   * Delete photos. Cloud photos go from the screen at once and come back if the server didn't
+   * delete them; resolves once the server has answered (at once for guests).
+   */
+  removePhotosByIds: (ids: string[]) => Promise<PhotoRemovalResult>;
   clearAllPhotos: () => void;
   trackPreviewUrl: (url: string) => void;
 };
@@ -595,13 +602,16 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const removePhotosByIds = useCallback((ids: string[]) => {
+  const removePhotosByIds = useCallback(async (ids: string[]): Promise<PhotoRemovalResult> => {
     // Photos other people added to a shared album aren't this user's to delete.
     const locked = new Set(photosRef.current.filter((e) => e.canDelete === false).map((e) => e.id));
     ids = ids.filter((id) => !locked.has(id));
-    if (ids.length === 0) return;
+    if (ids.length === 0) return { deleted: 0, failed: 0 };
     const idSet = new Set(ids);
-    const removed = photosRef.current.filter((e) => idSet.has(e.id));
+    const before = photosRef.current;
+    const removed = before.filter((e) => idSet.has(e.id));
+    const originalIndex = new Map(before.map((e, i) => [e.id, i]));
+    const projectId = activeProjectIdRef.current;
     let nextPhotos: V2PhotoEntry[] = [];
 
     setPhotos((prev) => {
@@ -624,12 +634,32 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       return current;
     });
 
-    if (modeRef.current === "cloud") {
-      const remoteIds = removed.filter((e) => e.remote).map((e) => e.remote!.photoId);
-      if (remoteIds.length > 0) {
-        void library.deletePhotos(remoteIds).then(() => evictEntryImages(removed));
-      }
+    const remote = removed.filter((e) => e.remote);
+    if (modeRef.current !== "cloud" || remote.length === 0) return { deleted: removed.length, failed: 0 };
+
+    const result = await library.deletePhotos(remote.map((e) => e.remote!.photoId));
+    const deletedRemoteIds = new Set(result.data?.deleted ?? []);
+    const gone = remote.filter((e) => deletedRemoteIds.has(e.remote!.photoId));
+    const kept = remote.filter((e) => !deletedRemoteIds.has(e.remote!.photoId));
+    if (gone.length > 0) void evictEntryImages(gone);
+
+    // Whatever the server still has goes back where it was, unless they've moved to another album.
+    if (kept.length > 0 && activeProjectIdRef.current === projectId) {
+      setPhotos((prev) => {
+        const next = [...prev];
+        const present = new Set(next.map((e) => e.id));
+        const restore = kept
+          .filter((e) => !present.has(e.id))
+          .sort((a, b) => (originalIndex.get(a.id) ?? 0) - (originalIndex.get(b.id) ?? 0));
+        for (const entry of restore) {
+          next.splice(Math.min(originalIndex.get(entry.id) ?? next.length, next.length), 0, entry);
+        }
+        photosRef.current = next;
+        return next;
+      });
     }
+    const localOnly = removed.length - remote.length;
+    return { deleted: localOnly + gone.length, failed: kept.length };
   }, []);
 
   const clearAllPhotos = useCallback(() => {
