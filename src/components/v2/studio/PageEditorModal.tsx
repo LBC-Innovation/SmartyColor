@@ -21,6 +21,9 @@ import {
   X,
   ZoomIn,
   ZoomOut,
+  Download,
+  RectangleHorizontal,
+  RectangleVertical,
 } from "lucide-react";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
@@ -63,8 +66,15 @@ type Props = {
   onSelectRevision: (revisionId: string) => void;
   onFlipPhotoToo: () => void;
   onEditWithNote: () => void;
+  /** Print through the browser's print dialog; Download saves the PDF; Share opens sending. */
   onPrint: () => void;
+  onDownload: () => void;
   onShare: () => void;
+  /** Which of Print or Download is getting the PDF ready. */
+  pdfBusy: "print" | "download" | null;
+  /** Turn the page to the other shape: what the button says and what it costs. */
+  shape: { label: string; costLabel: string | null } | null;
+  onChangeShape: () => void;
   onToggleLeftOut: () => void;
   onDelete: () => void;
   /** Shown after a quick fix: goes back to the version before it. */
@@ -148,6 +158,14 @@ export function PageEditorModal(props: Props) {
 
   const shownSrc = view === "page" && hasPage ? photo.sheet!.imageDataUrl : photoSrc;
   const fixDisabled = busy || !hasPage;
+  const ShapeIcon = props.shape?.label.includes("landscape") ? RectangleHorizontal : RectangleVertical;
+  const shapeButton = props.shape ? (
+    <button type="button" className="v2-btn-outline min-h-11 w-full text-sm" disabled={busy || state === "queued"} onClick={props.onChangeShape}>
+      <ShapeIcon className="h-4 w-4" aria-hidden />
+      {props.shape.label}
+      {props.shape.costLabel ? <span className="font-normal text-v2-muted">· {props.shape.costLabel}</span> : null}
+    </button>
+  ) : null;
 
   const fixButton =
     "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-v2-navy transition hover:border-v2-primary/40 disabled:cursor-not-allowed disabled:opacity-40";
@@ -173,16 +191,6 @@ export function PageEditorModal(props: Props) {
         <FlipHorizontal2 className="h-4 w-4 text-v2-muted" aria-hidden />
         Flip the photo too
       </button>
-      <button type="button" className={actionButton} disabled={!hasPage || busy} onClick={props.onPrint}>
-        <Printer className="h-4 w-4 text-v2-muted" aria-hidden />
-        Print free
-      </button>
-      {canShare ? (
-        <button type="button" className={actionButton} disabled={busy} onClick={props.onShare}>
-          <Share2 className="h-4 w-4 text-v2-muted" aria-hidden />
-          Share
-        </button>
-      ) : null}
       {hasPage || leftOut ? (
         <button type="button" className={actionButton} onClick={props.onToggleLeftOut}>
           {leftOut ? <BookPlus className="h-4 w-4 text-v2-muted" aria-hidden /> : <BookMinus className="h-4 w-4 text-v2-muted" aria-hidden />}
@@ -377,6 +385,41 @@ export function PageEditorModal(props: Props) {
                     Draw it again
                     {makeCostLabel ? <span className="font-normal text-v2-muted">· {makeCostLabel}</span> : null}
                   </button>
+                  {shapeButton}
+                </div>
+              </section>
+            ) : null}
+
+            {!hasPage && props.shape ? <div className="grid">{shapeButton}</div> : null}
+
+            {hasPage ? (
+              <section aria-labelledby="print-share">
+                <h3 id="print-share" className="mb-2 text-xs font-semibold uppercase tracking-wider text-v2-muted">
+                  Print and share
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button" className={fixButton} disabled={busy || props.pdfBusy != null} onClick={props.onPrint}>
+                    {props.pdfBusy === "print" ? (
+                      <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+                    ) : (
+                      <Printer className="h-4 w-4" aria-hidden />
+                    )}
+                    Print
+                  </button>
+                  <button type="button" className={fixButton} disabled={busy || props.pdfBusy != null} onClick={props.onDownload}>
+                    {props.pdfBusy === "download" ? (
+                      <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+                    ) : (
+                      <Download className="h-4 w-4" aria-hidden />
+                    )}
+                    Download
+                  </button>
+                  {canShare ? (
+                    <button type="button" className={fixButton} disabled={busy} onClick={props.onShare}>
+                      <Share2 className="h-4 w-4" aria-hidden />
+                      Share
+                    </button>
+                  ) : null}
                 </div>
               </section>
             ) : null}

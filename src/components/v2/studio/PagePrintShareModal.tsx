@@ -42,6 +42,8 @@ type Props = {
   /** Builds this page's print-ready PDF (same file for printing and downloading). */
   makePdf: () => Promise<Blob>;
   share: PageShareAccess;
+  /** "send" shows only the sharing part (the editor has its own Print and Download). */
+  mode?: "all" | "send";
   onClose: () => void;
 };
 
@@ -59,16 +61,43 @@ function smsHref(url: string): string {
  * the device knows (the browser's print dialog), download the PDF, or send it to someone by email
  * or text. Sending uses the page's unlisted share link, which shows only this page.
  */
-export function PagePrintShareModal({ sheetSrc, makePdf, share, onClose }: Props) {
-  const { pdf, ready, printing, print, download, retry } = usePrintablePdf(makePdf);
-
+export function PagePrintShareModal({ sheetSrc, makePdf, share, mode = "all", onClose }: Props) {
+  const sendOnly = mode === "send";
   return (
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-lg"
-      title={<h2 className="text-lg font-semibold text-v2-ink">Print or share</h2>}
+      title={<h2 className="text-lg font-semibold text-v2-ink">{sendOnly ? "Share this page" : "Print or share"}</h2>}
     >
       <div className="space-y-6 p-5 sm:p-6">
+        {sendOnly ? (
+          // eslint-disable-next-line @next/next/no-img-element -- data URLs and signed URLs
+          <img src={sheetSrc} alt="Coloring page" className="mx-auto h-40 w-auto rounded-lg border border-gray-200 bg-white object-contain p-1 shadow-sm" />
+        ) : (
+          <PrintPart sheetSrc={sheetSrc} makePdf={makePdf} />
+        )}
+
+        <section className={cn(!sendOnly && "border-t border-gray-200 pt-5")} aria-labelledby="send-page-heading">
+          <h3 id="send-page-heading" className="text-sm font-semibold text-v2-ink">
+            Send to someone
+          </h3>
+          {share.kind === "guest" ? (
+            <GuestSendPrompt />
+          ) : share.kind === "not-owner" ? (
+            <p className="mt-1 text-sm text-v2-muted">Only the person who added this photo can send its page to others.</p>
+          ) : (
+            <SendPage photoId={share.photoId} revisionId={share.revisionId} />
+          )}
+        </section>
+      </div>
+    </V2Modal>
+  );
+}
+
+/** Preview, Print and Download; the PDF is made as soon as this shows. */
+function PrintPart({ sheetSrc, makePdf }: { sheetSrc: string; makePdf: () => Promise<Blob> }) {
+  const { pdf, ready, printing, print, download, retry } = usePrintablePdf(makePdf);
+  return (
         <div className="flex gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element -- data URLs and signed URLs */}
           <img
@@ -120,11 +149,11 @@ export function PagePrintShareModal({ sheetSrc, makePdf, share, onClose }: Props
           </div>
         </div>
 
-        <section className="border-t border-gray-200 pt-5" aria-labelledby="send-page-heading">
-          <h3 id="send-page-heading" className="text-sm font-semibold text-v2-ink">
-            Send to someone
-          </h3>
-          {share.kind === "guest" ? (
+  );
+}
+
+function GuestSendPrompt() {
+  return (
             <div className="mt-2 rounded-2xl border border-v2-primary/25 bg-v2-primary-light/60 p-4 text-center">
               <p className="text-sm text-v2-ink">Create a free account to email or text this page. Your pages come with you.</p>
               <Link
@@ -142,14 +171,6 @@ export function PagePrintShareModal({ sheetSrc, makePdf, share, onClose }: Props
                 I already have an account
               </Link>
             </div>
-          ) : share.kind === "not-owner" ? (
-            <p className="mt-1 text-sm text-v2-muted">Only the person who added this photo can send its page to others.</p>
-          ) : (
-            <SendPage photoId={share.photoId} revisionId={share.revisionId} />
-          )}
-        </section>
-      </div>
-    </V2Modal>
   );
 }
 

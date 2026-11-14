@@ -96,3 +96,64 @@ export function usePrintablePdf(makePdf: () => Promise<Blob>, fileName = DEFAULT
 
   return { pdf, ready: pdf.status === "ready", printing, print, download, retry };
 }
+
+/**
+ * Builds a PDF only when Print or Download is pressed, for places that show the buttons on every
+ * page (the page editor) and shouldn't make a file each time a page is shown.
+ */
+export function useOnDemandPdf(fileName = DEFAULT_FILE_NAME) {
+  const [busy, setBusy] = useState<"print" | "download" | null>(null);
+
+  async function print(makePdf: () => Promise<Blob>) {
+    if (busy) return;
+    // Phones open the PDF in a new tab (its viewer prints). The tab is opened now, while the tap
+    // still counts as the user's, so it isn't blocked as a pop-up once the file is ready.
+    const tab = prefersOpeningPdf() ? window.open("", "_blank") : null;
+    setBusy("print");
+    try {
+      const url = URL.createObjectURL(await makePdf());
+      if (tab) {
+        tab.location.href = url;
+        return;
+      }
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.tabIndex = -1;
+      frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+      frame.onload = () => {
+        try {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+        } catch {
+          window.open(url, "_blank", "noopener");
+        }
+        // Long enough for the print dialog to have read the file.
+        window.setTimeout(() => frame.remove(), 60_000);
+      };
+      frame.src = url;
+      document.body.appendChild(frame);
+    } catch (err) {
+      tab?.close();
+      throw err;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function download(makePdf: () => Promise<Blob>) {
+    if (busy) return;
+    setBusy("download");
+    try {
+      const url = URL.createObjectURL(await makePdf());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return { busy, print, download };
+}

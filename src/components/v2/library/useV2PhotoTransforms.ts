@@ -16,7 +16,7 @@ import {
   estimateDataUrlRawBytes,
   maxRawBytesPerImageInRequest,
 } from "@/lib/photo/payloadBudget";
-import { PORTRAIT_VERSION_TITLE, type GeneratedPhoto } from "@/lib/session/photoTypes";
+import { reframeVersionTitle, type GeneratedPhoto, type ReframeTarget } from "@/lib/session/photoTypes";
 import type { SheetVersion } from "@/lib/session/types";
 import { entryFromLibraryPhoto, evictEntryImages } from "@/lib/v2/cloudLibrary";
 import { mirrorPhotoCrop } from "@/lib/v2/storybookTypes";
@@ -123,10 +123,25 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef, locks }: PhotoTran
   }
 
   /** Add an AI portrait version of a landscape photo to its versions. The photo itself is kept. */
-  async function makePortrait(photoId: string) {
+  async function makePortrait(photoId: string): Promise<void> {
+    await reframePhoto(photoId, "portrait");
+  }
+
+  /**
+   * Add a version of the uploaded photo recomposed to the other shape (landscape to portrait, or
+   * portrait to landscape). The photo itself is kept. Returns the new version, or null when it
+   * wasn't made (busy, already that shape, out of credit, or an error that was shown). `quiet`
+   * skips the success toast, for callers that go straight on to draw a page from it.
+   */
+  async function reframePhoto(
+    photoId: string,
+    target: ReframeTarget,
+    opts?: { quiet?: boolean },
+  ): Promise<SheetVersion | null> {
     const photo = idle(photoId);
-    if (!photo || photoOrientation(photo) !== "landscape") return;
-    if (!sheetCredits.canAfford("portrait", photo)) return;
+    if (!photo || photoOrientation(photo) === target) return null;
+    if (!sheetCredits.canAfford("portrait", photo)) return null;
+    let made: SheetVersion | null = null;
 
     lock(photoId);
     setPortraitId(photoId);
@@ -138,8 +153,8 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef, locks }: PhotoTran
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
             photo.remote
-              ? { photoId: photo.remote.photoId }
-              : { photoDataUrl: photo.photoDataUrl, image: photo.image },
+              ? { photoId: photo.remote.photoId, target }
+              : { photoDataUrl: photo.photoDataUrl, image: photo.image, target },
           ),
         },
         { withAuth: Boolean(photo.remote) },
@@ -156,26 +171,29 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef, locks }: PhotoTran
       } catch {
         throw new Error("The server sent an unexpected response. Please try again in a moment.");
       }
-      if (sheetCredits.applyResponse(response.status, payload, "portrait")) return;
+      if (sheetCredits.applyResponse(response.status, payload, "portrait")) return null;
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not make a portrait version.");
+        throw new Error(payload.error ?? `Could not make a ${target} version.`);
       }
 
       if (payload.photo) {
         const fresh = await entryFromLibraryPhoto(payload.photo);
         updatePhoto(photoId, fresh, { persist: false });
+        const revisions = normalizeV2SheetRevisions(fresh);
+        made = revisions.find((r) => r.id === fresh.activeRevisionId) ?? revisions[revisions.length - 1] ?? null;
       } else if (payload.image) {
         const version: SheetVersion = {
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
           sheet: {
-            title: PORTRAIT_VERSION_TITLE,
+            title: reframeVersionTitle(target),
             imageDataUrl: payload.image.imageDataUrl,
             mimeType: payload.image.mimeType,
           },
           kind: "photo",
-          orientation: "portrait",
+          orientation: target,
         };
+        made = version;
         const prior = photosRef.current.find((entry) => entry.id === photoId) ?? photo;
         updatePhoto(photoId, {
           sheet: version.sheet,
@@ -183,19 +201,23 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef, locks }: PhotoTran
           activeRevisionId: version.id,
         });
       } else {
-        throw new Error("No portrait photo came back.");
+        throw new Error("No photo came back.");
       }
-      toast.success({
-        title: "Portrait version ready",
-        message: "It's in this photo's versions. Make a coloring page from it when you're ready.",
-      });
+      if (!opts?.quiet) {
+        toast.success({
+          title: `${target === "portrait" ? "Portrait" : "Landscape"} version ready`,
+          message: "It's in this photo's versions. Make a coloring page from it when you're ready.",
+        });
+      }
+      return made;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not make a portrait version.");
+      toast.error(err instanceof Error ? err.message : `Could not make a ${target} version.`);
+      return null;
     } finally {
       unlock(photoId);
       setPortraitId(null);
     }
   }
 
-  return { mirrorPhoto, makePortrait, mirroringId, portraitId };
+  return { mirrorPhoto, makePortrait, reframePhoto, mirroringId, portraitId };
 }

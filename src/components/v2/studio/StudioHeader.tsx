@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { CheckSquare, EllipsisVertical, Loader2, Upload } from "lucide-react";
+import { Check, CheckSquare, EllipsisVertical, Loader2, Upload } from "lucide-react";
 import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { useVisibleNav } from "@/components/v2/V2Chrome";
 import { v2BottomNav } from "@/components/v2/nav-config";
@@ -15,10 +15,26 @@ type Props = {
   onAddPhotos: () => void;
   onSelectPhotos: () => void;
   selectDisabled?: boolean;
+  /** The two "when adding photos" switches, also kept here so they can be set before adding. */
+  autoMake: boolean;
+  onAutoMakeChange: (on: boolean) => void;
+  autoPortrait: boolean;
+  onAutoPortraitChange: (on: boolean) => void;
 };
 
 /** One row above the gallery: album switcher, page count, Add photos and a ⋮ menu. */
-export function StudioHeader({ pageCount, photoCount, uploading, onAddPhotos, onSelectPhotos, selectDisabled }: Props) {
+export function StudioHeader({
+  pageCount,
+  photoCount,
+  uploading,
+  onAddPhotos,
+  onSelectPhotos,
+  selectDisabled,
+  autoMake,
+  onAutoMakeChange,
+  autoPortrait,
+  onAutoPortraitChange,
+}: Props) {
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -110,6 +126,27 @@ export function StudioHeader({ pageCount, photoCount, uploading, onAddPhotos, on
                   <CheckSquare className="h-4 w-4 text-v2-muted" aria-hidden />
                   Select photos
                 </button>
+                <div className="my-1 border-t border-gray-100" />
+                <p className="px-3 pb-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-v2-muted">When adding photos</p>
+                {(
+                  [
+                    ["Make pages", autoMake, onAutoMakeChange],
+                    ["Turn landscapes portrait", autoPortrait, onAutoPortraitChange],
+                  ] as const
+                ).map(([label, on, change]) => (
+                  <button key={label} type="button" role="menuitemcheckbox" aria-checked={on} className={item} onClick={() => change(!on)}>
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                        on ? "border-v2-primary bg-v2-primary text-white" : "border-gray-300",
+                      )}
+                      aria-hidden
+                    >
+                      {on ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                    </span>
+                    {label}
+                  </button>
+                ))}
                 {otherTabs.length > 0 ? <div className="my-1 border-t border-gray-100 lg:hidden" /> : null}
                 {otherTabs.map((tab) => (
                   <Link key={tab.id} href={tab.href!} role="menuitem" className={cn(item, "lg:hidden")} onClick={() => setMenuOpen(false)}>

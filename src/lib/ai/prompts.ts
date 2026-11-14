@@ -247,13 +247,24 @@ ${coloringSheetOutputRules(prefs, title)}
 Return an improved coloring sheet that addresses the issues while staying true to the photo.`;
 }
 
-/** Recomposing a landscape photo onto a portrait canvas; the result is still a photo. */
+/**
+ * Recomposing a photo onto a canvas of the other shape (landscape to portrait, or portrait to
+ * landscape); the result is still a photo.
+ */
 export function buildPhotoPortraitPrompt(source: PhotoLayout, target: PhotoLayout) {
-  return `You are reframing a REAL photograph from landscape to portrait. The result must still be the same photograph — a photo, not a drawing.
+  const toPortrait = target.orientation === "portrait";
+  const from = toPortrait ? "LANDSCAPE" : "PORTRAIT";
+  const to = toPortrait ? "PORTRAIT (taller than wide)" : "LANDSCAPE (wider than tall)";
+  const howTo = toPortrait
+    ? `- Extend the scene naturally above and below the subjects (more sky, ceiling, wall, ground, floor) so it reads as the same place and the same moment.
+- You may trim empty background at the far left and right, but never cut off a person or a key object.`
+    : `- Extend the scene naturally to the left and right of the subjects (more of the room, yard, street, or landscape) so it reads as the same place and the same moment.
+- You may trim empty sky, ceiling, or ground at the very top and bottom, but never cut off a person's head or feet or a key object.`;
+  return `You are reframing a REAL photograph from ${from.toLowerCase()} to ${toPortrait ? "portrait" : "landscape"}. The result must still be the same photograph — a photo, not a drawing.
 
 CANVAS (mandatory):
-- The reference photo is LANDSCAPE, about ${source.aspectRatio}.
-- The output MUST be PORTRAIT (taller than wide) at ${target.aspectRatio}.
+- The reference photo is ${from}, about ${source.aspectRatio}.
+- The output MUST be ${to} at ${target.aspectRatio}.
 - Do NOT rotate the photo or turn the scene on its side. Up stays up.
 
 Keep everything that matters (most important):
@@ -262,9 +273,8 @@ Keep everything that matters (most important):
 - Keep the same arrangement: who stands left, right, in front, and behind, and how far apart they are relative to each other.
 - Do NOT stretch, squash, or distort anything to make it fit.
 
-How to make it portrait:
-- Extend the scene naturally above and below the subjects (more sky, ceiling, wall, ground, floor) so it reads as the same place and the same moment.
-- You may trim empty background at the far left and right, but never cut off a person or a key object.
+How to make it ${toPortrait ? "portrait" : "landscape"}:
+${howTo}
 - Match the reference's lighting, colors, focus, and camera look. The added areas must blend in seamlessly.
 - No borders, frames, text, captions, watermarks, or collage panels. One continuous photograph, edge to edge.`;
 }

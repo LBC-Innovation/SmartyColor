@@ -8,6 +8,13 @@ type Props = {
   signedIn: boolean;
   autoOn: boolean;
   onAutoChange: (on: boolean) => void;
+  /** Turn landscape photos portrait as they are added. */
+  autoPortraitOn: boolean;
+  onAutoPortraitChange: (on: boolean) => void;
+  /** Credit for one reframe; null for guests or until prices load. */
+  portraitPriceCents: number | null;
+  /** Photos being turned portrait right now. */
+  reframingCount: number;
   /** Credit for one new page, from the price list; null until it loads. */
   pagePriceCents: number | null;
   balanceCents: number | null;
@@ -33,6 +40,10 @@ export function UploadStrip({
   signedIn,
   autoOn,
   onAutoChange,
+  autoPortraitOn,
+  onAutoPortraitChange,
+  portraitPriceCents,
+  reframingCount,
   pagePriceCents,
   balanceCents,
   uploading,
@@ -73,31 +84,32 @@ export function UploadStrip({
           </div>
         </div>
       ) : (
-        <label className="flex min-h-11 cursor-pointer items-center gap-3">
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-v2-ink">Make pages as I add</span>
-            <span className="block text-xs text-v2-muted">{costLine}</span>
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoOn}
-            aria-label="Make pages as I add"
-            onClick={() => onAutoChange(!autoOn)}
-            className={cn(
-              "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors",
-              autoOn ? "border-v2-primary bg-v2-primary" : "border-gray-300 bg-white",
-            )}
-          >
-            <span
-              className={cn(
-                "absolute h-5 w-5 rounded-full shadow-sm transition-transform",
-                autoOn ? "translate-x-6 bg-white" : "translate-x-1 bg-gray-300",
-              )}
-            />
-          </button>
-        </label>
+        <div className="divide-y divide-v2-primary/10">
+          <Toggle label="Make pages as I add" detail={costLine} on={autoOn} onChange={onAutoChange} />
+          <Toggle
+            label="Turn landscape photos portrait"
+            detail={
+              signedIn
+                ? portraitPriceCents != null
+                  ? `${formatCredits(portraitPriceCents)} each · fills the page better`
+                  : "Fills the page better"
+                : "Free to try · fills the page better"
+            }
+            on={autoPortraitOn}
+            onChange={onAutoPortraitChange}
+          />
+        </div>
       )}
+
+      {reframingCount > 0 ? (
+        <div className="mt-2 flex min-h-9 items-center gap-2 border-t border-v2-primary/15 pt-2 text-sm">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-v2-primary motion-reduce:animate-none" aria-hidden />
+          <span className="min-w-0 flex-1 text-v2-ink">
+            Turning {reframingCount} {reframingCount === 1 ? "photo" : "photos"} portrait
+            {signedIn && portraitPriceCents != null ? ` · ${formatCredits(portraitPriceCents * reframingCount)}` : ""}
+          </span>
+        </div>
+      ) : null}
 
       {uploading || activeCount > 0 ? (
         <div className="mt-2 flex min-h-9 items-center gap-2 border-t border-v2-primary/15 pt-2 text-sm">
@@ -125,5 +137,34 @@ export function UploadStrip({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function Toggle({ label, detail, on, onChange }: { label: string; detail: string; on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="flex min-h-11 cursor-pointer items-center gap-3 py-1">
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-v2-ink">{label}</span>
+        <span className="block text-xs text-v2-muted">{detail}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        onClick={() => onChange(!on)}
+        className={cn(
+          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors",
+          on ? "border-v2-primary bg-v2-primary" : "border-gray-300 bg-white",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute h-5 w-5 rounded-full shadow-sm transition-transform",
+            on ? "translate-x-6 bg-white" : "translate-x-1 bg-gray-300",
+          )}
+        />
+      </button>
+    </label>
   );
 }

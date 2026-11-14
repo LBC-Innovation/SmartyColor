@@ -19,6 +19,8 @@ import { useV2PhotoTransforms } from "@/components/v2/library/useV2PhotoTransfor
 import { V2SavePromptCard } from "@/components/v2/marketing/V2SavePromptCard";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { PageEditorModal, type EditorView } from "@/components/v2/studio/PageEditorModal";
+import { shapePlan } from "@/components/v2/studio/pageShape";
+import { useOnDemandPdf } from "@/components/v2/usePrintablePdf";
 import { StudioGallery } from "@/components/v2/studio/StudioGallery";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
@@ -42,11 +44,15 @@ import { fillCopy, readIntent } from "@/lib/marketing/copy";
 import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
 import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import { usePriceList } from "@/lib/pricing/usePriceList";
-import { activeSheetVersion, activeSourceVersion, activeVersionPrintPrefs, normalizeV2SheetRevisions, type V2PhotoEntry } from "@/lib/v2/studioTypes";
+import { activeSheetVersion, activeSourceVersion, activeVersionPrintPrefs, normalizeV2SheetRevisions, photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 
 const INTENT_NAMED_KEY = "cm_intent_named";
 /** "Make pages as I add", remembered per device: "on", "off", or unset (not chosen yet). */
 const AUTOPAGE_KEY = "cm_autopage";
+/** "on" turns landscape photos portrait as they are added. Off unless chosen: it uses credit. */
+const AUTOPORTRAIT_KEY = "cm_autoportrait";
+/** Photos reframed at the same time while adding a batch. */
+const REFRAME_CONCURRENCY = 3;
 /** Guests: only the first few photos of a batch are drawn by themselves. */
 const GUEST_AUTO_BATCH = 3;
 const INTERRUPTED = "This page was interrupted. Tap to try again.";
@@ -77,6 +83,22 @@ function readAutoPref(): "on" | "off" | null {
     return v === "on" || v === "off" ? v : null;
   } catch {
     return null;
+  }
+}
+
+function readAutoPortrait(): boolean {
+  try {
+    return localStorage.getItem(AUTOPORTRAIT_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function writeAutoPortrait(on: boolean) {
+  try {
+    localStorage.setItem(AUTOPORTRAIT_KEY, on ? "on" : "off");
+  } catch {
+    /* ignore */
   }
 }
 
@@ -201,6 +223,7 @@ export function ColorfulMemoriesApp() {
       : "";
 
   const pagePriceCents = signedIn ? sheetUsageCostCents(prices, "generation") : null;
+  const portraitPriceCents = signedIn ? sheetUsageCostCents(prices, "portrait") : null;
   const balanceCents = user?.creditsBalanceCents ?? null;
 
   /** How many more pages the wallet covers, after what is already running or waiting. */
@@ -241,11 +264,62 @@ export function ColorfulMemoriesApp() {
     setAutoPref(v);
   }
 
+  // ---- "Turn landscape photos portrait" ------------------------------------------------
+  const [autoPortrait, setAutoPortraitState] = useState<boolean>(readAutoPortrait);
+  const [reframing, setReframing] = useState(0);
+  function setAutoPortrait(on: boolean) {
+    writeAutoPortrait(on);
+    setAutoPortraitState(on);
+  }
+
+  /**
+   * Reframes landscape photos to portrait a few at a time, then (when pages are being made) draws
+   * each page from its portrait version. A photo whose reframe fails still gets its page, drawn
+   * from the photo as it is.
+   */
+  async function reframeThenDraw(ids: string[], draw: boolean) {
+    if (ids.length === 0) return;
+    setReframing((n) => n + ids.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < ids.length) {
+        const id = ids[next++];
+        const version = await photoTransforms.reframePhoto(id, "portrait", { quiet: true });
+        setReframing((n) => n - 1);
+        if (!draw) continue;
+        if (version) makePages([id], { source: version, addVersion: true });
+        else makePages([id]);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(REFRAME_CONCURRENCY, ids.length) }, worker));
+  }
+
+  /** What happens to a batch once it's known whether pages are made for it. */
+  function startBatch(ids: string[], draw: boolean) {
+    const landscape = autoPortrait
+      ? ids.filter((id) => {
+          const p = photosRef.current.find((e) => e.id === id);
+          return p ? photoOrientation(p) === "landscape" : false;
+        })
+      : [];
+    if (!signedIn) {
+      // Guests share one small free allowance per batch between reframes and pages.
+      const reframe = landscape.slice(0, GUEST_AUTO_BATCH);
+      const direct = ids.filter((id) => !reframe.includes(id));
+      if (draw) queue.enqueue(direct.slice(0, Math.max(0, GUEST_AUTO_BATCH - reframe.length)));
+      void reframeThenDraw(reframe, draw);
+      return;
+    }
+    const direct = ids.filter((id) => !landscape.includes(id));
+    if (draw) makePages(direct);
+    void reframeThenDraw(landscape, draw);
+  }
+
   function onPhotosAdded(added: V2PhotoEntry[]) {
     const ids = added.map((p) => p.id);
     if (!signedIn) {
       // Guests: the first few of each batch are drawn by themselves; each photo at most once.
-      if (autoOn) queue.enqueue(ids.slice(0, GUEST_AUTO_BATCH));
+      startBatch(ids, autoOn);
       return;
     }
     // Never spend credit without a clear choice: the first batch on this device asks.
@@ -253,7 +327,7 @@ export function ColorfulMemoriesApp() {
       setChoiceIds((prev) => [...(prev ?? []), ...ids]);
       return;
     }
-    if (autoOn) makePages(ids);
+    startBatch(ids, autoOn);
   }
 
   const ingestFiles = useV2PhotoIngest({ onAdded: onPhotosAdded });
@@ -263,7 +337,7 @@ export function ColorfulMemoriesApp() {
     setAuto(make);
     const ids = choiceIds ?? [];
     setChoiceIds(null);
-    if (make) makePages(ids);
+    startBatch(ids, make);
   }
 
   // ---- interrupted pages ---------------------------------------------------------------
@@ -356,8 +430,9 @@ export function ColorfulMemoriesApp() {
   const [editor, setEditor] = useState<{ photoId: string; view: EditorView } | null>(null);
   const [editChatOpen, setEditChatOpen] = useState(false);
   /** The photo whose page is in the "Print or share" dialog (from a card or the editor). */
-  const [outputFor, setOutputFor] = useState<string | null>(null);
-  const outputPhoto = outputFor ? photos.find((p) => p.id === outputFor) : null;
+  const [output, setOutput] = useState<{ id: string; mode: "all" | "send" } | null>(null);
+  const outputPhoto = output ? photos.find((p) => p.id === output.id) : null;
+  const pdfOnDemand = useOnDemandPdf();
   const [undo, setUndo] = useState<{ photoId: string; revisionId: string } | null>(null);
   const editorIndex = editor ? photos.findIndex((p) => p.id === editor.photoId) : -1;
   const editorPhoto = editorIndex >= 0 ? photos[editorIndex] : null;
@@ -419,7 +494,8 @@ export function ColorfulMemoriesApp() {
   const failedCount = photos.filter((p) => cardState(p) === "failed").length;
   const uploading = pendingUploads.length > 0;
   const activeCount = queue.running + queue.queued;
-  const showStrip = photos.length + pendingUploads.length === 0 || uploading || activeCount > 0 || choiceIds != null || shortCount > 0;
+  const showStrip =
+    photos.length + pendingUploads.length === 0 || uploading || activeCount > 0 || reframing > 0 || choiceIds != null || shortCount > 0;
 
   // ---- desktop: drop files anywhere on the gallery ----------------------------------------
   const [dropping, setDropping] = useState(false);
@@ -476,6 +552,44 @@ export function ColorfulMemoriesApp() {
   const hasBookPage = order.contentCount > 0 || book.stillDrawing > 0;
   // Phones: the book bar replaces the tab bar once there is a page (the header menu has the tabs).
   const showBookBar = !desktop && hasBookPage && !editor;
+  // Turning the page to the other shape: free when that page exists, a page when the photo
+  // already has that shape, otherwise reframing the photo and then a page.
+  const editorShapePlan = editorPhoto && !editorPhoto.generating ? shapePlan(editorPhoto) : null;
+  const editorShape = editorShapePlan
+    ? {
+        label: editorShapePlan.target === "portrait" ? "Make it portrait" : "Make it landscape",
+        costLabel:
+          editorShapePlan.kind === "select"
+            ? "Free"
+            : !signedIn
+              ? "Free"
+              : editorShapePlan.kind === "draw"
+                ? pagePriceCents != null
+                  ? formatCredits(pagePriceCents)
+                  : null
+                : pagePriceCents != null && portraitPriceCents != null
+                  ? formatCredits(pagePriceCents + portraitPriceCents)
+                  : null,
+      }
+    : null;
+
+  async function changeShape(photoId: string) {
+    const photo = photosRef.current.find((p) => p.id === photoId);
+    if (!photo) return;
+    const plan = shapePlan(photo);
+    setUndo(null);
+    if (plan.kind === "select") {
+      gen.selectRevision(photoId, plan.revisionId);
+      return;
+    }
+    if (plan.kind === "draw") {
+      makePages([photoId], plan.source ? { source: plan.source, addVersion: true } : { addVersion: true });
+      return;
+    }
+    const version = await photoTransforms.reframePhoto(photoId, plan.target, { quiet: true });
+    if (version) makePages([photoId], { source: version, addVersion: true });
+  }
+
   const editCost = editorPhoto
     ? editorPhoto.remote && signedIn
       ? (() => {
@@ -550,6 +664,10 @@ export function ColorfulMemoriesApp() {
                 onAddPhotos={() => fileRef.current?.click()}
                 onSelectPhotos={deletion.enter}
                 selectDisabled={activeCount > 0}
+                autoMake={autoOn}
+                onAutoMakeChange={setAuto}
+                autoPortrait={autoPortrait}
+                onAutoPortraitChange={setAutoPortrait}
               />
             </div>
 
@@ -559,6 +677,10 @@ export function ColorfulMemoriesApp() {
                   signedIn={signedIn}
                   autoOn={autoOn}
                   onAutoChange={setAuto}
+                  autoPortraitOn={autoPortrait}
+                  onAutoPortraitChange={setAutoPortrait}
+                  portraitPriceCents={portraitPriceCents}
+                  reframingCount={reframing}
                   pagePriceCents={pagePriceCents}
                   balanceCents={signedIn ? balanceCents : null}
                   uploading={uploading}
@@ -638,7 +760,7 @@ export function ColorfulMemoriesApp() {
                     gen.setBookPrefs(id, { leftOut: !p?.printPrefs.book?.leftOut });
                   }}
                   onDelete={deletePhoto}
-                  onPrint={setOutputFor}
+                  onPrint={(id) => setOutput({ id, mode: "all" })}
                   onReorder={replacePhotos}
                 />
               )}
@@ -734,8 +856,18 @@ export function ColorfulMemoriesApp() {
             gen.startEditChat();
             setEditChatOpen(true);
           }}
-          onPrint={() => setOutputFor(editorPhoto.id)}
-          onShare={() => setOutputFor(editorPhoto.id)}
+          onPrint={() => {
+            const p = editorPhoto;
+            void pdfOnDemand.print(() => makePagePdf(p)).catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Could not make a PDF."));
+          }}
+          onDownload={() => {
+            const p = editorPhoto;
+            void pdfOnDemand.download(() => makePagePdf(p)).catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Could not make a PDF."));
+          }}
+          onShare={() => setOutput({ id: editorPhoto.id, mode: "send" })}
+          pdfBusy={pdfOnDemand.busy}
+          shape={editorShape}
+          onChangeShape={() => void changeShape(editorPhoto.id)}
           onToggleLeftOut={() => gen.setBookPrefs(editorPhoto.id, { leftOut: !editorPhoto.printPrefs.book?.leftOut })}
           onDelete={() => {
             closeEditor();
@@ -767,7 +899,8 @@ export function ColorfulMemoriesApp() {
 
       {outputPhoto?.sheet && activePageVersion(outputPhoto) ? (
         <PagePrintShareModal
-          key={`${outputPhoto.id}:${activePageVersion(outputPhoto)!.id}`}
+          key={`${outputPhoto.id}:${activePageVersion(outputPhoto)!.id}:${output!.mode}`}
+          mode={output!.mode}
           sheetSrc={outputPhoto.sheet.imageDataUrl}
           makePdf={() => makePagePdf(outputPhoto)}
           share={
@@ -777,7 +910,7 @@ export function ColorfulMemoriesApp() {
                 ? { kind: "not-owner" }
                 : { kind: "ready", photoId: outputPhoto.remote.photoId, revisionId: activePageVersion(outputPhoto)!.id }
           }
-          onClose={() => setOutputFor(null)}
+          onClose={() => setOutput(null)}
         />
       ) : null}
 
