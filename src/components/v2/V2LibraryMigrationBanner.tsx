@@ -68,7 +68,7 @@ export function V2LibraryMigrationBanner() {
             </span>
           </p>
           <div className="flex items-center gap-2">
-            <Link href="/studio/order" className="v2-btn-primary min-h-11 flex-1 text-sm sm:flex-none">
+            <Link href="/studio?book=open" className="v2-btn-primary min-h-11 flex-1 text-sm sm:flex-none">
               <BookOpen className="h-4 w-4" aria-hidden />
               Make your book
             </Link>
