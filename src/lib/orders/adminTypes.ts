@@ -13,7 +13,8 @@ export type AdminUserOrderSummary = {
   luluPrintJobId: number | null;
   luluStatusName: string | null;
   fulfillment: BookFulfillment;
-  userId: string;
+  /** Null once the account that placed it is deleted. */
+  userId: string | null;
   /** Present on the all-orders admin list. */
   userEmail?: string | null;
   contactEmail: string | null;

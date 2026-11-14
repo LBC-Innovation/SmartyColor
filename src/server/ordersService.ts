@@ -61,7 +61,8 @@ const PRINT_FILE_URL_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 type OrderRow = {
   id: string;
-  user_id: string;
+  /** Null once the account that placed it is deleted. */
+  user_id: string | null;
   product_id: string;
   project_title: string | null;
   page_count: number;
@@ -80,8 +81,8 @@ type OrderRow = {
   estimated_delivery_max: string | null;
   estimated_dispatch_min: string | null;
   estimated_dispatch_max: string | null;
-  contact_email: string;
-  shipping_address: ShippingAddress;
+  contact_email: string | null;
+  shipping_address: ShippingAddress | null;
   billing_address?: ShippingAddress | null;
   is_gift?: boolean | null;
   gift_note?: string | null;
@@ -154,6 +155,8 @@ function mapEvents(rows: EventRow[]): BookOrderEvent[] {
   }));
 }
 
+const EMPTY_ADDRESS: ShippingAddress = { name: "", street1: "", city: "", postcode: "", country_code: "", phone_number: "" };
+
 function mapDetail(row: OrderRow, events: EventRow[]): BookOrderDetail {
   const summary = mapSummary(row);
   const timeline = buildFulfillmentTimeline({
@@ -165,8 +168,9 @@ function mapDetail(row: OrderRow, events: EventRow[]): BookOrderDetail {
   });
   return {
     ...summary,
-    contactEmail: row.contact_email,
-    shippingAddress: row.shipping_address,
+    // Only a deleted account's orders lack these, and those are never shown to a customer.
+    contactEmail: row.contact_email ?? "",
+    shippingAddress: row.shipping_address ?? EMPTY_ADDRESS,
     billingAddress: row.billing_address ?? null,
     isGift: row.is_gift === true,
     giftNote: row.gift_note ?? null,
@@ -502,6 +506,10 @@ export async function confirmDraftBookOrder(input: {
       },
     };
   }
+  if (!draft.shipping_address) {
+    return { data: null, error: { message: "Add a shipping address before ordering.", code: "ADDRESS_REQUIRED" } };
+  }
+  const shippingAddress = draft.shipping_address;
   if (!draft.proof_confirmed_at) {
     return {
       data: null,
@@ -519,7 +527,7 @@ export async function confirmDraftBookOrder(input: {
     pricedOrderColumns({
       bindingId,
       pageCount: draft.page_count,
-      shippingAddress: draft.shipping_address,
+      shippingAddress,
       shippingLevel: draft.shipping_level,
     }),
   ]);
@@ -735,6 +743,8 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
     if (!order || order.deleted_at) return;
     if ((order.fulfillment ?? "print") === "digital") return;
     if (order.status === "draft" || order.status === "quoted" || order.status === "awaiting_payment") return;
+    // A deleted account's order has no one to email.
+    if (!order.user_id) return;
 
     let to = ((order.contact_email as string | null) ?? "").trim();
     if (!to) {
@@ -803,6 +813,7 @@ export async function sendOrderCanceledEmail(orderId: string): Promise<void> {
 
     const { data: order } = await db.from("book_orders").select("*").eq("id", orderId).maybeSingle();
     if (!order || order.status !== "canceled") return;
+    if (!order.user_id) return;
     // Nothing worth an email for an order that was never paid.
     if (!order.paid_at) return;
 
@@ -1346,8 +1357,9 @@ export async function listAllOrdersForAdmin(options?: {
   const rows = (data as unknown as AdminOrderRow[]).map(mapAdminOrder);
 
   const emails = new Map<string, string | null>();
+  const userIds = [...new Set(rows.map((r) => r.userId).filter((id): id is string => id != null))];
   await Promise.all(
-    [...new Set(rows.map((r) => r.userId))].map(async (id) => {
+    userIds.map(async (id) => {
       try {
         const { data: auth } = await getSupabaseAuth().auth.admin.getUserById(id);
         emails.set(id, auth.user?.email ?? null);
@@ -1356,7 +1368,7 @@ export async function listAllOrdersForAdmin(options?: {
       }
     }),
   );
-  return { data: rows.map((r) => ({ ...r, userEmail: emails.get(r.userId) ?? null })), error: null };
+  return { data: rows.map((r) => ({ ...r, userEmail: r.userId ? (emails.get(r.userId) ?? null) : null })), error: null };
 }
 
 export type CancelOrderResult = { status: BookOrderStatus; refundedCents: number };
@@ -1384,6 +1396,9 @@ export async function cancelBookOrder(input: {
   if (error) return { data: null, error: { message: error.message } };
   if (!order || (order.deleted_at && input.actor.kind === "customer")) {
     return { data: null, error: { message: "Order not found", code: "NOT_FOUND" } };
+  }
+  if (!order.user_id) {
+    return { data: null, error: { message: "The account that placed this order has been deleted, so it can't be canceled or refunded here." } };
   }
 
   const reason = (input.reason ?? "").trim().slice(0, 1000) || null;

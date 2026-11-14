@@ -314,10 +314,56 @@ export async function setFeatureAccess(
   return { data: { features: next }, error: null };
 }
 
+/** Orders still being paid for, made or shipped: deleting the account would orphan them mid-way. */
+const ORDER_IN_PROGRESS = ["awaiting_payment", "paid", "submitting_to_lulu", "submitted_to_lulu", "in_production"];
+
+/**
+ * Delete an account and everything in it. Purchase records stay (the database unlinks them from the
+ * user), but first lose everything personal: address, email, gift note, cover, page lists, files.
+ */
 export async function deleteUser(id: string, adminId: string): Promise<ApiResult<{ success: boolean }>> {
+  const db = getSupabaseAdmin();
+  const { data: open, error: openErr } = await db
+    .from("book_orders")
+    .select("id")
+    .eq("user_id", id)
+    .in("status", ORDER_IN_PROGRESS)
+    .is("deleted_at", null);
+  if (openErr) return { data: null, error: { message: openErr.message } };
+  if (open && open.length > 0) {
+    return {
+      data: null,
+      error: {
+        message: `This account has ${open.length === 1 ? "an order" : `${open.length} orders`} still in progress. Wait until ${open.length === 1 ? "it ships" : "they ship"} or cancel ${open.length === 1 ? "it" : "them"}, then delete the account.`,
+      },
+    };
+  }
+
+  const { error: scrubErr } = await db
+    .from("book_orders")
+    .update({
+      contact_email: null,
+      shipping_address: null,
+      billing_address: null,
+      gift_note: null,
+      project_title: null,
+      cover_design: null,
+      digital_pages: null,
+      print_pages: null,
+      interior_url: null,
+      cover_url: null,
+      digital_pdf_path: null,
+      interior_pdf_path: null,
+      cover_pdf_path: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", id);
+  if (scrubErr) return { data: null, error: { message: scrubErr.message } };
+
   const { error } = await getSupabaseAuth().auth.admin.deleteUser(id);
   if (error) return { data: null, error: { message: error.message } };
-  // Rows cascade from auth.users; files don't — purge the user's library folder.
+  // Most rows cascade from auth.users (orders and payments are unlinked instead); files don't, so
+  // purge the user's folder, which also holds their book order files.
   try {
     await removePrefix(id);
   } catch (e) {

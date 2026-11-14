@@ -132,7 +132,7 @@ export function V2AdminOrdersStudio() {
                           </p>
                           <p className="text-xs text-v2-muted">
                             {order.id.slice(0, 8).toUpperCase()} ·{" "}
-                            {order.userEmail ?? order.contactEmail ?? order.userId.slice(0, 8)} ·{" "}
+                            {order.userEmail ?? order.contactEmail ?? (order.userId ? order.userId.slice(0, 8) : "Deleted account")} ·{" "}
                             {order.fulfillment === "digital" ? "Print at home · " : ""}
                             {order.pageCount} pages ·{" "}
                             {order.totalCents != null ? formatCredits(order.totalCents) : "—"} ·{" "}
