@@ -3,6 +3,7 @@ import { CONTACT_EMAIL } from "@/content/marketing";
 import { statusLabel } from "@/lib/orders/fulfillmentTimeline";
 import type { BookOrderDetail } from "@/lib/orders/types";
 import { cn } from "@/lib/cn";
+import { CancelOrderButton, formatCancelDeadline } from "@/components/v2/orders/CancelCountdown";
 
 /** Plain-language meaning of each stage on the order page, in the order they happen. */
 const STAGE_COPY: Record<string, string> = {
@@ -109,17 +110,11 @@ export function OrderPlacedThanks({
         <p className="mt-3 text-sm text-v2-muted">
           Changed your mind? You can cancel for a full refund to your wallet until your book goes
           into production
-          {order.luluProductionDueAt
-            ? `, around ${new Date(order.luluProductionDueAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+          {order.cancelDeadline
+            ? `, around ${formatCancelDeadline(order.cancelDeadline)}`
             : ", usually about an hour after you order"}
           .{" "}
-          <button
-            type="button"
-            onClick={onCancel}
-            className="font-semibold text-rose-700 underline-offset-2 hover:underline"
-          >
-            Cancel order
-          </button>
+          <CancelOrderButton variant="link" deadline={order.cancelDeadline} onClick={onCancel} />
         </p>
       ) : null}
     </section>

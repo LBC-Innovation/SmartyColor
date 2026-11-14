@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatDeliveryExpectation } from "@/lib/orders/fulfillmentTimeline";
 import type { BookOrderSummary } from "@/lib/orders/types";
+import { CancelOrderButton, formatCancelDeadline } from "@/components/v2/orders/CancelCountdown";
 
 function formatMoney(cents: number | null): string {
   if (cents == null) return "—";
@@ -179,18 +180,14 @@ export function V2MyOrdersStudio() {
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 sm:px-5">
                       <p className="text-xs text-v2-muted">
                         Can be canceled for a full refund until production starts
-                        {order.luluProductionDueAt
-                          ? `, around ${new Date(order.luluProductionDueAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
-                          : ""}
+                        {order.cancelDeadline ? `, around ${formatCancelDeadline(order.cancelDeadline)}` : ""}
                         .
                       </p>
-                      <button
-                        type="button"
+                      <CancelOrderButton
+                        deadline={order.cancelDeadline}
                         onClick={() => setCancelling(order)}
-                        className="v2-btn-outline h-10 text-sm text-rose-700"
-                      >
-                        Cancel order
-                      </button>
+                        className="h-10"
+                      />
                     </div>
                   ) : null}
                   {order.fulfillment === "digital" && order.status === "paid" ? (
@@ -221,7 +218,7 @@ export function V2MyOrdersStudio() {
           orderId={cancelling.id}
           title={cancelling.projectTitle}
           totalCents={cancelling.totalCents}
-          deadline={cancelling.luluProductionDueAt}
+          deadline={cancelling.cancelDeadline}
           onClose={() => setCancelling(null)}
           onCanceled={(result) => {
             setCancelling(null);

@@ -40,6 +40,28 @@ function deliveryRange(min: string | null | undefined, max: string | null | unde
   return from || to || null;
 }
 
+const DEFAULT_TIME_ZONE = "America/New_York";
+
+/** A real IANA zone name, or the default. */
+function safeTimeZone(zone: string | null | undefined): string {
+  if (!zone) return DEFAULT_TIME_ZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return zone;
+  } catch {
+    return DEFAULT_TIME_ZONE;
+  }
+}
+
+/** "3:42 PM EST on Fri, Nov 14" in the given zone. */
+function emailDeadline(iso: string, timeZone: string): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone, timeZoneName: "short" });
+  const day = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone });
+  return `${time} on ${day}`;
+}
+
 /** What the customer will see on the order page, in the printer's order. Mirrors the page's own copy. */
 const NEXT_STEPS: { label: string; detail: string }[] = [
   {
@@ -74,6 +96,10 @@ export type OrderConfirmationInput = {
   orderUrl: string;
   /** Opens the order page with the cancel dialog up. */
   cancelUrl: string;
+  /** When the full-refund cancel window closes (ISO); the email names the time when known. */
+  cancelDeadline?: string | null;
+  /** The buyer's IANA time zone, from their browser; the deadline is shown in it. */
+  timeZone?: string | null;
   /** Lulu's shipping level, e.g. "MAIL"; named for the customer on the shipping line. */
   shippingLevel?: string | null;
   /** The printer's estimated delivery window (YYYY-MM-DD); the line is left out without one. */
@@ -102,8 +128,11 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
   if (input.taxCents != null) money.push(["Sales tax", usd(input.taxCents)]);
   const total = input.totalCents != null ? usd(input.totalCents) : null;
   const follow = `We'll keep your order page up to date as the printer reports progress. Questions? Reply to this email or write to ${CONTACT_EMAIL}.`;
-  const cancelNote =
-    "Changed your mind? You can cancel for a full refund to your wallet until your book goes into production, usually about an hour after you order.";
+  const deadline = input.cancelDeadline ? emailDeadline(input.cancelDeadline, safeTimeZone(input.timeZone)) : null;
+  const cancelHeading = deadline ? `Cancel by ${deadline} for a full refund` : null;
+  const cancelNote = deadline
+    ? `Changed your mind? You can cancel this order for a full refund to your wallet until ${deadline}, when your book goes into production. After that it can't be canceled.`
+    : "Changed your mind? You can cancel for a full refund to your wallet until your book goes into production, usually about an hour after you order.";
   const cta = "View your order";
   const delivery = deliveryRange(input.estimatedDeliveryMin, input.estimatedDeliveryMax);
   const deliveryNote = "This is the printer's estimate, not a guarantee. Tracking appears on your order page once it ships.";
@@ -143,7 +172,19 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
                 <p style="margin:0;">${escapeHtml(lead)}</p>
               </td>
             </tr>
-            <tr>
+${cancelHeading ? `            <tr>
+              <td style="padding:16px 32px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;">
+                  <tr>
+                    <td style="padding:12px 16px;font-size:15px;line-height:1.5;color:#78350f;">
+                      <p style="margin:0;"><strong>${escapeHtml(cancelHeading)}.</strong></p>
+                      <p style="margin:4px 0 0;font-size:13px;color:#92400e;">After that your book is in production and the order can't be canceled. <a href="${escapeHtml(input.cancelUrl)}" style="color:#b45309;font-weight:600;">Cancel this order</a></p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+` : ""}            <tr>
               <td style="padding:20px 32px 0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f1ff;border-radius:12px;">
                   <tr>
@@ -218,6 +259,7 @@ ${delivery ? `            <tr>
     "",
     lead,
     "",
+    ...(cancelHeading ? [`${cancelHeading}. After that the order can't be canceled.`, ""] : []),
     ...details.map(([k, v]) => `${k}: ${v}`),
     "",
     "Shipping to:",

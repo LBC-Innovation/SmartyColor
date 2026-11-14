@@ -72,6 +72,11 @@ export type BookOrderSummary = {
   updatedAt: string;
   /** Lulu's production delay ends here; after that the book can't be canceled. */
   luluProductionDueAt: string | null;
+  /**
+   * When the full-refund cancel window closes: Lulu's production time, or an estimate from the
+   * payment time until Lulu reports one. Null when no clock is running.
+   */
+  cancelDeadline: string | null;
   /** The customer may cancel (a hint; the server re-checks with Lulu). */
   canCancel: boolean;
   /** Credits returned to the wallet when the order was canceled. */

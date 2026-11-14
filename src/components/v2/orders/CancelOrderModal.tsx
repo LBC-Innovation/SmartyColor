@@ -5,6 +5,11 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
+import {
+  formatCancelDeadline,
+  formatCountdown,
+  useCancelCountdown,
+} from "@/components/v2/orders/CancelCountdown";
 
 type Props = {
   orderId: string;
@@ -20,14 +25,6 @@ type Props = {
   onClose: () => void;
   onCanceled: (result: api.CancelOrderData) => void;
 };
-
-function formatDeadline(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 export function CancelOrderModal({
   orderId,
@@ -46,6 +43,9 @@ export function CancelOrderModal({
   const amount = totalCents != null && totalCents > 0 ? formatCredits(totalCents) : null;
   const bookName = title?.trim() || "this book";
   const reasonId = `cancel-reason-${orderId}`;
+  const { remainingMs, expired } = useCancelCountdown(deadline);
+  // Admins see the deadline but aren't blocked by it; the server checks the printer either way.
+  const closed = !admin && expired;
 
   async function confirm(): Promise<void> {
     setBusy(true);
@@ -86,9 +86,21 @@ export function CancelOrderModal({
                 project stays in {admin ? "their" : "your"} account to order again later.
               </li>
             </ul>
-            {deadline ? (
+            {deadline && closed ? (
+              <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-relaxed text-v2-ink">
+                The cancel window closed at {formatCancelDeadline(deadline)}, when your book went into
+                production. It can no longer be canceled.
+              </p>
+            ) : deadline ? (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-900">
-                Orders can be canceled until production starts, around {formatDeadline(deadline)}.
+                Orders can be canceled until production starts, around {formatCancelDeadline(deadline)}
+                {remainingMs != null && !expired ? (
+                  <>
+                    {" "}
+                    (<span className="font-semibold tabular-nums">{formatCountdown(remainingMs)}</span> left)
+                  </>
+                ) : null}
+                .
               </p>
             ) : null}
             <p className="mt-2 text-xs text-v2-muted">This can&apos;t be undone.</p>
@@ -128,7 +140,7 @@ export function CancelOrderModal({
           </button>
           <button
             type="button"
-            disabled={busy || (admin && !reason.trim())}
+            disabled={busy || closed || (admin && !reason.trim())}
             onClick={() => void confirm()}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
           >

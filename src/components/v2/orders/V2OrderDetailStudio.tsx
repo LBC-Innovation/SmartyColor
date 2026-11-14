@@ -9,6 +9,7 @@ import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
 import { BookOrderCheckoutPanel } from "@/components/v2/orders/BookOrderCheckoutPanel";
 import { OrderPlacedThanks } from "@/components/v2/orders/OrderPlacedThanks";
+import { CancelOrderButton, formatCancelDeadline } from "@/components/v2/orders/CancelCountdown";
 import { CancelOrderModal } from "@/components/v2/orders/CancelOrderModal";
 import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
@@ -298,19 +299,15 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     <p className="mt-0.5 text-sm text-v2-muted">
                       You can cancel for a full refund to your wallet until your book goes into
                       production
-                      {order.luluProductionDueAt
-                        ? `, around ${new Date(order.luluProductionDueAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
-                        : ""}
+                      {order.cancelDeadline ? `, around ${formatCancelDeadline(order.cancelDeadline)}` : ""}
                       .
                     </p>
                   </div>
-                  <button
-                    type="button"
+                  <CancelOrderButton
+                    deadline={order.cancelDeadline}
                     onClick={() => setCancelOpen(true)}
-                    className="v2-btn-outline shrink-0 text-sm text-rose-700"
-                  >
-                    Cancel order
-                  </button>
+                    className="shrink-0"
+                  />
                 </section>
               ) : null}
 
@@ -486,7 +483,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
           orderId={order.id}
           title={order.projectTitle}
           totalCents={order.totalCents}
-          deadline={order.luluProductionDueAt}
+          deadline={order.cancelDeadline}
           onClose={() => setCancelOpen(false)}
           onCanceled={(result) => {
             setCancelOpen(false);

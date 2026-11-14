@@ -57,3 +57,30 @@ export function adminCanCancel(order: {
   if (order.luluProductionDueAt && Date.parse(order.luluProductionDueAt) <= now) return false;
   return true;
 }
+
+/**
+ * Lulu's production delay on our account: a paid job waits this long before printing starts, and
+ * can be canceled until then. Used to estimate the deadline before Lulu has reported its own.
+ */
+export const LULU_PRODUCTION_DELAY_MINUTES = 60;
+
+/**
+ * When the customer's free cancel window closes: Lulu's `production_due_time` once the job is at
+ * the printer, otherwise an estimate from when the order was paid. Null when there is no clock
+ * running (digital, unpaid, failed, or already past the cancelable stages).
+ */
+export function customerCancelDeadline(order: {
+  status: BookOrderStatus;
+  fulfillment: BookFulfillment;
+  luluProductionDueAt: string | null;
+  paidAt: string | null;
+}): string | null {
+  if (order.fulfillment === "digital") return null;
+  if (order.luluProductionDueAt) return order.luluProductionDueAt;
+  if ((order.status === "paid" || order.status === "submitting_to_lulu") && order.paidAt) {
+    const paid = Date.parse(order.paidAt);
+    if (Number.isNaN(paid)) return null;
+    return new Date(paid + LULU_PRODUCTION_DELAY_MINUTES * 60_000).toISOString();
+  }
+  return null;
+}
