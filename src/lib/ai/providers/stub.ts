@@ -90,8 +90,10 @@ export function createStubProvider(): ColoringAI {
       const { bytes } = parsePhotoDataUrl(input.photoDataUrl);
       const upright = await sharp(bytes).rotate().toBuffer();
       const meta = await sharp(upright).metadata();
-      const height = Math.max(meta.width ?? 1200, meta.height ?? 900);
-      const width = Math.round(height * 0.75);
+      const longEdge = Math.max(meta.width ?? 1200, meta.height ?? 900);
+      const landscape = input.target === "landscape";
+      const width = landscape ? longEdge : Math.round(longEdge * 0.75);
+      const height = landscape ? Math.round(longEdge * 0.75) : longEdge;
       const backdrop = await sharp(upright).resize(width, height, { fit: "cover" }).blur(30).toBuffer();
       const inset = await sharp(upright).resize(width, height, { fit: "inside" }).toBuffer();
       const out = await sharp(backdrop)

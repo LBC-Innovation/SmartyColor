@@ -33,7 +33,10 @@ type UsagePayload = {
  * can't cover by opening the add-credit modal, and keeps the shown balance in
  * step with what the server charged. Guests' local photos are not metered.
  */
-export function useSheetUsageCredits(returnPath: string): {
+export function useSheetUsageCredits(
+  returnPath: string,
+  opts?: { handleCheckoutReturn?: boolean },
+): {
   canAfford: (kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "remote" | "editCount">) => boolean;
   /** Call with every response; true when it was an out-of-credit refusal (modal is now open). */
   applyResponse: (status: number, payload: UsagePayload, kind: SheetUsageKind) => boolean;
@@ -43,7 +46,7 @@ export function useSheetUsageCredits(returnPath: string): {
   const prices = usePriceList();
   const [shortfall, setShortfall] = useState<Shortfall | null>(null);
 
-  useCreditCheckoutReturn();
+  useCreditCheckoutReturn({ enabled: opts?.handleCheckoutReturn !== false });
 
   function canAfford(kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "remote" | "editCount">): boolean {
     if (!photo.remote || !user) return true;

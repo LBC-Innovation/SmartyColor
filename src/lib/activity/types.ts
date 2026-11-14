@@ -21,6 +21,7 @@ export const ACTIVITY_TYPES = {
   sheets: [
     { id: "sheet_generated", label: "Page made" },
     { id: "sheet_edited", label: "Page edited" },
+    { id: "page_emailed", label: "Page emailed" },
   ],
   albums: [
     { id: "album_created", label: "Album created" },

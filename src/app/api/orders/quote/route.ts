@@ -2,6 +2,9 @@ import { jsonError, jsonResult } from "@/lib/api/respond";
 import { getBookBinding, isPrintBindingId } from "@/lib/print/bookBindings";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { luluConfigured } from "@/server/lulu/config";
+import { defaultQuoteShippingAddress } from "@/server/lulu/costCalculation";
+import { luluShippingChoices } from "@/server/lulu/shippingOptions";
+import { DEFAULT_SHIPPING_LEVEL, isShippingLevel } from "@/lib/orders/shippingLevels";
 import { pricePrintOrder } from "@/server/pricingService";
 import { lookupUsPostcode, normalizeUsPostcode } from "@/server/shipping/usPostcodeLookup";
 
@@ -14,6 +17,8 @@ export async function POST(request: Request) {
     pageCount?: number;
     shippingPostcode?: string;
     shippingLevel?: string;
+    /** The main quote asks for shipping speeds and delivery dates; per-format price checks don't. */
+    withShipping?: boolean;
     shippingAddress?: {
       street1?: string;
       street2?: string;
@@ -30,6 +35,11 @@ export async function POST(request: Request) {
   if (typeof body.pageCount !== "number" || !Number.isInteger(body.pageCount) || body.pageCount < 1) {
     return jsonError("pageCount must be a positive integer", 400);
   }
+
+  if (body.shippingLevel !== undefined && !isShippingLevel(body.shippingLevel)) {
+    return jsonError("shippingLevel is not one we offer", 400);
+  }
+  const shippingLevel = body.shippingLevel ?? DEFAULT_SHIPPING_LEVEL;
 
   const binding = getBookBinding(body.bindingId);
   if (body.pageCount > binding.maxPages) {
@@ -119,12 +129,23 @@ export async function POST(request: Request) {
 
   try {
     // The customer's price: Lulu's cost with our markup on the book, from the price catalog.
-    const priced = await pricePrintOrder({
-      bindingId: body.bindingId,
-      pageCount: body.pageCount,
-      shippingLevel: body.shippingLevel,
-      shippingAddress: shippingAddressOverride,
-    });
+    // The printer's delivery dates come from a separate Lulu call; ask at the same time.
+    const [priced, choices] = await Promise.all([
+      pricePrintOrder({
+        bindingId: body.bindingId,
+        pageCount: body.pageCount,
+        shippingLevel,
+        shippingAddress: shippingAddressOverride,
+      }),
+      body.withShipping
+        ? luluShippingChoices({
+            podPackageId: binding.podPackageId,
+            pageCount: body.pageCount,
+            address: shippingAddressOverride ?? defaultQuoteShippingAddress(),
+          })
+        : Promise.resolve(null),
+    ]);
+    const delivery = choices?.find((c) => c.level === shippingLevel) ?? null;
     if (priced.error) throw new Error(priced.error.message);
     const { price } = priced.data;
     return jsonResult({
@@ -141,6 +162,9 @@ export async function POST(request: Request) {
         shippingLevel: priced.data.shippingLevel,
         quoteError: null,
         addressSuggestion: priced.data.addressSuggestion,
+        estimatedDeliveryMin: delivery?.deliveryMin ?? null,
+        estimatedDeliveryMax: delivery?.deliveryMax ?? null,
+        shippingChoices: choices ?? [],
       },
       error: null,
     });

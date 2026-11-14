@@ -1,3 +1,4 @@
+import { SharedPageSignUp } from "@/components/v2/share/SharedPageSignUp";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -58,16 +59,7 @@ export default async function SharedPage({ params }: Props) {
 
         <div className="flex w-full flex-col items-center gap-3 text-center print:hidden">
           <SharedPagePrintButton />
-          <section className="v2-panel mt-2 w-full p-5">
-            <h1 className="text-lg font-semibold text-v2-ink">Coloring pages from your own photos</h1>
-            <p className="mt-1 text-sm leading-relaxed text-v2-muted">
-              This page started as a family photo. Turn yours into pages your kids will recognize, then
-              print them at home or order a book.
-            </p>
-            <Link href={MAKE_YOUR_OWN_HREF} className="v2-btn-primary mt-4 inline-flex">
-              Make your own from your photos
-            </Link>
-          </section>
+          <SharedPageSignUp />
         </div>
       </div>
     </main>

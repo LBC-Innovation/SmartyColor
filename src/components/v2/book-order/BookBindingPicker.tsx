@@ -20,6 +20,9 @@ export type BindingQuote = {
   taxCents: number | null;
   loading: boolean;
   error: string | null;
+  /** The printer's estimated delivery window (YYYY-MM-DD), when the quote came with one. */
+  deliveryMin?: string | null;
+  deliveryMax?: string | null;
 };
 
 /** What one printed format costs for the book as it stands, before shipping and tax. */
@@ -34,8 +37,10 @@ export type FormatPrice = {
 };
 
 type Props = {
-  value: BookFormatId;
-  onChange: (id: BookFormatId) => void;
+  /** Null while nothing is picked: no card is selected and the first available one takes Tab. */
+  value: BookFormatId | null;
+  /** `via` says whether a click/Enter picked it or an arrow key moved through the group. */
+  onChange: (id: BookFormatId, via: "click" | "arrow") => void;
   /** Live prices for the printed formats; a format without one shows no price. */
   prices?: Partial<Record<BookBindingId, FormatPrice>>;
   /** Pages the customer has chosen so far (0 before they pick any). */
@@ -44,6 +49,8 @@ type Props = {
   recommendedId?: BookFormatId;
   /** The print-at-home PDF's price, from the price list. */
   digitalPriceCents?: number | null;
+  /** "list" stacks the cards in one column, for narrow panels and sheets. */
+  layout?: "grid" | "list";
 };
 
 type Card = {
@@ -102,6 +109,7 @@ export function BookBindingPicker({
   contentPageCount = 0,
   recommendedId,
   digitalPriceCents = null,
+  layout = "grid",
 }: Props) {
   const filtering = contentPageCount > 0;
   const idBase = useId();
@@ -132,7 +140,8 @@ export function BookBindingPicker({
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1;
     const target = radios[(at + step + radios.length) % radios.length];
     target.focus();
-    target.click();
+    const id = target.dataset.formatId as BookFormatId | undefined;
+    if (id) onChange(id, "arrow");
   }
 
   return (
@@ -141,7 +150,7 @@ export function BookBindingPicker({
     // up, however the text above or below them wraps.
     <div
       ref={groupRef}
-      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className={layout === "list" ? "grid gap-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-4"}
       role="radiogroup"
       aria-label="Book format"
       onKeyDown={onKeyDown}
@@ -173,6 +182,82 @@ export function BookBindingPicker({
                   : pricing
                     ? "Pricing your book"
                     : card.detail;
+        if (layout === "list") {
+          // Compact row for the narrow order panel: title and price on one line, then one short
+          // description and one line of page facts.
+          const facts = unavailable
+            ? basis
+            : [card.digital ? "Instant PDF" : priced ? basis : card.headline, card.pageRule ?? card.detail]
+                .filter(Boolean)
+                .join(" · ");
+          return (
+            <button
+              key={card.id}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              aria-labelledby={`${idBase}-${card.id}-title`}
+              aria-describedby={`${idBase}-${card.id}-price ${idBase}-${card.id}-info`}
+              tabIndex={card.id === tabStopId ? 0 : -1}
+              disabled={unavailable}
+              data-format-id={card.id}
+              onClick={() => onChange(card.id, "click")}
+              className={cn(
+                "flex w-full items-start gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
+                unavailable
+                  ? "cursor-not-allowed border-gray-200 bg-v2-bg-subtle"
+                  : selected
+                    ? "border-v2-primary bg-white shadow-[0_0_0_3px_rgb(86_79_208/0.12)]"
+                    : "border-gray-200 bg-white hover:border-v2-primary/40",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                  selected ? "border-v2-primary bg-v2-primary text-white" : "border-gray-300",
+                  unavailable && "opacity-50",
+                )}
+                aria-hidden
+              >
+                {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+              </span>
+              <span className={cn("min-w-0 flex-1", unavailable && "opacity-60")}>
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Icon className="h-4 w-4 shrink-0 self-center text-v2-primary" aria-hidden />
+                    <span id={`${idBase}-${card.id}-title`} className="truncate text-base font-bold text-v2-ink">
+                      {card.title}
+                    </span>
+                    {card.id === recommendedId && !unavailable && fitCount > 1 ? (
+                      <span className="shrink-0 rounded-full bg-v2-primary-light px-1.5 py-0.5 text-[10px] font-semibold text-v2-link">
+                        Best fit
+                      </span>
+                    ) : null}
+                  </span>
+                  <span id={`${idBase}-${card.id}-price`} className="shrink-0 text-right tabular-nums">
+                    {unavailable ? (
+                      <span className="text-xs font-semibold text-v2-muted">Not available</span>
+                    ) : pricing ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-v2-muted" role="status">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none text-v2-primary" aria-hidden />
+                        Pricing…
+                      </span>
+                    ) : priced ? (
+                      <span className="text-base font-bold text-v2-ink">{formatCredits(price.bookCents!)}</span>
+                    ) : card.digital && digitalPriceCents != null ? (
+                      <span className="text-base font-bold text-v2-ink">{formatCredits(digitalPriceCents)}</span>
+                    ) : null}
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-sm leading-snug text-v2-muted line-clamp-2">{card.blurb}</span>
+                <span id={`${idBase}-${card.id}-info`} className="mt-1 flex items-baseline justify-between gap-2 text-xs leading-snug">
+                  <span className={cn("min-w-0", unavailable ? "font-semibold text-v2-navy" : "text-v2-muted")}>{facts}</span>
+                  {priced ? <span className="shrink-0 text-v2-muted">+ shipping &amp; tax</span> : null}
+                </span>
+              </span>
+            </button>
+          );
+        }
         return (
           <button
             key={card.id}
@@ -183,7 +268,8 @@ export function BookBindingPicker({
             aria-describedby={`${idBase}-${card.id}-price ${idBase}-${card.id}-info`}
             tabIndex={card.id === tabStopId ? 0 : -1}
             disabled={unavailable}
-            onClick={() => onChange(card.id)}
+            data-format-id={card.id}
+            onClick={() => onChange(card.id, "click")}
             className={cn(
               "relative row-span-3 grid grid-rows-subgrid gap-y-0 rounded-2xl border-2 p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary sm:p-5",
               unavailable

@@ -1,103 +1,144 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  BookOpen,
-  ChevronLeft,
-  FlipHorizontal2,
-  Loader2,
-  PencilLine,
-  Printer,
-  RectangleVertical,
-  Share2,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
-import { guestLimitScope, type GuestLimitScope } from "@/lib/guestLimit";
-import {
-  V2AssetLightbox,
-  type LightboxFocus,
-  type LightboxViewMode,
-} from "@/components/v2/V2AssetLightbox";
-import { V2PrintSheetModal } from "@/components/v2/V2PrintSheetModal";
-import { V2SharePageModal } from "@/components/v2/share/V2SharePageModal";
-import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
-import { V2LibraryWorkspace } from "@/components/v2/library/V2LibraryWorkspace";
+import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
+import { PagePrintShareModal } from "@/components/v2/studio/PagePrintShareModal";
+import { V2SheetEditChat } from "@/components/v2/V2SheetEditChat";
+import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
+import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { useV2Toast } from "@/components/v2/V2Toast";
+import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
+import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
 import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
 import { useV2PhotoIngest } from "@/components/v2/library/useV2PhotoIngest";
 import { useV2PhotoTransforms } from "@/components/v2/library/useV2PhotoTransforms";
-import { V2LibraryRefreshButton } from "@/components/v2/library/V2LibraryRefreshButton";
-import { V2StudioLayoutToggle } from "@/components/v2/V2StudioLayoutToggle";
-import {
-  V2SheetEditChat,
-  type SheetEditMessage,
-} from "@/components/v2/V2SheetEditChat";
-import { useV2Studio } from "@/components/v2/V2StudioProvider";
-import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
-import { readPagesMade, trackPageGenerated } from "@/lib/track";
-import { V2BookNudge } from "@/components/v2/marketing/V2BookNudge";
 import { V2SavePromptCard } from "@/components/v2/marketing/V2SavePromptCard";
-import { V2BookUpsellCard } from "@/components/v2/marketing/V2BookUpsellCard";
-import { INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
-import { readIntent } from "@/lib/marketing/copy";
-import { authedFetch, hasSessionToken } from "@/lib/api/client";
-import { friendlyRequestError } from "@/lib/api/networkError";
-import {
-  entryFromLibraryPhoto,
-  uploadRevisionToLibrary,
-} from "@/lib/v2/cloudLibrary";
-import type { LibraryPhoto } from "@/lib/library/types";
-import { useV2Toast } from "@/components/v2/V2Toast";
-import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
-import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
-import { V2WorkingOverlay } from "@/components/v2/V2WorkingOverlay";
-import { V2StudioPhotoGrid } from "@/components/v2/V2StudioPhotoGrid";
-import { Columns2, LayoutGrid } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
+import { PageEditorModal, type EditorView } from "@/components/v2/studio/PageEditorModal";
+import { shapePlan } from "@/components/v2/studio/pageShape";
+import { useOnDemandPdf } from "@/components/v2/usePrintablePdf";
+import { StudioGallery } from "@/components/v2/studio/StudioGallery";
+import { StudioHeader } from "@/components/v2/studio/StudioHeader";
+import { UploadStrip } from "@/components/v2/studio/UploadStrip";
+import { PLACEHOLDER_ALBUM_NAME } from "@/components/v2/studio/albumNames";
+import type { CardState } from "@/components/v2/studio/GalleryCard";
+import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
+import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
+import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
+import { BookOrderPanel, ConfirmButton, confirmBlocker, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
+import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
+import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
+import { activePageVersion, galleryBook, pagePrintPrefs, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
+import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
+import { BEST_PHOTOS, INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
+import { useAuth } from "@/context/AuthContext";
+import { authedFetch } from "@/lib/api/client";
+import type { GuestLimitScope } from "@/lib/guestLimit";
 import { formatCredits } from "@/lib/credits/money";
-import { unitPriceCents } from "@/lib/credits/pricing";
+import { freeEditsPerSheet, sheetUsageCostCents } from "@/lib/credits/pricing";
+import { fillCopy, readIntent } from "@/lib/marketing/copy";
+import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
+import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import { usePriceList } from "@/lib/pricing/usePriceList";
-import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
-import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
-import { compositeSheetOverlayDataUrl } from "@/lib/photo/compositeSheetOverlay";
-import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
-import {
-  type V2PhotoEntry,
-  activeSheetVersion,
-  activeSourceVersion,
-  activeVersionPrintPrefs,
-  normalizeV2SheetRevisions,
-  photoOrientation,
-  photoPrintPrefs,
-} from "@/lib/v2/studioTypes";
+import { photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 
-function newId() {
-  return crypto.randomUUID();
-}
-
-function createSheetRevision(sheet: GeneratedSheet): SheetVersion {
-  return {
-    id: newId(),
-    createdAt: new Date().toISOString(),
-    sheet,
-  };
-}
-
-type GenerateResult = "success" | "failed" | "skipped";
-
-/** Names the studio gives a new album before anyone has renamed it. */
-const PLACEHOLDER_ALBUM_NAME = /^(Untitled album|My first album|(Project|Album) \d+)$/;
 const INTENT_NAMED_KEY = "cm_intent_named";
+/** "Make pages as I add", remembered per device: "on", "off", or unset (not chosen yet). */
+const AUTOPAGE_KEY = "cm_autopage";
+/** "on" turns landscape photos portrait as they are added. Off unless chosen: it uses credit. */
+const AUTOPORTRAIT_KEY = "cm_autoportrait";
+/** Photos reframed at the same time while adding a batch. */
+const REFRAME_CONCURRENCY = 3;
+/** Guests: only the first few photos of a batch are drawn by themselves. */
+const GUEST_AUTO_BATCH = 3;
+const INTERRUPTED = "This page was interrupted. Tap to try again.";
+/** Photos with a page request in flight, so a reload can tell which ones it cut short. */
+const INFLIGHT_KEY = "cm_pages_inflight";
 
+function readInflight(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(INFLIGHT_KEY) ?? "[]") as unknown;
+    return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeInflight(ids: string[]) {
+  try {
+    if (ids.length) localStorage.setItem(INFLIGHT_KEY, JSON.stringify(ids));
+    else localStorage.removeItem(INFLIGHT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readAutoPref(): "on" | "off" | null {
+  try {
+    const v = localStorage.getItem(AUTOPAGE_KEY);
+    return v === "on" || v === "off" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function readAutoPortrait(): boolean {
+  try {
+    return localStorage.getItem(AUTOPORTRAIT_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function writeAutoPortrait(on: boolean) {
+  try {
+    localStorage.setItem(AUTOPORTRAIT_KEY, on ? "on" : "off");
+  } catch {
+    /* ignore */
+  }
+}
+
+function writeAutoPref(v: "on" | "off") {
+  try {
+    localStorage.setItem(AUTOPAGE_KEY, v);
+  } catch {
+    /* ignore */
+  }
+}
+
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
+function subscribeDesktop(onChange: () => void) {
+  const mq = window.matchMedia(DESKTOP_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+/** Two layouts: under 1024px the gallery is full width with a book bar; from 1024px a 60/40 split. */
+function useIsDesktop() {
+  return useSyncExternalStore(
+    subscribeDesktop,
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => false,
+  );
+}
+
+/**
+ * The studio: one screen from photos to a paid book. A gallery of photos with their coloring pages
+ * (the gallery order is the book order), a page editor, and the "Your book" order panel (a sticky
+ * column on desktop, a book bar and bottom sheet on phones).
+ */
 export function ColorfulMemoriesApp() {
   const toast = useV2Toast();
+  const searchParams = useSearchParams();
   const welcomeGuide = useV2WelcomeGuide();
-  const router = useRouter();
-  const sheetCredits = useSheetUsageCredits("/studio");
   const prices = usePriceList();
+  const { user } = useAuth();
+  const desktop = useIsDesktop();
   const {
     hydrated,
     cloud,
@@ -105,19 +146,16 @@ export function ColorfulMemoriesApp() {
     activeProject,
     projects,
     renameActiveProject,
+    switchProject,
+    refreshActiveProject,
     photos,
     photosRef,
     pendingUploads,
-    selectedId,
-    setSelectedId,
-    studioLayout,
-    setStudioLayout,
     replacePhotos,
     mutatePhotos,
-    updatePhoto,
   } = useV2Studio();
-  /** Coloring pages in this album: the guest "Save this page" card and the book nudge read it. */
-  const sheetCount = photos.filter((p) => p.sheet).length;
+  const signedIn = Boolean(user) && cloud;
+
   // A visitor who came from a landing page (gift, birthday, pets) gets their first, empty album
   // named to match, once per visit. Only a placeholder name is replaced, never one they chose.
   useEffect(() => {
@@ -132,639 +170,370 @@ export function ColorfulMemoriesApp() {
     }
     renameActiveProject(name);
   }, [hydrated, activeProject, projects.length, photos.length, renameActiveProject]);
-  const deletion = useV2LibraryDeletion();
-  const ingestFiles = useV2PhotoIngest({ onAdded: autoGenerateFirstPage });
-  const [printOpen, setPrintOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [generatingAll, setGeneratingAll] = useState(false);
-  const generateAllRunRef = useRef(false);
-  const coloringApiLockRef = useRef(false);
-  const generateRequestIdRef = useRef<Map<string, string>>(new Map());
-  /** Set once the first-page shortcut has fired, so it can never run twice. */
-  const autoFirstPageRef = useRef(false);
-  const photoTransforms = useV2PhotoTransforms({ sheetCredits, lockRef: coloringApiLockRef });
-  const [lightboxFocus, setLightboxFocus] = useState<LightboxFocus | null>(
-    null,
-  );
-  const [lightboxViewMode, setLightboxViewMode] =
-    useState<LightboxViewMode>("single");
-  const [savingOverlayRevision, setSavingOverlayRevision] = useState(false);
-  /** A guest ran into the daily limit; the modal offers a free account. */
+
+  // ---- making pages ------------------------------------------------------------------
+  const locks = usePhotoLocks();
+  // The order panel handles the return from adding credit, so it can finish the purchase.
+  const sheetCredits = useSheetUsageCredits("/studio", { handleCheckoutReturn: false });
   const [guestLimit, setGuestLimit] = useState<{ scope: GuestLimitScope; kind: "page" | "edit" } | null>(null);
-  const [editChatOpen, setEditChatOpen] = useState(false);
-  const [editMessages, setEditMessages] = useState<SheetEditMessage[]>([]);
-  const fileRef = useRef<HTMLInputElement>(null);
-  /** Below lg the studio is a full-screen view opened by tapping a photo. */
-  /**
-   * After a reload our history entry is still there (marked in history.state), so the phone studio view
-   * reopens with it; Back then closes the view instead of doing nothing.
-   */
-  const [restoredStudioView] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      (window.history.state as { cmStudioView?: boolean } | null)?.cmStudioView === true &&
-      !window.matchMedia("(min-width: 1024px)").matches,
-  );
-  const [mobileStudioOpen, setMobileStudioOpen] = useState(restoredStudioView);
-  /** Studio shows every photo as a sortable grid instead of the photo/sheet panes. */
-  const [gridView, setGridView] = useState(false);
-  /** Set while the rail's "Original" entry is selected; see originalViewKey. */
-  const [originalViewFor, setOriginalViewFor] = useState<string | null>(null);
-
-  const selected = photos.find((p) => p.id === selectedId) ?? null;
-  const selectedRevisions = selected ? normalizeV2SheetRevisions(selected) : [];
-  const selectedVersions = selected ? { ...selected, sheetRevisions: selectedRevisions } : null;
-  const storedActiveVersion = selectedVersions ? activeSheetVersion(selectedVersions) : null;
-  // Looking at the uploaded photo again lasts until the photo or its versions change.
-  const originalViewKey = selected
-    ? `${selected.id}:${storedActiveVersion?.id ?? ""}:${selectedRevisions.length}`
-    : null;
-  const viewingOriginal = originalViewKey !== null && originalViewFor === originalViewKey;
-  /** Null while the uploaded photo is on show from the rail's "Original" entry. */
-  const activeVersion = viewingOriginal ? null : storedActiveVersion;
-  /** The portrait version on show, or the one the sheet on show was drawn from. */
-  const sourceVersion =
-    selectedVersions && !viewingOriginal ? activeSourceVersion(selectedVersions) : null;
-  /** Once a photo has portrait versions, the rail lists the uploaded photo too so it can be recalled. */
-  const railOriginal =
-    selected && selectedRevisions.some((revision) => revision.kind === "photo")
-      ? {
-          src: selected.previewUrl,
-          thumbSrc: selected.thumbUrl,
-          selected: viewingOriginal,
-          onSelect: () => setOriginalViewFor(originalViewKey),
-        }
-      : undefined;
-  const sourcePhotoSrc = sourceVersion?.sheet.imageDataUrl ?? selected?.previewUrl ?? "";
-  /** Null while a photo (the upload or a portrait version) is on show rather than a sheet. */
-  const activeSheet =
-    viewingOriginal || activeVersion?.kind === "photo" ? null : selected?.sheet ?? null;
-
-  /**
-   * On phones the studio view is a full-screen layer, so the browser Back button should close it
-   * rather than leave the page. Opening pushes one history entry; Back (popstate) closes the view,
-   * and the on-screen arrow goes back through history so no stray entry is left. Desktop shows the
-   * studio all the time and never pushes.
-   */
-  const studioHistoryRef = useRef(restoredStudioView);
-
-  function openMobileStudio() {
-    setMobileStudioOpen(true);
-    if (studioHistoryRef.current || window.matchMedia("(min-width: 1024px)").matches) return;
-    studioHistoryRef.current = true;
-    window.history.pushState({ cmStudioView: true }, "", window.location.href);
-  }
-
-  function closeMobileStudio() {
-    if (studioHistoryRef.current) {
-      window.history.back(); // the popstate listener closes the view
-    } else {
-      setMobileStudioOpen(false);
-    }
-  }
-
-  useEffect(() => {
-    const onPop = () => {
-      studioHistoryRef.current = false;
-      setMobileStudioOpen(false);
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+  const guestLimitShownRef = useRef(false);
+  const showGuestLimit = useCallback((scope: GuestLimitScope, kind: "page" | "edit") => {
+    if (kind === "page" && guestLimitShownRef.current) return;
+    if (kind === "page") guestLimitShownRef.current = true;
+    setGuestLimit({ scope, kind });
   }, []);
+  const gen = useSheetGeneration({ sheetCredits, locks, onGuestLimit: showGuestLimit });
+  const photoTransforms = useV2PhotoTransforms({ sheetCredits, locks });
 
-  function openPhoto(id: string) {
-    setSelectedId(id);
-    openMobileStudio();
-  }
-
-  useEffect(() => {
-    setLightboxFocus(null);
-    setLightboxViewMode("single");
-    setEditChatOpen(false);
-    setShareOpen(false);
-    setEditMessages([]);
-  }, [selectedId]);
-
-  function openLightbox(focus: LightboxFocus) {
-    setLightboxViewMode("single");
-    setLightboxFocus(focus);
-  }
-
-  function closeLightbox() {
-    setLightboxFocus(null);
-    setLightboxViewMode("single");
-  }
-
-  function deleteSelectedPageFromStudio() {
-    if (!selectedId) return;
-    deletion.request([selectedId]);
-  }
-
-  async function generateForPhoto(
-    photoId: string,
-    options?: {
-      select?: boolean;
-      batch?: boolean;
-      /** Draw from this portrait version instead of the uploaded photo. */
-      source?: SheetVersion;
-      /** Draw from the uploaded photo even though the photo already has versions. */
-      addVersion?: boolean;
-    },
-  ): Promise<GenerateResult> {
-    const photo = photosRef.current.find((entry) => entry.id === photoId);
-    const source = options?.source ?? null;
-    if (!photo || (photo.sheet && !source && !options?.addVersion)) return "skipped";
-    if (photo.generating || coloringApiLockRef.current) return "skipped";
-
-    if (options?.select !== false) {
-      setSelectedId(photoId);
+  function onBatchEnd(summary: BatchSummary) {
+    guestLimitShownRef.current = false;
+    const { ready, failed } = summary;
+    if (ready + failed === 0) return;
+    if (failed === 0) {
+      toast.success({
+        title: ready === 1 ? "Coloring page ready!" : `${ready} coloring pages ready`,
+        message: ready === 1 ? "Tap it to check it, fix it or print it." : "Tap any page to check it, fix it or print it.",
+      });
+    } else {
+      toast.info(
+        "Tap Try again on the page to have another go.",
+        `${ready} ready, ${failed} ${failed === 1 ? "needs" : "need"} another try`,
+      );
     }
-    if (!sheetCredits.canAfford("generation", photo)) return "failed";
+  }
 
-    coloringApiLockRef.current = true;
-    const requestId = crypto.randomUUID();
-    generateRequestIdRef.current.set(photoId, requestId);
-    mutatePhotos((prev) =>
-      prev.map((entry) =>
-        entry.id === photoId ? { ...entry, generating: true } : entry,
-      ),
+  const queue = useSheetQueue({
+    run: async (photoId, options) => {
+      writeInflight([...new Set([...readInflight(), photoId])]);
+      try {
+        const outcome = await gen.generateForPhoto(photoId, options);
+        if (outcome.kind === "limit") showGuestLimit(outcome.scope, "page");
+        return outcome;
+      } finally {
+        writeInflight(readInflight().filter((id) => id !== photoId));
+      }
+    },
+    onBatchEnd,
+  });
+
+  // One polite announcement for the whole batch, not one per page.
+  const liveMessage =
+    queue.progress.total > 0
+      ? `${queue.progress.done} of ${queue.progress.total} ${queue.progress.total === 1 ? "page" : "pages"} ready`
+      : "";
+
+  const pagePriceCents = signedIn ? sheetUsageCostCents(prices, "generation") : null;
+  const portraitPriceCents = signedIn ? sheetUsageCostCents(prices, "portrait") : null;
+  const balanceCents = user?.creditsBalanceCents ?? null;
+
+  /** How many more pages the wallet covers, after what is already running or waiting. */
+  function pagesAffordable(): number {
+    if (!signedIn || pagePriceCents == null || pagePriceCents <= 0 || balanceCents == null) return Number.POSITIVE_INFINITY;
+    return Math.max(0, Math.floor(balanceCents / pagePriceCents) - (queue.running + queue.queued));
+  }
+
+  const [shortCount, setShortCount] = useState(0);
+  const [addCreditFor, setAddCreditFor] = useState<number | null>(null);
+
+  /** Queue pages, never more than the wallet covers (signed in). Returns how many were queued. */
+  function makePages(ids: string[], options?: GenerateOptions): number {
+    const wanted = ids.filter((id) => {
+      const p = photosRef.current.find((e) => e.id === id);
+      return p && (options?.addVersion || !activePageVersion(p)) && !p.generating;
+    });
+    if (wanted.length === 0) return 0;
+    const cap = pagesAffordable();
+    const take = wanted.slice(0, cap === Number.POSITIVE_INFINITY ? wanted.length : cap);
+    setShortCount(wanted.length - take.length);
+    if (take.length === 0) {
+      setAddCreditFor(pagePriceCents != null && balanceCents != null ? Math.max(0, pagePriceCents - balanceCents) : 0);
+      return 0;
+    }
+    return queue.enqueue(take, options);
+  }
+
+  // ---- "Make pages as I add" ---------------------------------------------------------
+  // Read on the client only: the studio renders nothing that uses it until it has hydrated.
+  const [autoPref, setAutoPref] = useState<"on" | "off" | null>(readAutoPref);
+  const autoOn = signedIn ? autoPref === "on" : autoPref !== "off";
+  const [choiceIds, setChoiceIds] = useState<string[] | null>(null);
+
+  function setAuto(on: boolean) {
+    const v = on ? "on" : "off";
+    writeAutoPref(v);
+    setAutoPref(v);
+  }
+
+  // ---- "Turn landscape photos portrait" ------------------------------------------------
+  const [autoPortrait, setAutoPortraitState] = useState<boolean>(readAutoPortrait);
+  const [reframing, setReframing] = useState(0);
+  function setAutoPortrait(on: boolean) {
+    writeAutoPortrait(on);
+    setAutoPortraitState(on);
+  }
+
+  /**
+   * Reframes landscape photos to portrait a few at a time, then (when pages are being made) draws
+   * each page from its portrait version. A photo whose reframe fails still gets its page, drawn
+   * from the photo as it is.
+   */
+  async function reframeThenDraw(ids: string[], draw: boolean) {
+    if (ids.length === 0) return;
+    setReframing((n) => n + ids.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < ids.length) {
+        const id = ids[next++];
+        const version = await photoTransforms.reframePhoto(id, "portrait", { quiet: true });
+        setReframing((n) => n - 1);
+        if (!draw) continue;
+        if (version) makePages([id], { source: version, addVersion: true });
+        else makePages([id]);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(REFRAME_CONCURRENCY, ids.length) }, worker));
+  }
+
+  /** What happens to a batch once it's known whether pages are made for it. */
+  function startBatch(ids: string[], draw: boolean) {
+    const landscape = autoPortrait
+      ? ids.filter((id) => {
+          const p = photosRef.current.find((e) => e.id === id);
+          return p ? photoOrientation(p) === "landscape" : false;
+        })
+      : [];
+    if (!signedIn) {
+      // Guests share one small free allowance per batch between reframes and pages.
+      const reframe = landscape.slice(0, GUEST_AUTO_BATCH);
+      const direct = ids.filter((id) => !reframe.includes(id));
+      if (draw) queue.enqueue(direct.slice(0, Math.max(0, GUEST_AUTO_BATCH - reframe.length)));
+      void reframeThenDraw(reframe, draw);
+      return;
+    }
+    const direct = ids.filter((id) => !landscape.includes(id));
+    if (draw) makePages(direct);
+    void reframeThenDraw(landscape, draw);
+  }
+
+  function onPhotosAdded(added: V2PhotoEntry[]) {
+    const ids = added.map((p) => p.id);
+    if (!signedIn) {
+      // Guests: the first few of each batch are drawn by themselves; each photo at most once.
+      startBatch(ids, autoOn);
+      return;
+    }
+    // Never spend credit without a clear choice: the first batch on this device asks.
+    if (autoPref == null) {
+      setChoiceIds((prev) => [...(prev ?? []), ...ids]);
+      return;
+    }
+    startBatch(ids, autoOn);
+  }
+
+  const ingestFiles = useV2PhotoIngest({ onAdded: onPhotosAdded });
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function chooseAuto(make: boolean) {
+    setAuto(make);
+    const ids = choiceIds ?? [];
+    setChoiceIds(null);
+    startBatch(ids, make);
+  }
+
+  // ---- interrupted pages ---------------------------------------------------------------
+  // A reload (or iOS dropping the tab) loses a page mid-drawing. Anything still flagged as
+  // drawing with no live request becomes "Try again".
+  const sweepInterrupted = useCallback(() => {
+    const cutShort = new Set(readInflight().filter((id) => !queue.isLive(id)));
+    const stale = photosRef.current.filter(
+      (p) => ((p.generating || p.correcting) || cutShort.has(p.id)) && !queue.isLive(p.id) && !locks.has(p.id),
     );
+    if (cutShort.size) writeInflight(readInflight().filter((id) => !cutShort.has(id)));
+    if (stale.length === 0) return;
+    const ids = new Set(stale.map((p) => p.id));
+    mutatePhotos((prev) => prev.map((p) => (ids.has(p.id) ? { ...p, generating: false, correcting: false } : p)));
+    for (const p of stale) if (!activePageVersion(p)) queue.markFailed(p.id, INTERRUPTED);
+    if (cloud) void refreshActiveProject();
+  }, [photosRef, queue, locks, mutatePhotos, cloud, refreshActiveProject]);
 
-    try {
-      const response = await authedFetch("/api/photo-coloring", {
+  const sweptRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated || sweptRef.current) return;
+    sweptRef.current = true;
+    sweepInterrupted();
+  }, [hydrated, sweepInterrupted]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") sweepInterrupted();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [sweepInterrupted]);
+
+  // ---- book --------------------------------------------------------------------------
+  const book = useMemo(() => galleryBook(photos, activeProjectId, activeProject?.name ?? "Album"), [photos, activeProjectId, activeProject?.name]);
+  const cartParam = searchParams.get("cart");
+  const order = useBookOrder({
+    pages: book.pages,
+    pagesStillDrawing: book.stillDrawing + queue.queued,
+    projectId: activeProjectId,
+    projectTitle: activeProject?.name ?? "My coloring book",
+    cartParam,
+    onRestoreProject: (id) => {
+      if (projects.some((p) => p.id === id)) switchProject(id);
+    },
+  });
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [openRow, setOpenRow] = useState<OrderRow | null>("format");
+  const [confirm, setConfirm] = useState<{ step: ConfirmStep; autoPlace: boolean } | null>(null);
+  const galleryRef = useRef<HTMLDivElement>(null);
+
+  // Arrivals: "?book=open" (after sign-up), "?step=review" (old links), "?checkout=resume" (back from Stripe).
+  const wantsBook = searchParams.get("book") === "open" || searchParams.get("step") === "review";
+  const resuming = searchParams.get("checkout") === "resume";
+  const arrivalKey =
+    hydrated && (wantsBook || resuming) && !(resuming && (order.restoring || !user)) ? searchParams.toString() : null;
+  const [handledArrival, setHandledArrival] = useState<string | null>(null);
+  if (arrivalKey && arrivalKey !== handledArrival) {
+    setHandledArrival(arrivalKey);
+    if (!desktop) setSheetOpen(true);
+    if (resuming && order.proofConfirmed) setConfirm({ step: "overview", autoPlace: true });
+    else if (resuming || searchParams.get("step") === "review") setOpenRow("ship");
+  }
+  useEffect(() => {
+    if (!handledArrival) return;
+    // Leave a clean address so a reload doesn't do this again (the cart id stays for the panel).
+    const url = new URL(window.location.href);
+    for (const k of ["book", "step", "checkout", "project"]) url.searchParams.delete(k);
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [handledArrival]);
+
+  function showGallery() {
+    setSheetOpen(false);
+    // Desktop scrolls the gallery column itself; phones scroll the page.
+    if (desktop) galleryRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    else galleryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openConfirm() {
+    const problem = order.validateAddresses();
+    if (problem) {
+      order.setError(problem);
+      setOpenRow("ship");
+      return;
+    }
+    order.setError(null);
+    setConfirm({ step: order.proofConfirmed ? "overview" : "proof", autoPlace: false });
+  }
+
+  // ---- editor ------------------------------------------------------------------------
+  const [editor, setEditor] = useState<{ photoId: string; view: EditorView } | null>(null);
+  const [editChatOpen, setEditChatOpen] = useState(false);
+  /** The photo whose page is in the "Print or share" dialog (from a card or the editor). */
+  const [output, setOutput] = useState<{ id: string; mode: "all" | "send" } | null>(null);
+  const outputPhoto = output ? photos.find((p) => p.id === output.id) : null;
+  const pdfOnDemand = useOnDemandPdf();
+  const [undo, setUndo] = useState<{ photoId: string; revisionId: string } | null>(null);
+  const editorIndex = editor ? photos.findIndex((p) => p.id === editor.photoId) : -1;
+  const editorPhoto = editorIndex >= 0 ? photos[editorIndex] : null;
+
+  function openEditor(photoId: string, view: EditorView) {
+    if (editor?.photoId !== photoId) gen.resetEditChat();
+    setUndo(null);
+    setEditor({ photoId, view });
+  }
+
+  function closeEditor() {
+    setEditor(null);
+    setEditChatOpen(false);
+    setUndo(null);
+  }
+
+  function moveEditor(delta: -1 | 1) {
+    const next = photos[editorIndex + delta];
+    if (next) openEditor(next.id, activePageVersion(next) ? "page" : "photo");
+  }
+
+  async function quickFix(kind: QuickFixKind) {
+    if (!editorPhoto) return;
+    const previous = await gen.applyQuickFixVersion(editorPhoto.id, kind);
+    if (previous) setUndo({ photoId: editorPhoto.id, revisionId: previous });
+  }
+
+  // ---- deleting and selecting -----------------------------------------------------------
+  const deletion = useV2LibraryDeletion();
+
+  function deletePhoto(id: string) {
+    queue.cancel([id]);
+    deletion.request([id]);
+  }
+
+  // ---- card states ---------------------------------------------------------------------
+  function cardState(photo: V2PhotoEntry): CardState {
+    const q = queue.status(photo.id);
+    if (q === "queued") return "queued";
+    if (photo.generating || q === "running") return "drawing";
+    if (activePageVersion(photo)) return "ready";
+    if (queue.failures[photo.id]) return "failed";
+    return "none";
+  }
+  const giftOffset = order.giftNotePage ? 1 : 0;
+  const cardInfo = (photo: V2PhotoEntry) => {
+    const position = book.positionByPhotoId.get(photo.id);
+    return {
+      state: cardState(photo),
+      bookNumber: position != null ? position + giftOffset : null,
+      leftOut: photo.printPrefs.book?.leftOut === true,
+      failureMessage: queue.failures[photo.id],
+    };
+  };
+
+  const withoutPageIds = photos
+    .filter((p) => !p.printPrefs.book?.leftOut && cardState(p) === "none")
+    .map((p) => p.id);
+  const failedCount = photos.filter((p) => cardState(p) === "failed").length;
+  const uploading = pendingUploads.length > 0;
+  const activeCount = queue.running + queue.queued;
+  const showStrip =
+    photos.length + pendingUploads.length === 0 || uploading || activeCount > 0 || reframing > 0 || choiceIds != null || shortCount > 0;
+
+  // ---- desktop: drop files anywhere on the gallery ----------------------------------------
+  const [dropping, setDropping] = useState(false);
+  function onDragOver(e: DragEvent) {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setDropping(true);
+  }
+  function onDrop(e: DragEvent) {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault();
+    setDropping(false);
+    void ingestFiles(e.dataTransfer.files);
+  }
+
+  // ---- printing ----------------------------------------------------------------------
+  async function makePagePdf(photo: V2PhotoEntry | null | undefined): Promise<Blob> {
+    const version = photo ? activePageVersion(photo) : null;
+    if (!photo || !version) throw new Error("Pick a coloring page first.");
+    const response = await authedFetch(
+      "/api/pdf",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           photo.remote
-            ? {
-                mode: "generate-library",
-                photoId: photo.remote.photoId,
-                ...(source ? { sourceRevisionId: source.id } : {}),
-              }
-            : source
-              ? {
-                  mode: "generate",
-                  photoDataUrl: source.sheet.imageDataUrl,
-                  printPrefs: { ...photo.printPrefs, orientation: source.orientation ?? "portrait" },
-                }
-              : {
-                  mode: "generate",
-                  photoDataUrl: photo.photoDataUrl,
-                  printPrefs: photoPrintPrefs(photo),
-                  image: photo.image,
-                },
+            ? { revisionId: version.id, printPrefs: pagePrintPrefs(photo) }
+            : { imageDataUrl: version.sheet.imageDataUrl, printPrefs: pagePrintPrefs(photo) },
         ),
-      }, { withAuth: Boolean(photo.remote) });
-      const rawBody = await response.text();
-      let payload: {
-        sheet?: GeneratedSheet;
-        photo?: LibraryPhoto;
-        error?: string;
-        code?: string;
-        creditsBalanceCents?: number;
-      };
-      try {
-        payload = JSON.parse(rawBody) as typeof payload;
-      } catch {
-        throw new Error(
-          "The server sent an unexpected response. Please try again in a moment.",
-        );
-      }
-      if (generateRequestIdRef.current.get(photoId) !== requestId) {
-        return "skipped";
-      }
-      const limit = guestLimitScope(response.status, payload.code);
-      if (limit) {
-        setGuestLimit({ scope: limit, kind: "page" });
-        mutatePhotos((prev) =>
-          prev.map((entry) => (entry.id === photoId ? { ...entry, generating: false } : entry)),
-        );
-        return "failed";
-      }
-      if (sheetCredits.applyResponse(response.status, payload, "generation")) {
-        mutatePhotos((prev) =>
-          prev.map((entry) =>
-            entry.id === photoId ? { ...entry, generating: false } : entry,
-          ),
-        );
-        return "failed";
-      }
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not make a coloring page.");
-      }
-      if (payload.photo) {
-        const fresh = await entryFromLibraryPhoto(payload.photo);
-        mutatePhotos((prev) => prev.map((entry) => (entry.id === photoId ? fresh : entry)));
-      } else {
-        if (!payload.sheet) {
-          throw new Error("No coloring page came back.");
-        }
-        const revision: SheetVersion = {
-          ...createSheetRevision(payload.sheet),
-          ...(source ? { orientation: source.orientation ?? "portrait", sourceRevisionId: source.id } : {}),
-        };
-        mutatePhotos((prev) =>
-          prev.map((entry) =>
-            entry.id === photoId
-              ? {
-                  ...entry,
-                  sheet: payload.sheet!,
-                  sheetRevisions: [...normalizeV2SheetRevisions(entry), revision],
-                  activeRevisionId: revision.id,
-                  generating: false,
-                }
-              : entry,
-          ),
-        );
-      }
-      trackPageGenerated(Boolean(photo.remote));
-      if (!options?.batch) {
-        toast.success({
-          title: "Coloring page ready!",
-          message:
-            "Your photo has been converted to a high-quality coloring page.",
-        });
-      }
-      return "success";
-    } catch (err) {
-      if (generateRequestIdRef.current.get(photoId) === requestId) {
-        mutatePhotos((prev) =>
-          prev.map((entry) =>
-            entry.id === photoId ? { ...entry, generating: false } : entry,
-          ),
-        );
-      }
-      toast.error(friendlyRequestError(err, "Something went wrong."));
-      return "failed";
-    } finally {
-      coloringApiLockRef.current = false;
-      if (generateRequestIdRef.current.get(photoId) === requestId) {
-        generateRequestIdRef.current.delete(photoId);
-      }
-    }
-  }
-
-  /**
-   * A guest who has never made a page gets their first one without hunting for the "Generate
-   * sheet" tile: the first photo of the batch is selected and drawn straight away, and on phones
-   * the studio opens so they watch it happen. Guests only, because generating spends a signed-in
-   * person's credit. Failures take the usual path (toast, then the retry button in the studio).
-   */
-  function autoGenerateFirstPage(added: V2PhotoEntry[]) {
-    const first = added[0];
-    if (!first || autoFirstPageRef.current) return;
-    if (cloud || hasSessionToken() || readPagesMade() > 0) return;
-    if (generateAllRunRef.current || coloringApiLockRef.current) return;
-    if (photosRef.current.some((entry) => entry.generating || entry.correcting)) return;
-    autoFirstPageRef.current = true;
-    openMobileStudio();
-    void generateForPhoto(first.id, { select: true });
-  }
-
-  function clearAllGeneratingFlags() {
-    mutatePhotos((prev) =>
-      prev.map((entry) =>
-        entry.generating || entry.correcting
-          ? { ...entry, generating: false, correcting: false }
-          : entry,
-      ),
-    );
-  }
-
-  async function generateForSelected() {
-    if (!selected) {
-      toast.error("Upload and select a photo first.");
-      return;
-    }
-    if (viewingOriginal) {
-      await generateForPhoto(selected.id, { addVersion: true });
-      return;
-    }
-    await generateForPhoto(selected.id, activeVersion?.kind === "photo" ? { source: activeVersion } : undefined);
-  }
-
-  function openSheetEditChat() {
-    if (!activeSheet) {
-      toast.error("Make a coloring page before making edits.");
-      return;
-    }
-    setEditMessages((current) =>
-      current.length > 0
-        ? current
-        : [
-            {
-              id: newId(),
-              role: "assistant",
-              text: "Tell me what to adjust on this page. I'll change only what you describe.",
-            },
-          ],
-    );
-    setEditChatOpen(true);
-  }
-
-  async function applySheetEdit(note: string) {
-    const photo = selected;
-    if (!photo?.sheet || !activeSheet) return;
-    // New versions of a sheet keep its shape and the photo version it was drawn from.
-    const lineage = {
-      ...(activeVersion?.orientation ? { orientation: activeVersion.orientation } : {}),
-      ...(activeVersion?.sourceRevisionId ? { sourceRevisionId: activeVersion.sourceRevisionId } : {}),
-    };
-
-    const trimmed = note.trim();
-    if (!trimmed) return;
-    if (trimmed.length > PHOTO_MAX_CORRECTION_CHARS) {
-      toast.error(
-        `Keep each edit note under ${PHOTO_MAX_CORRECTION_CHARS} characters.`,
-      );
-      return;
-    }
-    if (coloringApiLockRef.current || photo.generating || photo.correcting) {
-      return;
-    }
-    if (!sheetCredits.canAfford("edit", photo)) return;
-
-    const userMessageId = newId();
-    const pendingId = newId();
-
-    setEditMessages((prev) => [
-      ...prev,
-      { id: userMessageId, role: "user", text: trimmed },
-      {
-        id: pendingId,
-        role: "assistant",
-        text: "Applying your change to the page…",
-        pending: true,
       },
-    ]);
-    coloringApiLockRef.current = true;
-    updatePhoto(photo.id, { correcting: true });
-    let outOfCredit = false;
-
-    try {
-      let body: Record<string, unknown>;
-      if (photo.remote) {
-        const revisions = normalizeV2SheetRevisions(photo);
-        const revisionId = photo.activeRevisionId ?? revisions[revisions.length - 1]?.id;
-        if (!revisionId) throw new Error("No page to edit yet.");
-        body = { mode: "correct-library", photoId: photo.remote.photoId, revisionId, corrections: [trimmed] };
-      } else {
-        const sheetDataUrl = await prepareSheetDataUrlForApi(photo.sheet.imageDataUrl, 2);
-        body = {
-          mode: "correct",
-          photoDataUrl: sourceVersion?.sheet.imageDataUrl ?? photo.photoDataUrl,
-          sheetDataUrl,
-          corrections: [trimmed],
-          printPrefs: activeVersionPrintPrefs(photo),
-          image: sourceVersion ? undefined : photo.image,
-        };
-      }
-      const response = await authedFetch("/api/photo-coloring", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }, { withAuth: Boolean(photo.remote) });
-      const payload = (await response.json()) as {
-        sheet?: GeneratedSheet;
-        photo?: LibraryPhoto;
-        error?: string;
-        code?: string;
-        creditsBalanceCents?: number;
-      };
-      const limit = guestLimitScope(response.status, payload.code);
-      if (limit) {
-        outOfCredit = true; // the modal explains; no extra toast
-        setGuestLimit({ scope: limit, kind: "edit" });
-      } else {
-        outOfCredit = sheetCredits.applyResponse(response.status, payload, "edit");
-      }
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not apply that edit.");
-      }
-
-      if (payload.photo) {
-        const fresh = await entryFromLibraryPhoto(payload.photo);
-        updatePhoto(photo.id, { ...fresh, correcting: false }, { persist: false });
-      } else {
-        if (!payload.sheet) {
-          throw new Error("No updated page came back.");
-        }
-        const prior = photosRef.current.find((entry) => entry.id === photo.id);
-        const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
-        const revision = { ...createSheetRevision(payload.sheet), ...lineage };
-        revisions.push(revision);
-        updatePhoto(photo.id, {
-          sheet: payload.sheet,
-          sheetRevisions: revisions,
-          activeRevisionId: revision.id,
-          correcting: false,
-        });
-      }
-      setEditMessages((prev) =>
-        prev.map((message) =>
-          message.id === pendingId
-            ? {
-                ...message,
-                pending: false,
-                done: true,
-                text: "Updated! Check the coloring page preview for your change.",
-              }
-            : message,
-        ),
-      );
-    } catch (err) {
-      updatePhoto(photo.id, { correcting: false });
-      const message = friendlyRequestError(err, "Could not apply that edit.");
-      if (!outOfCredit) toast.error(message);
-      setEditMessages((prev) =>
-        prev.map((entry) =>
-          entry.id === pendingId
-            ? {
-                ...entry,
-                pending: false,
-                text: message,
-              }
-            : entry,
-        ),
-      );
-    } finally {
-      coloringApiLockRef.current = false;
-    }
-  }
-
-  async function saveOverlaySheetRevision(opacityPercent: number) {
-    const photo = selected;
-    if (!photo?.sheet || !activeSheet || savingOverlayRevision) return;
-    const lineage = {
-      ...(activeVersion?.orientation ? { orientation: activeVersion.orientation } : {}),
-      ...(activeVersion?.sourceRevisionId ? { sourceRevisionId: activeVersion.sourceRevisionId } : {}),
-    };
-
-    setSavingOverlayRevision(true);
-    try {
-      const imageDataUrl = await compositeSheetOverlayDataUrl(
-        sourceVersion?.sheet.imageDataUrl ?? (photo.photoDataUrl || photo.previewUrl),
-        photo.sheet.imageDataUrl,
-        opacityPercent,
-      );
-      const tintedSheet: GeneratedSheet = {
-        title: `${photo.sheet.title} · ${opacityPercent}% tint`,
-        imageDataUrl,
-        mimeType: "image/png",
-      };
-      if (photo.remote) {
-        const stored = await uploadRevisionToLibrary({
-          photoId: photo.remote.photoId,
-          sheet: tintedSheet,
-          meta: lineage,
-        });
-        const fresh = await entryFromLibraryPhoto(stored);
-        updatePhoto(photo.id, fresh, { persist: false });
-        toast.success({
-          title: "Revision saved",
-          message: `Added a ${opacityPercent}% color overlay to your page history.`,
-        });
-        return;
-      }
-      const prior = photosRef.current.find((entry) => entry.id === photo.id);
-      const revisions = prior ? [...normalizeV2SheetRevisions(prior)] : [];
-      const revision = { ...createSheetRevision(tintedSheet), ...lineage };
-      revisions.push(revision);
-      updatePhoto(photo.id, {
-        sheet: tintedSheet,
-        sheetRevisions: revisions,
-        activeRevisionId: revision.id,
-      });
-      toast.success({
-        title: "Revision saved",
-        message: `Added a ${opacityPercent}% color overlay to your page history.`,
-      });
-    } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Could not save overlay revision.",
-      );
-    } finally {
-      setSavingOverlayRevision(false);
-    }
-  }
-
-  function selectSheetRevision(photoId: string, revisionId: string) {
-    const entry = photosRef.current.find((item) => item.id === photoId);
-    if (!entry) return;
-    const revisions = normalizeV2SheetRevisions(entry);
-    const picked = revisions.find((item) => item.id === revisionId);
-    if (!picked) return;
-    setOriginalViewFor(null);
-    updatePhoto(photoId, { sheetRevisions: revisions, activeRevisionId: revisionId, sheet: picked.sheet });
-  }
-
-  async function generateAllSheets() {
-    if (generateAllRunRef.current) return;
-
-    const queue = photosRef.current
-      .filter((entry) => !entry.sheet && !entry.generating)
-      .map((entry) => entry.id);
-
-    if (queue.length === 0) {
-      if (photosRef.current.length === 0) {
-        toast.error("Upload photos first.");
-      }
-      return;
-    }
-
-    generateAllRunRef.current = true;
-    setGeneratingAll(true);
-
-    try {
-      for (const photoId of queue) {
-        if (!generateAllRunRef.current) break;
-
-        const current = photosRef.current.find((entry) => entry.id === photoId);
-        if (!current || current.sheet) continue;
-
-        const result = await generateForPhoto(photoId, {
-          select: false,
-          batch: true,
-        });
-        if (result === "failed") break;
-      }
-    } finally {
-      generateAllRunRef.current = false;
-      setGeneratingAll(false);
-      clearAllGeneratingFlags();
-      coloringApiLockRef.current = false;
-    }
-  }
-
-  /** The print-ready PDF for the sheet on screen. */
-  async function makeSelectedPdf(): Promise<Blob> {
-    if (!selected?.sheet || !activeSheet) throw new Error("Pick a coloring page first.");
-    const response = await authedFetch("/api/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        selected.remote
-          ? { revisionId: activeVersion?.id, printPrefs: activeVersionPrintPrefs(selected) }
-          : { imageDataUrl: selected.sheet.imageDataUrl, printPrefs: activeVersionPrintPrefs(selected) },
-      ),
-    }, { withAuth: Boolean(selected.remote) });
+      { withAuth: Boolean(photo.remote) },
+    );
     if (!response.ok) {
       const payload = (await response.json().catch(() => ({}))) as { error?: string };
       throw new Error(payload.error ?? "Could not make a PDF.");
     }
     return response.blob();
   }
-
-  const anyGenerating = photos.some(
-    (entry) => entry.generating || entry.correcting,
-  );
-  const busy =
-    (selected?.generating ?? false) ||
-    (selected?.correcting ?? false) ||
-    generatingAll;
-  const mirroring = Boolean(selected) && photoTransforms.mirroringId === selected?.id;
-  const makingPortrait = Boolean(selected) && photoTransforms.portraitId === selected?.id;
-  const portraitCents = unitPriceCents(prices, "ai.photo_portrait");
-  const photoToolsDisabled =
-    busy || anyGenerating || photoTransforms.mirroringId !== null || photoTransforms.portraitId !== null;
-  const sheetBusy = (selected?.generating ?? false) && !activeSheet;
-  const sheetCorrecting = selected?.correcting ?? false;
-  const sheetReady = Boolean(activeSheet);
-  /** Signed-in pages saved to the library can get a share link; guest pages never leave the device. */
-  const shareRevisionId =
-    cloud && selected?.remote && selected.canDelete !== false && activeSheet ? activeVersion?.id ?? null : null;
-  const hasAnySheet = photos.some((entry) => entry.sheet);
-  const needsSheetCount = photos.filter((entry) => !entry.sheet).length;
-  const uploading = pendingUploads.length > 0;
-  const canGenerateAll =
-    needsSheetCount > 0 && !uploading && !generatingAll && !anyGenerating;
-  const canBuyBook =
-    hasAnySheet && !uploading && !generatingAll && !anyGenerating && !busy;
-
-  function buyBook() {
-    if (!hasAnySheet) {
-      toast.error(
-        "Make at least one coloring page before creating your book.",
-      );
-      return;
-    }
-    const storeUrl = process.env.NEXT_PUBLIC_BOOK_STORE_URL?.trim();
-    if (storeUrl) {
-      window.open(storeUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    router.push(
-      activeProjectId ? `/studio/order?project=${encodeURIComponent(activeProjectId)}` : "/studio/order",
-    );
-  }
-
-  const showRevisionSidebar =
-    Boolean(selected?.sheet) && selectedRevisions.length > 0;
-  const showPhotoPane = studioLayout === "photo" || studioLayout === "both";
-  const showSheetPane = studioLayout === "sheet" || studioLayout === "both";
-  const activeRevisionId = activeVersion?.id ?? null;
 
   if (!hydrated) {
     return (
@@ -779,477 +548,414 @@ export function ColorfulMemoriesApp() {
     );
   }
 
-  const studioOpen = mobileStudioOpen && Boolean(selected);
+  const blocker = confirmBlocker(order);
+  const hasBookPage = order.contentCount > 0 || book.stillDrawing > 0;
+  // Phones: the book bar replaces the tab bar once there is a page (the header menu has the tabs).
+  const showBookBar = !desktop && hasBookPage && !editor;
+  // Turning the page to the other shape: free when that page exists, a page when the photo
+  // already has that shape, otherwise reframing the photo and then a page.
+  const editorShapePlan = editorPhoto && !editorPhoto.generating ? shapePlan(editorPhoto) : null;
+  const editorShape = editorShapePlan
+    ? {
+        label: editorShapePlan.target === "portrait" ? "Make it portrait" : "Make it landscape",
+        costLabel:
+          editorShapePlan.kind === "select"
+            ? "Free"
+            : !signedIn
+              ? "Free"
+              : editorShapePlan.kind === "draw"
+                ? pagePriceCents != null
+                  ? formatCredits(pagePriceCents)
+                  : null
+                : pagePriceCents != null && portraitPriceCents != null
+                  ? formatCredits(pagePriceCents + portraitPriceCents)
+                  : null,
+      }
+    : null;
 
-  // Under a finished page only: not while it draws, edits or is missing.
-  const bookCard =
-    sheetReady && !busy ? (
-      <V2BookUpsellCard
-        pageCount={sheetCount}
-        canMakeBook={canBuyBook}
-        onMakeBook={buyBook}
-        onAddPhotos={() => fileRef.current?.click()}
-        className={cloud ? "lg:hidden" : undefined}
-      />
-    ) : null;
+  async function changeShape(photoId: string) {
+    const photo = photosRef.current.find((p) => p.id === photoId);
+    if (!photo) return;
+    const plan = shapePlan(photo);
+    setUndo(null);
+    if (plan.kind === "select") {
+      gen.selectRevision(photoId, plan.revisionId);
+      return;
+    }
+    if (plan.kind === "draw") {
+      makePages([photoId], plan.source ? { source: plan.source, addVersion: true } : { addVersion: true });
+      return;
+    }
+    const version = await photoTransforms.reframePhoto(photoId, plan.target, { quiet: true });
+    if (version) makePages([photoId], { source: version, addVersion: true });
+  }
 
-  const refreshButton = (
-    <V2LibraryRefreshButton disabled={uploading || generatingAll || anyGenerating} />
-  );
+  const editCost = editorPhoto
+    ? editorPhoto.remote && signedIn
+      ? (() => {
+          const free = freeEditsPerSheet(prices);
+          if ((editorPhoto.editCount ?? 0) < free) return "Free";
+          const c = sheetUsageCostCents(prices, "edit", editorPhoto.editCount ?? 0);
+          return c != null ? formatCredits(c) : null;
+        })()
+      : "Free"
+    : null;
+  const makeCost = signedIn ? (pagePriceCents != null ? formatCredits(pagePriceCents) : null) : "Free";
+  const bookPriceLabel =
+    order.signedIn && order.quoteCents != null && !order.quoteLoading
+      ? order.isDigital
+        ? formatCredits(order.quoteCents)
+        : `${formatCredits(order.printCents ?? order.quoteCents)} + shipping`
+      : null;
+  // The one photo behind the page on show: new pages and edits start from it.
+  const editorSource = editorPhoto ? pageSourceVersion(editorPhoto) : null;
 
-  // Guests have nothing to refresh from, so they keep the batch generate shortcut.
-  const generateAllButton = cloud ? (
-    refreshButton
-  ) : photos.length > 0 ? (
-      <button
-        type="button"
-        disabled={!canGenerateAll}
-        onClick={() => void generateAllSheets()}
-        className="v2-hit inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-v2-primary/30 bg-v2-primary-light px-3.5 text-sm font-semibold text-v2-link transition hover:border-v2-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {generatingAll ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        ) : (
-          <Sparkles className="h-4 w-4" aria-hidden />
-        )}
-        Make all pages
-        {needsSheetCount > 0 && !generatingAll ? (
-          <span className="rounded-full bg-v2-primary/15 px-1.5 text-xs font-bold tabular-nums">
-            {needsSheetCount}
-          </span>
-        ) : null}
-      </button>
-    ) : null;
-
-  const photoPane = (
-    <div className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-      <button
-        type="button"
-        disabled={!selected}
-        onClick={() => selected && openLightbox("original")}
-        className={cn(
-          "flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl bg-v2-bg-subtle",
-          selected &&
-            "cursor-zoom-in transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
-          !selected && "cursor-default",
-        )}
-        aria-label={selected ? "View original photo full screen" : undefined}
-      >
-        {selected ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={sourcePhotoSrc}
-            alt="Selected photo"
-            className="pointer-events-none max-h-full max-w-full object-contain"
-          />
-        ) : (
-          <span className="p-6 text-center text-sm text-v2-muted">
-            Select a photo to preview
-          </span>
-        )}
-      </button>
-      {selected ? (
-        <div className="absolute right-2 top-2 flex max-w-[calc(100%-1rem)] flex-wrap justify-end gap-1.5">
-          <button
-            type="button"
-            disabled={photoToolsDisabled}
-            onClick={() => void photoTransforms.mirrorPhoto(selected.id)}
-            className="v2-photo-tool"
-            title={
-              selectedRevisions.length > 0
-                ? "Flip this photo and all its versions left to right"
-                : "Flip this photo left to right"
-            }
-          >
-            {mirroring ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-            ) : (
-              <FlipHorizontal2 className="h-4 w-4 shrink-0" aria-hidden />
-            )}
-            Mirror
-          </button>
-          {photoOrientation(selected) === "landscape" ? (
-            <button
-              type="button"
-              disabled={photoToolsDisabled}
-              onClick={() => void photoTransforms.makePortrait(selected.id)}
-              className="v2-photo-tool v2-photo-tool--ai"
-              title={
-                selected.remote && portraitCents != null
-                  ? `Add an AI portrait version of this photo (${formatCredits(portraitCents)})`
-                  : "Add an AI portrait version of this photo"
-              }
-            >
-              <RectangleVertical className="h-4 w-4 shrink-0" aria-hidden />
-              Make portrait
-              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {makingPortrait ? (
-        <V2WorkingOverlay
-          variant="portrait"
-          label="Making a portrait version of your photo."
-          className="rounded-xl"
-        />
-      ) : null}
-    </div>
-  );
-
-  const sheetPane = (
-    <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-      {activeSheet ? (
-        <div className="relative flex min-h-0 w-full flex-1 overflow-hidden rounded-xl bg-v2-bg-subtle">
-          <button
-            type="button"
-            disabled={sheetCorrecting}
-            onClick={() => openLightbox("sheet")}
-            className="relative flex h-full min-h-0 w-full flex-1 cursor-zoom-in items-center justify-center transition hover:ring-2 hover:ring-v2-primary/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary disabled:cursor-wait"
-            aria-label="View coloring page full screen"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              key={activeSheet.imageDataUrl.slice(-48)}
-              src={activeSheet.imageDataUrl}
-              alt="Generated coloring page"
-              className="v2-sheet-reveal pointer-events-none max-h-full max-w-full object-contain"
-            />
-          </button>
-          {sheetCorrecting ? (
-            <V2WorkingOverlay variant="edit" label="Applying your edits to the coloring page." />
-          ) : null}
-        </div>
-      ) : sheetBusy && selected ? (
-        <V2SheetGeneratingPlaceholder
-          imageSrc={sourcePhotoSrc}
-          imageAlt="Photo being traced"
-          className="min-h-0 w-full flex-1 rounded-xl border border-gray-200"
-          imageFit="contain"
-        />
-      ) : (
-        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-v2-primary/30 bg-v2-primary-light/60 p-6 text-center">
-          <p className="max-w-xs text-sm text-v2-muted">
-            {!selected
-              ? "Select a photo from your library to get started."
-              : viewingOriginal
-                ? "This is your original photo. Make a coloring page from it, or pick a version."
-                : activeVersion?.kind === "photo"
-                  ? "This portrait version doesn’t have a coloring page yet."
-                : "This photo doesn’t have a coloring page yet."}
-          </p>
-          <button
-            type="button"
-            disabled={!selected || generatingAll}
-            onClick={() => void generateForSelected()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-v2-primary/20 transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
-          >
-            <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-            Make coloring page
-          </button>
-        </div>
-      )}
-    </div>
+  const panel = (variant: "column" | "sheet") => (
+    <BookOrderPanel
+      order={order}
+      withoutPage={withoutPageIds.length + failedCount}
+      leftOut={book.leftOut}
+      openRow={openRow}
+      onOpenRow={setOpenRow}
+      onShowGallery={showGallery}
+      onConfirm={openConfirm}
+      variant={variant}
+    />
   );
 
   return (
-    <V2StudioFrame pageScroll>
-      {/* Phones: nothing here clips or scrolls — the frame scrolls the whole page. */}
-      <V2LibraryWorkspace
-        emptyState={{ onHowItWorks: welcomeGuide.open, line: STUDIO_EMPTY.lineByIntent[readIntent()] }}
-        fileInputRef={fileRef}
-        onFiles={(files) => void ingestFiles(files)}
-        onSelectPhoto={openPhoto}
-        onGenerateSheet={(id) => {
-          if (generatingAll || coloringApiLockRef.current) return;
-          void generateForPhoto(id);
-        }}
-        generateDisabled={generatingAll || anyGenerating}
-        deletion={deletion}
-        deleteDisabled={uploading || generatingAll}
-        headerAction={generateAllButton}
-        dock={
-          cloud && sheetCount > 0 ? (
-            <V2BookNudge pageCount={sheetCount} disabled={!canBuyBook} onMakeBook={buyBook} />
-          ) : (
-            <button
-              type="button"
-              disabled={!canBuyBook}
-              onClick={buyBook}
-              className="v2-photo-list-dock-cta"
-            >
-              <BookOpen className="h-5 w-5 shrink-0" aria-hidden />
-              Make a book
-            </button>
-          )
-        }
-        studioActions={
-          <>
-            <button
-              type="button"
-              disabled={!sheetReady || busy}
-              onClick={() => setPrintOpen(true)}
-              className="v2-studio-toolbar-btn"
-            >
-              <Printer className="h-4 w-4 shrink-0" aria-hidden />
-              Print page
-            </button>
-            {shareRevisionId ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setShareOpen(true)}
-                className="v2-studio-toolbar-btn"
-              >
-                <Share2 className="h-4 w-4 shrink-0" aria-hidden />
-                Share
-              </button>
-            ) : null}
-            <button
-              type="button"
-              disabled={!sheetReady || busy}
-              onClick={openSheetEditChat}
-              className="v2-studio-toolbar-btn v2-studio-toolbar-btn--primary"
-            >
-              <PencilLine className="h-4 w-4 shrink-0" aria-hidden />
-              Edit page
-            </button>
-            {selected ? (
-              <button
-                type="button"
-                onClick={deleteSelectedPageFromStudio}
-                disabled={busy || deletion.active}
-                className="v2-studio-toolbar-btn v2-studio-toolbar-btn--danger"
-              >
-                <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                Delete photo
-              </button>
-            ) : null}
-          </>
-        }
-      >
-          {/* Studio — right column on desktop, full-screen view on phones */}
+    <V2StudioFrame pageScroll hideBottomNav={showBookBar}>
+      <div className="flex w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,.heic,.heif"
+          multiple
+          className="sr-only"
+          onChange={(event) => {
+            const list = event.target.files;
+            if (list?.length) void ingestFiles(list);
+            event.target.value = "";
+          }}
+        />
+        <V2LibraryMigrationBanner />
+        <p className="sr-only" aria-live="polite" role="status">
+          {liveMessage}
+        </p>
+
+        <div className="flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
+          {/* Gallery: full width on phones, 60% on desktop */}
           <main
-            className={cn(
-              "flex-col bg-v2-bg",
-              studioOpen ? "v2-safe-overlay fixed inset-0 z-[45] flex" : "hidden",
-              "lg:static lg:z-auto lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:overflow-hidden lg:p-4 xl:p-6",
-            )}
+            ref={galleryRef}
             aria-label="Studio"
+            className={`relative w-full min-w-0 px-4 lg:w-[60%] lg:overflow-y-auto lg:px-6 lg:pb-8 ${
+              showBookBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
+            }`}
+            onDragOver={onDragOver}
+            onDragLeave={() => setDropping(false)}
+            onDrop={onDrop}
           >
-            <section className="v2-panel flex min-h-0 flex-1 overflow-hidden rounded-none border-0 shadow-none lg:rounded-2xl lg:border lg:shadow-[0_1px_2px_rgb(10_16_26/0.04),0_8px_24px_rgb(10_16_26/0.05)]">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <header className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2 sm:px-5 lg:px-6 lg:py-3">
-                  <button
-                    type="button"
-                    onClick={closeMobileStudio}
-                    className="-ml-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-bg-subtle lg:hidden"
-                    aria-label="Back to photos"
-                  >
-                    <ChevronLeft className="h-6 w-6" aria-hidden />
-                  </button>
-                  <h2 className="flex h-9 min-w-0 items-center truncate text-base font-semibold tracking-tight text-v2-ink lg:text-lg">
-                    Studio
-                  </h2>
-                  {/* sheet view ⇄ grid view */}
-                  <div
-                    className="ml-2 inline-flex h-9 shrink-0 items-center gap-1.5 sm:ml-3"
-                    role="group"
-                    aria-label="Studio view"
-                  >
-                    <Columns2
-                      className={cn("h-4 w-4", gridView ? "text-v2-muted" : "text-v2-primary")}
-                      aria-hidden
-                    />
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={gridView}
-                      aria-label={gridView ? "Showing all photos as a grid" : "Showing the selected photo and page"}
-                      title={gridView ? "Switch to page view" : "Switch to grid view"}
-                      onClick={() => setGridView((v) => !v)}
-                      className={cn(
-                        "v2-hit relative inline-flex h-6 w-10 items-center rounded-full border transition-colors",
-                        gridView ? "border-v2-primary bg-v2-primary" : "border-v2-primary/40 bg-v2-primary-light",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "absolute top-0.5 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform",
-                          gridView ? "translate-x-[18px]" : "translate-x-0.5",
-                        )}
-                      />
-                    </button>
-                    <LayoutGrid
-                      className={cn("h-4 w-4", gridView ? "text-v2-primary" : "text-v2-muted")}
-                      aria-hidden
-                    />
-                  </div>
-                  <span className="flex-1" aria-hidden />
-                  <V2StudioLayoutToggle
-                    className={cn("h-9 shrink-0", gridView && "opacity-50")}
-                    value={studioLayout}
-                    onChange={(mode) => {
-                      setGridView(false);
-                      setStudioLayout(mode);
-                    }}
-                  />
-                </header>
+            <div className="sticky top-0 z-20 -mx-4 bg-v2-bg/95 px-4 pb-2 pt-2 backdrop-blur lg:-mx-6 lg:px-6">
+              <StudioHeader
+                pageCount={order.contentCount}
+                photoCount={photos.length}
+                uploading={uploading}
+                onAddPhotos={() => fileRef.current?.click()}
+                onSelectPhotos={deletion.enter}
+                selectDisabled={activeCount > 0}
+                autoMake={autoOn}
+                onAutoMakeChange={setAuto}
+                autoPortrait={autoPortrait}
+                onAutoPortraitChange={setAutoPortrait}
+              />
+            </div>
 
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-5 lg:p-6">
-                  {gridView ? (
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-                      <V2StudioPhotoGrid
-                        photos={photos}
-                        selectedId={selectedId}
-                        onSelect={setSelectedId}
-                        onReorder={replacePhotos}
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className={cn(
-                        "grid min-h-0 flex-1 gap-3 overflow-hidden lg:gap-5",
-                        studioLayout === "both"
-                          ? "grid-rows-2 sm:grid-cols-2 sm:grid-rows-1"
-                          : "grid-cols-1",
-                      )}
-                    >
-                      {showPhotoPane ? photoPane : null}
-                      {showSheetPane ? sheetPane : null}
-                    </div>
-                  )}
-                </div>
-
-                {/* One next-step card at a time: a guest's "Save this page" card while it is due,
-                    otherwise "Turn this into a book". Signed-in people only get the book card, and
-                    on desktop the list's own book nudge already says it, so the card hides there. */}
-                {!cloud && hydrated ? <V2SavePromptCard pageCount={sheetCount} fallback={bookCard} /> : null}
-                {cloud ? bookCard : null}
-
-                {/* Phone-only: revisions + page actions */}
-                {showRevisionSidebar && selected && !gridView ? (
-                  <V2SheetRevisionStrip
-                    variant="compact"
-                    className="shrink-0 border-t border-gray-100 px-3 py-2 lg:hidden"
-                    revisions={selectedRevisions}
-                    activeRevisionId={activeRevisionId}
-                    original={railOriginal}
-                    onSelect={(revisionId) =>
-                      selectSheetRevision(selected.id, revisionId)
-                    }
-                    disabled={sheetCorrecting}
-                  />
-                ) : null}
-                {selected ? (
-                  <footer className={`grid shrink-0 ${shareRevisionId ? "grid-cols-4" : "grid-cols-3"} gap-2 border-t border-gray-100 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 lg:hidden`}>
-                    <button
-                      type="button"
-                      disabled={!sheetReady || busy}
-                      onClick={() => setPrintOpen(true)}
-                      className="v2-studio-action"
-                    >
-                      <Printer className="h-5 w-5" aria-hidden />
-                      Print
-                    </button>
-                    {shareRevisionId ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setShareOpen(true)}
-                        className="v2-studio-action"
-                      >
-                        <Share2 className="h-5 w-5" aria-hidden />
-                        Share
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={!sheetReady || busy}
-                      onClick={openSheetEditChat}
-                      className="v2-studio-action v2-studio-action--primary"
-                    >
-                      <PencilLine className="h-5 w-5" aria-hidden />
-                      Edit page
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy || deletion.active}
-                      onClick={deleteSelectedPageFromStudio}
-                      className="v2-studio-action v2-studio-action--danger"
-                    >
-                      <Trash2 className="h-5 w-5" aria-hidden />
-                      Delete
-                    </button>
-                  </footer>
-                ) : null}
-              </div>
-
-              {showRevisionSidebar && selected && !gridView ? (
-                <V2SheetRevisionStrip
-                  variant="sidebar"
-                  className="hidden min-h-0 self-stretch lg:flex"
-                  revisions={selectedRevisions}
-                  activeRevisionId={activeRevisionId}
-                  original={railOriginal}
-                  onSelect={(revisionId) =>
-                    selectSheetRevision(selected.id, revisionId)
-                  }
-                  onEditSheet={openSheetEditChat}
-                  editDisabled={busy || !sheetReady}
-                  disabled={sheetCorrecting}
+            <div className="space-y-3">
+              {showStrip ? (
+                <UploadStrip
+                  signedIn={signedIn}
+                  autoOn={autoOn}
+                  onAutoChange={setAuto}
+                  autoPortraitOn={autoPortrait}
+                  onAutoPortraitChange={setAutoPortrait}
+                  portraitPriceCents={portraitPriceCents}
+                  reframingCount={reframing}
+                  pagePriceCents={pagePriceCents}
+                  balanceCents={signedIn ? balanceCents : null}
+                  uploading={uploading}
+                  activeCount={activeCount}
+                  queuedCount={queue.queued}
+                  onStopRest={() => queue.cancel()}
+                  choiceCount={choiceIds?.length ?? null}
+                  onChoose={chooseAuto}
+                  shortCount={shortCount}
+                  onAddCredit={() => setAddCreditFor(pagePriceCents != null ? pagePriceCents * shortCount : 0)}
                 />
               ) : null}
-            </section>
-          </main>
-      </V2LibraryWorkspace>
 
-      {selected && activeSheet ? (
+              {!cloud && photos.length > 0 ? <V2SavePromptCard pageCount={order.contentCount} fallback={null} /> : null}
+
+              {withoutPageIds.length >= 2 && activeCount === 0 && !deletion.active ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 text-v2-ink">
+                    {withoutPageIds.length} photos have no page yet
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 items-center gap-1.5 font-semibold text-v2-link"
+                    onClick={() => makePages(withoutPageIds)}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                    Make the rest
+                    <span className="font-normal text-v2-muted">
+                      ({signedIn ? (pagePriceCents != null ? formatCredits(pagePriceCents * withoutPageIds.length) : "uses credit") : "free to try"})
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+
+              {photos.length + pendingUploads.length === 0 ? (
+                <V2UploadDropzone className="min-h-[18rem]" onFiles={(files) => void ingestFiles(files)}>
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <h2 className="v2-brand-title text-xl text-v2-ink">{STUDIO_EMPTY.title}</h2>
+                    <p className="text-sm text-v2-muted">{STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}</p>
+                    <button type="button" onClick={() => fileRef.current?.click()} className="v2-btn-primary v2-breathe min-h-11 w-full max-w-xs">
+                      {STUDIO_EMPTY.button}
+                    </button>
+                    <div className="w-full max-w-xs text-left">
+                      <p className="text-xs font-semibold text-v2-navy">{BEST_PHOTOS.title}</p>
+                      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-v2-muted">
+                        {BEST_PHOTOS.items.map((tip) => (
+                          <li key={tip}>{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <p className="text-[11px] text-v2-muted">
+                      {fillCopy(STUDIO_EMPTY.formats, { size: formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES) })}
+                      <span className="hidden pointer-fine:inline"> {STUDIO_EMPTY.dragHint}</span>
+                    </p>
+                    {!cloud ? <p className="text-[11px] text-v2-muted">{STUDIO_EMPTY.guestNote}</p> : null}
+                    <button type="button" onClick={welcomeGuide.open} className="min-h-11 px-3 text-sm font-semibold text-v2-link">
+                      {STUDIO_EMPTY.howItWorks}
+                    </button>
+                  </div>
+                </V2UploadDropzone>
+              ) : (
+                <StudioGallery
+                  photos={photos}
+                  pendingUploads={pendingUploads.length}
+                  cardInfo={cardInfo}
+                  selectMode={deletion.active}
+                  selectedIds={deletion.selectedIds}
+                  onToggleSelect={deletion.toggle}
+                  onOpen={openEditor}
+                  onMake={(id) => {
+                    queue.clearFailure(id);
+                    makePages([id]);
+                  }}
+                  onCancel={(id) => queue.cancel([id])}
+                  onToggleLeftOut={(id) => {
+                    const p = photosRef.current.find((e) => e.id === id);
+                    gen.setBookPrefs(id, { leftOut: !p?.printPrefs.book?.leftOut });
+                  }}
+                  onDelete={deletePhoto}
+                  onPrint={(id) => setOutput({ id, mode: "all" })}
+                  onReorder={replacePhotos}
+                />
+              )}
+            </div>
+            {dropping ? (
+              <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-v2-primary bg-v2-primary-light/80 text-sm font-semibold text-v2-navy">
+                Drop photos to add them
+              </div>
+            ) : null}
+          </main>
+
+          {/* The book order: sticky column on desktop */}
+          <aside className="hidden min-h-0 border-l border-gray-200 bg-white lg:block lg:w-[40%] lg:overflow-y-auto" aria-label="Complete your book order">
+            <div className="p-5 xl:p-6">
+              <h2 className="v2-brand-title mb-2 text-xl text-v2-ink">Complete your book order</h2>
+              {panel("column")}
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      {deletion.active ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 lg:left-0 lg:right-[40%]">
+          <div className="mx-auto flex max-w-xl items-center gap-2">
+            <button type="button" className="v2-btn-outline min-h-11 px-4 text-sm" onClick={deletion.exit}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-red-600 px-4 text-sm font-semibold text-white disabled:opacity-40"
+              disabled={deletion.selectedIds.size === 0}
+              onClick={deletion.requestSelected}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+              Delete {deletion.selectedIds.size} {deletion.selectedIds.size === 1 ? "photo" : "photos"}
+            </button>
+          </div>
+        </div>
+      ) : showBookBar ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 text-sm">
+              <span className="font-semibold text-v2-ink">
+                {order.contentCount} {order.contentCount === 1 ? "page" : "pages"}
+              </span>
+              {bookPriceLabel ? <span className="block truncate text-xs text-v2-muted">{bookPriceLabel}</span> : null}
+            </p>
+            <button type="button" className="v2-btn-primary min-h-11 shrink-0 px-5 text-sm" onClick={() => setSheetOpen(true)}>
+              Make my book
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {sheetOpen && !desktop ? (
+        <BottomSheet
+          title="Complete your book order"
+          onClose={() => setSheetOpen(false)}
+          footer={order.signedIn && hasBookPage ? <ConfirmButton order={order} blocker={blocker} onConfirm={openConfirm} /> : undefined}
+        >
+          {panel("sheet")}
+        </BottomSheet>
+      ) : null}
+
+      {editorPhoto ? (
+        <PageEditorModal
+          photo={editorPhoto}
+          index={editorIndex}
+          total={photos.length}
+          initialView={editor!.view}
+          state={cardState(editorPhoto)}
+          failureMessage={queue.failures[editorPhoto.id]}
+          busy={locks.busy.has(editorPhoto.id) || editorPhoto.generating || Boolean(editorPhoto.correcting) || queue.status(editorPhoto.id) != null}
+          makeCostLabel={makeCost}
+          editCostLabel={editCost}
+          leftOut={editorPhoto.printPrefs.book?.leftOut === true}
+          canShare={Boolean(activePageVersion(editorPhoto))}
+          onClose={closeEditor}
+          onPrev={editorIndex > 0 ? () => moveEditor(-1) : null}
+          onNext={editorIndex < photos.length - 1 ? () => moveEditor(1) : null}
+          onMake={() => {
+            queue.clearFailure(editorPhoto.id);
+            makePages([editorPhoto.id], editorSource ? { source: editorSource } : undefined);
+          }}
+          onDrawAgain={() => makePages([editorPhoto.id], editorSource ? { source: editorSource, addVersion: true } : { addVersion: true })}
+          onQuickFix={(kind) => void quickFix(kind)}
+          onSelectRevision={(revisionId) => {
+            setUndo(null);
+            gen.selectRevision(editorPhoto.id, revisionId);
+          }}
+          onFlipPhotoToo={() => void photoTransforms.mirrorPhoto(editorPhoto.id)}
+          onEditWithNote={() => {
+            gen.startEditChat();
+            setEditChatOpen(true);
+          }}
+          onPrint={() => {
+            const p = editorPhoto;
+            void pdfOnDemand.print(() => makePagePdf(p)).catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Could not make a PDF."));
+          }}
+          onDownload={() => {
+            const p = editorPhoto;
+            void pdfOnDemand.download(() => makePagePdf(p)).catch((e: unknown) => toast.error(e instanceof Error ? e.message : "Could not make a PDF."));
+          }}
+          onShare={() => setOutput({ id: editorPhoto.id, mode: "send" })}
+          pdfBusy={pdfOnDemand.busy}
+          shape={editorShape}
+          onChangeShape={() => void changeShape(editorPhoto.id)}
+          onToggleLeftOut={() => gen.setBookPrefs(editorPhoto.id, { leftOut: !editorPhoto.printPrefs.book?.leftOut })}
+          onDelete={() => {
+            closeEditor();
+            deletePhoto(editorPhoto.id);
+          }}
+          onUndo={
+            undo && undo.photoId === editorPhoto.id
+              ? () => {
+                  gen.selectRevision(undo.photoId, undo.revisionId);
+                  setUndo(null);
+                }
+              : undefined
+          }
+        />
+      ) : null}
+
+      {editorPhoto?.sheet ? (
         <V2SheetEditChat
           open={editChatOpen}
           onClose={() => setEditChatOpen(false)}
-          originalPreviewUrl={sourcePhotoSrc}
-          sheetImageUrl={activeSheet.imageDataUrl}
-          messages={editMessages}
-          onSend={(text) => void applySheetEdit(text)}
-          busy={sheetCorrecting}
-          disabled={!sheetReady}
+          originalPreviewUrl={editorSource?.sheet.imageDataUrl ?? editorPhoto.previewUrl}
+          sheetImageUrl={editorPhoto.sheet.imageDataUrl}
+          messages={gen.editMessages}
+          onSend={(text) => void gen.applySheetEdit(editorPhoto.id, text)}
+          busy={Boolean(editorPhoto.correcting)}
+          disabled={!activePageVersion(editorPhoto)}
         />
       ) : null}
 
-      {printOpen && selected && activeSheet ? (
-        <V2PrintSheetModal
-          key={`${selected.id}:${activeVersion?.id ?? "sheet"}`}
-          sheetSrc={activeSheet.imageDataUrl}
-          printPrefs={activeVersionPrintPrefs(selected)}
-          makePdf={makeSelectedPdf}
-          onClose={() => setPrintOpen(false)}
+      {outputPhoto && activePageVersion(outputPhoto) ? (
+        <PagePrintShareModal
+          key={`${outputPhoto.id}:${activePageVersion(outputPhoto)!.id}:${output!.mode}`}
+          mode={output!.mode}
+          sheetSrc={activePageVersion(outputPhoto)!.sheet.imageDataUrl}
+          makePdf={() => makePagePdf(outputPhoto)}
+          share={
+            !cloud || !outputPhoto.remote
+              ? { kind: "guest" }
+              : outputPhoto.canDelete === false
+                ? { kind: "not-owner" }
+                : { kind: "ready", photoId: outputPhoto.remote.photoId, revisionId: activePageVersion(outputPhoto)!.id }
+          }
+          onClose={() => setOutput(null)}
         />
       ) : null}
 
-      {shareOpen && selected?.remote && shareRevisionId && activeSheet ? (
-        <V2SharePageModal
-          key={`${selected.id}:${shareRevisionId}`}
-          photoId={selected.remote.photoId}
-          revisionId={shareRevisionId}
-          sheetSrc={activeSheet.imageDataUrl}
-          onClose={() => setShareOpen(false)}
+      {confirm ? (
+        <ConfirmPurchaseModal
+          order={order}
+          initialStep={confirm.step}
+          autoPlace={confirm.autoPlace}
+          onClose={() => setConfirm(null)}
+          onFixPage={(libraryPhotoId) => {
+            const target = photosRef.current.find((p) => (p.remote?.photoId ?? p.id) === libraryPhotoId);
+            setConfirm(null);
+            setSheetOpen(false);
+            if (target) openEditor(target.id, "page");
+          }}
+          onAddPhoto={() => {
+            // Opened from the tap itself, so the browser allows the picker. The book updates
+            // as the new photo's page is made; the proof then asks only about what changed.
+            setConfirm(null);
+            setSheetOpen(false);
+            fileRef.current?.click();
+          }}
+          onEditRow={(row) => {
+            setConfirm(null);
+            setOpenRow(row);
+            if (!desktop) setSheetOpen(true);
+          }}
         />
       ) : null}
 
-      {lightboxFocus && selected ? (
-        <V2AssetLightbox
-          focus={lightboxFocus}
-          originalSrc={sourcePhotoSrc}
-          sheetSrc={activeSheet?.imageDataUrl ?? null}
-          viewMode={lightboxViewMode}
-          onViewModeChange={setLightboxViewMode}
-          onClose={closeLightbox}
-          onSaveOverlayRevision={saveOverlaySheetRevision}
-          saveOverlayRevisionBusy={savingOverlayRevision}
+      {order.addCredit ? (
+        <V2AddCreditModal
+          onClose={order.closeAddCredit}
+          returnPath={order.addCredit.returnPath}
+          shortfallCents={order.addCredit.cents}
+          shortfallFor="this book"
         />
       ) : null}
-
+      {addCreditFor != null ? (
+        <V2AddCreditModal
+          onClose={() => setAddCreditFor(null)}
+          returnPath="/studio"
+          shortfallCents={addCreditFor || null}
+          shortfallFor="these pages"
+        />
+      ) : null}
       {sheetCredits.addCreditModal}
       {guestLimit ? (
         <V2GuestLimitModal scope={guestLimit.scope} kind={guestLimit.kind} onClose={() => setGuestLimit(null)} />

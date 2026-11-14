@@ -304,32 +304,50 @@ async function handleLibraryModeForUser(
   timer.mark("model");
 
   // Charge only once there is a sheet to hand over; refund if it can't be saved.
+  // Parallel requests can each pass the pre-check above and then find the wallet short here. The
+  // model has already run by then, so the page is kept and handed over uncharged rather than
+  // thrown away; the client caps how many pages it starts at once, so this stays rare.
   const charge = await chargeSheetUsage(userId, record.id, kind);
   timer.mark("charge");
+  let chargedCents = 0;
+  let creditsBalanceCents = quote.data.creditsBalanceCents;
   if (charge.error) {
-    if (charge.error.code === INSUFFICIENT_CREDITS_CODE) {
-      return Response.json(
-        insufficientCreditsBody(kind, quote.data.costCents, quote.data.creditsBalanceCents),
-        { status: 402 },
-      );
+    if (charge.error.code !== INSUFFICIENT_CREDITS_CODE) {
+      return Response.json({ error: charge.error.message }, { status: 500 });
     }
-    return Response.json({ error: charge.error.message }, { status: 500 });
+    const latest = await quoteSheetUsage(userId, kind, record.editCount);
+    if (!latest.error) creditsBalanceCents = latest.data.creditsBalanceCents;
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        message: "photo-coloring: charge failed after the model ran; page returned uncharged",
+        userId,
+        photoId: record.id,
+        kind,
+        costCents: quote.data.costCents,
+        creditsBalanceCents,
+      }),
+    );
+  } else {
+    chargedCents = charge.data.chargedCents;
+    creditsBalanceCents = charge.data.creditsBalanceCents;
   }
+  const charged = !charge.error;
 
   let stored;
   try {
     stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet, meta);
     timer.mark("store");
   } catch (error) {
-    await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
+    if (charged) await refundSheetUsage(userId, record.id, kind, chargedCents);
     throw error;
   }
   if (stored.error) {
-    await refundSheetUsage(userId, record.id, kind, charge.data.chargedCents);
+    if (charged) await refundSheetUsage(userId, record.id, kind, chargedCents);
     return Response.json({ error: stored.error.message }, { status: 500 });
   }
   // Charged sheets reach the history through their ledger entry; free ones have none.
-  if (charge.data.chargedCents === 0) {
+  if (charged && chargedCents === 0) {
     await recordActivity({
       userId,
       category: "sheets",
@@ -344,7 +362,7 @@ async function handleLibraryModeForUser(
   }
   return Response.json({
     photo: stored.data,
-    chargedCents: charge.data.chargedCents,
-    creditsBalanceCents: charge.data.creditsBalanceCents,
+    chargedCents,
+    creditsBalanceCents,
   });
 }

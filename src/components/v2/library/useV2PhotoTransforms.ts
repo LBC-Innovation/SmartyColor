@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import type { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
+import type { PhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { authedFetch } from "@/lib/api/client";
 import * as library from "@/lib/library/client";
 import type { LibraryPhoto } from "@/lib/library/types";
@@ -15,7 +16,7 @@ import {
   estimateDataUrlRawBytes,
   maxRawBytesPerImageInRequest,
 } from "@/lib/photo/payloadBudget";
-import { PORTRAIT_VERSION_TITLE, type GeneratedPhoto } from "@/lib/session/photoTypes";
+import { reframeVersionTitle, type GeneratedPhoto, type ReframeTarget } from "@/lib/session/photoTypes";
 import type { SheetVersion } from "@/lib/session/types";
 import { entryFromLibraryPhoto, evictEntryImages } from "@/lib/v2/cloudLibrary";
 import { mirrorPhotoCrop } from "@/lib/v2/storybookTypes";
@@ -28,14 +29,16 @@ import {
 type PhotoTransformOptions = {
   sheetCredits: ReturnType<typeof useSheetUsageCredits>;
   /** Shared with sheet generation, so a photo never changes under a sheet being drawn from it. */
-  lockRef: RefObject<boolean>;
+  lockRef?: RefObject<boolean>;
+  /** Per-photo locks: other photos stay free while this one changes. Wins over `lockRef`. */
+  locks?: PhotoLocks;
 };
 
 /**
  * Changes to the photo itself rather than its coloring page: mirroring it,
  * and adding an AI portrait version of a landscape photo to its versions.
  */
-export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOptions) {
+export function useV2PhotoTransforms({ sheetCredits, lockRef, locks }: PhotoTransformOptions) {
   const toast = useV2Toast();
   const { photosRef, updatePhoto, trackPreviewUrl } = useV2Studio();
   const [mirroringId, setMirroringId] = useState<string | null>(null);
@@ -43,8 +46,19 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
 
   function idle(photoId: string): V2PhotoEntry | null {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
-    if (!photo || lockRef.current || photo.generating || photo.correcting) return null;
+    const locked = locks ? locks.has(photoId) : Boolean(lockRef?.current);
+    if (!photo || locked || photo.generating || photo.correcting) return null;
     return photo;
+  }
+
+  function lock(photoId: string) {
+    if (locks) locks.acquire(photoId);
+    else if (lockRef) lockRef.current = true;
+  }
+
+  function unlock(photoId: string) {
+    if (locks) locks.release(photoId);
+    else if (lockRef) lockRef.current = false;
   }
 
   /** Flip the photo left-to-right, and every version of it so they still match. */
@@ -52,7 +66,7 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
     const photo = idle(photoId);
     if (!photo) return;
 
-    lockRef.current = true;
+    lock(photoId);
     setMirroringId(photoId);
     try {
       if (photo.remote) {
@@ -103,18 +117,33 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not mirror that photo.");
     } finally {
-      lockRef.current = false;
+      unlock(photoId);
       setMirroringId(null);
     }
   }
 
   /** Add an AI portrait version of a landscape photo to its versions. The photo itself is kept. */
-  async function makePortrait(photoId: string) {
-    const photo = idle(photoId);
-    if (!photo || photoOrientation(photo) !== "landscape") return;
-    if (!sheetCredits.canAfford("portrait", photo)) return;
+  async function makePortrait(photoId: string): Promise<void> {
+    await reframePhoto(photoId, "portrait");
+  }
 
-    lockRef.current = true;
+  /**
+   * Add a version of the uploaded photo recomposed to the other shape (landscape to portrait, or
+   * portrait to landscape). The photo itself is kept. Returns the new version, or null when it
+   * wasn't made (busy, already that shape, out of credit, or an error that was shown). `quiet`
+   * skips the success toast, for callers that go straight on to draw a page from it.
+   */
+  async function reframePhoto(
+    photoId: string,
+    target: ReframeTarget,
+    opts?: { quiet?: boolean },
+  ): Promise<SheetVersion | null> {
+    const photo = idle(photoId);
+    if (!photo || photoOrientation(photo) === target) return null;
+    if (!sheetCredits.canAfford("portrait", photo)) return null;
+    let made: SheetVersion | null = null;
+
+    lock(photoId);
     setPortraitId(photoId);
     try {
       const response = await authedFetch(
@@ -124,8 +153,8 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
             photo.remote
-              ? { photoId: photo.remote.photoId }
-              : { photoDataUrl: photo.photoDataUrl, image: photo.image },
+              ? { photoId: photo.remote.photoId, target }
+              : { photoDataUrl: photo.photoDataUrl, image: photo.image, target },
           ),
         },
         { withAuth: Boolean(photo.remote) },
@@ -142,26 +171,29 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
       } catch {
         throw new Error("The server sent an unexpected response. Please try again in a moment.");
       }
-      if (sheetCredits.applyResponse(response.status, payload, "portrait")) return;
+      if (sheetCredits.applyResponse(response.status, payload, "portrait")) return null;
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not make a portrait version.");
+        throw new Error(payload.error ?? `Could not make a ${target} version.`);
       }
 
       if (payload.photo) {
         const fresh = await entryFromLibraryPhoto(payload.photo);
         updatePhoto(photoId, fresh, { persist: false });
+        const revisions = normalizeV2SheetRevisions(fresh);
+        made = revisions.find((r) => r.id === fresh.activeRevisionId) ?? revisions[revisions.length - 1] ?? null;
       } else if (payload.image) {
         const version: SheetVersion = {
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
           sheet: {
-            title: PORTRAIT_VERSION_TITLE,
+            title: reframeVersionTitle(target),
             imageDataUrl: payload.image.imageDataUrl,
             mimeType: payload.image.mimeType,
           },
           kind: "photo",
-          orientation: "portrait",
+          orientation: target,
         };
+        made = version;
         const prior = photosRef.current.find((entry) => entry.id === photoId) ?? photo;
         updatePhoto(photoId, {
           sheet: version.sheet,
@@ -169,19 +201,23 @@ export function useV2PhotoTransforms({ sheetCredits, lockRef }: PhotoTransformOp
           activeRevisionId: version.id,
         });
       } else {
-        throw new Error("No portrait photo came back.");
+        throw new Error("No photo came back.");
       }
-      toast.success({
-        title: "Portrait version ready",
-        message: "It's in this photo's versions. Make a coloring page from it when you're ready.",
-      });
+      if (!opts?.quiet) {
+        toast.success({
+          title: `${target === "portrait" ? "Portrait" : "Landscape"} version ready`,
+          message: "It's in this photo's versions. Make a coloring page from it when you're ready.",
+        });
+      }
+      return made;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not make a portrait version.");
+      toast.error(err instanceof Error ? err.message : `Could not make a ${target} version.`);
+      return null;
     } finally {
-      lockRef.current = false;
+      unlock(photoId);
       setPortraitId(null);
     }
   }
 
-  return { mirrorPhoto, makePortrait, mirroringId, portraitId };
+  return { mirrorPhoto, makePortrait, reframePhoto, mirroringId, portraitId };
 }

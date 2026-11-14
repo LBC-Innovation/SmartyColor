@@ -170,18 +170,43 @@ Style:
 
 function photoLineArtStyleRules() {
   return `Line art quality (required for photo tracing):
-- Match a store-bought coloring book: smooth, even, connected black outlines on white paper only.
-- Outer silhouettes: light-to-medium line weight — never bold marker, never heavy black fills.
-- Eyes, brows, lips, fingers: thin delicate strokes — not thick blobs or square blocks.
-- Strokes must be smooth flowing curves — no jagged pixels, stair-steps, or sketchy dashes.
-- SOLID continuous lines only — no dotted, broken, or stippled segments.
-- NO cross-hatching, NO gray shading, NO horizontal/vertical hatch lines, NO random scribbles in blank areas.
-- Background trees/foliage: simplify to a few smooth outline shapes — do NOT draw every leaf or branch.
-- Only draw outlines for subjects and large shapes the kid would color — not photo edge-detection noise.
-- Every large area inside a shape must stay EMPTY WHITE for coloring — never fill clothing, sky, skin, or backgrounds with solid black.
+- The finished page must look like a page from a professionally published coloring book: confident, smooth, clean ink lines, as if inked with a fine technical pen or drawn as vector art. Realistic proportions and shapes from the photo, drawn with calm, simplified, polished linework.
+- ONE clean stroke per edge. No sketchy, feathered, doubled, overlapping, wobbly, broken, or scratchy lines. No pencil or charcoal look. No texture strokes.
+- Smooth flowing curves with clean joins — no jagged pixels, stair-steps, kinks, or tiny zig-zags.
+- Even line weight: outer silhouettes medium weight; interior details a little thinner. Never hairline-thin, never bold marker.
+- SOLID continuous lines only — no dotted, dashed, or stippled lines anywhere, and no dots used as texture.
+- NO cross-hatching, NO hatch lines, NO gray shading, NO shadow marks, NO random scribbles in blank areas.
+- Draw only the outlines a child would color between — not photo edge-detection noise, not every crease and fold. Simplify small clutter into a few clear shapes.
+- Background trees/foliage: a few smooth outline shapes — do NOT draw every leaf or branch.
+
+Hair (common mistake: frizzy, strand-by-strand hair — never do this):
+- Draw hair as ONE smooth outer outline of the hairstyle plus only a few (about 3 to 8) long, smooth flowing lines that follow its main sections or locks.
+- Keep the real style from the photo: straight hair stays sleek and straight, wavy hair gets a few soft waves, curly hair gets a handful of rounded curl shapes along its edge.
+- NO individual strands, NO flyaway hairs, NO fuzzy, frizzy, spiky, or jagged hair edges, NO scribbled hair texture. Most of the hair area stays EMPTY WHITE for coloring.
+- Eyebrows: one soft smooth shape each — not many little hair strokes.
+- Beards, mustaches, and stubble: ONE smooth closed outline shape, left white inside (at most one soft inner line) — never stubble dots, stipple, short tick marks, or strand texture.
+- Bangs and fringe: a smooth, softly curved lower edge — not a row of pointed or spiky tips.
+
+Clothing patterns (common mistake: dense, scratchy plaid or gingham — never do this):
+- Plaid, gingham, checks, and stripes: a FEW evenly spaced, clean straight lines (about 4 to 8 across a shirt front), making boxes or bands big enough for a child to color. Lines follow the fabric's folds smoothly and stop cleanly at seams.
+- NO dense grids, NO doubled or broken pattern lines, NO tiny checks, NO hatching to suggest a weave.
+- Small prints (polka dots, flowers): a modest number of clean, open shapes with white insides — never tiny solid dots.
+- Clothing folds: only a few main fold lines, not every wrinkle.
+
+Faces and eyes (common mistake: dramatic, oversized, heavily lined eyes — never do this):
+- Keep every face true to the photo and easy to recognize, with natural, relaxed features. Do not exaggerate, beautify, glamorize, or stylize.
+- Eyes: keep the photo's real eye size and shape — never enlarge them. A simple eye outline, a round iris, a small solid pupil dot with a little white highlight, and at most one thin lid line above.
+- NO eyeliner, NO thick or long eyelashes, NO individual lashes, NO dark or filled irises, NO anime, cartoon, doll, or makeup look.
+- Nose: one or two short soft lines (nostrils and one side) — not a heavy full outline.
+- Mouth: a simple, clean lip outline. Teeth as one smooth shape with only a few light divisions.
+- Clean skin: NO wrinkles, pores, freckles, under-eye bags, cheek creases, or shading marks. A smile line only where it is strongly visible in the photo.
+- Hands and fingers: clean, simple outlines.
+
+Fills (required):
+- Every large area inside a shape must stay EMPTY WHITE for coloring — never fill clothing, sky, skin, hair, or backgrounds with solid black.
 - NEVER use solid black fills anywhere on the page — not for shadows, shirts, hair masses, or compression blocks. Outlines only; all interiors white.
 - If a region would become a solid black shape, leave it white instead.
-- Dark photo areas (night sky, black face masks, dark clothing) must still be EMPTY WHITE on the coloring page — trace only the outer edges, never paint those areas solid black.`;
+- Dark photo areas (night sky, dark hair, black face masks, dark clothing) must still be EMPTY WHITE on the coloring page — trace only the outer edges, never paint those areas solid black.`;
 }
 
 export function buildPhotoColoringPrompt(
@@ -247,13 +272,24 @@ ${coloringSheetOutputRules(prefs, title)}
 Return an improved coloring sheet that addresses the issues while staying true to the photo.`;
 }
 
-/** Recomposing a landscape photo onto a portrait canvas; the result is still a photo. */
+/**
+ * Recomposing a photo onto a canvas of the other shape (landscape to portrait, or portrait to
+ * landscape); the result is still a photo.
+ */
 export function buildPhotoPortraitPrompt(source: PhotoLayout, target: PhotoLayout) {
-  return `You are reframing a REAL photograph from landscape to portrait. The result must still be the same photograph — a photo, not a drawing.
+  const toPortrait = target.orientation === "portrait";
+  const from = toPortrait ? "LANDSCAPE" : "PORTRAIT";
+  const to = toPortrait ? "PORTRAIT (taller than wide)" : "LANDSCAPE (wider than tall)";
+  const howTo = toPortrait
+    ? `- Extend the scene naturally above and below the subjects (more sky, ceiling, wall, ground, floor) so it reads as the same place and the same moment.
+- You may trim empty background at the far left and right, but never cut off a person or a key object.`
+    : `- Extend the scene naturally to the left and right of the subjects (more of the room, yard, street, or landscape) so it reads as the same place and the same moment.
+- You may trim empty sky, ceiling, or ground at the very top and bottom, but never cut off a person's head or feet or a key object.`;
+  return `You are reframing a REAL photograph from ${from.toLowerCase()} to ${toPortrait ? "portrait" : "landscape"}. The result must still be the same photograph — a photo, not a drawing.
 
 CANVAS (mandatory):
-- The reference photo is LANDSCAPE, about ${source.aspectRatio}.
-- The output MUST be PORTRAIT (taller than wide) at ${target.aspectRatio}.
+- The reference photo is ${from}, about ${source.aspectRatio}.
+- The output MUST be ${to} at ${target.aspectRatio}.
 - Do NOT rotate the photo or turn the scene on its side. Up stays up.
 
 Keep everything that matters (most important):
@@ -262,9 +298,8 @@ Keep everything that matters (most important):
 - Keep the same arrangement: who stands left, right, in front, and behind, and how far apart they are relative to each other.
 - Do NOT stretch, squash, or distort anything to make it fit.
 
-How to make it portrait:
-- Extend the scene naturally above and below the subjects (more sky, ceiling, wall, ground, floor) so it reads as the same place and the same moment.
-- You may trim empty background at the far left and right, but never cut off a person or a key object.
+How to make it ${toPortrait ? "portrait" : "landscape"}:
+${howTo}
 - Match the reference's lighting, colors, focus, and camera look. The added areas must blend in seamlessly.
 - No borders, frames, text, captions, watermarks, or collage panels. One continuous photograph, edge to edge.`;
 }

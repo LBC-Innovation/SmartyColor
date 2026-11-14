@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Download, Loader2, Printer, RotateCw } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
+import { usePrintablePdf } from "@/components/v2/usePrintablePdf";
 import type { PrintPrefs } from "@/lib/print/settings";
 import { cn } from "@/lib/cn";
 
@@ -15,18 +15,6 @@ type V2PrintSheetModalProps = {
   onClose: () => void;
 };
 
-type PdfState =
-  | { status: "loading" }
-  | { status: "ready"; url: string }
-  | { status: "error"; message: string };
-
-const FILE_NAME = "colorful-memories-coloring-page.pdf";
-
-/** Phones and tablets can't print a PDF from a hidden frame; they open it instead. */
-function prefersOpeningPdf() {
-  return window.matchMedia("(pointer: coarse)").matches;
-}
-
 /**
  * Preview one coloring page on its paper, then print it or save it as a PDF.
  * The PDF is made as soon as the dialog opens so both buttons respond at once.
@@ -37,83 +25,12 @@ export function V2PrintSheetModal({
   makePdf,
   onClose,
 }: V2PrintSheetModalProps) {
-  const [pdf, setPdf] = useState<PdfState>({ status: "loading" });
-  const [attempt, setAttempt] = useState(0);
-  const [printing, setPrinting] = useState(false);
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  // The parent remounts the dialog per sheet, so the first makePdf is the right one.
-  const [makeThisPdf] = useState(() => makePdf);
-
-  useEffect(() => {
-    let cancelled = false;
-    let url: string | null = null;
-    makeThisPdf()
-      .then((blob) => {
-        if (cancelled) return;
-        url = URL.createObjectURL(blob);
-        setPdf({ status: "ready", url });
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setPdf({
-          status: "error",
-          message: err instanceof Error ? err.message : "Could not make a PDF.",
-        });
-      });
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [attempt, makeThisPdf]);
-
-  useEffect(
-    () => () => {
-      frameRef.current?.remove();
-    },
-    [],
-  );
-
-  function print() {
-    if (pdf.status !== "ready") return;
-    if (prefersOpeningPdf()) {
-      window.open(pdf.url, "_blank", "noopener");
-      return;
-    }
-    setPrinting(true);
-    frameRef.current?.remove();
-    const frame = document.createElement("iframe");
-    frame.setAttribute("aria-hidden", "true");
-    frame.tabIndex = -1;
-    frame.style.cssText =
-      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
-    frame.onload = () => {
-      try {
-        frame.contentWindow?.focus();
-        frame.contentWindow?.print();
-      } catch {
-        window.open(pdf.url, "_blank", "noopener");
-      } finally {
-        setPrinting(false);
-      }
-    };
-    frame.src = pdf.url;
-    document.body.appendChild(frame);
-    frameRef.current = frame;
-  }
-
-  function download() {
-    if (pdf.status !== "ready") return;
-    const link = document.createElement("a");
-    link.href = pdf.url;
-    link.download = FILE_NAME;
-    link.click();
-  }
+  const { pdf, ready, printing, print, download, retry } = usePrintablePdf(makePdf);
 
   const landscape = printPrefs.orientation === "landscape";
   const [shortSide, longSide] = printPrefs.paper === "a4" ? [210, 297] : [8.5, 11];
   const [paperW, paperH] = landscape ? [longSide, shortSide] : [shortSide, longSide];
   const paperLabel = printPrefs.paper === "a4" ? "A4" : "US Letter";
-  const ready = pdf.status === "ready";
 
   return (
     <V2Modal
@@ -169,10 +86,7 @@ export function V2PrintSheetModal({
               {pdf.message}
               <button
                 type="button"
-                onClick={() => {
-                  setPdf({ status: "loading" });
-                  setAttempt((n) => n + 1);
-                }}
+                onClick={retry}
                 className="inline-flex items-center gap-1 font-semibold text-v2-primary hover:underline"
               >
                 <RotateCw className="h-3.5 w-3.5" aria-hidden />

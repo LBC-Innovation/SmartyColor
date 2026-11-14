@@ -8,7 +8,8 @@ import type { PageFit } from "@/lib/print/pageLayout";
 import { cn } from "@/lib/cn";
 
 type Props = {
-  value: PageFit;
+  /** Null while nothing is picked: neither choice is selected. */
+  value: PageFit | null;
   onChange: (fit: PageFit) => void;
   /** One of the customer's own pages, shown both ways so the difference is plain. */
   sample: BookWizardPhotoPage;
@@ -40,7 +41,7 @@ export function BookPageFitPicker({ value, onChange, sample, binding }: Props) {
     <fieldset>
       <legend className="text-base font-semibold text-v2-ink">How should each picture sit on its page?</legend>
       <p className="mt-0.5 text-sm text-v2-muted">
-        This applies to every coloring page. The pages below update to match.
+        This applies to every coloring page in the book.
       </p>
       <div className="mt-3 grid grid-cols-2 gap-3" role="radiogroup" aria-label="Picture fit">
         {options.map((option) => {

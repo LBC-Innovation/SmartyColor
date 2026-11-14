@@ -12,6 +12,8 @@ type Options = {
   onBalanceChanged?: () => void;
   /** Added to the "credit added" message, e.g. "You can finish your order." */
   creditedHint?: string;
+  /** False when another hook on the same page handles the return (only one may). */
+  enabled?: boolean;
 };
 
 /**
@@ -29,6 +31,7 @@ export function useCreditCheckoutReturn(options: Options = {}): void {
   });
 
   useEffect(() => {
+    if (latest.current.options.enabled === false) return;
     const url = new URL(window.location.href);
     const outcome = url.searchParams.get(CREDITS_RETURN_PARAM);
     if (!outcome) return;

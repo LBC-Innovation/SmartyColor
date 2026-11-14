@@ -1,3 +1,4 @@
+import type { ShippingChoice, ShippingLevel } from "@/lib/orders/shippingLevels";
 import type { AdminUser, ApiResult, User } from "@/lib/api/types";
 import type { FeatureAccess } from "@/lib/auth/features";
 import type { BookBindingId } from "@/lib/print/bookBindings";
@@ -452,6 +453,11 @@ export type OrderQuoteData = {
   quoteError?: string | null;
   /** Lulu's "did you mean" for the street address sent with the quote. */
   addressSuggestion?: AddressSuggestion | null;
+  /** The printer's estimated delivery window (YYYY-MM-DD) for this address and shipping level. */
+  estimatedDeliveryMin?: string | null;
+  estimatedDeliveryMax?: string | null;
+  /** Every shipping speed on offer for this address, cheapest first (main quote only). */
+  shippingChoices?: ShippingChoice[];
 };
 
 /** The address the customer saved for future orders; null when they haven't saved one. */
@@ -472,6 +478,7 @@ export function fetchOrderQuote(input: {
   pageCount: number;
   shippingPostcode?: string;
   shippingLevel?: string;
+  withShipping?: boolean;
   shippingAddress?: Partial<ShippingAddress>;
 }): Promise<ApiResult<OrderQuoteData>> {
   return request("/orders/quote", {
@@ -495,6 +502,8 @@ export type BookDraftPayload = {
   proofConfirmed: boolean;
   /** Sent to someone else. A gift note travels as the first page in `pages`. */
   isGift: boolean;
+  /** The shipping speed picked in the order panel. */
+  shippingLevel?: ShippingLevel;
 };
 
 /** Signed PUT target for the print-ready front cover image of a draft order. */

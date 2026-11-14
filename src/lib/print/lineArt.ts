@@ -16,13 +16,25 @@ const WIDTH_TOLERANCE = 0.08;
 const INK_BOOST_PX = 0.6;
 /** Most a stroke edge is moved (px per side, at print size) to match weight. */
 const MAX_EDGE_SHIFT = 3;
+/**
+ * Gaussian smoothing (px, at print size) before ink is re-rendered. Image models draw lines with
+ * small wobbles, pixel steps and sketchy texture; blurring then re-inking at the 50% midpoint
+ * irons those into smooth, even curves like a hand-inked coloring book, without moving a
+ * straight edge or changing stroke width.
+ */
+const LINE_SMOOTH_SIGMA = 0.9;
+/**
+ * Ink islands smaller than this (px² at a 2048 px long edge) are stray specks: stubble and
+ * stipple dots, flecks of hatching. Real details (pupils, buttons) are larger.
+ */
+const SPECK_MAX_AREA = 28;
 
 /**
  * Resample to print size with a high-quality kernel. The soft ramp between ink
  * and paper that this creates is what `renderSmoothInk` turns into clean,
  * anti-aliased curves instead of stair-stepped pixels.
  */
-async function loadUpscaledGray(base64: string) {
+async function loadUpscaledGray(base64: string, smoothSigma = 0) {
   const input = Buffer.from(base64, "base64");
   const meta = await sharp(input).metadata();
   const srcW = meta.width ?? 0;
@@ -37,6 +49,7 @@ async function loadUpscaledGray(base64: string) {
       { kernel: "lanczos3" },
     );
   }
+  if (smoothSigma >= 0.3) pipeline = pipeline.blur(smoothSigma);
   const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
   return { gray: new Uint8Array(data), width: info.width, height: info.height };
 }
@@ -272,6 +285,47 @@ type InkBlob = {
   perimeter: number;
 };
 
+/** Turn ink islands of at most `maxArea` pixels white (8-connected). */
+function removeSpecks(data: Uint8Array, width: number, height: number, maxArea: number): Uint8Array {
+  if (maxArea < 1) return data;
+  const out = new Uint8Array(data);
+  const seen = new Uint8Array(width * height);
+  const stack: number[] = [];
+  const members: number[] = [];
+  for (let start = 0; start < out.length; start++) {
+    if (out[start] >= 128 || seen[start]) continue;
+    stack.length = 0;
+    members.length = 0;
+    stack.push(start);
+    seen[start] = 1;
+    let tooBig = false;
+    while (stack.length) {
+      const i = stack.pop()!;
+      if (!tooBig) {
+        members.push(i);
+        if (members.length > maxArea) tooBig = true;
+      }
+      const x = i % width;
+      const y = (i - x) / width;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= width) continue;
+          const j = ny * width + nx;
+          if (!seen[j] && out[j] < 128) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        }
+      }
+    }
+    if (!tooBig) for (const i of members) out[i] = 255;
+  }
+  return out;
+}
+
 /** Clear obvious fills without erasing connected line-art components. */
 function removeMajorSolidInkFills(
   data: Uint8Array,
@@ -443,9 +497,9 @@ function dilateMask(mask: Uint8Array, width: number, height: number, radius: num
  */
 export async function toPhotoLineArtPng(
   base64: string,
-  options: { referenceBase64?: string } = {},
+  options: { referenceBase64?: string; smoothSigma?: number; speckMaxArea?: number } = {},
 ): Promise<string> {
-  const { gray, width, height } = await loadUpscaledGray(base64);
+  const { gray, width, height } = await loadUpscaledGray(base64, options.smoothSigma ?? LINE_SMOOTH_SIGMA);
 
   let working: Uint8Array = options.referenceBase64
     ? gray
@@ -470,7 +524,12 @@ export async function toPhotoLineArtPng(
   // smooth image (with a small margin to catch the anti-aliased fringe).
   const binary = new Uint8Array(smooth.length);
   for (let i = 0; i < smooth.length; i++) binary[i] = smooth[i] < 128 ? 0 : 255;
-  const cleared = removeMajorSolidInkFills(binary, width, height);
+  const cleared = removeSpecks(
+    removeMajorSolidInkFills(binary, width, height),
+    width,
+    height,
+    Math.round((options.speckMaxArea ?? SPECK_MAX_AREA) * ((width * height) / (2048 * 2048))),
+  );
   const removed = new Uint8Array(smooth.length);
   let anyRemoved = false;
   for (let i = 0; i < removed.length; i++) {

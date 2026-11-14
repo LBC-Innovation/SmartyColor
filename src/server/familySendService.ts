@@ -37,7 +37,8 @@ function log(level: string, message: string, ctx: Record<string, unknown> = {}) 
   console.log(JSON.stringify({ level, message, ...ctx }));
 }
 
-async function displayName(user: Pick<AuthUser, "id" | "email">): Promise<string> {
+/** How the sender is named in emails to people they send pages to. */
+export async function senderDisplayName(user: Pick<AuthUser, "id" | "email">): Promise<string> {
   const { data } = await db().from("profiles").select("display_name").eq("id", user.id).maybeSingle();
   return (data?.display_name as string | null)?.trim() || user.email.split("@")[0] || "Someone";
 }
@@ -134,7 +135,7 @@ export async function sendAlbumToFamily(input: {
   const sent = await sendEmail(
     familyPagesEmail({
       to: email,
-      senderName: await displayName(user),
+      senderName: await senderDisplayName(user),
       pageCount: pages.length,
       note,
       makeYourOwnUrl: `${clientOrigin()}/?utm_source=family_email&utm_medium=email&utm_campaign=send_to_family`,

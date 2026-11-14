@@ -19,7 +19,7 @@ import type { ColoringAI } from "@/lib/ai/types";
 import { toPhotoLineArtPng } from "@/lib/print/lineArt";
 import { defaultPrintPrefs, type PrintPrefs } from "@/lib/print/settings";
 import {
-  PHOTO_NOT_LANDSCAPE_MESSAGE,
+  alreadyOrientedMessage,
   type GeneratedPhoto,
   type PhotoColoringCorrectRequest,
   type PhotoColoringGenerateRequest,
@@ -182,6 +182,17 @@ async function drawFromReferences(
   return toSheet(file, printPrefs.showTitle, weightReferenceBase64);
 }
 
+/** Landscape canvas for a portrait photo: 4:3, the same page turned on its side. */
+function landscapeLayoutFor(source: PhotoLayout): PhotoLayout {
+  const longEdge = Math.max(source.width, source.height);
+  return {
+    orientation: "landscape",
+    aspectRatio: "4:3",
+    width: longEdge,
+    height: Math.round(longEdge * 0.75),
+  };
+}
+
 /** Portrait canvas for a landscape photo: 3:4 sits best on a printed page. */
 function portraitLayoutFor(source: PhotoLayout): PhotoLayout {
   const longEdge = Math.max(source.width, source.height);
@@ -200,15 +211,13 @@ export function createPhotoHandlers(): Pick<
   return {
     async photoToPortrait(input: PhotoPortraitRequest): Promise<GeneratedPhoto> {
       const photo = await photoForModel(parsePhotoDataUrl(input.photoDataUrl));
-      const source = await layoutForPhotoBytes(
-        photo.bytes,
-        { ...defaultPrintPrefs, orientation: "landscape" },
-        input.image,
-      );
-      if (source.orientation !== "landscape") {
-        throw new Error(PHOTO_NOT_LANDSCAPE_MESSAGE);
+      const want = input.target ?? "portrait";
+      const from = want === "portrait" ? "landscape" : "portrait";
+      const source = await layoutForPhotoBytes(photo.bytes, { ...defaultPrintPrefs, orientation: from }, input.image);
+      if (source.orientation !== from) {
+        throw new Error(alreadyOrientedMessage(want));
       }
-      const target = portraitLayoutFor(source);
+      const target = want === "portrait" ? portraitLayoutFor(source) : landscapeLayoutFor(source);
       const images = createImageGenerator();
       const request = {
         operation: "photoToPortrait" as const,
@@ -230,12 +239,14 @@ export function createPhotoHandlers(): Pick<
         file = await images.generate({
           ...request,
           followUps: [
-            `CORRECTION: the previous attempt was not portrait. Produce the same photograph again on a PORTRAIT canvas (${target.aspectRatio}) that is taller than it is wide. Do not rotate the scene or turn it on its side.`,
+            want === "portrait"
+              ? `CORRECTION: the previous attempt was not portrait. Produce the same photograph again on a PORTRAIT canvas (${target.aspectRatio}) that is taller than it is wide. Do not rotate the scene or turn it on its side.`
+              : `CORRECTION: the previous attempt was not landscape. Produce the same photograph again on a LANDSCAPE canvas (${target.aspectRatio}) that is wider than it is tall. Do not rotate the scene or turn it on its side.`,
           ],
         });
         // Padding a photo onto a white canvas is not a portrait photo; let the caller retry.
         if (await isWrongWayRound(file, target)) {
-          throw new Error("Could not reframe this photo as a portrait. Please try again.");
+          throw new Error(`Could not reframe this photo as ${want === "portrait" ? "a portrait" : "a landscape"}. Please try again.`);
         }
       }
 
