@@ -54,7 +54,7 @@ import {
   computeBookPagePlan,
   explainBookPagePadding,
 } from "@/lib/print/bookPagePlan";
-import type { BookWizardNotePage, BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import type { BookWizardBlankPage, BookWizardNotePage, BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import type { PageFit } from "@/lib/print/pageLayout";
 import { DEFAULT_SHIPPING_LEVEL, isShippingLevel, type ShippingChoice, type ShippingLevel } from "@/lib/orders/shippingLevels";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
@@ -72,6 +72,8 @@ type StudioCartState = BookCartState & {
   pageFitChosen?: boolean;
   /** The shipping speed picked in the Ship to step. */
   shippingLevel?: string;
+  /** Filler pages the customer turned into lined pages, or chose to keep blank. */
+  blankChoices?: Record<string, "plain" | "lined">;
 };
 
 export type PlacedOrder = {
@@ -264,7 +266,19 @@ export function useBookOrder({
     () => (giftNotePage ? [giftNotePage, ...photoPages] : photoPages),
     [giftNotePage, photoPages],
   );
-  const plan = useMemo(() => computeBookPagePlan(plannedPages, binding), [plannedPages, binding]);
+  // Filler pages the book needs are blank unless the customer makes one a lined (writing) page.
+  const [blankChoices, setBlankChoices] = useState<Record<string, "plain" | "lined">>({});
+  const plan = useMemo(() => {
+    const base = computeBookPagePlan(plannedPages, binding);
+    if (Object.keys(blankChoices).length === 0) return base;
+    const allPages = base.allPages.map((page) =>
+      page.kind === "blank" && blankChoices[page.id] ? { ...page, variant: blankChoices[page.id] } : page,
+    );
+    return { ...base, allPages, blankPages: allPages.filter((p): p is BookWizardBlankPage => p.kind === "blank") };
+  }, [plannedPages, binding, blankChoices]);
+  function chooseBlank(id: string, variant: "plain" | "lined") {
+    setBlankChoices((prev) => ({ ...prev, [id]: variant }));
+  }
   const softPrintPages = useSoftPrintPages(plan.allPages, binding);
   const overCapacity = contentCount > binding.maxPages;
   const formatFits = bookFormatFit(contentCount, binding).fits;
@@ -499,6 +513,7 @@ export function useBookOrder({
       setIsGift(saved.isGift === true);
       if (saved.pageFitChosen) setChosenPageFit(saved.pageFit === "full" ? "full" : "framed");
       if (isShippingLevel(saved.shippingLevel)) setShippingLevel(saved.shippingLevel);
+      if (saved.blankChoices && typeof saved.blankChoices === "object") setBlankChoices(saved.blankChoices);
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
       if (album && album !== projectId) onRestoreProject?.(album);
@@ -526,6 +541,7 @@ export function useBookOrder({
       pageFit,
       pageFitChosen: chosenPageFit != null,
       shippingLevel,
+      blankChoices,
       pages: cartPages(photoPages),
       removedIds: [],
       coverDesign: coverDraft,
@@ -544,7 +560,7 @@ export function useBookOrder({
       thumbRevisionId: firstPhoto?.revisionId ?? null,
       state,
     };
-  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, shippingLevel, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
+  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, shippingLevel, blankChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
 
   const cartReady = signedIn && !restoring && touched && contentCount > 0;
 
@@ -837,6 +853,9 @@ export function useBookOrder({
     // picture fit
     pageFit,
     pageFitChosen: chosenPageFit != null,
+    // filler pages
+    blankChoices,
+    chooseBlank,
     // shipping speed
     shippingLevel,
     shippingChoices,

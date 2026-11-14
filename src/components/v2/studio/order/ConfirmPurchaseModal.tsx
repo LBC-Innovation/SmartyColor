@@ -3,7 +3,7 @@
 import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Gift, Loader2, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Gift, ImagePlus, Loader2, NotebookPen, Square, X } from "lucide-react";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { BookCoverCredit } from "@/components/v2/book-order/BookCoverCredit";
 import { BookPrintGuidesToggle } from "@/components/v2/book-order/BookPrintGuidesToggle";
@@ -34,6 +34,8 @@ type Props = {
   onFixPage: (libraryPhotoId: string) => void;
   /** An overview "Edit" link: close, and open that row of the order panel. */
   onEditRow: (row: OrderRow) => void;
+  /** On a blank page: close and open the photo picker, so a new photo can take its place. */
+  onAddPhoto: () => void;
 };
 
 type ProofItem =
@@ -54,7 +56,7 @@ function useWide() {
 }
 
 /** Proof, overview and thank-you in one dialog: full screen on phones, large on desktop. */
-export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, onFixPage, onEditRow }: Props) {
+export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, onFixPage, onEditRow, onAddPhoto }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const wide = useWide();
@@ -253,6 +255,14 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
             </button>
           ) : null}
         </div>
+        {item.kind === "page" && item.page.kind === "blank" ? (
+          <BlankPageChoices
+            className="mx-auto mt-1 max-w-md px-1"
+            choice={order.blankChoices[item.page.id] ?? null}
+            onAddPhoto={onAddPhoto}
+            onChoose={(variant) => order.chooseBlank(item.page.id, variant)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -356,6 +366,14 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                                 <div className="mt-1 flex justify-center">
                                   <FixButton onClick={() => onFixPage(page.photoId)} />
                                 </div>
+                              ) : page.kind === "blank" ? (
+                                <BlankPageChoices
+                                  className="mt-1"
+                                  compact
+                                  choice={order.blankChoices[page.id] ?? null}
+                                  onAddPhoto={onAddPhoto}
+                                  onChoose={(variant) => order.chooseBlank(page.id, variant)}
+                                />
                               ) : null}
                             </div>
                           ) : (
@@ -469,6 +487,49 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
             )}
           </footer>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Under a page the book had to add to reach its page count: replace it with another photo, make
+ * it a lined page for writing, or keep it blank. Blank is what prints if nothing is chosen.
+ */
+function BlankPageChoices({
+  choice,
+  onAddPhoto,
+  onChoose,
+  compact,
+  className,
+}: {
+  choice: "plain" | "lined" | null;
+  onAddPhoto: () => void;
+  onChoose: (variant: "plain" | "lined") => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  const chip = (selected: boolean) =>
+    cn(
+      "inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition sm:text-sm",
+      selected ? "border-v2-primary bg-v2-primary-light text-v2-navy" : "border-gray-200 bg-white text-v2-navy hover:border-v2-primary/40",
+    );
+  return (
+    <div className={className} role="group" aria-label="This page is blank">
+      {!compact ? <p className="mb-1 text-xs text-v2-muted">This page is blank so your book has the pages its binding needs.</p> : null}
+      <div className={cn("grid gap-1.5", compact ? "grid-cols-1" : "grid-cols-3")}>
+        <button type="button" className={chip(false)} onClick={onAddPhoto}>
+          <ImagePlus className="h-4 w-4 shrink-0" aria-hidden />
+          Add another photo
+        </button>
+        <button type="button" className={chip(choice === "lined")} aria-pressed={choice === "lined"} onClick={() => onChoose("lined")}>
+          {choice === "lined" ? <Check className="h-4 w-4 shrink-0" aria-hidden /> : <NotebookPen className="h-4 w-4 shrink-0" aria-hidden />}
+          Add lined page
+        </button>
+        <button type="button" className={chip(choice === "plain")} aria-pressed={choice === "plain"} onClick={() => onChoose("plain")}>
+          {choice === "plain" ? <Check className="h-4 w-4 shrink-0" aria-hidden /> : <Square className="h-4 w-4 shrink-0" aria-hidden />}
+          Keep page blank
+        </button>
       </div>
     </div>
   );

@@ -926,6 +926,13 @@ export function ColorfulMemoriesApp() {
             setSheetOpen(false);
             if (target) openEditor(target.id, "page");
           }}
+          onAddPhoto={() => {
+            // Opened from the tap itself, so the browser allows the picker. The book updates
+            // as the new photo's page is made; the proof then asks only about what changed.
+            setConfirm(null);
+            setSheetOpen(false);
+            fileRef.current?.click();
+          }}
           onEditRow={(row) => {
             setConfirm(null);
             setOpenRow(row);
