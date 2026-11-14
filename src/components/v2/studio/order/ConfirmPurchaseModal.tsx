@@ -1,5 +1,6 @@
 "use client";
 
+import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Gift, Loader2, X } from "lucide-react";
@@ -553,7 +554,7 @@ function Overview({
         ) : (
           <>
             <Line label="Book" cents={order.printCents} />
-            <Line label="Shipping" cents={order.shippingCents} />
+            <Line label={`Shipping · ${shippingLevelLabel(order.shippingLevel)}`} cents={order.shippingCents} />
             <Line label="Sales tax" cents={order.taxCents} />
           </>
         )}

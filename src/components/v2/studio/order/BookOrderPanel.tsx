@@ -1,5 +1,6 @@
 "use client";
 
+import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
@@ -523,6 +524,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                   ) : null}
                 </div>
               ) : null}
+              <ShippingSpeedPicker order={order} />
             </div>
           </Row>
         </>
@@ -559,7 +561,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             ) : (
               <>
                 <Money label="Book" cents={order.printCents} loading={order.quoteLoading} />
-                <Money label="Shipping" cents={order.shippingCents} loading={order.quoteLoading} />
+                <Money label={`Shipping · ${shippingLevelLabel(order.shippingLevel)}`} cents={order.shippingCents} loading={order.quoteLoading} />
                 <Money label="Sales tax" cents={order.taxCents} loading={order.quoteLoading} />
               </>
             )}
@@ -620,6 +622,72 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         </V2Modal>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Lulu's shipping speeds for this book and address, cheapest first: Standard is chosen until the
+ * customer upgrades. Each shows how much more it costs than the current choice and when it should
+ * arrive (printing time included). The exact total comes back with the next quote.
+ */
+function ShippingSpeedPicker({ order }: { order: BookOrder }) {
+  const choices = order.shippingChoices;
+  if (choices.length < 2) return null;
+  const current = choices.find((c) => c.level === order.shippingLevel) ?? choices[0];
+  return (
+    <fieldset>
+      <legend className="text-sm font-semibold text-v2-ink">Shipping speed</legend>
+      <p className="mt-0.5 text-xs text-v2-muted">
+        Dates include printing time and are the printer&apos;s estimate{order.addressComplete ? "" : " until your address is complete"}.
+      </p>
+      <div className="mt-2 grid gap-2" role="radiogroup" aria-label="Shipping speed">
+        {choices.map((choice) => {
+          const selected = choice.level === order.shippingLevel;
+          const diff =
+            choice.costCents != null && current.costCents != null ? choice.costCents - current.costCents : null;
+          const range = formatDeliveryRange({ min: choice.deliveryMin, max: choice.deliveryMax });
+          return (
+            <button
+              key={choice.level}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              disabled={order.quoteLoading}
+              onClick={() => {
+                order.touch();
+                order.chooseShippingLevel(choice.level);
+              }}
+              className={cn(
+                "flex w-full items-start gap-3 rounded-xl border-2 px-3 py-2 text-left transition disabled:opacity-60",
+                selected ? "border-v2-primary bg-white shadow-[0_0_0_3px_rgb(86_79_208/0.12)]" : "border-gray-200 bg-white hover:border-v2-primary/40",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                  selected ? "border-v2-primary bg-v2-primary text-white" : "border-gray-300",
+                )}
+                aria-hidden
+              >
+                {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm font-bold text-v2-ink">
+                    {choice.label}
+                    {choice.service ? <span className="font-normal text-v2-muted"> · {choice.service}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-v2-ink">
+                    {selected ? "Selected" : diff == null ? "" : diff > 0 ? `+${formatCredits(diff)}` : diff < 0 ? `−${formatCredits(-diff)}` : "Same price"}
+                  </span>
+                </span>
+                {range ? <span className="mt-0.5 block text-xs text-v2-muted">Arrives {range}</span> : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

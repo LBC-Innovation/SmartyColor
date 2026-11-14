@@ -1,3 +1,4 @@
+import { isShippingLevel } from "@/lib/orders/shippingLevels";
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { getBookBinding, isPrintBindingId } from "@/lib/print/bookBindings";
 import { normalizeCoverDesign } from "@/lib/print/bookCover";
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     coverDesign?: unknown;
     proofConfirmed?: boolean;
     isGift?: boolean;
+    shippingLevel?: string;
   };
 
   if (!isPrintBindingId(body.bindingId)) {
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
     coverDesign: normalizeCoverDesign(body.coverDesign),
     proofConfirmed: body.proofConfirmed === true,
     isGift: body.isGift === true,
+    shippingLevel: isShippingLevel(body.shippingLevel) ? body.shippingLevel : null,
   });
 
   if (result.error?.code === "NOT_FOUND") {

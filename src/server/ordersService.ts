@@ -38,6 +38,7 @@ import {
   fetchLuluPrintJob,
 } from "@/server/lulu/printJobs";
 import { estimateLuluDelivery } from "@/server/lulu/shippingOptions";
+import type { ShippingLevel } from "@/lib/orders/shippingLevels";
 import { buildLuluPrintJobPayload, validateLuluPayload } from "@/lib/print/luluPayload";
 import { getBookBinding } from "@/lib/print/bookBindings";
 import { getObjectBytes, signedReadUrls } from "@/server/storage/libraryFiles";
@@ -265,6 +266,8 @@ export type DraftBookContent = {
   proofConfirmed?: boolean;
   /** Sent to someone else; its note, if any, is the first print page. */
   isGift?: boolean;
+  /** The shipping speed the customer picked; left as it is when not sent. */
+  shippingLevel?: ShippingLevel | null;
 };
 
 function draftContentColumns(input: DraftBookContent) {
@@ -277,6 +280,7 @@ function draftContentColumns(input: DraftBookContent) {
     cover_design: input.coverDesign ?? null,
     billing_address: input.billingAddress ? normalizeShippingAddress(input.billingAddress) : null,
     proof_confirmed_at: input.proofConfirmed ? new Date().toISOString() : null,
+    ...(input.shippingLevel ? { shipping_level: input.shippingLevel } : {}),
   };
 }
 
@@ -768,6 +772,7 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
         totalCents: order.total_cents as number | null,
         orderUrl: `${clientOrigin()}/orders/${orderId}`,
         cancelUrl: `${clientOrigin()}/orders/${orderId}?cancel=1`,
+        shippingLevel: order.shipping_level as string | null,
         estimatedDeliveryMin: order.estimated_delivery_min as string | null,
         estimatedDeliveryMax: order.estimated_delivery_max as string | null,
         coverThumb,

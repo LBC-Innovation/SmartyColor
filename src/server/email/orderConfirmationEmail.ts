@@ -1,4 +1,5 @@
 import "server-only";
+import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import { CONTACT_EMAIL } from "@/content/marketing";
 import type { OutgoingEmail } from "@/server/email/resend";
 import { EMAIL_LOGO_HEIGHT, EMAIL_LOGO_PNG_BASE64, EMAIL_LOGO_WIDTH } from "@/server/email/brandLogo";
@@ -73,6 +74,8 @@ export type OrderConfirmationInput = {
   orderUrl: string;
   /** Opens the order page with the cancel dialog up. */
   cancelUrl: string;
+  /** Lulu's shipping level, e.g. "MAIL"; named for the customer on the shipping line. */
+  shippingLevel?: string | null;
   /** The printer's estimated delivery window (YYYY-MM-DD); the line is left out without one. */
   estimatedDeliveryMin?: string | null;
   estimatedDeliveryMax?: string | null;
@@ -95,7 +98,7 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
   ];
   const money: [string, string][] = [];
   if (input.printCents != null) money.push(["Printing", usd(input.printCents)]);
-  if (input.shippingCents != null) money.push(["Shipping", usd(input.shippingCents)]);
+  if (input.shippingCents != null) money.push([`Shipping (${shippingLevelLabel(input.shippingLevel)})`, usd(input.shippingCents)]);
   if (input.taxCents != null) money.push(["Sales tax", usd(input.taxCents)]);
   const total = input.totalCents != null ? usd(input.totalCents) : null;
   const follow = `We'll keep your order page up to date as the printer reports progress. Questions? Reply to this email or write to ${CONTACT_EMAIL}.`;

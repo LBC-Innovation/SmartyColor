@@ -56,6 +56,7 @@ import {
 } from "@/lib/print/bookPagePlan";
 import type { BookWizardNotePage, BookWizardPage, BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import type { PageFit } from "@/lib/print/pageLayout";
+import { DEFAULT_SHIPPING_LEVEL, isShippingLevel, type ShippingChoice, type ShippingLevel } from "@/lib/orders/shippingLevels";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { unitPriceCents } from "@/lib/credits/pricing";
 import { usePriceList } from "@/lib/pricing/usePriceList";
@@ -69,6 +70,8 @@ type StudioCartState = BookCartState & {
   quotedCents?: number | null;
   /** True once the customer picked Framed or Edge to edge themselves (older carts always say "framed"). */
   pageFitChosen?: boolean;
+  /** The shipping speed picked in the Ship to step. */
+  shippingLevel?: string;
 };
 
 export type PlacedOrder = {
@@ -300,6 +303,9 @@ export function useBookOrder({
 
   // ---- quotes ---------------------------------------------------------------------
   const [printQuote, setPrintQuote] = useState<BindingQuote | null>(null);
+  // Standard (MAIL) unless the customer upgrades; the faster speeds come back with each quote.
+  const [shippingLevel, setShippingLevel] = useState<ShippingLevel>(DEFAULT_SHIPPING_LEVEL);
+  const [shippingChoices, setShippingChoices] = useState<ShippingChoice[]>([]);
   const [addressSuggestion, setAddressSuggestion] = useState<{ key: string; suggestion: AddressSuggestion } | null>(null);
   const [answeredSuggestions, setAnsweredSuggestions] = useState<string[]>([]);
   // No quote until the customer has picked a format themselves: nothing is chosen for them.
@@ -348,8 +354,12 @@ export function useBookOrder({
         ...prev,
         loading: true,
       }));
-      void api.fetchOrderQuote({ bindingId, pageCount: quotePageCount, ...shipping }).then((result) => {
+      void api.fetchOrderQuote({ bindingId, pageCount: quotePageCount, shippingLevel, withShipping: true, ...shipping }).then((result) => {
         if (cancelled) return;
+        const choices = api.isError(result) ? [] : (result.data.shippingChoices ?? []);
+        setShippingChoices(choices);
+        // A speed this address can't get (after the address changed) falls back to Standard.
+        if (choices.length > 0 && !choices.some((c) => c.level === shippingLevel)) setShippingLevel(DEFAULT_SHIPPING_LEVEL);
         const suggestion = api.isError(result) ? null : (result.data.addressSuggestion ?? null);
         setAddressSuggestion(suggestion && addressComplete ? { key: suggestionKey, suggestion } : null);
         setPrintQuote(
@@ -372,7 +382,7 @@ export function useBookOrder({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [user, quoteActive, bindingId, quotePageCount, shippingZip, addressComplete, suggestionKey, shippingAddress.street1, shippingAddress.street2, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
+  }, [user, quoteActive, bindingId, quotePageCount, shippingLevel, shippingZip, addressComplete, suggestionKey, shippingAddress.street1, shippingAddress.street2, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
 
   function answerSuggestion(use: boolean) {
     if (!visibleSuggestion) return;
@@ -488,6 +498,7 @@ export function useBookOrder({
       setShipDifferent(saved.shipDifferent === true);
       setIsGift(saved.isGift === true);
       if (saved.pageFitChosen) setChosenPageFit(saved.pageFit === "full" ? "full" : "framed");
+      if (isShippingLevel(saved.shippingLevel)) setShippingLevel(saved.shippingLevel);
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
       if (album && album !== projectId) onRestoreProject?.(album);
@@ -514,6 +525,7 @@ export function useBookOrder({
       bindingTouched: chosenBindingId != null,
       pageFit,
       pageFitChosen: chosenPageFit != null,
+      shippingLevel,
       pages: cartPages(photoPages),
       removedIds: [],
       coverDesign: coverDraft,
@@ -532,7 +544,7 @@ export function useBookOrder({
       thumbRevisionId: firstPhoto?.revisionId ?? null,
       state,
     };
-  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
+  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, shippingLevel, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
 
   const cartReady = signedIn && !restoring && touched && contentCount > 0;
 
@@ -685,6 +697,7 @@ export function useBookOrder({
       coverDesign,
       proofConfirmed,
       isGift,
+      shippingLevel,
     };
     let orderId = savedDraftIdRef.current;
     if (orderId) {
@@ -824,6 +837,10 @@ export function useBookOrder({
     // picture fit
     pageFit,
     pageFitChosen: chosenPageFit != null,
+    // shipping speed
+    shippingLevel,
+    shippingChoices,
+    chooseShippingLevel: setShippingLevel,
     choosePageFit: setChosenPageFit,
     formatFits,
     overCapacity,

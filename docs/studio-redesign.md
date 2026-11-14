@@ -594,3 +594,9 @@ the version's orientation exactly, 90° steps are fine. The book preview must al
   page by email (server email with the share link and a "Create a free account" invitation) or by
   text message (`sms:` link with the share link). Guests are asked to create an account to send.
   The shared page (`/p/<token>`) now asks visitors who aren't signed in to create a free account.
+- **Shipping speed and delivery dates.** The main quote also returns Lulu's shipping speeds for the
+  address (`/shipping-options/`, cheapest first, business-only and inactive ones dropped) with each
+  one's delivery window. The Ship to step shows a "Shipping speed" picker (Standard = MAIL chosen
+  until the customer upgrades); the chosen level is sent with the draft order, saved as
+  `shipping_level`, priced by the server at confirm and sent to Lulu. The total, the overview and
+  the confirmation email show "Estimated delivery", labelled as the printer's estimate.
