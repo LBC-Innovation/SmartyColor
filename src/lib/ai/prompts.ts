@@ -184,7 +184,14 @@ Hair (common mistake: frizzy, strand-by-strand hair — never do this):
 - Keep the real style from the photo: straight hair stays sleek and straight, wavy hair gets a few soft waves, curly hair gets a handful of rounded curl shapes along its edge.
 - NO individual strands, NO flyaway hairs, NO fuzzy, frizzy, spiky, or jagged hair edges, NO scribbled hair texture. Most of the hair area stays EMPTY WHITE for coloring.
 - Eyebrows: one soft smooth shape each — not many little hair strokes.
-- Beards, mustaches, and stubble: a clean outline shape with at most one or two soft inner lines — never stubble dots, stipple, or strand texture.
+- Beards, mustaches, and stubble: ONE smooth closed outline shape, left white inside (at most one soft inner line) — never stubble dots, stipple, short tick marks, or strand texture.
+- Bangs and fringe: a smooth, softly curved lower edge — not a row of pointed or spiky tips.
+
+Clothing patterns (common mistake: dense, scratchy plaid or gingham — never do this):
+- Plaid, gingham, checks, and stripes: a FEW evenly spaced, clean straight lines (about 4 to 8 across a shirt front), making boxes or bands big enough for a child to color. Lines follow the fabric's folds smoothly and stop cleanly at seams.
+- NO dense grids, NO doubled or broken pattern lines, NO tiny checks, NO hatching to suggest a weave.
+- Small prints (polka dots, flowers): a modest number of clean, open shapes with white insides — never tiny solid dots.
+- Clothing folds: only a few main fold lines, not every wrinkle.
 
 Faces and eyes (common mistake: dramatic, oversized, heavily lined eyes — never do this):
 - Keep every face true to the photo and easy to recognize, with natural, relaxed features. Do not exaggerate, beautify, glamorize, or stylize.
