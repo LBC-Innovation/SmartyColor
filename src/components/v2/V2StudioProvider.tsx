@@ -63,8 +63,11 @@ type V2StudioContextValue = {
   mode: V2StudioMode;
   /** True when the library lives in the user's account. */
   cloud: boolean;
-  /** Re-read the active project from its source (after a migration, for instance). */
-  reload: () => Promise<void>;
+  /**
+   * Re-read the active project from its source (after a migration, for instance).
+   * Cloud only: `activeProjectId` opens that album instead of the last one used.
+   */
+  reload: (opts?: { activeProjectId?: string | null }) => Promise<void>;
   /**
    * Cloud only: pull the active album's photos again, so pages other people
    * added show up. Resolves "gone" when the album is no longer available.
@@ -444,8 +447,9 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     };
   }, [awaitingIdentity, userId, bootstrapCloud, bootstrapLocal, revokeAllPreviews, router]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (opts?: { activeProjectId?: string | null }) => {
     if (modeRef.current === "cloud" && userIdRef.current) {
+      if (opts?.activeProjectId) writeActiveProjectPref(userIdRef.current, opts.activeProjectId);
       persistSkipRef.current = true;
       try {
         await bootstrapCloud(userIdRef.current);
