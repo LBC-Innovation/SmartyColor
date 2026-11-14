@@ -1,5 +1,6 @@
 "use client";
 
+import { activePageVersion, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
 import { useEffect, useId, useRef, useState, type CSSProperties, type HTMLAttributes } from "react";
 import {
   ArrowDownToLine,
@@ -209,8 +210,11 @@ export function GalleryCard({
   style,
   nodeRef,
 }: GalleryCardProps) {
-  const photoThumb = useThumbUrl(photo.previewUrl, photo.thumbUrl);
-  const sheetThumb = useThumbUrl(photo.sheet?.imageDataUrl, photo.sheet?.thumbUrl);
+  // One photo per card: the one the page was drawn from (a reframed photo when it was), and that page.
+  const source = pageSourceVersion(photo);
+  const page = activePageVersion(photo);
+  const photoThumb = useThumbUrl(source?.sheet.imageDataUrl ?? photo.previewUrl, source ? source.sheet.thumbUrl : photo.thumbUrl);
+  const sheetThumb = useThumbUrl(page?.sheet.imageDataUrl, page?.sheet.thumbUrl);
   const hasPage = state === "ready";
   const label = `Photo ${index + 1}`;
   const caption = leftOut ? "Left out of book" : !hasPage && state !== "drawing" ? "Not in book yet" : null;

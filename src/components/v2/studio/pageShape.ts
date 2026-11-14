@@ -1,6 +1,7 @@
 import type { SheetVersion } from "@/lib/session/types";
 import type { ReframeTarget } from "@/lib/session/photoTypes";
-import { activeSourceVersion, normalizeV2SheetRevisions, photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
+import { pagePrintPrefs } from "@/components/v2/studio/order/galleryBookPages";
+import { normalizeV2SheetRevisions, photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 
 /**
  * What turning a page to the other shape takes, cheapest first:
@@ -16,8 +17,7 @@ export type ShapePlan =
 
 /** The shape the page on show was drawn from (or the photo on show, before any page). */
 export function currentShape(photo: V2PhotoEntry): ReframeTarget {
-  const source = activeSourceVersion({ ...photo, sheetRevisions: normalizeV2SheetRevisions(photo) });
-  return source?.orientation ?? photoOrientation(photo);
+  return pagePrintPrefs(photo).orientation;
 }
 
 export function shapePlan(photo: V2PhotoEntry): ShapePlan {

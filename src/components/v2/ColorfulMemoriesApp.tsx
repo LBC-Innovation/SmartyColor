@@ -32,7 +32,7 @@ import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useShee
 import { BookOrderPanel, ConfirmButton, confirmBlocker, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
 import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
 import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
-import { activePageVersion, galleryBook } from "@/components/v2/studio/order/galleryBookPages";
+import { activePageVersion, galleryBook, pagePrintPrefs, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
 import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { BEST_PHOTOS, INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
@@ -44,7 +44,7 @@ import { fillCopy, readIntent } from "@/lib/marketing/copy";
 import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
 import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import { usePriceList } from "@/lib/pricing/usePriceList";
-import { activeSheetVersion, activeSourceVersion, activeVersionPrintPrefs, normalizeV2SheetRevisions, photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
+import { photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 
 const INTENT_NAMED_KEY = "cm_intent_named";
 /** "Make pages as I add", remembered per device: "on", "off", or unset (not chosen yet). */
@@ -239,7 +239,7 @@ export function ColorfulMemoriesApp() {
   function makePages(ids: string[], options?: GenerateOptions): number {
     const wanted = ids.filter((id) => {
       const p = photosRef.current.find((e) => e.id === id);
-      return p && (options?.addVersion || !p.sheet) && !p.generating;
+      return p && (options?.addVersion || !activePageVersion(p)) && !p.generating;
     });
     if (wanted.length === 0) return 0;
     const cap = pagesAffordable();
@@ -352,7 +352,7 @@ export function ColorfulMemoriesApp() {
     if (stale.length === 0) return;
     const ids = new Set(stale.map((p) => p.id));
     mutatePhotos((prev) => prev.map((p) => (ids.has(p.id) ? { ...p, generating: false, correcting: false } : p)));
-    for (const p of stale) if (!p.sheet) queue.markFailed(p.id, INTERRUPTED);
+    for (const p of stale) if (!activePageVersion(p)) queue.markFailed(p.id, INTERRUPTED);
     if (cloud) void refreshActiveProject();
   }, [photosRef, queue, locks, mutatePhotos, cloud, refreshActiveProject]);
 
@@ -473,7 +473,7 @@ export function ColorfulMemoriesApp() {
     const q = queue.status(photo.id);
     if (q === "queued") return "queued";
     if (photo.generating || q === "running") return "drawing";
-    if (activePageVersion(photo) && photo.sheet) return "ready";
+    if (activePageVersion(photo)) return "ready";
     if (queue.failures[photo.id]) return "failed";
     return "none";
   }
@@ -513,8 +513,8 @@ export function ColorfulMemoriesApp() {
 
   // ---- printing ----------------------------------------------------------------------
   async function makePagePdf(photo: V2PhotoEntry | null | undefined): Promise<Blob> {
-    const version = photo ? activeSheetVersion({ ...photo, sheetRevisions: normalizeV2SheetRevisions(photo) }) : null;
-    if (!photo?.sheet || !version) throw new Error("Pick a coloring page first.");
+    const version = photo ? activePageVersion(photo) : null;
+    if (!photo || !version) throw new Error("Pick a coloring page first.");
     const response = await authedFetch(
       "/api/pdf",
       {
@@ -522,8 +522,8 @@ export function ColorfulMemoriesApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           photo.remote
-            ? { revisionId: version.id, printPrefs: activeVersionPrintPrefs(photo) }
-            : { imageDataUrl: photo.sheet.imageDataUrl, printPrefs: activeVersionPrintPrefs(photo) },
+            ? { revisionId: version.id, printPrefs: pagePrintPrefs(photo) }
+            : { imageDataUrl: version.sheet.imageDataUrl, printPrefs: pagePrintPrefs(photo) },
         ),
       },
       { withAuth: Boolean(photo.remote) },
@@ -607,9 +607,8 @@ export function ColorfulMemoriesApp() {
         ? formatCredits(order.quoteCents)
         : `${formatCredits(order.printCents ?? order.quoteCents)} + shipping`
       : null;
-  const editorSource = editorPhoto
-    ? activeSourceVersion({ ...editorPhoto, sheetRevisions: normalizeV2SheetRevisions(editorPhoto) })
-    : null;
+  // The one photo behind the page on show: new pages and edits start from it.
+  const editorSource = editorPhoto ? pageSourceVersion(editorPhoto) : null;
 
   const panel = (variant: "column" | "sheet") => (
     <BookOrderPanel
@@ -845,7 +844,7 @@ export function ColorfulMemoriesApp() {
             queue.clearFailure(editorPhoto.id);
             makePages([editorPhoto.id], editorSource ? { source: editorSource } : undefined);
           }}
-          onDrawAgain={() => makePages([editorPhoto.id], { addVersion: true })}
+          onDrawAgain={() => makePages([editorPhoto.id], editorSource ? { source: editorSource, addVersion: true } : { addVersion: true })}
           onQuickFix={(kind) => void quickFix(kind)}
           onSelectRevision={(revisionId) => {
             setUndo(null);
@@ -897,11 +896,11 @@ export function ColorfulMemoriesApp() {
         />
       ) : null}
 
-      {outputPhoto?.sheet && activePageVersion(outputPhoto) ? (
+      {outputPhoto && activePageVersion(outputPhoto) ? (
         <PagePrintShareModal
           key={`${outputPhoto.id}:${activePageVersion(outputPhoto)!.id}:${output!.mode}`}
           mode={output!.mode}
-          sheetSrc={outputPhoto.sheet.imageDataUrl}
+          sheetSrc={activePageVersion(outputPhoto)!.sheet.imageDataUrl}
           makePdf={() => makePagePdf(outputPhoto)}
           share={
             !cloud || !outputPhoto.remote

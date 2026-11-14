@@ -16,10 +16,8 @@ import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import { trackPageGenerated } from "@/lib/track";
 import { entryFromLibraryPhoto, uploadRevisionToLibrary } from "@/lib/v2/cloudLibrary";
+import { activePageVersion, pagePrintPrefs, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
 import {
-  activeSheetVersion,
-  activeSourceVersion,
-  activeVersionPrintPrefs,
   normalizeV2SheetRevisions,
   photoPrintPrefs,
   type V2PhotoEntry,
@@ -90,7 +88,7 @@ export function useSheetGeneration({
   async function generateForPhoto(photoId: string, options?: GenerateOptions): Promise<GenerateOutcome> {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
     const source = options?.source ?? null;
-    if (!photo || (photo.sheet && !source && !options?.addVersion)) return { kind: "skipped" };
+    if (!photo || (activePageVersion(photo) && !source && !options?.addVersion)) return { kind: "skipped" };
     if (photo.generating || photo.correcting || !locks.acquire(photoId)) return { kind: "skipped" };
     if (!sheetCredits.canAfford("generation", photo)) {
       locks.release(photoId);
@@ -202,11 +200,11 @@ export function useSheetGeneration({
 
   async function applySheetEdit(photoId: string, note: string) {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
-    if (!photo?.sheet) return;
-    const versioned = { ...photo, sheetRevisions: normalizeV2SheetRevisions(photo) };
-    const active = activeSheetVersion(versioned);
-    if (active?.kind === "photo") return;
-    const sourceVersion = activeSourceVersion(versioned);
+    if (!photo) return;
+    // The edit applies to the page on show, with the photo that page was drawn from.
+    const active = activePageVersion(photo);
+    if (!active) return;
+    const sourceVersion = pageSourceVersion(photo);
     const lineage = lineageOf(active);
 
     const trimmed = note.trim();
@@ -233,17 +231,15 @@ export function useSheetGeneration({
     try {
       let body: Record<string, unknown>;
       if (photo.remote) {
-        const revisionId = photo.activeRevisionId ?? versioned.sheetRevisions[versioned.sheetRevisions.length - 1]?.id;
-        if (!revisionId) throw new Error("No page to edit yet.");
-        body = { mode: "correct-library", photoId: photo.remote.photoId, revisionId, corrections: [trimmed] };
+        body = { mode: "correct-library", photoId: photo.remote.photoId, revisionId: active.id, corrections: [trimmed] };
       } else {
-        const sheetDataUrl = await prepareSheetDataUrlForApi(photo.sheet.imageDataUrl, 2);
+        const sheetDataUrl = await prepareSheetDataUrlForApi(active.sheet.imageDataUrl, 2);
         body = {
           mode: "correct",
           photoDataUrl: sourceVersion?.sheet.imageDataUrl ?? photo.photoDataUrl,
           sheetDataUrl,
           corrections: [trimmed],
-          printPrefs: activeVersionPrintPrefs(photo),
+          printPrefs: pagePrintPrefs(photo),
           image: sourceVersion ? undefined : photo.image,
         };
       }
@@ -312,10 +308,9 @@ export function useSheetGeneration({
    */
   async function applyQuickFixVersion(photoId: string, kind: QuickFixKind): Promise<string | null> {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
-    if (!photo?.sheet) return null;
-    const versioned = { ...photo, sheetRevisions: normalizeV2SheetRevisions(photo) };
-    const active = activeSheetVersion(versioned);
-    if (!active || active.kind === "photo") return null;
+    if (!photo) return null;
+    const active = activePageVersion(photo);
+    if (!active) return null;
     if (photo.generating || photo.correcting || !locks.acquire(photoId)) return null;
     try {
       const imageDataUrl = await applyQuickFix(active.sheet.imageDataUrl, kind);

@@ -1,5 +1,7 @@
 import { bookPageId } from "@/components/v2/studio/order/useBookOrder";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
+import type { PrintPrefs } from "@/lib/print/settings";
+import type { SheetVersion } from "@/lib/session/types";
 import {
   activeSheetVersion,
   normalizeV2SheetRevisions,
@@ -19,10 +21,44 @@ export type GalleryBook = {
   leftOut: number;
 };
 
-/** The active version of a photo when it is a coloring page (not a portrait photo version). */
-export function activePageVersion(photo: V2PhotoEntry) {
-  const version = activeSheetVersion({ ...photo, sheetRevisions: normalizeV2SheetRevisions(photo) });
-  return version && version.kind !== "photo" ? version : null;
+/**
+ * The coloring page a photo shows: the chosen page, or (when the chosen version is a reframed
+ * photo, e.g. while a page is being drawn from it) its newest page. Reframed photos are steps on
+ * the way to a page, never something to show in place of one, so a photo with pages always shows
+ * one of them.
+ */
+export function activePageVersion(photo: V2PhotoEntry): SheetVersion | null {
+  const revisions = normalizeV2SheetRevisions(photo);
+  const version = activeSheetVersion({ ...photo, sheetRevisions: revisions });
+  if (version && version.kind !== "photo") return version;
+  return [...revisions].reverse().find((r) => r.kind !== "photo") ?? null;
+}
+
+/** Every coloring page of a photo, oldest first; reframed photos are left out. */
+export function pageVersions(photo: V2PhotoEntry): SheetVersion[] {
+  return normalizeV2SheetRevisions(photo).filter((r) => r.kind !== "photo");
+}
+
+/**
+ * The one photo behind what is showing: the reframed photo the shown page was drawn from, or the
+ * reframed photo itself while its page is still to come, else null for the uploaded photo.
+ */
+export function pageSourceVersion(photo: V2PhotoEntry): SheetVersion | null {
+  const revisions = normalizeV2SheetRevisions(photo);
+  const page = activePageVersion(photo);
+  if (page) {
+    if (!page.sourceRevisionId) return null;
+    return revisions.find((r) => r.id === page.sourceRevisionId && r.kind === "photo") ?? null;
+  }
+  // No page yet: a reframed photo that is chosen is the one its first page will be drawn from.
+  const active = activeSheetVersion({ ...photo, sheetRevisions: revisions });
+  return active?.kind === "photo" ? active : null;
+}
+
+/** Print settings for the shown page, with that page's own shape. */
+export function pagePrintPrefs(photo: V2PhotoEntry): PrintPrefs {
+  const page = activePageVersion(photo);
+  return { ...photo.printPrefs, orientation: page?.orientation ?? pageSourceVersion(photo)?.orientation ?? photoOrientation(photo) };
 }
 
 /** The gallery is the book: its order is the page order, and there is no second ordering. */
@@ -39,7 +75,7 @@ export function galleryBook(photos: V2PhotoEntry[], projectId: string | null, pr
       continue;
     }
     const version = activePageVersion(photo);
-    if (!version || !photo.sheet) {
+    if (!version) {
       if (photo.generating) stillDrawing += 1;
       else withoutPage += 1;
       continue;

@@ -30,13 +30,11 @@ import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
 import { V2WorkingOverlay } from "@/components/v2/V2WorkingOverlay";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { useLayerHistory } from "@/components/v2/studio/useLayerHistory";
-import { activePageVersion } from "@/components/v2/studio/order/galleryBookPages";
+import { activePageVersion, pageSourceVersion, pageVersions } from "@/components/v2/studio/order/galleryBookPages";
 import { cn } from "@/lib/cn";
 import { BOLDER_MAX_LEVEL, bolderLevel, type QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import type { CardState } from "@/components/v2/studio/GalleryCard";
 import {
-  activeSheetVersion,
-  activeSourceVersion,
   normalizeV2SheetRevisions,
   type V2PhotoEntry,
 } from "@/lib/v2/studioTypes";
@@ -108,12 +106,13 @@ export function PageEditorModal(props: Props) {
   useLayerHistory(true, onClose);
 
   const revisions = normalizeV2SheetRevisions(photo);
-  const versioned = { ...photo, sheetRevisions: revisions };
+  // One photo, many pages: the strip lists coloring pages only, and "Photo" is the photo behind
+  // the page on show (the reframed one when the page was drawn from it).
   const pageVersion = activePageVersion(photo);
-  const anyVersion = activeSheetVersion(versioned);
-  const source = activeSourceVersion(versioned);
+  const pages = pageVersions(photo);
+  const source = pageSourceVersion(photo);
   const photoSrc = source?.sheet.imageDataUrl ?? photo.previewUrl;
-  const hasPage = Boolean(pageVersion && photo.sheet);
+  const hasPage = Boolean(pageVersion);
   const [viewFor, setViewFor] = useState<{ id: string; view: EditorView }>({ id: photo.id, view: initialView });
   const view: EditorView = !hasPage ? "photo" : viewFor.id === photo.id ? viewFor.view : "page";
   const [zoomed, setZoomed] = useState(false);
@@ -156,7 +155,7 @@ export function PageEditorModal(props: Props) {
     else onPrev?.();
   }
 
-  const shownSrc = view === "page" && hasPage ? photo.sheet!.imageDataUrl : photoSrc;
+  const shownSrc = view === "page" && pageVersion ? pageVersion.sheet.imageDataUrl : photoSrc;
   const fixDisabled = busy || !hasPage;
   const ShapeIcon = props.shape?.label.includes("landscape") ? RectangleHorizontal : RectangleVertical;
   const shapeButton = props.shape ? (
@@ -286,6 +285,9 @@ export function PageEditorModal(props: Props) {
                 </div>
               )}
               {photo.correcting ? <V2WorkingOverlay variant="edit" label="Applying your change to the coloring page." /> : null}
+              {state === "drawing" && hasPage && !photo.correcting ? (
+                <V2WorkingOverlay variant="edit" label="Drawing a new version of this page." />
+              ) : null}
               {!hasPage && state !== "drawing" ? (
                 <div className="absolute inset-x-3 bottom-3 flex flex-col items-center gap-2 rounded-2xl bg-white/95 p-3 text-center shadow-lg">
                   {state === "queued" ? (
@@ -318,12 +320,12 @@ export function PageEditorModal(props: Props) {
                 </button>
               </div>
             ) : null}
-            {hasPage && revisions.length > 1 ? (
+            {pages.length > 0 ? (
               <V2SheetRevisionStrip
                 variant="compact"
                 className="mt-2 shrink-0"
-                revisions={revisions}
-                activeRevisionId={anyVersion?.id ?? null}
+                revisions={pages}
+                activeRevisionId={pageVersion?.id ?? null}
                 onSelect={props.onSelectRevision}
                 disabled={busy}
               />
