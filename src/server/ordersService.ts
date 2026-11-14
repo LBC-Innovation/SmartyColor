@@ -768,6 +768,8 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
         totalCents: order.total_cents as number | null,
         orderUrl: `${clientOrigin()}/orders/${orderId}`,
         cancelUrl: `${clientOrigin()}/orders/${orderId}?cancel=1`,
+        estimatedDeliveryMin: order.estimated_delivery_min as string | null,
+        estimatedDeliveryMax: order.estimated_delivery_max as string | null,
         coverThumb,
       }),
     );

@@ -20,6 +20,25 @@ function usd(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+/**
+ * A plain date from Lulu ("2026-11-27") as "Nov 27", read as that calendar day whatever time zone
+ * the server runs in.
+ */
+function emailDay(value: string): string {
+  const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = plain ? new Date(Date.UTC(Number(plain[1]), Number(plain[2]) - 1, Number(plain[3]))) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: plain ? "UTC" : undefined });
+}
+
+/** "Nov 27 – Dec 2", a single day, or null when neither end is known. */
+function deliveryRange(min: string | null | undefined, max: string | null | undefined): string | null {
+  const from = min ? emailDay(min) : "";
+  const to = max ? emailDay(max) : "";
+  if (from && to) return from === to ? from : `${from} – ${to}`;
+  return from || to || null;
+}
+
 /** What the customer will see on the order page, in the printer's order. Mirrors the page's own copy. */
 const NEXT_STEPS: { label: string; detail: string }[] = [
   {
@@ -54,6 +73,9 @@ export type OrderConfirmationInput = {
   orderUrl: string;
   /** Opens the order page with the cancel dialog up. */
   cancelUrl: string;
+  /** The printer's estimated delivery window (YYYY-MM-DD); the line is left out without one. */
+  estimatedDeliveryMin?: string | null;
+  estimatedDeliveryMax?: string | null;
   /** A small JPEG of the book's front cover; left out when the order has none. */
   coverThumb?: { jpeg: Uint8Array; width: number; height: number } | null;
 };
@@ -80,6 +102,8 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
   const cancelNote =
     "Changed your mind? You can cancel for a full refund to your wallet until your book goes into production, usually about an hour after you order.";
   const cta = "View your order";
+  const delivery = deliveryRange(input.estimatedDeliveryMin, input.estimatedDeliveryMax);
+  const deliveryNote = "This is the printer's estimate, not a guarantee. Tracking appears on your order page once it ships.";
   const url = escapeHtml(input.orderUrl);
   // Shown at half its pixel size so it stays sharp on high-density screens.
   const cover = input.coverThumb
@@ -138,6 +162,19 @@ ${cover ? `                    <td width="${cover.width + 16}" valign="top" styl
                 <p style="margin:0;color:#475569;">${input.shipTo.map(escapeHtml).join("<br>")}</p>
               </td>
             </tr>
+${delivery ? `            <tr>
+              <td style="padding:16px 32px 0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;">
+                  <tr>
+                    <td style="padding:12px 16px;font-size:15px;line-height:1.5;color:#064e3b;">
+                      <p style="margin:0;"><strong>Estimated delivery:</strong> ${escapeHtml(delivery)}</p>
+                      <p style="margin:4px 0 0;font-size:13px;color:#047857;">${escapeHtml(deliveryNote)}</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+` : ""}
             <tr>
               <td style="padding:20px 32px 0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;border-top:1px solid #e5e7eb;">
@@ -183,6 +220,7 @@ ${cover ? `                    <td width="${cover.width + 16}" valign="top" styl
     "Shipping to:",
     ...input.shipTo,
     "",
+    ...(delivery ? [`Estimated delivery: ${delivery}`, deliveryNote, ""] : []),
     ...money.map(([k, v]) => `${k}: ${v}`),
     ...(total ? [`Total charged: ${total}`] : []),
     "",
