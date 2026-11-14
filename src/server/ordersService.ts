@@ -54,6 +54,7 @@ import {
   CUSTOMER_CANCELABLE_STATUSES,
   DEAD_LULU_STATUSES,
   customerCanCancel,
+  customerCancelDeadline,
 } from "@/lib/orders/cancelWindow";
 
 /** Lulu fetches the print PDFs asynchronously (can be hours later); keep the links alive 7 days. */
@@ -140,6 +141,12 @@ function mapSummary(row: OrderRow): BookOrderSummary {
       fulfillment: row.fulfillment ?? "print",
       luluStatusName: row.lulu_status_name,
       luluProductionDueAt: row.lulu_production_due_at ?? null,
+    }),
+    cancelDeadline: customerCancelDeadline({
+      status: row.status,
+      fulfillment: row.fulfillment ?? "print",
+      luluProductionDueAt: row.lulu_production_due_at ?? null,
+      paidAt: row.paid_at,
     }),
     refundedCents: row.refunded_cents ?? null,
   };
@@ -728,7 +735,10 @@ async function emailCoverThumb(
  * skipped. Never throws and never affects the order; a failed send is logged and can be retried
  * by the next caller.
  */
-export async function sendOrderConfirmationEmail(orderId: string): Promise<void> {
+export async function sendOrderConfirmationEmail(
+  orderId: string,
+  options?: { timeZone?: string },
+): Promise<void> {
   try {
     const db = getSupabaseAdmin();
     const { data: sent } = await db
@@ -782,6 +792,13 @@ export async function sendOrderConfirmationEmail(orderId: string): Promise<void>
         totalCents: order.total_cents as number | null,
         orderUrl: `${clientOrigin()}/orders/${orderId}`,
         cancelUrl: `${clientOrigin()}/orders/${orderId}?cancel=1`,
+        cancelDeadline: customerCancelDeadline({
+          status: order.status as BookOrderStatus,
+          fulfillment: (order.fulfillment ?? "print") as BookFulfillment,
+          luluProductionDueAt: (order.lulu_production_due_at as string | null) ?? null,
+          paidAt: (order.paid_at as string | null) ?? null,
+        }),
+        timeZone: options?.timeZone,
         shippingLevel: order.shipping_level as string | null,
         estimatedDeliveryMin: order.estimated_delivery_min as string | null,
         estimatedDeliveryMax: order.estimated_delivery_max as string | null,
@@ -1097,7 +1114,7 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
       `
       id, user_id, product_id, project_title, page_count, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, tracking_number, tracking_urls,
-      estimated_delivery_min, estimated_delivery_max, created_at, updated_at,
+      estimated_delivery_min, estimated_delivery_max, created_at, updated_at, paid_at,
       lulu_production_due_at, refunded_cents,
       print_products ( name )
     `,

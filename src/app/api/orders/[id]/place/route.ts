@@ -11,6 +11,8 @@ export async function POST(request: Request, { params }: Params) {
   if ("error" in auth) return auth.error;
 
   const { id } = await params;
+  const body = (await request.json().catch(() => null)) as { timeZone?: unknown } | null;
+  const timeZone = typeof body?.timeZone === "string" ? body.timeZone.slice(0, 64) : undefined;
   const result = await orders.placeBookOrderWithCredits({
     userId: auth.user.id,
     orderId: id,
@@ -28,10 +30,11 @@ export async function POST(request: Request, { params }: Params) {
   if (result.data) {
     // Payment confirmed: the server copy of `purchase`, deduplicated with the browser's by order id.
     after(() => trackPurchaseServer({ request, orderId: id, email: auth.user.email }));
-    after(() => orders.sendOrderConfirmationEmail(id));
-    // Hand the paid order to Lulu after the response; failures are recorded on the order, never thrown.
+    // Hand the paid order to Lulu after the response (failures are recorded on the order, never
+    // thrown), then email the customer, so the email can carry Lulu's own cancel deadline.
     after(async () => {
       await orders.submitOrderToLulu(id);
+      await orders.sendOrderConfirmationEmail(id, { timeZone });
     });
   }
   return jsonResult(result, result.error ? 500 : 200);

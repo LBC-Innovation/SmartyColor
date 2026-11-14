@@ -556,8 +556,16 @@ export function placeBookOrder(orderId: string): Promise<
     creditsAppliedCents: number;
   }>
 > {
+  let timeZone: string | undefined;
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    /* the email falls back to a default zone */
+  }
   return request(`/orders/${orderId}/place`, {
     method: "POST",
+    // Lets the confirmation email show the cancel deadline in the buyer's own time.
+    body: JSON.stringify({ timeZone }),
   });
 }
 
