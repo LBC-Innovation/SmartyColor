@@ -81,7 +81,18 @@ import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
 import { BookAddressSuggestion, applySuggestion } from "@/components/v2/book-order/BookAddressSuggestion";
 import {
-  EMPTY_SHIPPING_ADDRESS,
+  ADDRESS_STORAGE_KEY,
+  COVER_STORAGE_KEY,
+  OWN_ADDRESS_ERRORS,
+  SHIP_TO_ADDRESS_ERROR,
+  SHIP_TO_STORAGE_KEY,
+  cartPages,
+  isBlankAddress,
+  readStoredAddress,
+  readStoredCover,
+  storeAddress,
+} from "@/components/v2/studio/order/bookOrderStorage";
+import {
   isShippingAddressComplete,
   normalizeShippingAddress,
   validateBillingAddress,
@@ -96,57 +107,6 @@ import { fillCopy, readIntent } from "@/lib/marketing/copy";
 import { GIFT_NOTE_MAX_CHARS, normalizeGiftNote, printableGiftNoteChars } from "@/lib/orders/giftNote";
 import { holidayOrderBy } from "@/lib/marketing/holiday";
 
-/** The customer's own address: billing, and where the book ships unless they say otherwise. */
-const ADDRESS_STORAGE_KEY = "cm_shipping_address";
-/** A separate delivery address, when the book ships somewhere else. */
-const SHIP_TO_STORAGE_KEY = "cm_ship_to_address";
-/** The banner shown when the customer's own address is incomplete: one address, or billing when shipping elsewhere. */
-const OWN_ADDRESS_ERRORS = ["Please complete your address.", "Please complete your billing address."] as const;
-const SHIP_TO_ADDRESS_ERROR = "Please complete the shipping address.";
-/** Survives the trip to add credit and back, which reloads the wizard. */
-const COVER_STORAGE_KEY = "cm_book_cover_design";
-
-/**
- * The address being typed is a draft for this tab only, so it survives the trip
- * to add credit and back; keeping it for later orders is the customer's choice,
- * saved to their account.
- */
-function readStoredAddress(key: string): ShippingAddress {
-  if (typeof window === "undefined") return EMPTY_SHIPPING_ADDRESS;
-  try {
-    // Addresses used to be kept in this browser without asking; drop those.
-    localStorage.removeItem(key);
-    const raw = sessionStorage.getItem(key);
-    return raw ? { ...EMPTY_SHIPPING_ADDRESS, ...(JSON.parse(raw) as Partial<ShippingAddress>) } : EMPTY_SHIPPING_ADDRESS;
-  } catch {
-    return EMPTY_SHIPPING_ADDRESS;
-  }
-}
-
-/** Nothing typed yet: only the defaults, like the country, are set. */
-function isBlankAddress(a: ShippingAddress): boolean {
-  return (Object.keys(EMPTY_SHIPPING_ADDRESS) as (keyof ShippingAddress)[]).every(
-    (k) => (a[k] ?? "").trim() === (EMPTY_SHIPPING_ADDRESS[k] ?? "").trim(),
-  );
-}
-
-function storeAddress(key: string, address: ShippingAddress) {
-  try {
-    sessionStorage.setItem(key, JSON.stringify(address));
-  } catch {
-    /* ignore */
-  }
-}
-
-function readStoredCover(): BookCoverDesign | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(COVER_STORAGE_KEY);
-    return raw ? normalizeCoverDesign(JSON.parse(raw)) : null;
-  } catch {
-    return null;
-  }
-}
 import {
   bookEntryFromLibraryPhoto,
   collectPhotoPagesFromProjects,
@@ -164,18 +124,6 @@ const ALL_STEPS: BookOrderStep[] = ["book", "pages", "cover", "proof", "review"]
 
 function isStep(value: unknown): value is BookOrderStep {
   return typeof value === "string" && (ALL_STEPS as string[]).includes(value);
-}
-
-/** The pages as the cart remembers them: ids, order and turns, never the images. */
-function cartPages(pages: BookWizardPage[]): BookCartPageEntry[] {
-  // The gift note is saved with the cart on its own, not as a page.
-  return pages.flatMap((p): BookCartPageEntry[] =>
-    p.kind === "photo"
-      ? [{ id: p.id, kind: "photo", ...(p.rotation ? { rotation: p.rotation } : {}), ...(p.mirrored ? { mirrored: true } : {}) }]
-      : p.kind === "blank"
-        ? [{ id: p.id, kind: "blank", variant: p.variant === "lined" ? "lined" : "plain", ...(p.auto ? { auto: true } : {}) }]
-        : [],
-  );
 }
 
 /**
