@@ -395,13 +395,13 @@ export function PageEditorModal(props: Props) {
             </div>
             {props.onUndo ? (
               <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-v2-ink px-3 py-1.5 text-sm text-white" role="status">
-                <span>Page changed. It is a new version.</span>
+                <span>Saved as a new version.</span>
                 <button type="button" className="min-h-9 rounded-full px-3 font-semibold underline-offset-2 hover:underline" onClick={props.onUndo}>
                   Undo
                 </button>
               </div>
             ) : null}
-            {pages.length > 0 ? (
+            {pages.length > 1 ? (
               <V2SheetRevisionStrip
                 variant="compact"
                 className="mt-2 shrink-0"
@@ -448,7 +448,7 @@ export function PageEditorModal(props: Props) {
                   <ActionRow
                     primary
                     icon={<MessageSquareText />}
-                    label="Chat to edit"
+                    label="Describe a change"
                     detail={editCostLabel}
                     disabled={busy}
                     onClick={props.onEditWithNote}

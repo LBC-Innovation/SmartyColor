@@ -121,7 +121,7 @@ export function formatDeliveryExpectation(
 ): string | null {
   if (status === "delivered") return "Delivered";
   if (status === "shipped") {
-    return min && max ? `Estimated arrival ${formatDateRange(min, max)}` : "On the way — check tracking for updates";
+    return min && max ? `Estimated arrival ${formatDateRange(min, max)}` : "On the way. Check tracking for updates.";
   }
   if (status === "canceled" || status === "failed" || status === "refunded") {
     return null;

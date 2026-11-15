@@ -32,16 +32,20 @@ type Props = {
 
 /** Amount picker (quick amounts or a typed amount) that hands off to Stripe Checkout. */
 export function V2AddCreditForm({ returnPath, suggestedCents, compact }: Props) {
-  const suggested = suggestedCents && suggestedCents > 0 ? roundUpToQuickAmount(suggestedCents) : 10_00;
+  const hasSuggestion = Boolean(suggestedCents && suggestedCents > 0);
+  const exact = hasSuggestion ? Math.max(suggestedCents as number, MIN_CENTS) : 0;
+  const suggested = hasSuggestion ? roundUpToQuickAmount(suggestedCents as number) : 10_00;
   const suggestedIsQuick = QUICK_AMOUNTS_CENTS.includes(suggested);
 
-  const [mode, setMode] = useState<"quick" | "other">(suggestedIsQuick ? "quick" : "other");
+  const [mode, setMode] = useState<"exact" | "quick" | "other">(
+    hasSuggestion ? "exact" : suggestedIsQuick ? "quick" : "other",
+  );
   const [quick, setQuick] = useState<number>(suggestedIsQuick ? suggested : QUICK_AMOUNTS_CENTS[1]);
   const [otherText, setOtherText] = useState(suggestedIsQuick ? "" : (suggested / 100).toFixed(2));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const amountCents = mode === "quick" ? quick : parseDollars(otherText);
+  const amountCents = mode === "exact" ? exact : mode === "quick" ? quick : parseDollars(otherText);
   const amountError =
     mode === "other" && otherText.trim() && amountCents == null
       ? "Enter an amount in dollars."
@@ -76,8 +80,22 @@ export function V2AddCreditForm({ returnPath, suggestedCents, compact }: Props) 
   return (
     <div>
       <p className="v2-label">How much would you like to add?</p>
+      {hasSuggestion ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setMode("exact")}
+            aria-pressed={mode === "exact"}
+            className={cn(pill(mode === "exact"), "flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left")}
+          >
+            <span className="tabular-nums">{formatCredits(exact)}</span>
+            <span className="text-xs font-medium text-v2-muted">Just what you need</span>
+          </button>
+          <p className="mb-2 mt-3 text-xs font-medium text-v2-muted">Or add more for later</p>
+        </>
+      ) : null}
       <div className="grid grid-cols-3 gap-2">
-        {QUICK_AMOUNTS_CENTS.map((cents) => (
+        {QUICK_AMOUNTS_CENTS.filter((cents) => !hasSuggestion || cents > exact).map((cents) => (
           <button
             key={cents}
             type="button"

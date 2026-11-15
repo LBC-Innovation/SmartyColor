@@ -37,6 +37,8 @@ export type HeroPair = {
   height: number;
   /** Narrower `-<width>.webp` siblings next to the full-size file. */
   srcSetWidths: number[];
+  /** Short name on the before/after switcher, e.g. "Beach day". */
+  label?: string;
 };
 
 export type IconName =
@@ -76,6 +78,8 @@ export type WhyBlock = {
   points: PointCopy[];
   /** The photo and coloring page shown beside the points. */
   example: HeroPair;
+  /** Lifestyle photo filling the band's other half. The before/after is shown instead until it is ready. */
+  photo?: LifestyleId;
   useCasesTitle: string;
   useCases: string[];
 };
@@ -131,6 +135,8 @@ export type LandingPageCopy = {
   primaryCta: string;
   trustBullets: string[];
   hero: HeroPair;
+  /** Full-width photo behind the hero text. The hero pair's photo is used until it is ready. */
+  heroPhoto: LifestyleId;
   sections: LandingSections;
   why: WhyBlock;
   ideas?: IdeasBlock;
@@ -151,6 +157,7 @@ const FAMILY_BALCONY: HeroPair = {
   width: 1200,
   height: 900,
   srcSetWidths: [400, 800],
+  label: "Beach day",
 };
 
 const BOYS_CATFISH: HeroPair = {
@@ -161,6 +168,7 @@ const BOYS_CATFISH: HeroPair = {
   width: 900,
   height: 1200,
   srcSetWidths: [400, 800],
+  label: "The big catch",
 };
 
 export const BEST_PHOTOS = {
@@ -182,6 +190,7 @@ export const WHY_FAMILIES: WhyBlock = {
     },
   ],
   example: BOYS_CATFISH,
+  photo: "fridge",
   useCasesTitle: "Perfect for",
   useCases: ["Grandparent gifts", "Birthday parties", "Rainy afternoons", "Road trips", "Classrooms", "Family reunions"],
 };
@@ -227,6 +236,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     primaryCta: PRIMARY_CTA,
     trustBullets: ["No account to start", "First page in about a minute", "Your photos stay private"],
     hero: FAMILY_BALCONY,
+    heroPhoto: "living-room-floor",
     sections: { ...CONSUMER_SECTIONS, occasions: true },
     why: WHY_FAMILIES,
     faq: [],
@@ -252,6 +262,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     // TODO(owner): swap in a photo of a grandparent with a grandkid and the page made from it, with
     // written consent. Replace `hero` and `why.example` with the new HeroPair.
     hero: FAMILY_BALCONY,
+    heroPhoto: "kitchen-table",
     sections: { ...CONSUMER_SECTIONS, occasions: true, giftTiming: true },
     why: {
       eyebrow: "Why it works as a gift",
@@ -276,6 +287,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       ],
       // TODO(owner): a grandparent-and-grandkid pair, with written consent.
       example: BOYS_CATFISH,
+      photo: "fridge",
       useCasesTitle: "Great for",
       useCases: ["Grandparents", "Aunts and uncles", "Godparents", "Family friends"],
     },
@@ -325,6 +337,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     trustBullets: ["Print pages at home, free", "A printed book to keep", "No account to start"],
     // TODO(owner): swap in a birthday photo (kids at a party) and its coloring page, with written consent.
     hero: BOYS_CATFISH,
+    heroPhoto: "birthday-table",
     sections: { ...CONSUMER_SECTIONS, occasions: true },
     why: {
       eyebrow: "Why it works for birthdays",
@@ -349,6 +362,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       ],
       // TODO(owner): a birthday-party pair (child with a cake or friends), with written consent.
       example: BOYS_CATFISH,
+      photo: "living-room-floor",
       useCasesTitle: "Great for",
       useCases: ["Party activity", "Take-home pages", "A keepsake gift"],
     },
@@ -407,6 +421,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     // TODO(owner): replace with a dog or cat photo and the coloring page made from it, with written
     // consent. The catfish photo is a stand-in until then.
     hero: BOYS_CATFISH,
+    heroPhoto: "dog-coloring",
     sections: { ...CONSUMER_SECTIONS, occasions: true },
     why: {
       eyebrow: "Why pet lovers like it",
@@ -431,6 +446,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       ],
       // TODO(owner): a dog or cat pair, with written consent.
       example: BOYS_CATFISH,
+      photo: "fridge",
       useCasesTitle: "Great for",
       useCases: ["Dogs", "Cats", "Family photos with pets", "Gifts for pet lovers"],
     },
@@ -487,6 +503,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     trustBullets: ["Try a free page first", "Printed in the US", "Larger orders quoted individually"],
     // TODO(owner): swap in a photographer-session or event photo and its coloring page, with written consent.
     hero: FAMILY_BALCONY,
+    heroPhoto: "birthday-table",
     sections: { ...ALL_SECTIONS_OFF, howItWorks: true, partnerContact: true, bestPhotos: true },
     why: {
       eyebrow: "The idea",
@@ -499,6 +516,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       ],
       // TODO(owner): a photographer-session or event pair, with written consent.
       example: BOYS_CATFISH,
+      photo: "kitchen-table",
       useCasesTitle: "Works for",
       useCases: ["Photo sessions", "Classrooms", "Family attractions", "Events and reunions"],
     },
@@ -559,6 +577,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     trustBullets: ["Captions you can edit", "Printed in the US", "Your photos stay private"],
     // TODO(owner): swap in a trip photo and a captioned story page, with written consent.
     hero: FAMILY_BALCONY,
+    heroPhoto: "living-room-floor",
     sections: { ...CONSUMER_SECTIONS },
     why: WHY_FAMILIES,
     faq: [],
@@ -568,9 +587,18 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
 /** Landing pages in the order they are listed in the sitemap, footer and occasion cards. */
 export const LANDING_ORDER: LandingIntent[] = ["default", "gift", "birthday", "pets", "partners", "story"];
 
-/** Shown under the hero CTA and on the pricing card when the reference price is known. */
-export const PRICE_LINE =
-  "A {refPages}-page {refFormat} is about {price} with US shipping, before tax.";
+/** The reference book's price, on the pricing card and in the studio, when the price is known. */
+export const PRICE_LINE = "{price} for a {refPages}-page {refFormat}, standard US shipping included. Plus tax.";
+
+/**
+ * The hero's price card, shown when the reference price is known. "From" is the reference book
+ * (REFERENCE_BOOK in src/server/marketing/marketingNumbers.ts); larger books and other bindings cost more.
+ */
+export const HERO_PRICE_TAG = {
+  label: "Printed coloring books",
+  price: "from {price}",
+  detail: "{refPages}-page {refFormat}, US shipping included. Spiral and paperback too.",
+};
 
 /**
  * Slim banner at the top of the home and gift pages, and next to the delivery estimate at checkout.
@@ -579,18 +607,24 @@ export const PRICE_LINE =
 export const HOLIDAY_LINE = "Order by {date} for Christmas.";
 export const HOLIDAY_CHECKOUT_NOTE = "Delivery dates for your address are shown at checkout before you pay.";
 
-/** Homepage block under the hero. Shown only while the Christmas order-by date is set. */
+/** Homepage toast at the bottom of the screen. Shown only while the Christmas order-by date is set. */
 export const HOLIDAY_BLOCK = {
   title: "Giving a book for Christmas?",
-  body: "Ship it straight to the grandparents, or anyone you choose, with a note from you.",
-  /** Shown under the body together with HOLIDAY_LINE. */
-  note: HOLIDAY_CHECKOUT_NOTE,
+  line: "Order by {date}. It ships to them with your note.",
   link: "See Christmas gifts",
   href: "/gift",
+  dismiss: "Dismiss",
 };
 
 export const HERO_SECONDARY_CTA = "See how it works";
-export const HERO_DEMO_NOTE = ["Real pages made in the studio. Type a note like", "thicker lines", "and it redraws."] as const;
+/** The hero's drag-to-compare slider. */
+export const HERO_COMPARE = {
+  photo: "Your photo",
+  page: "Coloring page",
+  hint: "Drag to compare",
+  label: "Compare the photo with the coloring page made from it",
+  sticker: "Made from a real photo",
+};
 
 /** Placeholder in the gift note box: Christmas-flavored only while the order-by date is set. */
 export const GIFT_NOTE_PLACEHOLDER = { christmas: "Merry Christmas! Love, Grandma", neutral: "Love, Grandma" };
@@ -613,6 +647,7 @@ export const OCCASIONS = {
     {
       intent: "gift",
       icon: "gift",
+      image: "kitchen-table",
       title: "A gift book",
       /** Used instead of `title` while the Christmas order-by date is set. */
       holidayTitle: "Christmas gifts",
@@ -621,18 +656,21 @@ export const OCCASIONS = {
     {
       intent: "birthday",
       icon: "cake",
+      image: "birthday-table",
       title: "Birthdays",
       body: "A book starring the birthday kid, or pages to print for every guest.",
     },
     {
       intent: "pets",
       icon: "paw",
+      image: "dog-coloring",
       title: "Pets",
       body: "Their dog or cat as a coloring page, for the pet lover in your life.",
     },
     {
       intent: "partners",
       icon: "briefcase",
+      image: "birthday-table",
       title: "Photographers and businesses",
       body: "Turn a session, a class or an event into a coloring book families keep.",
       /** This card goes to its page instead of starting a free page. */
@@ -641,6 +679,8 @@ export const OCCASIONS = {
   ] satisfies {
     intent: LandingIntent;
     icon: IconName;
+    /** Lifestyle photo shown on top of the card once it is ready. */
+    image?: LifestyleId;
     title: string;
     holidayTitle?: string;
     body: string;
@@ -719,6 +759,106 @@ export type ProductPhoto = {
  */
 export const PRODUCT_PHOTOS: ProductPhoto[] = [];
 
+export type LifestyleId = "kitchen-table" | "living-room-floor" | "fridge" | "birthday-table" | "dog-coloring" | "mail-day";
+
+export type LifestylePhoto = {
+  src: string;
+  alt: string;
+  /** Short scene label shown on the photo. Never phrased as a customer or a review. */
+  caption: string;
+  width: number;
+  height: number;
+  srcSetWidths: number[];
+  /** False until the file is in /public/marketing/lifestyle. A photo that is not ready is never shown. */
+  ready: boolean;
+};
+
+/**
+ * Illustrative lifestyle scenes (people coloring, gifting, the fridge). They set the mood; they are
+ * not customers, so never caption them as reviews. Prompts and the steps to add one are in
+ * docs/landing-redesign.md: drop the PNG in /public/marketing/lifestyle, run
+ * node scripts/prepare-lifestyle-images.mjs, then set `ready`, `width` and `height` here.
+ */
+export const LIFESTYLE_PHOTOS: Record<LifestyleId, LifestylePhoto> = {
+  "kitchen-table": {
+    src: "/marketing/lifestyle/kitchen-table.webp",
+    alt: "A grandmother and her granddaughter laughing over a coloring page of the two of them",
+    caption: "Grandma's kitchen table",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
+  "living-room-floor": {
+    src: "/marketing/lifestyle/living-room-floor.webp",
+    alt: "Two kids on a rug coloring pages of their family on a rainy afternoon",
+    caption: "A rainy Saturday",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
+  fridge: {
+    src: "/marketing/lifestyle/fridge.webp",
+    alt: "A boy pressing his colored-in page onto the fridge with a magnet",
+    caption: "Straight to the fridge",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
+  "birthday-table": {
+    src: "/marketing/lifestyle/birthday-table.webp",
+    alt: "Kids at a birthday table coloring pages of the birthday girl",
+    caption: "The party table",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
+  "dog-coloring": {
+    src: "/marketing/lifestyle/dog-coloring.webp",
+    alt: "A girl holding up a coloring page of her golden retriever next to the dog",
+    caption: "Starring the dog",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
+  "mail-day": {
+    src: "/marketing/lifestyle/mail-day.webp",
+    alt: "A boy and his mom opening a mailer with a coloring book of their family inside",
+    caption: "Mail day",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: false,
+  },
+};
+
+/**
+ * The edge-to-edge strip of lifestyle photos under the hero. The page's own hero photo is left out;
+ * the strip is hidden until at least three of the rest are ready.
+ */
+export const PHOTO_BAND = {
+  eyebrow: "Made for real life",
+  title: "Pages that get colored, not filed",
+  body: "Rainy days, grandma's table, the birthday party. Then straight onto the fridge.",
+  ids: ["kitchen-table", "living-room-floor", "fridge", "birthday-table", "dog-coloring"] as LifestyleId[],
+};
+
+/** The real before/after, shown big. The switcher lists every real pair on the page. */
+export const TRANSFORM = {
+  eyebrow: "Real photos, real pages",
+  title: "Your photo in. Their page out.",
+  body: "Every page here was made in the studio from a real family photo. Drag the slider to compare.",
+  fixTitle: "Not quite right?",
+  fixBody: "Type “thicker lines” or “take out the stroller” and it redraws the page.",
+};
+
+/** Photo behind the final call to action: the first one that is ready. */
+export const FINAL_CTA_PHOTOS: LifestyleId[] = ["mail-day", "dog-coloring", "kitchen-table"];
+
 /** "Before you order": true statements only, each tied to code (see the build notes). */
 export const REASSURANCE = {
   title: "Before you order",
@@ -775,7 +915,7 @@ export const STUDIO_EMPTY = {
   /** "{size}" is the upload limit per photo. */
   formats: "JPG, PNG, WebP or HEIC, up to {size} each.",
   /** Guests only. */
-  guestNote: "No account needed. Your photo is only used to draw your page. It is not saved to an account.",
+  guestNote: "No account needed. Your photo is only used to draw your page.",
   howItWorks: "How it works",
   /** Replaces `line` for visitors who arrived from a landing page. Other intents use `line`. */
   lineByIntent: {
@@ -813,6 +953,8 @@ export type ProductCopy = {
   badge?: string;
   /** Product line behind this card; the card is hidden while that line is off by default. */
   feature?: "storybook";
+  /** Picture at the top of the card: a real coloring page, the printed book, or the story icon. */
+  visual: "page" | "book" | "story";
 };
 
 /** The address people write to. Shown on the terms page and in the footer. */
@@ -830,6 +972,7 @@ export const PRODUCTS = {
       price: "Free to try, no account",
       points: ["Letter-size PDF, ready to print", "Edit any page by typing a note", "No account needed"],
       cta: PRIMARY_CTA,
+      visual: "page",
     },
     {
       icon: "book",
@@ -845,6 +988,7 @@ export const PRODUCTS = {
       note: "Sign up and get a {credit} credit toward it.",
       featured: true,
       badge: "Best for gifts",
+      visual: "book",
     },
     {
       icon: "message",
@@ -854,6 +998,7 @@ export const PRODUCTS = {
       points: ["Turn an album into a story", "Captions you can edit", "Color it, read it, keep it"],
       cta: PRIMARY_CTA,
       feature: "storybook",
+      visual: "story",
     },
   ] satisfies ProductCopy[],
 };
@@ -961,8 +1106,8 @@ export const SAVE_PROMPT = {
   title: "Save this page and get {credit} toward a printed book.",
   /** Used when there is no sign-up credit. */
   titleNoCredit: "Save this page to your free account.",
-  body: "Every page you made here moves into your account. Downloading the free PDF still works without one.",
-  save: "Save it",
+  body: "A free account keeps your pages safe. You can still print without one.",
+  save: "Save my pages",
   dismiss: "Not now",
 };
 

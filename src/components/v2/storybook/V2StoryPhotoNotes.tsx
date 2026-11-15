@@ -132,7 +132,7 @@ export function V2StoryPhotoNotes({
         <div className="mt-3 flex-1 space-y-2.5 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
           {messages.length === 0 ? (
             <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-v2-muted">
-              Share what was happening — who is in the shot, why it mattered, or a
+              Share what was happening. Who is in the shot, why it mattered, or a
               detail your kids still talk about.
             </p>
           ) : (

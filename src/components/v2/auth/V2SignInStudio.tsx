@@ -16,6 +16,8 @@ export function V2SignInStudio() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
+  const safeNext = safeNextPath(next);
+  const backToStudio = safeNext?.startsWith("/studio") ? safeNext : undefined;
   const sessionExpired = searchParams.get("reason") === "expired";
   const passwordWasReset = searchParams.get("reset") === "1";
   const emailConfirmed = searchParams.get("confirmed") === "1";
@@ -52,7 +54,7 @@ export function V2SignInStudio() {
   }
 
   return (
-    <V2AuthShell>
+    <V2AuthShell backHref={backToStudio} backLabel={backToStudio ? "← Back to my pages" : undefined}>
       <form onSubmit={onSubmit} className="v2-auth-card w-full max-w-md p-6 sm:p-8">
         {sessionExpired ? (
           <div
@@ -61,8 +63,7 @@ export function V2SignInStudio() {
           >
             <p className="font-semibold">You’ve been signed out</p>
             <p>
-              Your session timed out after a while away. Sign in again to pick up where you left
-              off.
+              You were away for a while, so we signed you out. Sign in to pick up where you left off.
             </p>
           </div>
         ) : null}

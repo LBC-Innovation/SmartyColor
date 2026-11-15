@@ -23,6 +23,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X } from "lucide-react";
+import { cn } from "@/lib/cn";
 import {
   GalleryCard,
   GallerySkeletonCard,
@@ -51,6 +52,8 @@ type Props = {
   /** Print, download or send a finished page. */
   onPrint: (id: string) => void;
   onReorder: (next: V2PhotoEntry[]) => void;
+  /** False when something else already explains reordering (the book's own tip). */
+  showReorderHint?: boolean;
 };
 
 type ShareProps = Omit<
@@ -107,6 +110,7 @@ export function StudioGallery({
   onDelete,
   onPrint,
   onReorder,
+  showReorderHint = true,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hintSeen, setHintSeen] = useState(readHintSeen);
@@ -192,7 +196,7 @@ export function StudioGallery({
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      {!hintSeen && photos.length >= 2 && !selectMode ? (
+      {showReorderHint && !hintSeen && photos.length >= 2 && !selectMode ? (
         <p className="mb-3 inline-flex max-w-full items-center gap-1 rounded-full bg-v2-primary-light py-1 pl-3 pr-1 text-xs font-semibold text-v2-navy">
           <span className="pointer-coarse:inline hidden">Press and hold a photo to change the order</span>
           <span className="pointer-coarse:hidden">Drag photos to change the order</span>
@@ -208,7 +212,13 @@ export function StudioGallery({
       ) : null}
       <SortableContext items={photos.map((p) => p.id)} strategy={rectSortingStrategy}>
         <div
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
+          className={cn(
+            "grid gap-3 lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]",
+            // One page so far: a single big centered column below lg, so the first page is easy to see.
+            photos.length + pendingUploads === 1
+              ? "mx-auto max-w-[17rem] grid-cols-1 lg:mx-0 lg:max-w-none"
+              : "grid-cols-2 sm:grid-cols-3",
+          )}
           aria-label="Your photos and coloring pages"
           role="list"
         >

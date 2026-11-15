@@ -72,7 +72,7 @@ const CARDS: Card[] = [
     title: DIGITAL_FORMAT.shortLabel,
     blurb: DIGITAL_FORMAT.blurb,
     headline: "Print at home",
-    detail: "Any number of pages · no blank padding",
+    detail: "Any number of pages",
     digital: true,
   },
   ...PRINT_IDS.map((id) => {
@@ -84,7 +84,7 @@ const CARDS: Card[] = [
       headline: "Printed & shipped",
       detail: "Priced once you pick pages",
       pageRule:
-        spec.pageMultiple > 1
+        spec.pageMultiple > 2
           ? `${spec.minPages}–${spec.maxPages} pages, in sets of ${spec.pageMultiple}`
           : `${spec.minPages}–${spec.maxPages} pages`,
     } satisfies Card;
@@ -177,7 +177,7 @@ export function BookBindingPicker({
                   ? contentPageCount === 0
                     ? `Smallest book, ${pages}`
                     : price.pageCount > contentPageCount
-                      ? `For ${pages} (your ${contentPageCount} + ${price.pageCount - contentPageCount} blank)`
+                      ? `${pages}: your ${contentPageCount} and ${price.pageCount - contentPageCount} blank`
                       : `For your ${pages}`
                   : pricing
                     ? "Pricing your book"
@@ -187,9 +187,9 @@ export function BookBindingPicker({
           // description and one line of page facts.
           const facts = unavailable
             ? basis
-            : [card.digital ? "Instant PDF" : priced ? basis : card.headline, card.pageRule ?? card.detail]
-                .filter(Boolean)
-                .join(" · ");
+            : priced
+              ? basis
+              : [card.digital ? "Instant PDF" : card.headline, card.pageRule ?? card.detail].filter(Boolean).join(" · ");
           return (
             <button
               key={card.id}
@@ -235,9 +235,7 @@ export function BookBindingPicker({
                     ) : null}
                   </span>
                   <span id={`${idBase}-${card.id}-price`} className="shrink-0 text-right tabular-nums">
-                    {unavailable ? (
-                      <span className="text-xs font-semibold text-v2-muted">Not available</span>
-                    ) : pricing ? (
+                    {unavailable ? null : pricing ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-v2-muted" role="status">
                         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none text-v2-primary" aria-hidden />
                         Pricing…
@@ -312,9 +310,7 @@ export function BookBindingPicker({
                 unavailable && "opacity-50",
               )}
             >
-              {unavailable ? (
-                <span className="text-lg">Not available</span>
-              ) : pricing ? (
+              {unavailable ? null : pricing ? (
                 <span className="flex items-center gap-2 self-center text-sm font-semibold text-v2-muted" role="status">
                   <Loader2 className="h-4 w-4 animate-spin text-v2-primary" aria-hidden />
                   Getting prices…
@@ -333,7 +329,7 @@ export function BookBindingPicker({
             {/* The reason stays at full strength so it reads as the way to unlock the card. */}
             <div id={`${idBase}-${card.id}-info`} className="mt-3 border-t border-gray-200 pt-3 text-xs leading-snug text-v2-muted">
               <p className="font-semibold text-v2-navy">{basis}</p>
-              <p className="mt-0.5">{card.pageRule ?? card.detail}</p>
+              {priced ? null : <p className="mt-0.5">{card.pageRule ?? card.detail}</p>}
             </div>
           </button>
         );

@@ -183,7 +183,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                       className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"}
                       aria-hidden
                     />
-                    Sync status
+                    Refresh
                   </button>
                 </div>
               </header>
@@ -198,7 +198,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                       ? "Your book is ready and the PDF is downloading. "
                       : "Your book is ready as a PDF. "}
                     Print it on US Letter paper at 100% scale. You can download it again whenever
-                    you like — it won&apos;t cost anything.
+                    you like. It won&apos;t cost anything.
                   </p>
                   {order.status === "paid" ? (
                     <button
@@ -220,8 +220,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
 
               {justConfirmed && order.status === "awaiting_payment" ? (
                 <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
-                  Your book is saved and your print job is registered. Add credits below if needed,
-                  then place your order.
+                  Your book is saved. Add credit below if you need to, then place your order.
                 </div>
               ) : null}
 
@@ -283,7 +282,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                       : ""}
                     . It won&apos;t be printed or shipped.
                     {order.refundedCents
-                      ? ` ${formatCredits(order.refundedCents)} was returned to your wallet.`
+                      ? ` ${formatCredits(order.refundedCents)} was returned to your credit balance.`
                       : ""}
                   </p>
                   {order.cancelReason ? (
@@ -297,7 +296,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   <div className="min-w-0">
                     <h2 className="text-sm font-semibold text-v2-ink">Changed your mind?</h2>
                     <p className="mt-0.5 text-sm text-v2-muted">
-                      You can cancel for a full refund to your wallet until your book goes into
+                      You can cancel for a full refund to your credit balance until your book goes into
                       production
                       {order.cancelDeadline ? `, around ${formatCancelDeadline(order.cancelDeadline)}` : ""}
                       .
@@ -314,7 +313,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
               {order.fulfillment !== "digital" && order.deliveryExpectation ? (
                 <section className="v2-panel mb-4 border-v2-primary/20 bg-v2-primary-light/40 p-4 sm:p-5">
                   <p className="text-xs font-semibold uppercase tracking-wider text-v2-muted">
-                    Delivery expectation
+                    Delivery
                   </p>
                   <p className="mt-1 text-base font-semibold text-v2-ink">
                     {order.deliveryExpectation}
@@ -330,22 +329,6 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     </p>
                   ) : null}
                 </section>
-              ) : null}
-
-              {order.fulfillment !== "digital" ? (
-              <section className="v2-panel mb-4 p-4 sm:p-6">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
-                  Fulfillment
-                </h2>
-                <div className="mt-4">
-                  <V2OrderTimeline steps={order.timeline} />
-                </div>
-                {order.luluStatusMessage ? (
-                  <p className="mt-4 rounded-lg bg-v2-bg-subtle px-3 py-2 text-sm text-v2-muted">
-                    {order.luluStatusMessage}
-                  </p>
-                ) : null}
-              </section>
               ) : null}
 
               {order.fulfillment !== "digital" && (order.trackingNumber || order.trackingUrls.length > 0) && (
@@ -378,6 +361,22 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
               )}
 
               {order.fulfillment !== "digital" ? (
+              <section className="v2-panel mb-4 p-4 sm:p-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                  Progress
+                </h2>
+                <div className="mt-4">
+                  <V2OrderTimeline steps={order.timeline} />
+                </div>
+                {order.luluStatusMessage ? (
+                  <p className="mt-4 rounded-lg bg-v2-bg-subtle px-3 py-2 text-sm text-v2-muted">
+                    {order.luluStatusMessage}
+                  </p>
+                ) : null}
+              </section>
+              ) : null}
+
+              {order.fulfillment !== "digital" ? (
               <section className="v2-panel mb-4 p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
@@ -401,7 +400,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                 ) : (
                   <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                    No shipping address yet — add one before this order can go to checkout.
+                    No shipping address yet. Add one to finish this order.
                   </p>
                 )}
                 {order.billingAddress ? (
@@ -489,7 +488,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
             setCancelOpen(false);
             setCanceledNotice(
               result.refundedCents > 0
-                ? `Your order is canceled and ${formatCredits(result.refundedCents)} is back in your wallet. We've emailed you a confirmation.`
+                ? `Your order is canceled and ${formatCredits(result.refundedCents)} is back in your credit balance. We've emailed you a confirmation.`
                 : "Your order is canceled. We've emailed you a confirmation.",
             );
             void refreshUser();

@@ -32,12 +32,10 @@ export function V2DeleteProjectConfirmModal({
               Delete “{projectName}”?
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-v2-muted">
-              This album and all {photos} in it — including their coloring pages and
-              revisions — will be permanently deleted.
+              This album and all {photos} in it, with their coloring pages, will be deleted for good.
             </p>
             <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-900">
-              Any book you&apos;re still building that uses these photos will lose those
-              pages from its page set.
+              Any book you&apos;re still building with these photos will lose those pages.
             </p>
             <p className="mt-2 text-xs text-v2-muted">This can&apos;t be undone.</p>
           </div>

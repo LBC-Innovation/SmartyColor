@@ -4,7 +4,6 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { BookOpen, Loader2, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { BOOK_ORDER_STEP_LABEL, type BookOrderStep } from "@/components/v2/book-order/BookOrderStepper";
 import * as api from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { BOOK_CARTS_CHANGED_EVENT, type BookCartSummary } from "@/lib/orders/cartTypes";
@@ -13,10 +12,6 @@ import { getBookFormat, isPrintBindingId } from "@/lib/print/bookBindings";
 function formatName(bindingId: string | null): string | null {
   if (bindingId === "digital" || isPrintBindingId(bindingId)) return getBookFormat(bindingId).shortLabel;
   return null;
-}
-
-function stepName(step: string): string {
-  return BOOK_ORDER_STEP_LABEL[step as BookOrderStep] ?? "Book";
 }
 
 function ago(iso: string): string {
@@ -136,7 +131,7 @@ export function V2CartMenu() {
       {open ? (
         <div
           id={panelId}
-          className="absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_16px_48px_rgb(10_16_26/0.16)]"
+          className="fixed inset-x-3 top-14 z-50 mt-0 w-auto sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_16px_48px_rgb(10_16_26/0.16)]"
           role="dialog"
           aria-label="Books in progress"
         >
@@ -185,7 +180,7 @@ export function V2CartMenu() {
                             .join(" · ") || "Just started"}
                         </p>
                         <p className="truncate text-[11px] text-v2-muted">
-                          At {stepName(cart.step)} · {ago(cart.updatedAt)}
+                          {ago(cart.updatedAt)}
                         </p>
                       </div>
                       {confirming ? (
@@ -209,7 +204,7 @@ export function V2CartMenu() {
                       ) : (
                         <div className="flex shrink-0 items-center gap-1">
                           <Link
-                            href={`/studio/order?cart=${cart.id}`}
+                            href={`/studio?cart=${encodeURIComponent(cart.id)}&book=open`}
                             className="v2-btn-primary h-8 px-3 text-xs"
                             onClick={() => setOpen(false)}
                           >
@@ -234,7 +229,7 @@ export function V2CartMenu() {
 
           <div className="border-t border-gray-100 p-2">
             <Link
-              href="/studio/order"
+              href="/studio?book=open"
               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-v2-link transition hover:bg-v2-bg-subtle"
               onClick={() => setOpen(false)}
             >

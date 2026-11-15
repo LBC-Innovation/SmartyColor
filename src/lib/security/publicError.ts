@@ -22,6 +22,36 @@ export function sanitizeSecretText(text: string): string {
     .replace(/\bxai-[A-Za-z0-9]{20,}\b/g, "[redacted]");
 }
 
+const SAFETY_MESSAGES: Array<[RegExp, string]> = [
+  [
+    /safety_violations=\[[^\]]*(sexual|minors|nudity)[^\]]*\]/i,
+    "The image model declined this one because it thought the photo or request looked inappropriate (it sometimes does this with swimwear, bare skin, or kids at the beach or pool). Try a different photo, or crop or reword the request.",
+  ],
+  [
+    /safety_violations=\[[^\]]*(violence|gore|self[-_]?harm)[^\]]*\]/i,
+    "The image model declined this one because it thought the photo or request showed something violent. Try a different photo or reword the request.",
+  ],
+  [
+    /safety_violations=\[[^\]]*(hate|harassment)[^\]]*\]/i,
+    "The image model declined this one because it thought the request was unkind or hateful. Try rewording it.",
+  ],
+  [
+    /safety_violations=|rejected by the safety system|content[_ ]policy|moderation_blocked|prohibited[_ ]content|blocked.*safety|safety.*blocked|image_safety|recitation/i,
+    "The image model declined this photo or request for safety reasons. Try a different photo or reword the request.",
+  ],
+];
+
+/**
+ * If the text is a provider safety/moderation rejection, return a plain-language
+ * explanation for the user, otherwise null.
+ */
+export function friendlySafetyMessage(raw: string): string | null {
+  for (const [pattern, message] of SAFETY_MESSAGES) {
+    if (pattern.test(raw)) return message;
+  }
+  return null;
+}
+
 /**
  * Turn unknown thrown values into a short message safe for the browser/DOM.
  */
@@ -38,6 +68,9 @@ export function toPublicErrorMessage(
   const sanitized = sanitizeSecretText(raw).trim();
 
   if (!sanitized) return fallback;
+
+  const safety = friendlySafetyMessage(sanitized);
+  if (safety) return safety;
 
   // Provider SDK dumps often embed request URLs / auth material even after scrubbing.
   if (

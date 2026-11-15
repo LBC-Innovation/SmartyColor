@@ -71,6 +71,7 @@ type ProjectExtras = {
   sharedCount?: number;
   /** Contributor's own view state, which replaces the owner's. */
   share?: Row | null;
+  previewUrls?: string[];
 };
 
 function projectFromRow(row: Row, photoCount: number, extras: ProjectExtras = {}): LibraryProject {
@@ -87,7 +88,49 @@ function projectFromRow(row: Row, photoCount: number, extras: ProjectExtras = {}
     role: extras.role ?? "owner",
     ownerName: extras.ownerName ?? null,
     sharedCount: extras.sharedCount ?? 0,
+    ...(extras.previewUrls ? { previewUrls: extras.previewUrls } : {}),
   };
+}
+
+/** Photos shown in an album's collage on the home page. */
+const ALBUM_PREVIEW_COUNT = 4;
+
+/**
+ * The first few photo thumbnails of each album, in album order. Best effort: a thumbnail that
+ * isn't made yet is skipped (and queued), and a signing failure only leaves the collages empty.
+ */
+async function albumPreviews(photoRows: Row[]): Promise<Map<string, string[]>> {
+  const picked = new Map<string, string[]>();
+  for (const row of photoRows) {
+    const pid = row.project_id as string;
+    const path = row.storage_path as string | null;
+    if (!path) continue;
+    const list = picked.get(pid) ?? [];
+    // A few spares, so a missing thumbnail doesn't leave a gap.
+    if (list.length < ALBUM_PREVIEW_COUNT + 2) list.push(path);
+    picked.set(pid, list);
+  }
+  const paths = [...picked.values()].flat();
+  const out = new Map<string, string[]>();
+  if (paths.length === 0) return out;
+  let signed: Map<string, string>;
+  try {
+    signed = await signedReadUrls(paths.map(libraryPaths.thumb));
+  } catch {
+    return out;
+  }
+  const missing: string[] = [];
+  for (const [pid, list] of picked) {
+    const urls: string[] = [];
+    for (const path of list) {
+      const url = signed.get(libraryPaths.thumb(path));
+      if (!url) missing.push(path);
+      else if (urls.length < ALBUM_PREVIEW_COUNT) urls.push(url);
+    }
+    out.set(pid, urls);
+  }
+  if (missing.length > 0) scheduleThumbnails(missing);
+  return out;
 }
 
 function baseProjectFromRow(row: Row, photoCount: number): Omit<LibraryProject, "role" | "ownerName" | "sharedCount"> {
@@ -111,6 +154,8 @@ export async function listProjects(
   userId: string,
   /** Pass the caller's address to pick up albums shared with it before they had an account. */
   claim?: { email: string; emailVerified: boolean },
+  /** Also sign a few photo thumbnails per album, for the home page's album collages. */
+  options: { previews?: boolean } = {},
 ): Promise<ApiResult<LibraryProject[]>> {
   // Each step below runs its independent queries together; only real dependencies wait.
   const claiming = claim?.emailVerified && claim.email ? claimPendingShares(userId, claim.email) : null;
@@ -142,7 +187,13 @@ export async function listProjects(
 
   const [sharedRes, photosRes, invitesRes] = await Promise.all([
     sharedIds.length > 0 ? db().from("library_projects").select("*").in("id", sharedIds) : null,
-    ids.length > 0 ? db().from("library_photos").select("project_id").in("project_id", ids) : null,
+    ids.length > 0
+      ? db()
+          .from("library_photos")
+          .select("project_id, storage_path")
+          .in("project_id", ids)
+          .order("position", { ascending: true })
+      : null,
     ownedIds.length > 0
       ? db().from("library_project_shares").select("project_id").in("project_id", ownedIds)
       : null,
@@ -170,6 +221,7 @@ export async function listProjects(
     const pid = i.project_id as string;
     sharedCounts.set(pid, (sharedCounts.get(pid) ?? 0) + 1);
   }
+  const previews = options.previews ? await albumPreviews((photosRes?.data ?? []) as Row[]) : null;
   const ownerNames = new Map<string, string>();
   if (shared.length > 0) {
     const ownerIds = [...new Set(shared.map((r) => r.user_id as string))];
@@ -182,13 +234,17 @@ export async function listProjects(
   return {
     data: [
       ...(owned ?? []).map((r) =>
-        projectFromRow(r, counts.get(r.id as string) ?? 0, { sharedCount: sharedCounts.get(r.id as string) ?? 0 }),
+        projectFromRow(r, counts.get(r.id as string) ?? 0, {
+          sharedCount: sharedCounts.get(r.id as string) ?? 0,
+          previewUrls: previews?.get(r.id as string),
+        }),
       ),
       ...shared.map((r) =>
         projectFromRow(r, counts.get(r.id as string) ?? 0, {
           role: "contributor",
           ownerName: ownerNames.get(r.user_id as string) ?? null,
           share: shareByProject.get(r.id as string) ?? null,
+          previewUrls: previews?.get(r.id as string),
         }),
       ),
     ],

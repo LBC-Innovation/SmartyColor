@@ -281,7 +281,7 @@ export function V2ProjectSwitcher({
           >
             {projects.length === 0 ? (
               <li className="px-2.5 py-2 text-xs text-v2-muted">
-                No projects yet. Create one to start adding photos.
+                No albums yet. Create one to start adding photos.
               </li>
             ) : (
               projects.map((project) => {

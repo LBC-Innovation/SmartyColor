@@ -108,7 +108,7 @@ export function OrderPlacedThanks({
 
       {onCancel ? (
         <p className="mt-3 text-sm text-v2-muted">
-          Changed your mind? You can cancel for a full refund to your wallet until your book goes
+          Changed your mind? You can cancel for a full refund to your credit balance until your book goes
           into production
           {order.cancelDeadline
             ? `, around ${formatCancelDeadline(order.cancelDeadline)}`

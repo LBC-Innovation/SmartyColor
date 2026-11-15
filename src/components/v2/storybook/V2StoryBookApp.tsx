@@ -50,7 +50,7 @@ const TABS: { id: V2StoryBookTab; label: string; icon: typeof BookOpen }[] = [
 
 const PRINT_MODES: { id: StoryPrintArtMode; label: string; hint: string }[] = [
   { id: "photos", label: "Photos", hint: "Full-color pictures" },
-  { id: "coloring", label: "Coloring book", hint: "Line art — needs a sheet per photo" },
+  { id: "coloring", label: "Coloring book", hint: "Line art. Needs a page per photo" },
   { id: "blended", label: "Blended", hint: "Photo under light line art" },
 ];
 
@@ -90,7 +90,7 @@ export function V2StoryBookApp() {
       if (firstBatch) replacePhotos(sortPhotosByCapturedAt(photosRef.current));
       const count = `${added.length} photo${added.length === 1 ? "" : "s"}`;
       toast.success({
-        message: firstBatch ? `Added ${count} — sorted by date taken.` : `Added ${count}.`,
+        message: firstBatch ? `Added ${count}, sorted by date taken.` : `Added ${count}.`,
       });
     },
   });
@@ -516,7 +516,7 @@ export function V2StoryBookApp() {
                 <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
                   <p className="text-sm leading-relaxed text-v2-muted">
                     Your story is titled{" "}
-                    <strong className="font-semibold text-v2-ink">{albumTitle}</strong> — rename
+                    <strong className="font-semibold text-v2-ink">{albumTitle}</strong>. Rename
                     the album to change it. Tell us who traveled and what the trip was about;
                     every photo in Your Photos becomes a page.
                   </p>
@@ -582,7 +582,7 @@ export function V2StoryBookApp() {
                     <p className="max-w-xs text-sm text-v2-muted">
                       {photos.length > 0
                         ? "Pick a photo from Your Photos to add a caption and notes."
-                        : "Upload trip photos first — each one becomes a story page."}
+                        : "Upload trip photos first. Each one becomes a story page."}
                     </p>
                     <button
                       type="button"
@@ -616,7 +616,7 @@ export function V2StoryBookApp() {
                             "Upload photos first."
                           ) : (
                             <>
-                              Describe the trip first —{" "}
+                              Describe the trip first:{" "}
                               <button
                                 type="button"
                                 onClick={() => showTab("setup")}

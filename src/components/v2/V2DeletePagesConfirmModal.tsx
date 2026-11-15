@@ -58,7 +58,7 @@ export function V2DeletePagesConfirmModal({
             </h2>
             <p id="v2-delete-pages-desc" className="mt-2 text-sm leading-relaxed text-v2-muted">
               {pageCount === 1 ? "This photo and its coloring page" : "These photos and their coloring pages"}{" "}
-              will be permanently deleted. This action cannot be undone and content cannot be restored.
+              will be deleted for good. This can&apos;t be undone.
             </p>
           </div>
         </div>
@@ -80,7 +80,7 @@ export function V2DeletePagesConfirmModal({
               "inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            Permanently delete
+            Delete
           </button>
         </div>
       </div>

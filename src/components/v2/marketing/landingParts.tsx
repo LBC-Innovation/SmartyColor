@@ -18,7 +18,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import type { HeroPair, IconName } from "@/content/marketing";
+import { LIFESTYLE_PHOTOS, type HeroPair, type IconName, type LifestyleId } from "@/content/marketing";
 import { marketingSrcSet } from "@/lib/marketing/images";
 import { cn } from "@/lib/cn";
 
@@ -48,21 +48,25 @@ export function SectionHeading({
   body,
   align = "center",
   id,
+  tone = "light",
 }: {
   eyebrow: string;
   title: string;
   body?: string;
   align?: "center" | "left";
   id?: string;
+  /** "dark" for the plum band. */
+  tone?: "light" | "dark";
 }) {
+  const dark = tone === "dark";
   return (
     <div className={cn(align === "center" && "text-center")}>
-      <p className="text-xs font-bold uppercase tracking-wider text-v2-primary">{eyebrow}</p>
-      <h2 id={id} className="v2-brand-title mt-2 text-3xl text-v2-ink sm:text-4xl">
+      <p className={cn("text-xs font-bold uppercase tracking-wider", dark ? "text-brand-amber" : "text-v2-primary")}>{eyebrow}</p>
+      <h2 id={id} className={cn("v2-brand-title mt-2 text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]", dark ? "text-white" : "text-v2-ink")}>
         {title}
       </h2>
       {body ? (
-        <p className={cn("mt-3 max-w-xl text-sm text-v2-muted sm:text-base", align === "center" && "mx-auto")}>
+        <p className={cn("mt-3 max-w-xl text-sm sm:text-base", dark ? "text-white/80" : "text-v2-muted", align === "center" && "mx-auto")}>
           {body}
         </p>
       ) : null}
@@ -154,5 +158,39 @@ export function PrintedBook({ title }: { title: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Lifestyle photos that are in /public and switched on in LIFESTYLE_PHOTOS, in the order asked. */
+export function readyLifestyle(ids: LifestyleId[]): LifestyleId[] {
+  return ids.filter((id) => LIFESTYLE_PHOTOS[id].ready);
+}
+
+/**
+ * One lifestyle scene, cropped to fill its box (the parent sets the size). Lazy: these all sit
+ * below the hero. `caption` adds the scene label as a chip in the corner.
+ */
+export function LifestyleImage({ id, sizes, caption = false, className }: { id: LifestyleId; sizes: string; caption?: boolean; className?: string }) {
+  const photo = LIFESTYLE_PHOTOS[id];
+  return (
+    <figure className={cn("relative overflow-hidden bg-v2-butter", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.src}
+        srcSet={marketingSrcSet(photo.src, photo.srcSetWidths, photo.width)}
+        sizes={sizes}
+        width={photo.width}
+        height={photo.height}
+        alt={photo.alt}
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 block h-full w-full object-cover"
+      />
+      {caption ? (
+        <figcaption className="absolute bottom-3 left-3 rounded-full bg-white/95 px-3 py-1 text-xs font-bold text-v2-ink shadow-sm">
+          {photo.caption}
+        </figcaption>
+      ) : null}
+    </figure>
   );
 }

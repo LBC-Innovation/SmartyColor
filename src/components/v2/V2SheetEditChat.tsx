@@ -195,7 +195,7 @@ export function V2SheetEditChat({
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-semibold text-v2-ink">Edit coloring page</h2>
               <p className="mt-0.5 text-sm text-v2-muted">
-                Describe one change at a time. We refine this page rather than redraw it.
+                Ask for one change at a time. The rest of the page stays the same.
               </p>
             </div>
             <button
@@ -309,7 +309,7 @@ export function V2SheetEditChat({
                 type="submit"
                 disabled={!draft.trim() || busy || disabled}
                 className="v2-hit inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-v2-primary text-white transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-v2-muted"
-                aria-label="Send edit request"
+                aria-label="Send"
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
               </button>

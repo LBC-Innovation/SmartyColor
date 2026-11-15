@@ -51,6 +51,9 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
   const destination = next ?? albumPath;
   const signInHref =
     invite || next ? `/sign-in?next=${encodeURIComponent(destination)}` : "/sign-in";
+  // After "Check your email": always back to the destination, so a guest's pages move into the account.
+  const confirmedSignInHref = `/sign-in?next=${encodeURIComponent(destination)}`;
+  const backToStudio = next?.startsWith("/studio") ? next : undefined;
   const invitedEmailMismatch =
     invite != null && email.trim() !== "" && email.trim().toLowerCase() !== invite.email;
 
@@ -77,7 +80,7 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
 
   if (needsEmailConfirm) {
     return (
-      <V2AuthShell>
+      <V2AuthShell backHref={backToStudio} backLabel={backToStudio ? "← Back to my pages" : undefined}>
         <div className="v2-auth-card w-full max-w-md p-6 text-center sm:p-8">
           <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-v2-primary-light text-v2-primary">
             <MailCheck className="h-8 w-8" aria-hidden />
@@ -90,7 +93,7 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
               ? `Open it, then sign in to see “${invite.albumName}”.`
               : "Open it, then sign in to start."}
           </p>
-          <Link href={signInHref} className="v2-btn-primary mt-6 min-h-11 w-full py-3">
+          <Link href={confirmedSignInHref} className="v2-btn-primary mt-6 min-h-11 w-full py-3">
             {SIGN_UP.goToSignIn}
           </Link>
         </div>
@@ -99,7 +102,7 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
   }
 
   return (
-    <V2AuthShell>
+    <V2AuthShell backHref={backToStudio} backLabel={backToStudio ? "← Back to my pages" : undefined}>
       {invite ? (
         <div className="mb-4 flex w-full max-w-md gap-3 rounded-2xl border border-v2-primary/25 bg-v2-primary-light px-4 py-3.5">
           <Users className="mt-0.5 h-5 w-5 shrink-0 text-v2-primary" aria-hidden />

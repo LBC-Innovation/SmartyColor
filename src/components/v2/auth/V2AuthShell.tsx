@@ -5,7 +5,16 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
 
 /** Page frame shared by sign-in, sign-up and password recovery. */
-export function V2AuthShell({ children }: { children: ReactNode }) {
+export function V2AuthShell({
+  children,
+  backHref = "/",
+  backLabel = "← Back to home",
+}: {
+  children: ReactNode;
+  /** Where the link under the card goes. Callers pass only a value that went through `safeNextPath`. */
+  backHref?: string;
+  backLabel?: string;
+}) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-bg">
       <V2MarketingHeader />
@@ -14,10 +23,10 @@ export function V2AuthShell({ children }: { children: ReactNode }) {
         {children}
 
         <Link
-          href="/"
+          href={backHref}
           className="mt-6 inline-flex min-h-11 items-center text-sm font-medium text-v2-muted hover:text-v2-link"
         >
-          ← Back to home
+          {backLabel}
         </Link>
       </main>
     </div>

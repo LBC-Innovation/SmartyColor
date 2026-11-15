@@ -28,16 +28,14 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfal
         <div>
           <h2 className="text-lg font-semibold text-v2-ink">Add credit</h2>
           <p className="mt-0.5 text-sm text-v2-muted">
-            Balance{" "}
-            <span className="font-semibold tabular-nums text-v2-success-text">{formatCredits(balance)}</span>
-            {shortfallCents && shortfallCents > 0 ? (
-              <>
-                {" "}
-                · you need{" "}
-                <span className="font-semibold tabular-nums text-v2-ink">{formatCredits(shortfallCents)}</span>{" "}
-                more for {shortfallFor}
-              </>
-            ) : null}
+            {shortfallCents && shortfallCents > 0
+              ? `${balance > 0 ? `Your credit covers ${formatCredits(balance)}. ` : ""}Add ${formatCredits(shortfallCents)} for ${shortfallFor}, or add more for later.`
+              : (
+                <>
+                  Balance{" "}
+                  <span className="font-semibold tabular-nums text-v2-success-text">{formatCredits(balance)}</span>
+                </>
+              )}
           </p>
         </div>
       }

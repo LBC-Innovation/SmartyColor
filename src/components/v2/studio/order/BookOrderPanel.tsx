@@ -42,9 +42,8 @@ type Props = {
   onOpenRow: (row: OrderRow | null) => void;
   /** Close the sheet (phones) and bring the gallery into view. */
   onShowGallery: () => void;
-  onConfirm: () => void;
-  /** Where the panel sits: the sticky desktop column or the phone sheet (which has its own footer). */
-  variant: "column" | "sheet";
+  /** The book was thrown away: close it. */
+  onDiscarded?: () => void;
 };
 
 function StatusMark({ state }: { state: "done" | "warn" | "todo" }) {
@@ -118,21 +117,51 @@ function Money({ label, cents, loading }: { label: string; cents: number | null;
   return (
     <div className="flex items-baseline justify-between">
       <dt className="text-v2-muted">{label}</dt>
-      <dd className="font-semibold tabular-nums text-v2-ink">{loading ? "…" : cents != null ? formatCredits(cents) : "Not yet"}</dd>
+      <dd className="font-semibold tabular-nums text-v2-ink">{loading ? "…" : cents != null ? formatCredits(cents) : "Pending"}</dd>
     </div>
   );
 }
 
-/** Why "Confirm and buy" can't be pressed yet, or null when it can. */
+type StepState = "done" | "warn" | "todo";
+
+/** The book's steps and how far each one is: the panel's progress bar and the gallery's book card. */
+export function bookSteps(order: BookOrder): { row: OrderRow; label: string; state: StepState }[] {
+  const fits = order.formatFits && !order.overCapacity;
+  const shortBy = Math.max(0, order.binding.minPages - order.contentCount);
+  const printed = !order.isDigital;
+  const format: StepState = !order.formatChosen ? "todo" : order.contentCount > 0 && fits ? "done" : "warn";
+  const pages: StepState = !order.formatChosen || !order.pageFitChosen
+    ? "todo"
+    : order.contentCount === 0 || order.overCapacity || order.pagesStillDrawing > 0 || (printed && shortBy > 0)
+      ? "warn"
+      : "done";
+  const steps: { row: OrderRow; label: string; state: StepState }[] = [
+    { row: "format", label: "Format", state: format },
+    { row: "pages", label: "Pages", state: pages },
+  ];
+  // A guest sees the first two; the cover and address come after the free account.
+  if (printed && order.signedIn) {
+    const cover: StepState =
+      !order.formatChosen || !order.coverReady ? "todo" : isAutomaticAlbumName(order.coverDesign.text ?? "") ? "warn" : "done";
+    steps.push({ row: "cover", label: "Cover", state: cover });
+    const ship: StepState = order.formatChosen && order.addressesReady && order.shippingChosen ? "done" : "todo";
+    steps.push({ row: "ship", label: "Ship to", state: ship });
+  }
+  return steps;
+}
+
+/** Why "Review and order" can't be pressed yet, or null when it can. */
 export function confirmBlocker(order: BookOrder): string | null {
   if (!order.signedIn) return "Create a free account to finish your book.";
   if (order.contentCount === 0) return "Make at least one coloring page first.";
   if (!order.formatChosen) return "Choose a book format.";
   if (!order.pageFitChosen) return "Choose how pictures sit on the page.";
+  if (!order.isDigital && !order.coverReady) return "Choose a title and picture for your cover.";
   if (order.pagesStillDrawing > 0)
     return `${order.pagesStillDrawing} ${order.pagesStillDrawing === 1 ? "page is" : "pages are"} still being made.`;
   if (order.overCapacity) return `${order.binding.shortLabel} holds up to ${order.binding.maxPages} pages.`;
   if (!order.isDigital && !order.addressesReady) return "Add a shipping address.";
+  if (!order.isDigital && !order.shippingChosen && !order.quoteLoading) return "Choose a shipping speed.";
   if (order.quoteLoading) return "Getting the price…";
   if (order.quoteCents == null) return order.quoteError ?? "Waiting for the price.";
   return null;
@@ -140,12 +169,14 @@ export function confirmBlocker(order: BookOrder): string | null {
 
 /**
  * "Your book": format, pages, cover and address as rows that open one at a time, with the total
- * and "Confirm and buy" under them. The same rows in the desktop column and the phone sheet.
+ * and "Review and order" under them. The same rows in the desktop column and the phone sheet.
  */
-export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow, onShowGallery, onConfirm, variant }: Props) {
+export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow, onShowGallery, onDiscarded }: Props) {
   const idBase = useId();
   const numbers = useMarketingNumbers(!order.signedIn);
   const [designerOpen, setDesignerOpen] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const holiday = holidayOrderBy();
   const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
   const examplePrice = !order.signedIn && numbers ? fillCopy(PRICE_LINE, numberValues(numbers)) : null;
@@ -154,7 +185,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   const shortBy = Math.max(0, order.binding.minPages - order.contentCount);
 
   function toggle(row: OrderRow) {
-    order.touch();
     onOpenRow(openRow === row ? null : row);
   }
 
@@ -162,9 +192,16 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   function scrollToAnchor(anchorId: string) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        document.getElementById(anchorId)?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" }),
-      ),
+      requestAnimationFrame(() => {
+        const target = document.getElementById(anchorId);
+        if (!target) return;
+        // Scroll only the card or sheet the panel sits in, never the page behind it.
+        let box = target.parentElement;
+        while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+        if (!box) return;
+        const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 12;
+        box.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+      }),
     );
   }
 
@@ -175,7 +212,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
    * account card).
    */
   function pickFormat(id: BookFormatId, via: "click" | "arrow") {
-    order.touch();
     order.chooseFormat(id);
     if (via !== "click") return;
     const spec = getBookFormat(id);
@@ -208,7 +244,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
 
   /** Framed or edge to edge was picked: on to the next step, like the format. */
   function pickPageFit(fit: PageFit) {
-    order.touch();
     order.choosePageFit(fit);
     advancePastPages(order.isDigital);
   }
@@ -223,23 +258,23 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     );
   }
 
-  const formatState = !order.formatChosen ? "todo" : order.contentCount > 0 && fit.fits && !fit.tooMany ? "done" : "warn";
-  const pagesState =
-    !order.pageFitChosen ? "todo" : order.contentCount === 0 || fit.tooMany || order.pagesStillDrawing > 0 || shortBy > 0 ? "warn" : "done";
   const coverTitleIsAutomatic = isAutomaticAlbumName(order.coverDesign.text ?? "");
-  const coverState = coverTitleIsAutomatic ? "warn" : "done";
-  const shipState = order.addressesReady ? "done" : "todo";
   const pictureIndex =
     order.coverDesign.layout === "photo"
       ? Math.max(1, order.coverPictures.findIndex((p) => p.pageId === order.coverDesign.coverPageId) + 1)
       : null;
-  const coverSummary = `“${order.coverTitle}” · ${
-    order.coverDesign.layout === "none" ? "no picture" : pictureIndex ? `picture ${pictureIndex}` : "all pictures"
-  }`;
+  const coverSummary = !order.coverReady
+    ? !order.coverChoices.title
+      ? "Choose a title"
+      : "Choose a picture"
+    : `“${order.coverTitle}” · ${
+        order.coverDesign.layout === "none" ? "no picture" : pictureIndex ? `picture ${pictureIndex}` : "all pictures"
+      }`;
   const shipSummary = order.addressComplete
     ? [order.shippingAddress.name, order.shippingAddress.street1, order.shippingAddress.city].filter(Boolean).join(", ")
     : "Add an address";
-  const blocker = confirmBlocker(order);
+  const steps = bookSteps(order).map((step) => ({ ...step, anchor: `${idBase}-${step.row}` }));
+  const stateOf = (row: OrderRow): StepState => steps.find((step) => step.row === row)?.state ?? "todo";
 
   const coverChoices = order.coverPictures.slice(0, 6);
   const fasterCount = fasterShippingChoices(order.shippingChoices, order.shippingLevel).length;
@@ -254,12 +289,71 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         </p>
       ) : null}
 
+      {!order.signedIn ? (
+        <div className="mb-3 rounded-2xl border border-v2-primary/25 bg-v2-primary-light/60 p-4 text-center">
+          <p className="text-sm font-semibold text-v2-ink">Create a free account to order your book. Your pages come with you.</p>
+          <Link
+            href={withNextParam("/sign-up", `${STUDIO_PATH}?book=open`)}
+            onClick={requestMigrationAfterSignup}
+            className="v2-btn-primary mt-3 min-h-11 w-full text-sm"
+          >
+            {GUEST_GATES.book.primary}
+          </Link>
+          <Link
+            href={withNextParam("/sign-in", `${STUDIO_PATH}?book=open`)}
+            onClick={requestMigrationAfterSignup}
+            className="mt-1 inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-v2-link underline-offset-2 hover:underline"
+          >
+            {GUEST_GATES.book.secondary}
+          </Link>
+        </div>
+      ) : null}
+
+      <ol className="mb-1 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} aria-label="Steps">
+        {steps.map((step, i) => {
+          const active = openRow === step.row;
+          const locked = step.row !== "format" && !order.formatChosen;
+          return (
+            <li key={step.row}>
+              <button
+                type="button"
+                disabled={locked}
+                aria-current={active ? "step" : undefined}
+                className="group flex w-full flex-col gap-1.5 pb-1 pt-0.5 text-left disabled:cursor-default"
+                onClick={() => {
+                  onOpenRow(step.row);
+                  scrollToAnchor(step.anchor);
+                }}
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-full rounded-full transition-colors",
+                    step.state === "done" ? "bg-emerald-500" : step.state === "warn" ? "bg-amber-400" : active ? "bg-v2-primary" : "bg-gray-200",
+                  )}
+                  aria-hidden
+                />
+                <span
+                  className={cn(
+                    "truncate text-[11px] font-semibold",
+                    active ? "text-v2-ink" : locked ? "text-gray-400" : "text-v2-muted group-hover:text-v2-ink",
+                  )}
+                >
+                  <span className="sr-only">Step {i + 1}: </span>
+                  {step.label}
+                  <span className="sr-only">{step.state === "done" ? ", done" : step.state === "warn" ? ", needs a look" : ""}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
       <Row
         id={`${idBase}-format`}
         number={1}
         label="Format"
         summary={order.formatChosen ? `${order.binding.shortLabel} · ${order.plan.totalPages} pages` : "Choose a format"}
-        state={formatState}
+        state={stateOf("format")}
         open={openRow === "format"}
         onToggle={() => toggle("format")}
       >
@@ -282,7 +376,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         summary={`${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"} · ${
           !order.pageFitChosen ? "choose a fit" : order.pageFit === "full" ? "edge to edge" : "framed"
         }`}
-        state={pagesState}
+        state={stateOf("pages")}
         open={order.formatChosen && openRow === "pages"}
         onToggle={() => toggle("pages")}
         disabled={!order.formatChosen}
@@ -299,7 +393,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             </div>
           ) : null}
           <p>
-            {order.contentCount} coloring {order.contentCount === 1 ? "page" : "pages"} in the order of your gallery
+            {order.contentCount} coloring {order.contentCount === 1 ? "page" : "pages"} in the same order as your album
             {order.giftNotePage ? ", plus your gift note on page 1" : ""}.
           </p>
           {fit.tooMany ? (
@@ -337,7 +431,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           ) : null}
           <BookPrintQualityNotice pageNumbers={order.softPrintPages} fit="framed" />
           <button type="button" className="min-h-11 font-semibold text-v2-link underline-offset-2 hover:underline" onClick={onShowGallery}>
-            Change order in the gallery
+            Change the order in your album
           </button>
         </div>
       </Row>
@@ -348,8 +442,8 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             id={`${idBase}-cover`}
             number={3}
             label="Cover"
-            summary={coverTitleIsAutomatic ? "Check your cover title" : coverSummary}
-            state={coverState}
+            summary={order.coverReady && coverTitleIsAutomatic ? "Check your cover title" : coverSummary}
+            state={stateOf("cover")}
             open={order.formatChosen && openRow === "cover"}
             onToggle={() => toggle("cover")}
             disabled={!order.formatChosen}
@@ -361,11 +455,21 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
               <input
                 id={`${idBase}-title`}
                 className="v2-input w-full"
-                value={order.coverDesign.text}
+                value={order.coverChoices.title ? order.coverDesign.text : ""}
+                placeholder="Type a title for the front"
                 maxLength={120}
-                onChange={(e) => order.updateCover({ ...order.coverDesign, text: e.target.value })}
+                onChange={(e) => order.chooseCover({ ...order.coverDesign, text: e.target.value }, { title: true })}
               />
-              {coverTitleIsAutomatic ? (
+              {!order.coverChoices.title && order.coverDesign.text.trim() ? (
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center rounded-full border border-v2-primary/30 bg-v2-primary-light/60 px-3 text-sm font-semibold text-v2-navy hover:border-v2-primary"
+                  onClick={() => order.chooseCover(order.coverDesign, { title: true })}
+                >
+                  Use “{order.coverDesign.text}”
+                </button>
+              ) : null}
+              {order.coverChoices.title && coverTitleIsAutomatic ? (
                 <p className="text-xs text-amber-800">Check your cover title. It still has the album&apos;s automatic name.</p>
               ) : null}
               <div className="flex gap-3">
@@ -382,18 +486,18 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={order.coverDesign.layout === "grid"}
+                    aria-checked={order.coverChoices.layout && order.coverDesign.layout === "grid"}
                     aria-label="All pictures"
                     className={cn(
                       "flex aspect-square items-center justify-center rounded-lg border-2 bg-white text-v2-muted",
-                      order.coverDesign.layout === "grid" ? "border-v2-primary" : "border-gray-200",
+                      order.coverChoices.layout && order.coverDesign.layout === "grid" ? "border-v2-primary" : "border-gray-200",
                     )}
-                    onClick={() => order.updateCover({ ...order.coverDesign, layout: "grid" })}
+                    onClick={() => order.chooseCover({ ...order.coverDesign, layout: "grid" }, { layout: true })}
                   >
                     <LayoutGrid className="h-5 w-5" aria-hidden />
                   </button>
                   {coverChoices.map((picture, i) => {
-                    const on = order.coverDesign.layout === "photo" && (order.coverDesign.coverPageId ?? coverChoices[0]?.pageId) === picture.pageId;
+                    const on = order.coverChoices.layout && order.coverDesign.layout === "photo" && (order.coverDesign.coverPageId ?? coverChoices[0]?.pageId) === picture.pageId;
                     return (
                       <button
                         key={picture.pageId}
@@ -402,7 +506,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                         aria-checked={on}
                         aria-label={`Picture ${i + 1}`}
                         className={cn("relative aspect-square overflow-hidden rounded-lg border-2", on ? "border-v2-primary" : "border-gray-200")}
-                        onClick={() => order.updateCover({ ...order.coverDesign, layout: "photo", coverPageId: picture.pageId })}
+                        onClick={() => order.chooseCover({ ...order.coverDesign, layout: "photo", coverPageId: picture.pageId }, { layout: true })}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={picture.src} alt="" className="h-full w-full object-cover" />
@@ -412,13 +516,13 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={order.coverDesign.layout === "none"}
+                    aria-checked={order.coverChoices.layout && order.coverDesign.layout === "none"}
                     aria-label="No picture"
                     className={cn(
                       "flex aspect-square items-center justify-center rounded-lg border-2 bg-white text-v2-muted",
-                      order.coverDesign.layout === "none" ? "border-v2-primary" : "border-gray-200",
+                      order.coverChoices.layout && order.coverDesign.layout === "none" ? "border-v2-primary" : "border-gray-200",
                     )}
-                    onClick={() => order.updateCover({ ...order.coverDesign, layout: "none" })}
+                    onClick={() => order.chooseCover({ ...order.coverDesign, layout: "none" }, { layout: true })}
                   >
                     <ImageOff className="h-5 w-5" aria-hidden />
                   </button>
@@ -436,7 +540,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             number={4}
             label="Ship to"
             summary={shipSummary}
-            state={shipState}
+            state={stateOf("ship")}
             open={order.formatChosen && openRow === "ship"}
             onToggle={() => toggle("ship")}
             disabled={!order.formatChosen}
@@ -536,44 +640,43 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
       ) : null}
 
       <div id={`${idBase}-next`} className="scroll-mt-3" aria-hidden />
-      {!order.signedIn ? (
-        <div className="mt-3 rounded-2xl border border-v2-primary/25 bg-v2-primary-light/60 p-4 text-center">
-          <p className="text-sm font-semibold text-v2-ink">Create a free account to finish your book. Your pages come with you.</p>
-          <Link
-            href={withNextParam("/sign-up", STUDIO_PATH)}
-            onClick={requestMigrationAfterSignup}
-            className="v2-btn-primary mt-3 min-h-11 w-full text-sm"
-          >
-            {GUEST_GATES.book.primary}
-          </Link>
-          <Link
-            href={withNextParam("/sign-in", STUDIO_PATH)}
-            onClick={requestMigrationAfterSignup}
-            className="mt-1 inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-v2-link underline-offset-2 hover:underline"
-          >
-            {GUEST_GATES.book.secondary}
-          </Link>
-        </div>
-      ) : (
+      {order.signedIn ? (
         <div className="mt-4 rounded-2xl bg-v2-bg-subtle/70 p-4">
-          <dl className="space-y-1.5 text-sm">
-            {order.isDigital ? (
-              <Money label="Print-at-home PDF" cents={order.quoteCents} loading={order.quoteLoading} />
-            ) : (
-              <>
-                <Money label="Book" cents={order.printCents} loading={order.quoteLoading} />
-                <Money label={`Shipping · ${shippingLevelLabel(order.shippingLevel)}`} cents={order.shippingCents} loading={order.quoteLoading} />
-                <Money label="Sales tax" cents={order.taxCents} loading={order.quoteLoading} />
-              </>
-            )}
-            <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
-              <dt className="font-semibold text-v2-ink">Total</dt>
-              <dd className="text-lg font-bold tabular-nums text-v2-ink">
-                {order.quoteLoading ? "…" : order.quoteCents != null ? formatCredits(order.quoteCents) : "Not yet"}
-              </dd>
-            </div>
-          </dl>
-          {!order.isDigital && order.deliveryEstimate && formatDeliveryRange(order.deliveryEstimate) ? (
+          {order.formatChosen ? (
+            <dl className="space-y-1.5 text-sm">
+              {order.isDigital ? (
+                <Money label="Print-at-home PDF" cents={order.quoteCents} loading={order.quoteLoading} />
+              ) : (
+                <>
+                  <Money label="Book" cents={order.printCents} loading={order.quoteLoading} />
+                  {order.shippingChosen ? (
+                    <Money label={`Shipping · ${shippingLevelLabel(order.shippingLevel)}`} cents={order.shippingCents} loading={order.quoteLoading} />
+                  ) : (
+                    <div className="flex items-baseline justify-between">
+                      <dt className="text-v2-muted">Shipping</dt>
+                      <dd className="text-v2-muted">Choose a speed</dd>
+                    </div>
+                  )}
+                  <Money label="Sales tax" cents={order.taxCents} loading={order.quoteLoading} />
+                </>
+              )}
+              <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
+                <dt className="font-semibold text-v2-ink">Total</dt>
+                <dd className="text-lg font-bold tabular-nums text-v2-ink">
+                  {order.quoteLoading
+                    ? "…"
+                    : !order.isDigital && !order.shippingChosen
+                      ? "After shipping"
+                      : order.quoteCents != null
+                        ? formatCredits(order.quoteCents)
+                        : "Pending"}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="text-sm text-v2-muted">Choose a format to see your price.</p>
+          )}
+          {!order.isDigital && order.shippingChosen && order.deliveryEstimate && formatDeliveryRange(order.deliveryEstimate) ? (
             <p className="mt-2 flex items-center gap-1.5 text-sm text-v2-ink">
               <Truck className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
               <span>
@@ -586,8 +689,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                       type="button"
                       className="font-semibold text-v2-link underline underline-offset-2 hover:no-underline"
                       onClick={() => {
-                        order.touch();
-                        onOpenRow("ship");
+                                            onOpenRow("ship");
                         scrollToShippingSpeeds();
                       }}
                     >
@@ -607,10 +709,15 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             <p className="mt-1 text-xs text-v2-muted">Delivery dates are the printer&apos;s estimate, not a guarantee.</p>
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
-          {order.balanceCents != null ? (
+          {order.balanceCents != null && order.balanceCents > 0 && order.shortfallCents > 0 ? (
             <p className="mt-2 text-xs text-v2-muted">
-              Your credit: <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>
-              {order.shortfallCents > 0 ? <> · Add {formatCredits(order.shortfallCents)} at checkout</> : null}
+              Your credit covers <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
+              You pay <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.shortfallCents)}</span>.
+            </p>
+          ) : order.balanceCents != null && order.shortfallCents <= 0 && order.formatChosen ? (
+            <p className="mt-2 text-xs text-v2-muted">
+              Paid from your credit. You have{" "}
+              <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
             </p>
           ) : null}
           {printed && holidayLine ? (
@@ -620,10 +727,45 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             </p>
           ) : null}
         </div>
-      )}
+      ) : null}
 
-      {variant === "column" && order.signedIn ? (
-        <ConfirmButton order={order} blocker={blocker} onConfirm={onConfirm} className="mt-4" />
+      {order.cartId ? (
+        <div className="mt-4 text-center text-xs text-v2-muted">
+          {confirmDiscard ? (
+            <p className="flex flex-wrap items-center justify-center gap-x-2">
+              <span>Discard this book? Your pages stay in the album.</span>
+              <button
+                type="button"
+                className="min-h-11 font-semibold text-red-700 underline-offset-2 hover:underline disabled:opacity-50"
+                disabled={discarding}
+                onClick={() => {
+                  setDiscarding(true);
+                  void order.discard().finally(() => {
+                    setDiscarding(false);
+                    setConfirmDiscard(false);
+                    onDiscarded?.();
+                  });
+                }}
+              >
+                {discarding ? "Discarding…" : "Discard"}
+              </button>
+              <button type="button" className="min-h-11 font-semibold text-v2-link" onClick={() => setConfirmDiscard(false)}>
+                Keep it
+              </button>
+            </p>
+          ) : (
+            <>
+              Saved to your cart as you go.{" "}
+              <button
+                type="button"
+                className="min-h-11 font-semibold text-v2-muted underline underline-offset-2 hover:text-v2-ink"
+                onClick={() => setConfirmDiscard(true)}
+              >
+                Discard this book
+              </button>
+            </>
+          )}
+        </div>
       ) : null}
 
       {designerOpen ? (
@@ -631,7 +773,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           <div className="p-4 sm:p-6">
             <BookCoverDesigner
               design={order.coverDesign}
-              onChange={order.updateCover}
+              onChange={(next) =>
+                order.chooseCover(next, { layout: true, title: next.text !== order.coverDesign.text || order.coverChoices.title })
+              }
               binding={order.binding}
               pictures={order.coverPictures}
               picturesLoading={order.coverPicturesLoading}
@@ -652,7 +796,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
 function ShippingSpeedPicker({ order }: { order: BookOrder }) {
   const choices = order.shippingChoices;
   if (choices.length < 2) return null;
-  const current = choices.find((c) => c.level === order.shippingLevel) ?? choices[0];
+  // Until the customer picks, nothing is selected and each speed shows its own price.
+  const picked = order.shippingChosen;
+  const current = picked ? (choices.find((c) => c.level === order.shippingLevel) ?? null) : null;
   return (
     <fieldset data-shipping-speed className="scroll-mt-3">
       <legend className="text-sm font-semibold text-v2-ink">Shipping speed</legend>
@@ -661,9 +807,9 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
       </p>
       <div className="mt-2 grid gap-2" role="radiogroup" aria-label="Shipping speed">
         {choices.map((choice) => {
-          const selected = choice.level === order.shippingLevel;
+          const selected = picked && choice.level === order.shippingLevel;
           const diff =
-            choice.costCents != null && current.costCents != null ? choice.costCents - current.costCents : null;
+            current && choice.costCents != null && current.costCents != null ? choice.costCents - current.costCents : null;
           const range = formatDeliveryRange({ min: choice.deliveryMin, max: choice.deliveryMax });
           return (
             <button
@@ -673,8 +819,7 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
               aria-checked={selected}
               disabled={order.quoteLoading}
               onClick={() => {
-                order.touch();
-                order.chooseShippingLevel(choice.level);
+                            order.chooseShippingLevel(choice.level);
               }}
               className={cn(
                 "flex w-full items-start gap-3 rounded-xl border-2 px-3 py-2 text-left transition disabled:opacity-60",
@@ -697,7 +842,15 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
                     {choice.service ? <span className="font-normal text-v2-muted"> · {choice.service}</span> : null}
                   </span>
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-v2-ink">
-                    {selected ? "Selected" : diff == null ? "" : diff > 0 ? `+${formatCredits(diff)}` : diff < 0 ? `−${formatCredits(-diff)}` : "Same price"}
+                    {selected
+                      ? "Selected"
+                      : !current
+                        ? choice.costCents != null
+                          ? formatCredits(choice.costCents)
+                          : ""
+                        : diff == null
+                          ? ""
+                          : diff > 0 ? `+${formatCredits(diff)}` : diff < 0 ? `−${formatCredits(-diff)}` : "Same price"}
                   </span>
                 </span>
                 {range ? <span className="mt-0.5 block text-xs text-v2-muted">Arrives {range}</span> : null}
@@ -724,14 +877,14 @@ export function ConfirmButton({
   return (
     <div className={className}>
       <button type="button" className="v2-btn-primary min-h-12 w-full text-base" disabled={blocker != null} onClick={onConfirm}>
-        Confirm and buy
+        Review and order
       </button>
       {blocker ? (
         <p className="mt-1.5 text-center text-xs text-v2-muted" role="status">
           {blocker}
         </p>
-      ) : order.shortfallCents > 0 ? (
-        <p className="mt-1.5 text-center text-xs text-v2-muted">You&apos;ll add {formatCredits(order.shortfallCents)} of credit at checkout.</p>
+      ) : order.shortfallCents > 0 && (order.balanceCents ?? 0) > 0 ? (
+        <p className="mt-1.5 text-center text-xs text-v2-muted">You&apos;ll pay the remaining {formatCredits(order.shortfallCents)} at checkout.</p>
       ) : null}
     </div>
   );

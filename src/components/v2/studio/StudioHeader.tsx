@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, CheckSquare, EllipsisVertical, Loader2, Upload } from "lucide-react";
+import { BookOpen, Check, CheckSquare, EllipsisVertical, Loader2, Upload } from "lucide-react";
 import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { useVisibleNav } from "@/components/v2/V2Chrome";
 import { v2BottomNav } from "@/components/v2/nav-config";
@@ -20,6 +20,8 @@ type Props = {
   onAutoMakeChange: (on: boolean) => void;
   autoPortrait: boolean;
   onAutoPortraitChange: (on: boolean) => void;
+  /** The way into the book, always in reach while scrolling; null while the book is on screen. */
+  book?: { label: string; inProgress: boolean; onOpen: () => void } | null;
 };
 
 /** One row above the gallery: album switcher, page count, Add photos and a ⋮ menu. */
@@ -34,6 +36,7 @@ export function StudioHeader({
   onAutoMakeChange,
   autoPortrait,
   onAutoPortraitChange,
+  book,
 }: Props) {
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -77,13 +80,14 @@ export function StudioHeader({
       </div>
       {!renaming ? (
         <>
+          {photoCount > 0 || uploading ? (
           <button
             type="button"
             onClick={onAddPhotos}
             aria-label="Add photos"
             className={cn(
               "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 px-3 text-sm min-[360px]:px-4",
-              photoCount === 0 ? "v2-btn-primary" : "v2-btn-outline",
+              "v2-btn-outline",
             )}
           >
             {uploading ? (
@@ -94,6 +98,21 @@ export function StudioHeader({
             <span className="hidden min-[360px]:inline sm:hidden">Add</span>
             <span className="hidden sm:inline">Add photos</span>
           </button>
+          ) : null}
+          {book ? (
+            <button
+              type="button"
+              onClick={book.onOpen}
+              aria-label={book.label}
+              className="relative hidden min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-v2-primary px-4 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 sm:inline-flex"
+            >
+              <BookOpen className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">{book.label}</span>
+              {book.inProgress ? (
+                <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-amber-400" aria-hidden />
+              ) : null}
+            </button>
+          ) : null}
           <div ref={menuRef} className="relative shrink-0">
             <button
               ref={triggerRef}
@@ -131,7 +150,7 @@ export function StudioHeader({
                 {(
                   [
                     ["Make pages", autoMake, onAutoMakeChange],
-                    ["Turn landscapes portrait", autoPortrait, onAutoPortraitChange],
+                    ["Make wide photos fill the page", autoPortrait, onAutoPortraitChange],
                   ] as const
                 ).map(([label, on, change]) => (
                   <button key={label} type="button" role="menuitemcheckbox" aria-checked={on} className={item} onClick={() => change(!on)}>

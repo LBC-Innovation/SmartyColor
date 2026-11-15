@@ -13,7 +13,9 @@ const NOT_FOUND = err("Not found", "NOT_FOUND");
 const MAX_STATE_BYTES = 256 * 1024;
 /** Old carts stay until deleted, but the header only needs the recent ones. */
 const LIST_LIMIT = 20;
-const SUMMARY_COLUMNS = "id, title, step, binding_id, page_count, photo_count, thumb_path, created_at, updated_at";
+/** The album a cart was built from: the studio keeps one cart per album. */
+const ALBUM_PATH = "state->selectedProjectIds->>0";
+const SUMMARY_COLUMNS = `id, title, step, binding_id, page_count, photo_count, thumb_path, created_at, updated_at, album_id:${ALBUM_PATH}`;
 
 function db() {
   return getSupabaseAdmin();
@@ -27,6 +29,7 @@ function summaryFromRow(row: Row, thumbUrl: string | null): BookCartSummary {
     bindingId: (row.binding_id as string | null) ?? null,
     pageCount: (row.page_count as number) ?? 0,
     photoCount: (row.photo_count as number) ?? 0,
+    projectId: (row.album_id as string | null) ?? null,
     thumbUrl,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -90,7 +93,16 @@ export async function listCarts(userId: string): Promise<ApiResult<BookCartSumma
     .order("updated_at", { ascending: false })
     .limit(LIST_LIMIT);
   if (error) return err(error.message);
-  const rows = (data ?? []) as Row[];
+  // Newest first, so the first cart seen for an album is the one that counts. Older copies of
+  // the same album's book (saved before carts were kept one per album) stay hidden.
+  const seenAlbums = new Set<string>();
+  const rows = ((data ?? []) as Row[]).filter((r) => {
+    const album = r.album_id as string | null;
+    if (!album) return true;
+    if (seenAlbums.has(album)) return false;
+    seenAlbums.add(album);
+    return true;
+  });
   const thumbs = await signThumbs(rows);
   return {
     data: rows.map((r) => summaryFromRow(r, thumbs.get(r.thumb_path as string) || null)),
@@ -120,6 +132,23 @@ export async function getCart(userId: string, cartId: string): Promise<ApiResult
 export async function createCart(userId: string, input: BookCartInput): Promise<ApiResult<BookCartSummary>> {
   const invalid = validInput(input);
   if (invalid) return err(invalid, "INVALID_CART");
+  // One book per album: a second "new" cart for the same album (another tab, an old page) takes
+  // over the existing one instead, and any older copies of it are cleared away.
+  const album = Array.isArray(input.state.selectedProjectIds) ? input.state.selectedProjectIds[0] : null;
+  if (typeof album === "string" && album) {
+    const { data: existing, error: findError } = await db()
+      .from("book_order_carts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq(ALBUM_PATH, album)
+      .order("updated_at", { ascending: false });
+    if (findError) return err(findError.message);
+    const [keep, ...stale] = (existing ?? []).map((r) => r.id as string);
+    if (keep) {
+      if (stale.length > 0) await db().from("book_order_carts").delete().eq("user_id", userId).in("id", stale);
+      return updateCart(userId, keep, input);
+    }
+  }
   const { data, error } = await db()
     .from("book_order_carts")
     .insert({ user_id: userId, ...(await columnsFor(userId, input)) })

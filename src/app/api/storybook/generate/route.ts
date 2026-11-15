@@ -1,3 +1,4 @@
+import { toPublicErrorMessage } from "@/lib/security/publicError";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { walletCharge, walletCheck } from "@/server/walletUsageGuard";
 import {
@@ -76,8 +77,7 @@ export async function POST(request: Request) {
 
     return Response.json({ story });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not generate the story.";
+    const message = toPublicErrorMessage(error, "Could not generate the story.");
     return Response.json({ error: message }, { status: 500 });
   }
 }

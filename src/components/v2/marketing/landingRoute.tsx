@@ -3,7 +3,7 @@ import { preload } from "react-dom";
 import { LANDING_PAGES, type LandingIntent } from "@/content/marketing";
 import { holidayOrderBy } from "@/lib/marketing/holiday";
 import { getMarketingNumbers } from "@/server/marketing/marketingNumbers";
-import { HERO_STACK_SIZES, marketingSrcSet } from "@/lib/marketing/images";
+import { HERO_PHOTO_SIZES, heroImage } from "@/lib/marketing/heroImage";
 import { V2LandingPage } from "@/components/v2/marketing/V2LandingPage";
 import { landingFaq, landingValues } from "@/lib/marketing/landingValues";
 
@@ -29,17 +29,10 @@ export function landingMetadata(intent: LandingIntent): Metadata {
   };
 }
 
-/** Server half of a landing page: real prices and dates, hero preloads, then the page itself. */
+/** Server half of a landing page: real prices and dates, the hero photo preload, then the page itself. */
 export async function LandingRoute({ intent }: { intent: LandingIntent }) {
-  const { hero } = LANDING_PAGES[intent];
-  for (const src of [hero.photoSrc, hero.sheetSrc]) {
-    preload(src, {
-      as: "image",
-      fetchPriority: "high",
-      imageSrcSet: marketingSrcSet(src, hero.srcSetWidths, hero.width),
-      imageSizes: HERO_STACK_SIZES,
-    });
-  }
+  const hero = heroImage(LANDING_PAGES[intent]);
+  preload(hero.src, { as: "image", fetchPriority: "high", imageSrcSet: hero.srcSet, imageSizes: HERO_PHOTO_SIZES });
   const numbers = await getMarketingNumbers();
   const holiday = holidayOrderBy();
   const faq = landingFaq(intent, landingValues(numbers, holiday?.label ?? null));
