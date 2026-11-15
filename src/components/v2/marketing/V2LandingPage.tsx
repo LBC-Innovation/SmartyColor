@@ -111,7 +111,7 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
 
   // Rendered without waiting for the session check so the hero is in the server HTML.
   return (
-    <div className="v2-landing flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-cream text-v2-ink">
+    <div className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream text-v2-ink">
       {showBanner && holiday ? <HolidayBanner label={holiday.label} /> : null}
       <V2MarketingHeader intent={intent} wide />
 

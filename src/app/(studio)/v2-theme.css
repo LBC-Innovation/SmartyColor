@@ -36,10 +36,14 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-html:has(.v2-shell),
-body:has(.v2-shell) {
-  overflow: hidden;
-  height: 100%;
+/* Desktop is a fixed-height app shell. Phones scroll the document instead: iOS Safari only
+   collapses its address bar (and Android Chrome its toolbar) when the page itself scrolls. */
+@media (min-width: 1024px) {
+  html:has(.v2-shell),
+  body:has(.v2-shell) {
+    overflow: hidden;
+    height: 100%;
+  }
 }
 
 /* viewport-fit=cover: keep content clear of the notch / status bar. */

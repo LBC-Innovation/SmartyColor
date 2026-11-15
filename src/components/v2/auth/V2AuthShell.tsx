@@ -16,7 +16,7 @@ export function V2AuthShell({
   backLabel?: string;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-bg">
+    <div className="flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-bg">
       <V2MarketingHeader />
 
       <main className="flex flex-1 flex-col items-center justify-center px-5 py-8 sm:py-12">

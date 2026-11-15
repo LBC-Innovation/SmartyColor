@@ -155,7 +155,7 @@ export function V2PricingStudio() {
     <V2StudioFrame>
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
         <V2AdminToolbar />
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        <main className="flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
           <div className={`${ADMIN_CONTENT_CLASS} py-6 sm:py-8`}>
             <header className="mb-6">
               <h1 className="v2-brand-title text-2xl tracking-tight text-v2-ink sm:text-3xl">Prices</h1>

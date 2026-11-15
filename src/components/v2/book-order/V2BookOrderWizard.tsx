@@ -1271,7 +1271,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
 
   return (
     <V2StudioFrame hideBottomNav>
-      <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
         <header className="shrink-0 border-b border-gray-200 bg-white">
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between sm:px-8 sm:py-4">
             <h1 className="v2-brand-title text-xl tracking-tight text-v2-ink sm:text-2xl">
@@ -1283,7 +1283,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
           </div>
         </header>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+        <div ref={scrollRef} className="flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain">
           <div className="mx-auto w-full max-w-5xl px-4 py-4 sm:px-8 sm:py-6">
             {authLoading ? (
               <p className="text-sm text-v2-muted">Loading…</p>

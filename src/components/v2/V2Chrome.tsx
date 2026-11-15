@@ -197,19 +197,14 @@ export function V2StudioFrame({ sidebar, children, hideBottomNav, pageScroll }: 
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-1 flex-col",
-        pageScroll
-          ? "v2-page-scroll overflow-y-auto overscroll-y-contain lg:overflow-hidden"
-          : "overflow-hidden",
+        // Phones scroll the document itself, so Safari sees a scrolling page and can collapse its
+        // toolbar; desktop keeps the fixed-height app shell with panes that scroll on their own.
+        "flex flex-1 flex-col lg:h-full lg:min-h-0 lg:overflow-hidden",
+        pageScroll && "v2-page-scroll",
       )}
     >
       <V2TopBar />
-      <div
-        className={cn(
-          "flex w-full flex-1",
-          pageScroll ? "lg:min-h-0 lg:overflow-hidden" : "min-h-0 overflow-hidden",
-        )}
-      >
+      <div className="flex w-full flex-1 lg:min-h-0 lg:overflow-hidden">
         {sidebar}
         {children}
       </div>

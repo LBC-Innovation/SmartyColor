@@ -17,10 +17,10 @@ export const metadata: Metadata = {
 export default function V2Layout({ children }: { children: ReactNode }) {
   return (
     <div
-      className={`v2-shell flex h-dvh flex-col overflow-hidden bg-v2-bg text-v2-ink ${dmSans.variable}`}
+      className={`v2-shell flex min-h-dvh flex-col bg-v2-bg lg:h-dvh lg:overflow-hidden text-v2-ink ${dmSans.variable}`}
     >
       <V2RootProviders>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
           {children}
         </div>
       </V2RootProviders>
