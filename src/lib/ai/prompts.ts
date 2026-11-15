@@ -243,33 +243,36 @@ export function buildPhotoCorrectionPrompt(
   const prefs = { ...printPrefs, orientation: layout.orientation };
   const list = corrections.map((line, i) => `${i + 1}. ${line}`).join("\n");
 
-  return `You are fixing a photo-based coloring sheet.
+  return `You are editing an existing photo-based coloring sheet.
 
 ${photoLayoutPromptBlock(layout)}
 
 You receive:
-1) The ORIGINAL photograph (ground truth).
-2) The PREVIOUS coloring attempt (what to improve).
+1) The CURRENT coloring sheet — the page to edit, and the base for your output.
+2) The ORIGINAL photograph — reference only.
 
-Fix ONLY the issues listed below. Keep everything else the same as the previous attempt unless a fix requires a small adjustment nearby.
-Treat each issue as a surgical edit: change only what that note describes; preserve all other lines, shapes, and composition from the PREVIOUS coloring attempt.
+The CURRENT sheet is the source of truth. It may already include earlier edits the user asked for (things removed, added, moved, or restyled), so it can differ from the photograph on purpose. Keep every one of those differences. Never redraw the page from the photograph, and never "correct" the sheet back toward the photograph.
+
+Apply ONLY the requests listed below. Everything else stays exactly as it is on the CURRENT sheet, unless a request needs a small adjustment nearby.
+Treat each request as a surgical edit: change only what that note describes; preserve all other lines, shapes, and composition from the CURRENT sheet.
+Use the photograph only to see how a detail mentioned in a request really looks (a face, a pattern, an object that was missed).
 
 Line weight (critical):
-- Match the PREVIOUS coloring attempt exactly: same stroke thickness and boldness as that sheet — not thinner, not thicker.
-- Output one complete replacement coloring-sheet image (full canvas). Do not overlay or trace on top of the previous sheet reference.
+- Match the CURRENT sheet exactly: same stroke thickness and boldness as that sheet — not thinner, not thicker.
+- Output one complete replacement coloring-sheet image (full canvas). Do not overlay or trace on top of the sheet reference.
 - Do NOT retrace, duplicate, or stack a second line on an edge that already exists (that makes lines bolder).
 - Do NOT simplify, fade, or hairline-ify strokes that already exist (that makes lines thinner).
 
-Do NOT redesign the whole page. Do NOT add fictional elements. Stay faithful to the photograph.
+Do NOT redesign the whole page. Do NOT add anything the requests don't ask for.
 
-Issues to fix:
+Requests:
 ${list}
 
 ${photoLineArtStyleRules()}
 
 ${coloringSheetOutputRules(prefs, title)}
 
-Return an improved coloring sheet that addresses the issues while staying true to the photo.`;
+Return the CURRENT coloring sheet with only these requests applied.`;
 }
 
 /**

@@ -295,20 +295,24 @@ export function createPhotoHandlers(): Pick<
         layout,
       );
 
+      // The current sheet goes first: it is the page being edited, and the image models hold the
+      // first input most faithfully. With the photo first, a second edit was redrawn from the
+      // photo and quietly undid the earlier ones.
       return drawFromReferences(
         "correctPhotoColoring",
         prompt,
         [
           {
-            base64: photo.base64,
-            mediaType: photo.mediaType,
-            caption: "ORIGINAL PHOTOGRAPH — ground truth for what should appear.",
-          },
-          {
             base64: sheetInput.base64,
             mediaType: sheetInput.mediaType,
             caption:
-              "PREVIOUS COLORING ATTEMPT — match its line weight and layout exactly for unchanged areas. Output one full replacement sheet; do not draw on top of this image or retrace existing lines.",
+              "CURRENT COLORING SHEET — the page to edit. It already includes the user's earlier edits; keep everything on it, with the same line weight and layout, except what the new requests change.",
+          },
+          {
+            base64: photo.base64,
+            mediaType: photo.mediaType,
+            caption:
+              "ORIGINAL PHOTOGRAPH — reference only, for the look of details a request asks about. Do not redraw the page from it or undo differences between it and the current sheet.",
           },
         ],
         photo.bytes,
