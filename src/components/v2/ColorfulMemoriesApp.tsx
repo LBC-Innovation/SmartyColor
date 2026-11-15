@@ -25,7 +25,7 @@ import { StudioGallery } from "@/components/v2/studio/StudioGallery";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
 import { PLACEHOLDER_ALBUM_NAME } from "@/components/v2/studio/albumNames";
-import type { CardState } from "@/components/v2/studio/GalleryCard";
+import { GallerySkeletonCard, type CardState } from "@/components/v2/studio/GalleryCard";
 import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
 import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
@@ -146,6 +146,7 @@ export function ColorfulMemoriesApp() {
     cloud,
     activeProjectId,
     activeProject,
+    albumLoading,
     projects,
     renameActiveProject,
     switchProject,
@@ -791,7 +792,13 @@ export function ColorfulMemoriesApp() {
                 </p>
               ) : null}
 
-              {photos.length + pendingUploads.length === 0 ? (
+              {albumLoading ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]" role="status" aria-label="Loading album">
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <GallerySkeletonCard key={i} />
+                  ))}
+                </div>
+              ) : photos.length + pendingUploads.length === 0 ? (
                 <V2UploadDropzone className="min-h-[18rem]" onFiles={(files) => void ingestFiles(files)}>
                   <div className="flex flex-col items-center gap-3 text-center">
                     <h2 className="v2-brand-title text-xl text-v2-ink">{STUDIO_EMPTY.title}</h2>
