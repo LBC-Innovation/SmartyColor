@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Loader2, Pencil, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
@@ -29,7 +29,9 @@ import type { CardState } from "@/components/v2/studio/GalleryCard";
 import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
 import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
-import { BookOrderPanel, ConfirmButton, confirmBlocker, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
+import { BookOrderCard } from "@/components/v2/studio/order/BookOrderCard";
+import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
+import { BookPromoCard, type BookProgress } from "@/components/v2/studio/order/BookPromoCard";
 import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
 import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
 import { activePageVersion, galleryBook, pagePrintPrefs, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
@@ -383,7 +385,8 @@ export function ColorfulMemoriesApp() {
       if (projects.some((p) => p.id === id)) switchProject(id);
     },
   });
-  const [sheetOpen, setSheetOpen] = useState(false);
+  /** Building the book: the order card beside the gallery (desktop) or the sheet (phones). */
+  const [bookOpen, setBookOpen] = useState(false);
   const [openRow, setOpenRow] = useState<OrderRow | null>("format");
   const [confirm, setConfirm] = useState<{ step: ConfirmStep; autoPlace: boolean } | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -396,7 +399,8 @@ export function ColorfulMemoriesApp() {
   const [handledArrival, setHandledArrival] = useState<string | null>(null);
   if (arrivalKey && arrivalKey !== handledArrival) {
     setHandledArrival(arrivalKey);
-    if (!desktop) setSheetOpen(true);
+    if (wantsBook) order.begin();
+    setBookOpen(true);
     if (resuming && order.proofConfirmed) setConfirm({ step: "overview", autoPlace: true });
     else if (resuming || searchParams.get("step") === "review") setOpenRow("ship");
   }
@@ -408,8 +412,15 @@ export function ColorfulMemoriesApp() {
     window.history.replaceState(window.history.state, "", url.toString());
   }, [handledArrival]);
 
+  /** "Start my book" / "Continue your book": open the book at the first step that needs them. */
+  function openBook() {
+    order.begin();
+    setOpenRow(bookSteps(order).find((step) => step.state !== "done")?.row ?? null);
+    setBookOpen(true);
+  }
+
   function showGallery() {
-    setSheetOpen(false);
+    if (!desktop) setBookOpen(false);
     // Desktop scrolls the gallery column itself; phones scroll the page.
     if (desktop) galleryRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     else galleryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -482,7 +493,8 @@ export function ColorfulMemoriesApp() {
     const position = book.positionByPhotoId.get(photo.id);
     return {
       state: cardState(photo),
-      bookNumber: position != null ? position + giftOffset : null,
+      // Page numbers only once a book is being built: the gallery is just pages otherwise.
+      bookNumber: (bookOpen || order.started) && position != null ? position + giftOffset : null,
       leftOut: photo.printPrefs.book?.leftOut === true,
       failureMessage: queue.failures[photo.id],
     };
@@ -495,7 +507,7 @@ export function ColorfulMemoriesApp() {
   const uploading = pendingUploads.length > 0;
   const activeCount = queue.running + queue.queued;
   const showStrip =
-    photos.length + pendingUploads.length === 0 || uploading || activeCount > 0 || reframing > 0 || choiceIds != null || shortCount > 0;
+    uploading || activeCount > 0 || reframing > 0 || choiceIds != null || shortCount > 0;
 
   // ---- desktop: drop files anywhere on the gallery ----------------------------------------
   const [dropping, setDropping] = useState(false);
@@ -541,7 +553,7 @@ export function ColorfulMemoriesApp() {
         <div className="flex flex-1 items-center justify-center pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           <p className="flex items-center gap-2 text-sm text-v2-muted">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Restoring your studio…
+            Loading your album…
           </p>
         </div>
       </V2StudioFrame>
@@ -550,8 +562,19 @@ export function ColorfulMemoriesApp() {
 
   const blocker = confirmBlocker(order);
   const hasBookPage = order.contentCount > 0 || book.stillDrawing > 0;
-  // Phones: the book bar replaces the tab bar once there is a page (the header menu has the tabs).
-  const showBookBar = !desktop && hasBookPage && !editor;
+  const steps = bookSteps(order);
+  /** A book under way for this album (saved, or started here): the gallery offers to continue it. */
+  const bookProgress: BookProgress | null =
+    order.cartId || (order.started && order.formatChosen)
+      ? {
+          done: steps.filter((step) => step.state === "done").length,
+          total: steps.length,
+          summary: order.formatChosen ? `${order.binding.shortLabel} · ${order.plan.totalPages} pages` : null,
+        }
+      : null;
+  const bookCardOpen = desktop && bookOpen && hasBookPage;
+  // Phones: once a book is under way, the book bar replaces the tab bar (the header menu has the tabs).
+  const showBookBar = !desktop && hasBookPage && !editor && bookProgress != null;
   // Turning the page to the other shape: free when that page exists, a page when the photo
   // already has that shape, otherwise reframing the photo and then a page.
   const editorShapePlan = editorPhoto && !editorPhoto.generating ? shapePlan(editorPhoto) : null;
@@ -636,7 +659,7 @@ export function ColorfulMemoriesApp() {
   // The one photo behind the page on show: new pages and edits start from it.
   const editorSource = editorPhoto ? pageSourceVersion(editorPhoto) : null;
 
-  const panel = (variant: "column" | "sheet") => (
+  const panel = (
     <BookOrderPanel
       order={order}
       withoutPage={withoutPageIds.length + failedCount}
@@ -644,10 +667,13 @@ export function ColorfulMemoriesApp() {
       openRow={openRow}
       onOpenRow={setOpenRow}
       onShowGallery={showGallery}
-      onConfirm={openConfirm}
-      variant={variant}
+      onDiscarded={() => {
+        setBookOpen(false);
+        toast.info("Your pages are still here.", "Book discarded");
+      }}
     />
   );
+  const buyButton = order.signedIn && hasBookPage ? <ConfirmButton order={order} blocker={blocker} onConfirm={openConfirm} /> : undefined;
 
   return (
     <V2StudioFrame pageScroll hideBottomNav={showBookBar}>
@@ -674,7 +700,9 @@ export function ColorfulMemoriesApp() {
           <main
             ref={galleryRef}
             aria-label="Studio"
-            className={`relative w-full min-w-0 px-4 lg:w-[60%] lg:overflow-y-auto lg:px-6 lg:pb-8 ${
+            className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 ${
+              bookCardOpen ? "lg:w-[58%] xl:w-[60%]" : "lg:w-full"
+            } ${
               showBookBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
             }`}
             onDragOver={onDragOver}
@@ -693,6 +721,11 @@ export function ColorfulMemoriesApp() {
                 onAutoMakeChange={setAuto}
                 autoPortrait={autoPortrait}
                 onAutoPortraitChange={setAutoPortrait}
+                book={
+                  hasBookPage && !bookCardOpen && !deletion.active
+                    ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
+                    : null
+                }
               />
             </div>
 
@@ -719,8 +752,6 @@ export function ColorfulMemoriesApp() {
                 />
               ) : null}
 
-              {!cloud && photos.length > 0 ? <V2SavePromptCard pageCount={order.contentCount} fallback={null} /> : null}
-
               {withoutPageIds.length >= 2 && activeCount === 0 && !deletion.active ? (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
                   <span className="min-w-0 flex-1 text-v2-ink">
@@ -738,6 +769,26 @@ export function ColorfulMemoriesApp() {
                     </span>
                   </button>
                 </div>
+              ) : null}
+
+              {hasBookPage && !bookCardOpen && !deletion.active ? (
+                <BookPromoCard
+                  pageCount={order.contentCount}
+                  pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
+                  progress={bookProgress}
+                  onStart={openBook}
+                />
+              ) : null}
+
+              {bookCardOpen && photos.length >= 2 && !deletion.active ? (
+                <p className="flex items-center gap-2 rounded-xl bg-v2-primary-light/70 px-3 py-2 text-sm text-v2-navy">
+                  <BookOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
+                  <span>
+                    <span className="font-semibold">Pages print in this order.</span>{" "}
+                    <span className="pointer-coarse:hidden">Drag to move one,</span>
+                    <span className="hidden pointer-coarse:inline">Press and hold to move one,</span> or use its ⋮ menu to leave it out.
+                  </span>
+                </p>
               ) : null}
 
               {photos.length + pendingUploads.length === 0 ? (
@@ -787,8 +838,11 @@ export function ColorfulMemoriesApp() {
                   onDelete={deletePhoto}
                   onPrint={(id) => setOutput({ id, mode: "all" })}
                   onReorder={replacePhotos}
+                  showReorderHint={!bookCardOpen}
                 />
               )}
+
+              {!cloud && photos.length > 0 ? <V2SavePromptCard pageCount={order.contentCount} fallback={null} /> : null}
             </div>
             {dropping ? (
               <div className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-v2-primary bg-v2-primary-light/80 text-sm font-semibold text-v2-navy">
@@ -797,18 +851,23 @@ export function ColorfulMemoriesApp() {
             ) : null}
           </main>
 
-          {/* The book order: sticky column on desktop */}
-          <aside className="hidden min-h-0 border-l border-gray-200 bg-white lg:block lg:w-[40%] lg:overflow-y-auto" aria-label="Complete your book order">
-            <div className="p-5 xl:p-6">
-              <h2 className="v2-brand-title mb-2 text-xl text-v2-ink">Complete your book order</h2>
-              {panel("column")}
-            </div>
-          </aside>
+          {/* The book being built: a card beside the gallery on desktop, only once they start it */}
+          {bookCardOpen ? (
+            <aside className="hidden min-h-0 lg:flex lg:w-[42%] lg:flex-col lg:py-4 lg:pr-4 xl:w-[40%] xl:pr-6" aria-label="Your book">
+              <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton}>
+                {panel}
+              </BookOrderCard>
+            </aside>
+          ) : null}
         </div>
       </div>
 
       {deletion.active ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 lg:left-0 lg:right-[40%]">
+        <div
+          className={`fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 lg:left-0 ${
+            bookCardOpen ? "lg:right-[42%] xl:right-[40%]" : ""
+          }`}
+        >
           <div className="mx-auto flex max-w-xl items-center gap-2">
             <button type="button" className="v2-btn-outline min-h-11 px-4 text-sm" onClick={deletion.exit}>
               Cancel
@@ -828,25 +887,23 @@ export function ColorfulMemoriesApp() {
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 text-sm">
-              <span className="font-semibold text-v2-ink">
-                {order.contentCount} {order.contentCount === 1 ? "page" : "pages"}
+              <span className="block truncate font-semibold text-v2-ink">
+                Your book · {bookProgress?.summary ?? `${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
               </span>
-              {bookPriceLabel ? <span className="block truncate text-xs text-v2-muted">{bookPriceLabel}</span> : null}
+              <span className="block truncate text-xs text-v2-muted">
+                {bookPriceLabel ?? (bookProgress ? `${bookProgress.done} of ${bookProgress.total} steps done` : null)}
+              </span>
             </p>
-            <button type="button" className="v2-btn-primary min-h-11 shrink-0 px-5 text-sm" onClick={() => setSheetOpen(true)}>
-              Make my book
+            <button type="button" className="v2-btn-primary min-h-11 shrink-0 px-5 text-sm" onClick={openBook}>
+              Continue
             </button>
           </div>
         </div>
       ) : null}
 
-      {sheetOpen && !desktop ? (
-        <BottomSheet
-          title="Complete your book order"
-          onClose={() => setSheetOpen(false)}
-          footer={order.signedIn && hasBookPage ? <ConfirmButton order={order} blocker={blocker} onConfirm={openConfirm} /> : undefined}
-        >
-          {panel("sheet")}
+      {bookOpen && !desktop ? (
+        <BottomSheet title="Your book" onClose={() => setBookOpen(false)} footer={buyButton}>
+          {panel}
         </BottomSheet>
       ) : null}
 
@@ -948,20 +1005,20 @@ export function ColorfulMemoriesApp() {
           onFixPage={(libraryPhotoId) => {
             const target = photosRef.current.find((p) => (p.remote?.photoId ?? p.id) === libraryPhotoId);
             setConfirm(null);
-            setSheetOpen(false);
+            if (!desktop) setBookOpen(false);
             if (target) openEditor(target.id, "page");
           }}
           onAddPhoto={() => {
             // Opened from the tap itself, so the browser allows the picker. The book updates
             // as the new photo's page is made; the proof then asks only about what changed.
             setConfirm(null);
-            setSheetOpen(false);
+            if (!desktop) setBookOpen(false);
             fileRef.current?.click();
           }}
           onEditRow={(row) => {
             setConfirm(null);
             setOpenRow(row);
-            if (!desktop) setSheetOpen(true);
+            setBookOpen(true);
           }}
         />
       ) : null}

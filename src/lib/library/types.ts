@@ -20,6 +20,8 @@ export type LibraryProject = {
   ownerName: string | null;
   /** How many people the caller has invited (owner rows only). */
   sharedCount: number;
+  /** A few photo thumbnails for the album's collage; only when the list was asked for with previews. */
+  previewUrls?: string[];
   createdAt: string;
   updatedAt: string;
 };

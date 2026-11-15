@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useV2Toast } from "@/components/v2/V2Toast";
-import { Download, Loader2, Package, RefreshCw } from "lucide-react";
+import { Download, Loader2, Package, RefreshCw, Truck } from "lucide-react";
 import { V2GuestGate } from "@/components/v2/auth/V2GuestGate";
 import { GUEST_GATES } from "@/content/marketing";
 import { withNextParam } from "@/lib/auth/nextPath";
@@ -26,11 +26,11 @@ function formatMoney(cents: number | null): string {
 }
 
 /** Orders the customer started but has not paid for yet. */
-function isUnpaid(order: BookOrderSummary): boolean {
+export function isUnpaid(order: BookOrderSummary): boolean {
   return order.status === "draft" || order.status === "awaiting_payment";
 }
 
-function orderTitle(order: BookOrderSummary): string {
+export function orderTitle(order: BookOrderSummary): string {
   return order.projectTitle?.trim() || order.productName;
 }
 
@@ -81,8 +81,7 @@ export function V2MyOrdersStudio() {
                 My orders
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-v2-muted sm:text-base">
-                Track printed books from payment through delivery, and re-download your
-                print-at-home PDFs any time.
+                Track your printed books and download your print-at-home PDFs again.
               </p>
             </div>
             {user ? (
@@ -122,21 +121,24 @@ export function V2MyOrdersStudio() {
               <Package className="h-10 w-10 text-v2-muted" aria-hidden />
               <p className="text-sm font-semibold text-v2-ink">No orders yet</p>
               <p className="max-w-sm text-sm text-v2-muted">
-                When you order a coloring book from the studio, it will show up here with
-                delivery estimates and tracking.
+                Books you order show up here with delivery dates and tracking.
               </p>
               <Link
                 href="/studio"
-                className="mt-2 inline-flex rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
+                className="mt-2 inline-flex min-h-11 items-center rounded-full bg-v2-primary px-5 py-2.5 text-sm font-semibold text-white"
               >
-                Back to studio
+                Back to my albums
               </Link>
             </div>
           ) : (
             <ul className="space-y-3">
               {orders.map((order) => (
-                <li key={order.id} className="v2-panel transition hover:ring-2 hover:ring-v2-primary/20">
-                  <Link href={`/orders/${order.id}`} className="block p-4 sm:p-5">
+                <li key={order.id} className="v2-panel relative transition hover:ring-2 hover:ring-v2-primary/20">
+                  {/* The link's hit area covers the whole card, footers included; their buttons sit above it. */}
+                  <Link
+                    href={`/orders/${order.id}`}
+                    className="block p-4 outline-none after:absolute after:inset-0 after:rounded-[inherit] after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-v2-primary sm:p-5"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-base font-semibold text-v2-ink">
@@ -145,7 +147,11 @@ export function V2MyOrdersStudio() {
                         <p className="mt-0.5 text-xs text-v2-muted">
                           {order.fulfillment === "digital" ? "Print at home · " : ""}
                           {order.pageCount} pages · {formatMoney(order.totalCents)} ·{" "}
-                          {new Date(order.createdAt).toLocaleDateString()}
+                          {new Date(order.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
                         </p>
                       </div>
                       <V2OrderStatusBadge status={order.status} fulfillment={order.fulfillment} />
@@ -171,9 +177,9 @@ export function V2MyOrdersStudio() {
                   </Link>
                   {isUnpaid(order) ? (
                     <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
-                      <Link href={`/orders/${order.id}`} className="v2-btn-primary min-h-11 text-sm">
+                      <span className="v2-btn-primary min-h-11 text-sm" aria-hidden>
                         Finish and pay
-                      </Link>
+                      </span>
                     </div>
                   ) : null}
                   {order.canCancel ? (
@@ -186,8 +192,21 @@ export function V2MyOrdersStudio() {
                       <CancelOrderButton
                         deadline={order.cancelDeadline}
                         onClick={() => setCancelling(order)}
-                        className="h-10"
+                        className="relative z-10 h-10"
                       />
+                    </div>
+                  ) : null}
+                  {order.status === "shipped" && order.trackingUrls[0] ? (
+                    <div className="border-t border-gray-100 px-4 py-3 sm:px-5">
+                      <a
+                        href={order.trackingUrls[0]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="v2-btn-outline relative z-10 min-h-11 text-sm"
+                      >
+                        <Truck className="h-4 w-4" aria-hidden />
+                        Track package
+                      </a>
                     </div>
                   ) : null}
                   {order.fulfillment === "digital" && order.status === "paid" ? (
@@ -196,7 +215,7 @@ export function V2MyOrdersStudio() {
                         type="button"
                         onClick={() => void downloadPdf(order)}
                         disabled={downloadingId === order.id}
-                        className="v2-btn-outline h-10 text-sm"
+                        className="v2-btn-outline relative z-10 h-10 text-sm"
                       >
                         {downloadingId === order.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -226,7 +245,7 @@ export function V2MyOrdersStudio() {
               title: "Order canceled",
               message:
                 result.refundedCents > 0
-                  ? `${formatMoney(result.refundedCents)} is back in your wallet. We've emailed you a confirmation.`
+                  ? `${formatMoney(result.refundedCents)} is back in your credit balance. We've emailed you a confirmation.`
                   : "We've emailed you a confirmation.",
             });
             void refreshUser();

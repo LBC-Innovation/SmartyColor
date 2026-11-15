@@ -85,7 +85,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
       <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
         <div className="rounded-lg bg-v2-bg-subtle px-3 py-2">
           <dt className="text-xs font-semibold uppercase tracking-wider text-v2-muted">
-            Your balance
+            Your credit
           </dt>
           <dd className="mt-1 font-semibold tabular-nums text-v2-ink">
             {formatCredits(balanceCents)}
@@ -126,7 +126,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
             onClick={() => setAddCreditOpen(true)}
           >
             <Wallet className="h-4 w-4" aria-hidden />
-            Add {formatCredits(shortfallCents)} and continue
+            Pay {formatCredits(shortfallCents)} and continue
           </button>
         ) : (
           <>

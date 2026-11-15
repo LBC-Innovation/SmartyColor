@@ -1558,8 +1558,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                     <div>
                       <h2 className="text-base font-semibold text-v2-ink">Check your book, cover to cover</h2>
                       <p className="mt-0.5 text-sm text-v2-muted">
-                        This is your proof. Turn every page and make sure it&apos;s what you expect —
-                        go back a step to change anything.
+                        This is your proof. Turn every page and make sure it&apos;s what you expect.
+                        Go back a step to change anything.
                       </p>
                     </div>
                     <BookPrintQualityNotice pageNumbers={softPrintPages} fit={pageFit} />
@@ -1755,7 +1755,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                           <p>
                             You have{" "}
                             <span className="font-semibold tabular-nums">{formatCredits(balanceCents ?? 0)}</span>
-                            {" "}— add{" "}
+                            {", add"}{" "}
                             <span className="font-semibold tabular-nums">{formatCredits(shortfallCents)}</span>{" "}
                             more to continue.
                           </p>

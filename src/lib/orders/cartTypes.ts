@@ -34,6 +34,8 @@ export type BookCartSummary = {
   bindingId: string | null;
   pageCount: number;
   photoCount: number;
+  /** The album the book is made from, or null for carts that don't say. */
+  projectId: string | null;
   /** Short-lived URL for a small picture of the first page, when there is one. */
   thumbUrl: string | null;
   createdAt: string;

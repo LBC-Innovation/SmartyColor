@@ -91,7 +91,7 @@ export const DIGITAL_FORMAT: BookBindingSpec = {
   label: "Digital download",
   description: "A PDF of your arranged pages to print at home.",
   shortLabel: "Print at home",
-  blurb: "Instant PDF to print on your own printer. Download it again anytime from My Orders.",
+  blurb: "A PDF of your whole book to print on your own printer. Download it again anytime from My orders.",
   podPackageId: "digital",
   minPages: 1,
   maxPages: 800,

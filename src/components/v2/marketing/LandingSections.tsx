@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Copy } from "lucide-react";
+import { ArrowRight, Check, Copy, Gift, X } from "lucide-react";
 import {
   BEST_PHOTOS,
   CONTACT_EMAIL,
+  LIFESTYLE_PHOTOS,
+  PHOTO_BAND,
   FINISHED_BOOK,
   GIFT_TIMING,
   HOLIDAY_BLOCK,
-  HOLIDAY_LINE,
   LANDING_PAGES,
   OCCASIONS,
   PARTNER_CONTACT,
@@ -20,41 +21,88 @@ import {
   type CtaLocation,
   type IdeasBlock,
   type LandingIntent,
+  type LifestyleId,
   type WhyBlock,
 } from "@/content/marketing";
 import { fillCopy, type CopyValues } from "@/lib/marketing/copy";
 import { trackCta } from "@/lib/track";
 import { BOOK_BINDINGS, DIGITAL_FORMAT, type BookBindingId } from "@/lib/print/bookBindings";
 import { cn } from "@/lib/cn";
-import { BeforeAfter, ICONS, PrintedBook, SectionHeading } from "@/components/v2/marketing/landingParts";
+import { BeforeAfter, ICONS, LifestyleImage, PrintedBook, SectionHeading, readyLifestyle } from "@/components/v2/marketing/landingParts";
 
 /** Starts the free-page flow. `target` is the landing page whose promise the visitor is following. */
 export type StartFree = (location: CtaLocation, target?: LandingIntent) => void;
 
 export const PARTNER_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(PARTNER_CONTACT.subject)}`;
 
-/** Homepage block under the hero while the Christmas order-by date is set: the page's one in-page date. */
-export function HolidayBlock({ label }: { label: string }) {
-  const line = fillCopy(HOLIDAY_LINE, { date: label });
+const HOLIDAY_TOAST_KEY = "cm-holiday-toast-dismissed";
+
+/**
+ * Homepage toast while the Christmas order-by date is set: slides up at the bottom center a moment
+ * after load, and stays closed for the rest of the visit once dismissed. `raised` lifts it above the
+ * phone's sticky button while that button is showing.
+ */
+export function HolidayToast({ label, raised }: { label: string; raised: boolean }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(HOLIDAY_TOAST_KEY) === "1";
+    } catch {
+      /* storage blocked: show it, it can still be closed */
+    }
+    if (dismissed) return;
+    const timer = window.setTimeout(() => setOpen(true), 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const line = fillCopy(HOLIDAY_BLOCK.line, { date: label });
+  if (!open || !line) return null;
+  const close = () => {
+    setOpen(false);
+    try {
+      sessionStorage.setItem(HOLIDAY_TOAST_KEY, "1");
+    } catch {
+      /* fine: it just shows again next visit */
+    }
+  };
   return (
-    <section className="v2-gutter-x mx-auto w-full max-w-6xl pb-2 sm:pb-4">
-      <div className="flex flex-col gap-3 rounded-2xl border border-v2-primary/20 bg-v2-primary-light p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-v2-ink">{HOLIDAY_BLOCK.title}</h2>
-          <p className="mt-0.5 text-sm text-v2-navy">{HOLIDAY_BLOCK.body}</p>
-          <p className="mt-1 text-sm font-semibold text-v2-link">
-            {line} {HOLIDAY_BLOCK.note}
-          </p>
-        </div>
+    <aside
+      aria-label={HOLIDAY_BLOCK.title}
+      className={cn(
+        "cm-toast-in fixed inset-x-3 z-50 mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border-2 border-brand-amber bg-v2-butter py-2.5 pl-3 pr-1.5 text-v2-ink shadow-[0_18px_48px_rgb(36_26_77/0.3)] transition-[bottom] duration-200 motion-reduce:transition-none sm:gap-4 sm:py-3 sm:pl-4",
+        raised ? "bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:bottom-6" : "bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-6",
+      )}
+    >
+      <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-coral text-white sm:inline-flex">
+        <Gift className="h-5 w-5" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold leading-snug">{HOLIDAY_BLOCK.title}</p>
+        <p className="mt-0.5 text-sm text-v2-navy">{line}</p>
+        {/* phone: the link sits under the text */}
         <Link
           href={HOLIDAY_BLOCK.href}
-          className="v2-btn-outline h-11 shrink-0 bg-white px-5 text-sm"
+          onClick={close}
+          className="-mb-1 inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-v2-primary underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary sm:hidden"
         >
           {HOLIDAY_BLOCK.link}
           <ArrowRight className="h-4 w-4" aria-hidden />
         </Link>
       </div>
-    </section>
+      {/* tablet and up: a real button beside the text */}
+      <Link href={HOLIDAY_BLOCK.href} onClick={close} className="v2-btn-primary hidden min-h-11 shrink-0 px-5 text-sm sm:inline-flex">
+        {HOLIDAY_BLOCK.link}
+        <ArrowRight className="h-4 w-4" aria-hidden />
+      </Link>
+      <button
+        type="button"
+        onClick={close}
+        aria-label={HOLIDAY_BLOCK.dismiss}
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-full text-v2-navy hover:bg-black/5 hover:text-v2-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-v2-primary sm:self-center"
+      >
+        <X className="h-5 w-5" aria-hidden />
+      </button>
+    </aside>
   );
 }
 
@@ -78,7 +126,7 @@ export function OccasionsSection({
         ? `${OCCASIONS.othersLead} ${others[0]}.`
         : null;
   return (
-    <section className="v2-gutter-x mx-auto w-full max-w-6xl py-12 sm:py-16" aria-labelledby="occasions-title">
+    <section className="v2-gutter-x mx-auto w-full max-w-7xl py-12 sm:py-16" aria-labelledby="occasions-title">
       <SectionHeading eyebrow={OCCASIONS.eyebrow} title={OCCASIONS.title} id="occasions-title" />
       <ul
         className={cn(
@@ -91,39 +139,50 @@ export function OccasionsSection({
           const title = holidayOn && "holidayTitle" in card && card.holidayTitle ? card.holidayTitle : card.title;
           const page = LANDING_PAGES[card.intent];
           const linkOnly = "link" in card && card.link;
+          const image = "image" in card && card.image && LIFESTYLE_PHOTOS[card.image].ready ? card.image : null;
           return (
-            <li key={card.intent} className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-v2-primary-light text-v2-primary">
-                <Icon className="h-5 w-5" aria-hidden />
-              </span>
-              <h3 className="mt-4 text-lg font-semibold text-v2-ink">
-                <Link
-                  href={page.path}
-                  className="inline-flex min-h-11 items-center gap-1.5 text-v2-link underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
-                >
-                  {title}
-                  <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
-                </Link>
-              </h3>
-              <p className="flex-1 text-sm leading-relaxed text-v2-muted">{card.body}</p>
-              {linkOnly ? (
-                <Link
-                  href={page.path}
-                  onClick={() => trackCta("occasion", card.intent)}
-                  className="v2-btn-outline mt-5 min-h-11 w-full px-3 text-center text-sm"
-                >
-                  {card.link}
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onStart("occasion", card.intent)}
-                  aria-label={`${PRIMARY_CTA}: ${title}`}
-                  className="v2-btn-outline mt-5 min-h-11 w-full px-3 text-center text-sm"
-                >
-                  {PRIMARY_CTA}
-                </button>
-              )}
+            <li
+              key={card.intent}
+              className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-v2-ink/10 bg-white shadow-[0_10px_30px_rgb(36_26_77/0.07)]"
+            >
+              {image ? (
+                <LifestyleImage id={image} sizes="(min-width: 1024px) 280px, (min-width: 640px) 45vw, 92vw" className="aspect-[3/2] w-full" />
+              ) : null}
+              <div className="flex flex-1 flex-col p-5">
+                {image ? null : (
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-v2-butter text-v2-ink">
+                    <Icon className="h-5 w-5" aria-hidden />
+                  </span>
+                )}
+                <h3 className={cn("text-lg font-semibold text-v2-ink", !image && "mt-4")}>
+                  <Link
+                    href={page.path}
+                    className="inline-flex min-h-11 items-center gap-1.5 text-v2-link underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+                  >
+                    {title}
+                    <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
+                  </Link>
+                </h3>
+                <p className="flex-1 text-sm leading-relaxed text-v2-muted">{card.body}</p>
+                {linkOnly ? (
+                  <Link
+                    href={page.path}
+                    onClick={() => trackCta("occasion", card.intent)}
+                    className="v2-btn-outline mt-5 min-h-11 w-full px-3 text-center text-sm"
+                  >
+                    {card.link}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onStart("occasion", card.intent)}
+                    aria-label={`${PRIMARY_CTA}: ${title}`}
+                    className="v2-btn-outline mt-5 min-h-11 w-full px-3 text-center text-sm"
+                  >
+                    {PRIMARY_CTA}
+                  </button>
+                )}
+              </div>
             </li>
           );
         })}
@@ -144,7 +203,7 @@ export function FinishedBookSection({ values, coverTitle }: { values: CopyValues
   const pdfPrice = fillCopy(FINISHED_BOOK.digital.price, values);
   return (
     <section aria-labelledby="finished-title">
-      <div className="v2-gutter-x mx-auto w-full max-w-6xl py-12 sm:py-16">
+      <div className="v2-gutter-x mx-auto w-full max-w-7xl py-12 sm:py-16">
         <SectionHeading
           eyebrow={FINISHED_BOOK.eyebrow}
           title={FINISHED_BOOK.title}
@@ -249,45 +308,50 @@ export function ReassuranceStrip() {
   );
 }
 
-/** The "why" block: a pitch, three points, a real before/after, and chips. */
+/**
+ * The "why" block: an edge-to-edge split, a lifestyle photo on one half and the pitch on deep plum on
+ * the other. Until the photo is ready, the real before/after takes the photo's half.
+ */
 export function WhySection({ why, showBestPhotos }: { why: WhyBlock; showBestPhotos: boolean }) {
+  const photo = why.photo && LIFESTYLE_PHOTOS[why.photo].ready ? why.photo : null;
   return (
-    <section className="border-y border-gray-200 bg-white" aria-labelledby="why-title">
-      <div className="v2-gutter-x mx-auto grid w-full max-w-6xl gap-10 py-12 sm:py-16 lg:grid-cols-2 lg:items-center">
-        <div>
-          <SectionHeading align="left" eyebrow={why.eyebrow} title={why.title} body={why.body} id="why-title" />
-          <ul className="mt-7 space-y-4">
+    <section className="px-2 sm:px-3" aria-labelledby="why-title">
+      <div className="grid overflow-hidden rounded-[1.75rem] bg-v2-plum text-white lg:grid-cols-2 lg:rounded-[2.25rem]">
+        {photo ? (
+          <LifestyleImage id={photo} sizes="(min-width: 1024px) 50vw, 100vw" className="aspect-[3/2] w-full lg:aspect-auto lg:h-full lg:min-h-[44rem]" />
+        ) : (
+          <div className="flex items-center justify-center bg-white/[0.06] px-5 py-12 sm:px-10">
+            <BeforeAfter className="w-full max-w-sm" pair={why.example} />
+          </div>
+        )}
+        <div className="flex flex-col justify-center px-5 py-14 sm:px-10 sm:py-20 lg:px-16 xl:px-20">
+          <SectionHeading align="left" tone="dark" eyebrow={why.eyebrow} title={why.title} body={why.body} id="why-title" />
+          <ul className="mt-8 space-y-5">
             {why.points.map(({ icon, title, body }) => {
               const Icon = ICONS[icon];
               return (
-                <li key={title} className="flex gap-3.5">
-                  <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-v2-success-bg text-v2-success-text">
-                    <Icon className="h-4.5 w-4.5" aria-hidden />
+                <li key={title} className="flex gap-4">
+                  <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-amber">
+                    <Icon className="h-5 w-5" aria-hidden />
                   </span>
                   <span>
-                    <span className="block font-semibold text-v2-ink">{title}</span>
-                    <span className="block text-sm text-v2-muted">{body}</span>
+                    <span className="block font-semibold text-white">{title}</span>
+                    <span className="block text-sm leading-relaxed text-white/75">{body}</span>
                   </span>
                 </li>
               );
             })}
           </ul>
-        </div>
-        <div className="rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
-          <BeforeAfter className="mx-auto mb-6 max-w-sm" pair={why.example} />
-          <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">{why.useCasesTitle}</p>
+          <p className="mt-8 text-xs font-bold uppercase tracking-wider text-white/70">{why.useCasesTitle}</p>
           <ul className="mt-3 flex flex-wrap gap-2">
             {why.useCases.map((u) => (
-              <li
-                key={u}
-                className="rounded-full border border-gray-200 bg-white px-3.5 py-1.5 text-sm font-semibold text-v2-navy"
-              >
+              <li key={u} className="rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-white">
                 {u}
               </li>
             ))}
           </ul>
           {showBestPhotos ? (
-            <div className="mt-6 rounded-xl bg-white p-4 shadow-sm">
+            <div className="mt-8 rounded-2xl bg-white p-4 text-v2-ink">
               <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">{BEST_PHOTOS.title}</p>
               <ul className="mt-2 space-y-1.5 text-sm text-v2-navy">
                 {BEST_PHOTOS.items.map((t) => (
@@ -308,7 +372,7 @@ export function WhySection({ why, showBestPhotos }: { why: WhyBlock; showBestPho
 /** Three ideas (party uses, pet ideas, partner examples). */
 export function IdeasSection({ ideas }: { ideas: IdeasBlock }) {
   return (
-    <section className="v2-gutter-x mx-auto w-full max-w-6xl py-12 sm:py-16" aria-labelledby="ideas-title">
+    <section className="v2-gutter-x mx-auto w-full max-w-7xl py-12 sm:py-16" aria-labelledby="ideas-title">
       <SectionHeading eyebrow={ideas.eyebrow} title={ideas.title} body={ideas.body} id="ideas-title" />
       <ul className="mt-8 grid gap-4 sm:mt-10 md:grid-cols-3 md:gap-6">
         {ideas.items.map(({ icon, title, body }) => {
@@ -340,7 +404,7 @@ export function GiftTimingSection({ values }: { values: CopyValues }) {
   const pdfBody = fillCopy(GIFT_TIMING.pdf.bodyWithPrice, values) ?? GIFT_TIMING.pdf.body;
   const cards = [first, { title: GIFT_TIMING.pdf.title, body: pdfBody }];
   return (
-    <section className="v2-gutter-x mx-auto w-full max-w-6xl py-8 sm:py-12" aria-label="Timing">
+    <section className="v2-gutter-x mx-auto w-full max-w-7xl py-8 sm:py-12" aria-label="Timing">
       <ul className="grid gap-4 md:grid-cols-2 md:gap-6">
         {cards.map((c, i) => (
           <li
@@ -430,6 +494,37 @@ export function PartnerContactSection({ onInquiry, onStart }: { onInquiry: (loca
         </div>
         <CopyEmail className="mt-3 justify-center" onCopy={() => onInquiry("final")} />
       </div>
+    </section>
+  );
+}
+
+/**
+ * An edge-to-edge strip of lifestyle photos: the "people" moment of the page. The page's own hero
+ * photo is left out. Shows once at least three are ready; on a phone it scrolls sideways.
+ */
+export function PhotoBand({ exclude }: { exclude?: LifestyleId }) {
+  const ids = readyLifestyle(PHOTO_BAND.ids.filter((id) => id !== exclude));
+  if (ids.length < 3) return null;
+  return (
+    <section className="py-14 sm:py-20" aria-labelledby="band-title">
+      <div className="v2-gutter-x mx-auto w-full max-w-7xl">
+        <SectionHeading eyebrow={PHOTO_BAND.eyebrow} title={PHOTO_BAND.title} body={PHOTO_BAND.body} id="band-title" />
+      </div>
+      <ul
+        className="mt-10 flex snap-x snap-mandatory gap-2 overflow-x-auto px-2 pb-1 sm:mt-12 sm:gap-3 sm:px-3 lg:grid lg:overflow-visible lg:pb-0"
+        style={{ gridTemplateColumns: `repeat(${ids.length}, minmax(0, 1fr))` }}
+      >
+        {ids.map((id) => (
+          <li key={id} className="w-[80%] shrink-0 snap-center sm:w-[46%] lg:w-auto">
+            <LifestyleImage
+              id={id}
+              caption
+              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 46vw, 80vw"
+              className="aspect-[4/5] w-full rounded-2xl sm:rounded-3xl"
+            />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

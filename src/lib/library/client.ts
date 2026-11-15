@@ -18,8 +18,9 @@ import type {
 
 const base = "/library";
 
-export function listProjects() {
-  return api.request<LibraryProject[]>(`${base}/projects`);
+/** `previews` also returns a few photo thumbnails per album (the home page's collages). */
+export function listProjects(options: { previews?: boolean } = {}) {
+  return api.request<LibraryProject[]>(`${base}/projects${options.previews ? "?previews=1" : ""}`);
 }
 
 export function createProject(name: string) {

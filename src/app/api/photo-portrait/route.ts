@@ -1,3 +1,4 @@
+import { friendlySafetyMessage } from "@/lib/security/publicError";
 import {
   compressImageBufferToBudget,
   ensurePhotoDataUrlForRequest,
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
     }
     const message = /invalid json response/i.test(raw)
       ? "The image model had a temporary hiccup. Please try again."
-      : raw;
+      : (friendlySafetyMessage(raw) ?? raw);
     console.error("[photo-portrait]", raw, error);
     return Response.json({ error: message }, { status: 500 });
   }

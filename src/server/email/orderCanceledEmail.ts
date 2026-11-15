@@ -37,7 +37,7 @@ export function orderCanceledEmail(input: OrderCanceledInput): OutgoingEmail {
   const reason = input.canceledByAdmin && input.reason ? `Reason: ${input.reason}` : null;
   const refund =
     input.refundedCents > 0
-      ? `We returned ${usd(input.refundedCents)} to your Colorful Memories wallet. You can use it on your next book right away.`
+      ? `We returned ${usd(input.refundedCents)} to your Colorful Memories credit balance. You can use it on your next book right away.`
       : null;
   const follow = `Questions? Reply to this email or write to ${CONTACT_EMAIL}.`;
   const cta = "View your order";

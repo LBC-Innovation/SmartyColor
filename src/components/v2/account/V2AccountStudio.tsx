@@ -93,7 +93,7 @@ export function V2AccountStudio() {
               <p className="mt-1 text-4xl font-bold tabular-nums text-v2-success-text">
                 {formatCredits(user.creditsBalanceCents)}
               </p>
-              <p className="mt-1 text-xs text-v2-muted">Applied toward printed books at checkout.</p>
+              <p className="mt-1 text-xs text-v2-muted">Pays for new coloring pages and books.</p>
               <div className="mt-5">
                 <V2AddCreditForm returnPath="/account" compact />
               </div>
@@ -118,10 +118,12 @@ export function V2AccountStudio() {
                         : joined.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
                     </dd>
                   </div>
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-wider text-v2-muted">Plan</dt>
-                    <dd className="mt-0.5 capitalize text-v2-ink">{user.planTier || "Free"}</dd>
-                  </div>
+                  {user.planTier && user.planTier.toLowerCase() !== "free" ? (
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wider text-v2-muted">Plan</dt>
+                      <dd className="mt-0.5 capitalize text-v2-ink">{user.planTier}</dd>
+                    </div>
+                  ) : null}
                 </dl>
                 <div className="mt-5 flex flex-wrap gap-2">
                   <button type="button" className="v2-btn-outline text-sm" onClick={() => setModal("profile")}>
@@ -184,7 +186,11 @@ export function V2AccountStudio() {
                                 dateStyle: "medium",
                                 timeStyle: "short",
                               })}
-                              {entry.note && describeReason(entry.reason, null) !== entry.note ? ` · ${entry.note}` : ""}
+                              {entry.note?.trim() &&
+                              entry.note.trim().toLowerCase() !==
+                                describeReason(entry.reason, entry.note).trim().toLowerCase()
+                                ? ` · ${entry.note.trim()}`
+                                : ""}
                             </span>
                           </span>
                           <span className="text-right">
@@ -198,7 +204,7 @@ export function V2AccountStudio() {
                               {formatCredits(Math.abs(entry.delta))}
                             </span>
                             <span className="block text-xs text-v2-muted tabular-nums">
-                              {formatCredits(entry.balanceAfter)}
+                              Balance {formatCredits(entry.balanceAfter)}
                             </span>
                           </span>
                         </li>

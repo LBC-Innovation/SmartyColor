@@ -5,14 +5,18 @@ import { HEADER, type LandingIntent } from "@/content/marketing";
 import { V2BrandLogo } from "@/components/v2/ui/V2BrandLogo";
 import { useAuth } from "@/context/AuthContext";
 import { trackCta } from "@/lib/track";
+import { cn } from "@/lib/cn";
 
-/** `intent`: the landing page this header sits on, sent with the Sign up tap. */
-export function V2MarketingHeader({ intent = "default" }: { intent?: LandingIntent }) {
+/**
+ * `intent`: the landing page this header sits on, sent with the Sign up tap. `wide`: span the screen
+ * like the landing page's edge-to-edge sections instead of the usual centered column.
+ */
+export function V2MarketingHeader({ intent = "default", wide = false }: { intent?: LandingIntent; wide?: boolean }) {
   const { user, loading } = useAuth();
 
   return (
     <header className="shrink-0 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
-      <div className="v2-gutter-x mx-auto flex w-full max-w-6xl items-center justify-between gap-4 py-4">
+      <div className={cn("mx-auto flex w-full items-center justify-between gap-4 py-4", wide ? "px-5 sm:px-8 lg:px-12" : "v2-gutter-x max-w-6xl")}>
         <Link href="/" className="inline-flex min-h-11 min-w-0 items-center rounded-lg outline-offset-2">
           <V2BrandLogo />
         </Link>

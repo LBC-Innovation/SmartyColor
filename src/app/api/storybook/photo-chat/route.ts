@@ -1,3 +1,4 @@
+import { toPublicErrorMessage } from "@/lib/security/publicError";
 import { ensurePhotoDataUrlForRequest } from "@/lib/ai/compressPhotoServer";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { walletCharge, walletCheck } from "@/server/walletUsageGuard";
@@ -83,8 +84,7 @@ export async function POST(request: Request) {
       photoSummary: result.photoSummary,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not chat about this photo.";
+    const message = toPublicErrorMessage(error, "Could not chat about this photo.");
     return Response.json({ error: message }, { status: 500 });
   }
 }

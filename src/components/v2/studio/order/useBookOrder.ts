@@ -16,7 +16,6 @@ import {
   isBlankAddress,
   readStoredAddress,
   readStoredCover,
-  readStoredFormat,
   storeAddress,
   storeCover,
   storeFormat,
@@ -25,7 +24,6 @@ import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { putToSignedUrl } from "@/lib/library/client";
 import { centsToValue, trackFormat } from "@/lib/marketing/events";
-import { readIntent } from "@/lib/marketing/copy";
 import { BOOK_CARTS_CHANGED_EVENT, type BookCartInput, type BookCartState } from "@/lib/orders/cartTypes";
 import { normalizeGiftNote, printableGiftNoteChars } from "@/lib/orders/giftNote";
 import {
@@ -70,11 +68,16 @@ type StudioCartState = BookCartState & {
   quotedCents?: number | null;
   /** True once the customer picked Framed or Edge to edge themselves (older carts always say "framed"). */
   pageFitChosen?: boolean;
-  /** The shipping speed picked in the Ship to step. */
+  /** The shipping speed picked in the Ship to step; absent until they pick one. */
   shippingLevel?: string;
   /** Filler pages the customer turned into lined pages, or chose to keep blank. */
   blankChoices?: Record<string, "plain" | "lined">;
+  /** Which parts of the cover the customer chose (older carts with a cover count as both). */
+  coverChoices?: CoverChoices;
 };
+
+/** Parts of the cover the customer picked themselves. */
+type CoverChoices = { title: boolean; layout: boolean };
 
 export type PlacedOrder = {
   orderId: string;
@@ -140,8 +143,8 @@ export function useBookOrder({
   );
 
   // ---- format ----------------------------------------------------------------
-  const [storedFormat] = useState(() => readStoredFormat());
-  const [chosenBindingId, setChosenBindingId] = useState<BookFormatId | null>(storedFormat);
+  // Nothing is picked for the customer: no format until they choose one (a saved book restores theirs).
+  const [chosenBindingId, setChosenBindingId] = useState<BookFormatId | null>(null);
   const contentCount = photoPages.length;
   const recommendedFormat = bestFitFormat(contentCount);
   const bindingId: BookFormatId = chosenBindingId ?? recommendedFormat;
@@ -150,18 +153,16 @@ export function useBookOrder({
 
   function chooseFormat(id: BookFormatId) {
     setChosenBindingId(id);
-    storeFormat(id);
   }
 
   // ---- gift and addresses --------------------------------------------------------
   const [shippingZip] = useState(() => readStoredQuoteShippingZip());
   const [address, setAddress] = useState<ShippingAddress>(() => readStoredAddress(ADDRESS_STORAGE_KEY));
   const [addressErrors, setAddressErrors] = useState<ShippingAddressErrors>({});
-  // A gift visitor starts with the gift box ticked and the ship-to form open. A saved cart wins.
-  const [startsAsGift] = useState(() => readIntent() === "gift");
-  const [shipDifferent, setShipDifferent] = useState(startsAsGift);
+  // Gift and ship-elsewhere start unticked: the customer says so themselves. A saved cart restores them.
+  const [shipDifferent, setShipDifferent] = useState(false);
   const [shipTo, setShipTo] = useState<ShippingAddress>(() => readStoredAddress(SHIP_TO_STORAGE_KEY));
-  const [isGift, setIsGift] = useState(startsAsGift);
+  const [isGift, setIsGift] = useState(false);
   const [giftNote, setGiftNoteRaw] = useState("");
   const [rememberAddress, setRememberAddress] = useState(false);
   const hadSavedAddressRef = useRef(false);
@@ -290,9 +291,21 @@ export function useBookOrder({
   // ---- cover ---------------------------------------------------------------------
   const [coverDraft, setCoverDraft] = useState<BookCoverDesign | null>(() => readStoredCover());
   const coverDesign = useMemo(() => coverDraft ?? defaultCoverDesign(projectTitle), [coverDraft, projectTitle]);
+  // The cover's title and picture are the customer's to choose; the preview only suggests the
+  // album name until then. A cover kept from the trip to add credit was already chosen.
+  const [coverChoices, setCoverChoices] = useState<CoverChoices>(() =>
+    readStoredCover() ? { title: true, layout: true } : { title: false, layout: false },
+  );
+  const coverReady = coverChoices.title && coverChoices.layout && Boolean(coverDesign.text?.trim());
   const { pictures: coverPictures, loading: coverPicturesLoading } = useCoverPictures(plan.allPages, coverDesign.imageSource);
   const coverSources = useMemo(() => coverSourcesFor(coverDesign, coverPictures), [coverDesign, coverPictures]);
   useEffect(() => clearCoverPictureCache, []);
+
+  /** The customer changed the cover: whatever they touched counts as chosen. */
+  function chooseCover(next: BookCoverDesign, chose: Partial<CoverChoices>) {
+    setCoverChoices((prev) => ({ title: prev.title || Boolean(chose.title), layout: prev.layout || Boolean(chose.layout) }));
+    updateCover(next);
+  }
 
   function updateCover(next: BookCoverDesign) {
     setCoverDraft(next);
@@ -318,7 +331,10 @@ export function useBookOrder({
   // ---- quotes ---------------------------------------------------------------------
   const [printQuote, setPrintQuote] = useState<BindingQuote | null>(null);
   // Standard (MAIL) unless the customer upgrades; the faster speeds come back with each quote.
-  const [shippingLevel, setShippingLevel] = useState<ShippingLevel>(DEFAULT_SHIPPING_LEVEL);
+  // No speed is picked for the customer. Until they pick, quotes are asked at Standard only to
+  // list the speeds and their prices; a single available speed needs no choice.
+  const [chosenShippingLevel, setChosenShippingLevel] = useState<ShippingLevel | null>(null);
+  const shippingLevel: ShippingLevel = chosenShippingLevel ?? DEFAULT_SHIPPING_LEVEL;
   const [shippingChoices, setShippingChoices] = useState<ShippingChoice[]>([]);
   const [addressSuggestion, setAddressSuggestion] = useState<{ key: string; suggestion: AddressSuggestion } | null>(null);
   const [answeredSuggestions, setAnsweredSuggestions] = useState<string[]>([]);
@@ -373,7 +389,8 @@ export function useBookOrder({
         const choices = api.isError(result) ? [] : (result.data.shippingChoices ?? []);
         setShippingChoices(choices);
         // A speed this address can't get (after the address changed) falls back to Standard.
-        if (choices.length > 0 && !choices.some((c) => c.level === shippingLevel)) setShippingLevel(DEFAULT_SHIPPING_LEVEL);
+        // A speed this address can't get (after the address changed) has to be picked again.
+        if (choices.length > 0 && !choices.some((c) => c.level === shippingLevel)) setChosenShippingLevel(null);
         const suggestion = api.isError(result) ? null : (result.data.addressSuggestion ?? null);
         setAddressSuggestion(suggestion && addressComplete ? { key: suggestionKey, suggestion } : null);
         setPrintQuote(
@@ -462,72 +479,126 @@ export function useBookOrder({
   const balanceCents = user?.creditsBalanceCents ?? null;
   const shortfallCents = balanceCents != null && quoteCents != null ? Math.max(0, quoteCents - balanceCents) : 0;
 
-  // ---- analytics ---------------------------------------------------------------------
-  /** The cart id whose saved book has been read back (or failed to), so restoring is done. */
-  const [restoredCartId, setRestoredCartId] = useState<string | null>(null);
-  const restoring = Boolean(cartParam) && (authLoading || (Boolean(user) && restoredCartId !== cartParam));
-  const bookStartedRef = useRef(false);
-  useEffect(() => {
-    if (bookStartedRef.current || !user || restoring || contentCount === 0) return;
-    bookStartedRef.current = true;
-    trackBookStarted(trackFormat(bindingId));
-  }, [user, bindingId, restoring, contentCount]);
-
   // ---- saved cart --------------------------------------------------------------------
+  // A book is saved to the cart only once the customer has started it on purpose ("Start my
+  // book") and made a real choice (the format). Each album keeps at most one saved book: opening
+  // an album picks its book back up instead of starting another one.
+  const [started, setStarted] = useState(false);
   const [cartId, setCartId] = useState<string | null>(cartParam);
   const cartIdRef = useRef<string | null>(cartParam);
+  /** The album the current cart belongs to, once known (state for rendering, ref for saves). */
+  const [cartAlbum, setCartAlbumState] = useState<string | null>(null);
+  const cartAlbumRef = useRef<string | null>(null);
+  function setCartAlbum(album: string | null) {
+    cartAlbumRef.current = album;
+    setCartAlbumState(album);
+  }
   const cartClosedRef = useRef(false);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
-  /** The customer has done something with the book: from then on it is saved as it changes. */
-  const [touched, setTouched] = useState(false);
+  /** The draft order placing created, reused if placing is tried again. */
+  const savedDraftIdRef = useRef<string | null>(null);
   const [restoredCart, setRestoredCart] = useState<StudioCartState | null>(null);
+
+  // This album's saved book, if it has one (a `?cart=` link names it instead).
+  const [albumLookup, setAlbumLookup] = useState<{ projectId: string; cartId: string | null } | null>(null);
+  useEffect(() => {
+    if (!user || !projectId || cartParam) return;
+    let cancelled = false;
+    void api.listBookCarts().then((result) => {
+      if (cancelled) return;
+      const found = api.isError(result) ? null : (result.data.find((c) => c.projectId === projectId) ?? null);
+      setAlbumLookup({ projectId, cartId: found?.id ?? null });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, projectId, cartParam]);
+  const lookupDone = Boolean(cartParam) || albumLookup?.projectId === projectId;
+  const restoreId = cartParam ?? (albumLookup?.projectId === projectId ? albumLookup.cartId : null);
+
+  /** The cart id whose saved book has been read back (or failed to), so restoring is done. */
+  const [restoredCartId, setRestoredCartId] = useState<string | null>(null);
+  const restoring = Boolean(restoreId) && (authLoading || (Boolean(user) && restoredCartId !== restoreId));
+
+  const projectIdRef = useRef(projectId);
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
+
+  // Moving to another album leaves this album's book behind (still saved) and starts clean.
+  useEffect(() => {
+    if (!cartAlbumRef.current || cartAlbumRef.current === projectId) return;
+    cartIdRef.current = null;
+    cartClosedRef.current = false;
+    savedDraftIdRef.current = null;
+    storeCover(null);
+    // One reset when the album changes.
+    setCartAlbum(null);
+    setCartId(null);
+    setStarted(false);
+    setRestoredCart(null);
+    setConfirmedProofKey(null);
+    setCheckedPageKeys(new Set());
+    setCoverChoices({ title: false, layout: false });
+    setChosenShippingLevel(null);
+    setCoverDraft(null);
+    setGiftNoteRaw("");
+  }, [projectId]);
 
   // Read a saved book back from the cart.
   const restoredForRef = useRef<string | null>(null);
   useEffect(() => {
     // A saved cart needs an account; it is picked up after sign-in.
-    if (!cartParam || authLoading || !user) return;
-    if (restoredForRef.current === cartParam) return;
-    restoredForRef.current = cartParam;
+    if (!restoreId || authLoading || !user) return;
+    if (restoredForRef.current === restoreId) return;
+    restoredForRef.current = restoreId;
+    const fromLink = restoreId === cartParam;
     let cancelled = false;
-    void api.fetchBookCart(cartParam).then((result) => {
+    void api.fetchBookCart(restoreId).then((result) => {
       if (cancelled) return;
       if (api.isError(result)) {
         cartIdRef.current = null;
         setCartId(null);
-        setError(
-          result.error.code === "NOT_FOUND"
-            ? "That book isn't in your cart anymore. You can start it again here."
-            : "We couldn't open your saved book. Please try again.",
-        );
-        setRestoredCartId(cartParam);
+        if (fromLink) {
+          setError(
+            result.error.code === "NOT_FOUND"
+              ? "That book isn't in your cart anymore. You can start it again here."
+              : "We couldn't open your saved book. Please try again.",
+          );
+        }
+        setRestoredCartId(restoreId);
         return;
       }
       const saved = result.data.state as StudioCartState;
-      cartIdRef.current = cartParam;
-      setCartId(cartParam);
+      cartIdRef.current = restoreId;
+      cartClosedRef.current = false;
+      setCartId(restoreId);
       const format = saved.bindingId === "digital" || isPrintBindingId(saved.bindingId) ? saved.bindingId : null;
       if (format && saved.bindingTouched) chooseFormat(format);
       if (saved.coverDesign) setCoverDraft(normalizeCoverDesign(saved.coverDesign));
       setShipDifferent(saved.shipDifferent === true);
       setIsGift(saved.isGift === true);
       if (saved.pageFitChosen) setChosenPageFit(saved.pageFit === "full" ? "full" : "framed");
-      if (isShippingLevel(saved.shippingLevel)) setShippingLevel(saved.shippingLevel);
+      if (isShippingLevel(saved.shippingLevel)) setChosenShippingLevel(saved.shippingLevel);
+      setCoverChoices(
+        saved.coverChoices ?? (saved.coverDesign ? { title: true, layout: true } : { title: false, layout: false }),
+      );
       if (saved.blankChoices && typeof saved.blankChoices === "object") setBlankChoices(saved.blankChoices);
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
+      setCartAlbum(album ?? projectId);
       if (album && album !== projectId) onRestoreProject?.(album);
       if (saved.proofKey) setConfirmedProofKey(saved.proofKey);
       setRestoredCart(saved);
-      setTouched(true);
-      setRestoredCartId(cartParam);
+      setStarted(true);
+      setRestoredCartId(restoreId);
     });
     return () => {
       cancelled = true;
     };
     // chooseFormat, onRestoreProject and projectId are read once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartParam, authLoading, user]);
+  }, [restoreId, authLoading, user]);
 
   const cartInput = useMemo<BookCartInput>(() => {
     const firstPhoto = plan.allPages.find((p): p is BookWizardPhotoPage => p.kind === "photo");
@@ -540,8 +611,9 @@ export function useBookOrder({
       bindingTouched: chosenBindingId != null,
       pageFit,
       pageFitChosen: chosenPageFit != null,
-      shippingLevel,
+      ...(chosenShippingLevel ? { shippingLevel: chosenShippingLevel } : {}),
       blankChoices,
+      coverChoices,
       pages: cartPages(photoPages),
       removedIds: [],
       coverDesign: coverDraft,
@@ -560,22 +632,37 @@ export function useBookOrder({
       thumbRevisionId: firstPhoto?.revisionId ?? null,
       state,
     };
-  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, shippingLevel, blankChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
+  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, chosenShippingLevel, blankChoices, coverChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
 
-  const cartReady = signedIn && !restoring && touched && contentCount > 0;
+  // Saved as it changes once it is in the cart; before that, only after "Start my book" and a format.
+  const cartReady =
+    signedIn &&
+    lookupDone &&
+    !restoring &&
+    contentCount > 0 &&
+    (cartId != null || (started && chosenBindingId != null)) &&
+    (cartAlbum == null || cartAlbum === projectId);
 
   function saveCart(input: BookCartInput): Promise<void> {
     // One save at a time, so a new book is only ever created once.
+    const album = projectId;
     saveChainRef.current = saveChainRef.current.then(async () => {
       if (cartClosedRef.current) return;
+      // The album changed while this save waited: it belongs to a book that was left behind.
+      if (projectIdRef.current !== album) return;
       const id = cartIdRef.current;
       if (id) {
         const updated = await api.updateBookCart(id, input);
-        if (api.isError(updated) && updated.error.code === "NOT_FOUND") cartClosedRef.current = true;
+        if (api.isError(updated) && updated.error.code === "NOT_FOUND") {
+          cartClosedRef.current = true;
+          cartIdRef.current = null;
+          setCartId(null);
+        }
       } else {
         const created = await api.createBookCart(input);
         if (api.isError(created)) return;
         cartIdRef.current = created.data.id;
+        setCartAlbum(album);
         setCartId(created.data.id);
       }
       window.dispatchEvent(new Event(BOOK_CARTS_CHANGED_EVENT));
@@ -596,6 +683,40 @@ export function useBookOrder({
     if (!id) return;
     await api.deleteBookCart(id);
     window.dispatchEvent(new Event(BOOK_CARTS_CHANGED_EVENT));
+  }
+
+  /** "Start my book": the customer chose to make a book from this album. */
+  const bookStartedRef = useRef(false);
+  function begin() {
+    setStarted(true);
+    if (bookStartedRef.current || !user || cartIdRef.current) return;
+    bookStartedRef.current = true;
+    trackBookStarted(trackFormat(bindingId));
+  }
+
+  /** Throws this album's book away: the saved cart goes and the next start is a fresh one. */
+  async function discard() {
+    await closeCart();
+    cartIdRef.current = null;
+    setCartAlbum(null);
+    cartClosedRef.current = false;
+    savedDraftIdRef.current = null;
+    setCartId(null);
+    setStarted(false);
+    setRestoredCart(null);
+    setConfirmedProofKey(null);
+    setCheckedPageKeys(new Set());
+    setCoverChoices({ title: false, layout: false });
+    setChosenShippingLevel(null);
+    setCoverDraft(null);
+    storeCover(null);
+    setChosenBindingId(null);
+    storeFormat(null);
+    setChosenPageFit(null);
+    setBlankChoices({});
+    setGiftNoteRaw("");
+    setIsGift(false);
+    setError(null);
   }
 
   // ---- adding credit ----------------------------------------------------------------
@@ -622,7 +743,6 @@ export function useBookOrder({
   // ---- placing the order --------------------------------------------------------------
   const [placing, setPlacing] = useState(false);
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
-  const savedDraftIdRef = useRef<string | null>(null);
   const coverTitle = coverDesign.text?.trim() || projectTitle;
 
   function pageManifest(): DigitalBookPage[] | null {
@@ -822,7 +942,9 @@ export function useBookOrder({
     setCartId(null);
     setConfirmedProofKey(null);
     setCheckedPageKeys(new Set());
-    setTouched(false);
+    setCoverChoices({ title: false, layout: false });
+    setChosenShippingLevel(null);
+    setStarted(false);
     setGiftNoteRaw("");
     setCoverDraft(null);
   }
@@ -833,7 +955,10 @@ export function useBookOrder({
     restoredCart,
     error,
     setError,
-    touch: () => setTouched(true),
+    /** True once the customer chose to make a book here (or picked a saved one back up). */
+    started,
+    begin,
+    discard,
     // format
     bindingId,
     binding,
@@ -859,7 +984,11 @@ export function useBookOrder({
     // shipping speed
     shippingLevel,
     shippingChoices,
-    chooseShippingLevel: setShippingLevel,
+    chooseShippingLevel: setChosenShippingLevel,
+    /** A speed is settled: picked by the customer, or the only one there is. */
+    shippingChosen:
+      chosenShippingLevel != null ||
+      (shippingChoices.length <= 1 && printQuote != null && !printQuote.loading && printQuote.totalCents != null),
     choosePageFit: setChosenPageFit,
     formatFits,
     overCapacity,
@@ -878,6 +1007,10 @@ export function useBookOrder({
     coverPicturesLoading,
     coverSources,
     updateCover,
+    chooseCover,
+    coverChoices,
+    /** The customer chose both the cover's title and its picture. */
+    coverReady,
     // address and gift
     address,
     updateAddress,

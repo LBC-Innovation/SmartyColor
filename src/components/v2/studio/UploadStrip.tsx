@@ -85,15 +85,15 @@ export function UploadStrip({
         </div>
       ) : (
         <div className="divide-y divide-v2-primary/10">
-          <Toggle label="Make pages as I add" detail={costLine} on={autoOn} onChange={onAutoChange} />
+          <Toggle label="Make pages as I add photos" detail={costLine} on={autoOn} onChange={onAutoChange} />
           <Toggle
-            label="Turn landscape photos portrait"
+            label="Make wide photos fill the page"
             detail={
               signedIn
                 ? portraitPriceCents != null
-                  ? `${formatCredits(portraitPriceCents)} each · fills the page better`
-                  : "Fills the page better"
-                : "Free to try · fills the page better"
+                  ? `${formatCredits(portraitPriceCents)} each · redrawn tall to fit`
+                  : "Redrawn tall to fit"
+                : "Free to try · redrawn tall to fit"
             }
             on={autoPortraitOn}
             onChange={onAutoPortraitChange}
@@ -105,7 +105,7 @@ export function UploadStrip({
         <div className="mt-2 flex min-h-9 items-center gap-2 border-t border-v2-primary/15 pt-2 text-sm">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-v2-primary motion-reduce:animate-none" aria-hidden />
           <span className="min-w-0 flex-1 text-v2-ink">
-            Turning {reframingCount} {reframingCount === 1 ? "photo" : "photos"} portrait
+            Fitting {reframingCount} {reframingCount === 1 ? "photo" : "photos"} to the page
             {signedIn && portraitPriceCents != null ? ` · ${formatCredits(portraitPriceCents * reframingCount)}` : ""}
           </span>
         </div>

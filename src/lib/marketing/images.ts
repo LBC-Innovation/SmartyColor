@@ -5,5 +5,3 @@ export function marketingSrcSet(src: string, widths: number[], fullWidth: number
   return [...widths.map((w) => `${base}-${w}.webp ${w}w`), `${src} ${fullWidth}w`].join(", ");
 }
 
-/** Displayed width of each hero image (photo and page stack). */
-export const HERO_STACK_SIZES = "(min-width: 1024px) 330px, (min-width: 640px) 280px, 185px";

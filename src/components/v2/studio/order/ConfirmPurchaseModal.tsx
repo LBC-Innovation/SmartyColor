@@ -277,11 +277,11 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
             ? "Back cover"
             : `Pages ${[(view?.render as { left: number | null }).left, (view?.render as { right: number | null }).right].filter(Boolean).join(" and ")} of ${order.plan.allPages.length}`
         : `${items[current]?.kind === "page" ? `Page ${(items[current] as { number: number }).number}` : items[current]?.kind === "front" ? "Front cover" : "Back cover"} · ${current + 1} of ${items.length}`
-      : "Check and buy";
+      : "Review your order";
   const progress = step === "proof" ? (items.length - unseen) / Math.max(1, items.length) : 1;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-stretch justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label="Confirm and buy">
+    <div className="fixed inset-0 z-[55] flex items-stretch justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label="Review and order">
       <button type="button" tabIndex={-1} className="absolute inset-0 hidden bg-v2-ink/40 lg:block" aria-label="Close" onClick={closeIfIdle} />
       <div
         ref={panelRef}
@@ -436,7 +436,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                 <p className="mt-1 text-center text-xs text-v2-muted" role="status">
                   {seenAll
                     ? "Printed books are made to order and can't be changed once they go to the printer."
-                    : `${unseen} more to look at`}
+                    : `${unseen} more ${unseen === 1 ? "page" : "pages"} to look at`}
                 </p>
               </>
             ) : (
@@ -468,7 +468,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     disabled={order.quoteCents == null || order.quoteLoading}
                     onClick={() => void order.startTopUp(order.shortfallCents)}
                   >
-                    Add {formatCredits(order.shortfallCents)} and complete purchase
+                    Pay {formatCredits(order.shortfallCents)} and place order
                   </button>
                 ) : (
                   <button
@@ -477,7 +477,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     disabled={order.quoteCents == null || order.quoteLoading || !order.proofConfirmed}
                     onClick={() => void order.placeOrder()}
                   >
-                    Complete purchase{order.quoteCents != null ? ` · ${formatCredits(order.quoteCents)}` : ""}
+                    Place order{order.quoteCents != null ? ` · ${formatCredits(order.quoteCents)}` : ""}
                   </button>
                 )}
                 <p className="mt-1 text-center text-xs text-v2-muted">
@@ -624,9 +624,11 @@ function Overview({
           <dt className="font-semibold text-v2-ink">Total</dt>
           <dd className="text-lg font-bold tabular-nums text-v2-ink">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
         </div>
-        {creditApplied != null ? <Line label="Paid from your credit" cents={creditApplied} /> : null}
-        {order.shortfallCents > 0 ? <Line label="Credit to add" cents={order.shortfallCents} /> : null}
-        {balanceAfter != null ? <Line label="Credit left after" cents={balanceAfter} /> : null}
+        {creditApplied != null && creditApplied > 0 ? <Line label="Your credit" cents={creditApplied} negative /> : null}
+        {order.shortfallCents > 0 ? <Line label="You pay" cents={order.shortfallCents} /> : null}
+        {balanceAfter != null && balanceAfter > 0 && order.shortfallCents <= 0 ? (
+          <Line label="Credit left after" cents={balanceAfter} />
+        ) : null}
       </dl>
       {!order.isDigital && formatDeliveryRange(order.deliveryEstimate) ? (
         <p className="text-sm text-v2-ink">
@@ -656,11 +658,11 @@ function Overview({
   );
 }
 
-function Line({ label, cents }: { label: string; cents: number | null }) {
+function Line({ label, cents, negative }: { label: string; cents: number | null; negative?: boolean }) {
   return (
     <div className="flex items-baseline justify-between">
       <dt className="text-v2-muted">{label}</dt>
-      <dd className="font-semibold tabular-nums text-v2-ink">{cents != null ? formatCredits(cents) : "…"}</dd>
+      <dd className="font-semibold tabular-nums text-v2-ink">{cents != null ? `${negative ? "−" : ""}${formatCredits(cents)}` : "…"}</dd>
     </div>
   );
 }

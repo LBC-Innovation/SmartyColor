@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Package,
   ReceiptText,
   Shield,
   User,
@@ -98,7 +99,7 @@ export function V2UserMenu() {
         title={`Signed in as ${user.email}`}
       >
         <V2UserAvatar name={name} src={user.avatarUrl} size={36} shape="circle" />
-        <span className="hidden truncate text-xs font-semibold text-v2-navy sm:block">
+        <span className="hidden truncate text-xs font-semibold text-v2-navy sm:block lg:hidden xl:block">
           {name}
         </span>
         <ChevronDown
@@ -131,6 +132,15 @@ export function V2UserMenu() {
             >
               <CircleUser className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
               Account
+            </Link>
+            <Link
+              href="/orders"
+              role="menuitem"
+              className={ITEM_CLASS}
+              onClick={() => setOpen(false)}
+            >
+              <Package className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+              My orders
             </Link>
             <button
               type="button"
@@ -209,7 +219,7 @@ export function V2UserMenu() {
               }}
             >
               <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-              Log out
+              Sign out
             </button>
           </div>
         </div>
