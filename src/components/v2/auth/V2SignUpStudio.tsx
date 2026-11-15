@@ -39,7 +39,8 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
     void getInvitePreview(inviteId).then((res) => {
       if (cancelled || res.error) return;
       setInvite(res.data!);
-      setEmail((current) => current || res.data!.email);
+      const invited = res.data!.email;
+      if (invited) setEmail((current) => current || invited);
     });
     return () => {
       cancelled = true;
@@ -47,7 +48,12 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
   }, [inviteId]);
 
   // Where to go once signed in: the page they came from, else a shared album, else the studio.
-  const albumPath = invite ? `${STUDIO_PATH}?album=${encodeURIComponent(invite.albumId)}` : STUDIO_PATH;
+  // An invite link has no address to match, so it is claimed by going back to the link.
+  const albumPath = !invite
+    ? STUDIO_PATH
+    : invite.email
+      ? `${STUDIO_PATH}?album=${encodeURIComponent(invite.albumId)}`
+      : `/join/${encodeURIComponent(inviteId!)}`;
   const destination = next ?? albumPath;
   const signInHref =
     invite || next ? `/sign-in?next=${encodeURIComponent(destination)}` : "/sign-in";
@@ -55,7 +61,7 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
   const confirmedSignInHref = `/sign-in?next=${encodeURIComponent(destination)}`;
   const backToStudio = next?.startsWith("/studio") ? next : undefined;
   const invitedEmailMismatch =
-    invite != null && email.trim() !== "" && email.trim().toLowerCase() !== invite.email;
+    invite?.email != null && email.trim() !== "" && email.trim().toLowerCase() !== invite.email;
 
   async function onCreateAccount(e: FormEvent) {
     e.preventDefault();
@@ -109,8 +115,14 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
           <p className="min-w-0 text-sm leading-relaxed text-v2-navy">
             <strong className="text-v2-ink">{invite.inviterName}</strong> invited you to add photos to
             <strong className="block truncate text-base text-v2-ink">{invite.albumName}</strong>
-            Create your account with <strong className="text-v2-ink">{invite.email}</strong> and the
-            album will be waiting for you.
+            {invite.email ? (
+              <>
+                Create your account with <strong className="text-v2-ink">{invite.email}</strong> and the
+                album will be waiting for you.
+              </>
+            ) : (
+              "Create your account and you'll join the album straight away."
+            )}
           </p>
         </div>
       ) : null}

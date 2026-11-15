@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useRef, type ReactNode } from "react";
+import { useId, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -20,7 +21,24 @@ type V2ModalProps = {
   fill?: boolean;
 };
 
-export function V2Modal({
+const noopSubscribe = () => () => {};
+
+/**
+ * Rendered into <body>, so an ancestor with a transform, filter or backdrop-filter (the studio's
+ * blurred sticky header, say) can't become the containing block for `position: fixed` and squeeze
+ * or clip the dialog, and no ancestor stacking context can put it under the bottom nav.
+ */
+export function V2Modal(props: V2ModalProps) {
+  const onClient = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+  if (!onClient) return null;
+  return createPortal(<V2ModalPanel {...props} />, document.body);
+}
+
+function V2ModalPanel({
   title,
   ariaLabel,
   onClose,

@@ -12,6 +12,7 @@ export async function POST(request: Request, { params }: Params) {
   const code = result.error?.code;
   if (code === "NOT_FOUND") return jsonError(result.error!.message, 404, code);
   if (code === "TOO_SOON") return jsonError(result.error!.message, 429, code);
+  if (code === "NO_EMAIL") return jsonError(result.error!.message, 400, code);
   if (code === "EMAIL_FAILED") return jsonError(result.error!.message, 502, code);
   return jsonResult(result, result.error ? 500 : 200);
 }

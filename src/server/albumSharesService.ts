@@ -24,7 +24,18 @@ function db() {
 
 /** The owner's view of an invite never reveals whether the invitee has an account. */
 function shareFromRow(row: Row): AlbumShare {
-  return { id: row.id as string, email: row.email as string, invitedAt: row.created_at as string };
+  return {
+    id: row.id as string,
+    email: (row.email as string | null) ?? null,
+    via: row.invited_via === "link" ? "link" : "email",
+    joined: row.status === "active",
+    invitedAt: row.created_at as string,
+  };
+}
+
+/** Where an invite link points. Signed-in people join from there; everyone else signs up first. */
+export function inviteLinkUrl(shareId: string): string {
+  return `${clientOrigin()}/join/${encodeURIComponent(shareId)}`;
 }
 
 async function ownedProject(userId: string, projectId: string): Promise<ApiResult<Row>> {
@@ -71,11 +82,37 @@ export async function listShares(userId: string, projectId: string): Promise<Api
   if (project.error) return project;
   const { data, error } = await db()
     .from("library_project_shares")
-    .select("id, email, created_at")
+    .select("id, email, invited_via, status, created_at")
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
   if (error) return err(error.message);
   return { data: (data ?? []).map(shareFromRow), error: null };
+}
+
+/** Shared by email and link invites: per-album and per-day caps, and no duplicate addresses. */
+async function checkInviteLimits(userId: string, projectId: string, email: string | null): Promise<ApiResult<true>> {
+  const { data: existing, error: eErr } = await db()
+    .from("library_project_shares")
+    .select("id, email")
+    .eq("project_id", projectId);
+  if (eErr) return err(eErr.message);
+  if (email && (existing ?? []).some((s) => s.email === email)) {
+    return err("This album has already been shared with that address.", "ALREADY_SHARED");
+  }
+  if ((existing ?? []).length >= MAX_SHARES_PER_ALBUM) {
+    return err(`An album can be shared with up to ${MAX_SHARES_PER_ALBUM} people.`, "LIMIT");
+  }
+
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count: recent } = await db()
+    .from("library_project_shares")
+    .select("id", { count: "exact", head: true })
+    .eq("invited_by", userId)
+    .gte("created_at", dayAgo);
+  if ((recent ?? 0) >= MAX_INVITES_PER_DAY) {
+    return err("You've sent a lot of invitations today. Try again tomorrow.", "LIMIT");
+  }
+  return { data: true, error: null };
 }
 
 export async function inviteToAlbum(
@@ -90,27 +127,8 @@ export async function inviteToAlbum(
   const project = await ownedProject(user.id, projectId);
   if (project.error) return project;
 
-  const { data: existing, error: eErr } = await db()
-    .from("library_project_shares")
-    .select("id, email")
-    .eq("project_id", projectId);
-  if (eErr) return err(eErr.message);
-  if ((existing ?? []).some((s) => s.email === email)) {
-    return err("This album has already been shared with that address.", "ALREADY_SHARED");
-  }
-  if ((existing ?? []).length >= MAX_SHARES_PER_ALBUM) {
-    return err(`An album can be shared with up to ${MAX_SHARES_PER_ALBUM} people.`, "LIMIT");
-  }
-
-  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { count: recent } = await db()
-    .from("library_project_shares")
-    .select("id", { count: "exact", head: true })
-    .eq("invited_by", user.id)
-    .gte("created_at", dayAgo);
-  if ((recent ?? 0) >= MAX_INVITES_PER_DAY) {
-    return err("You've sent a lot of invitations today. Try again tomorrow.", "LIMIT");
-  }
+  const limits = await checkInviteLimits(user.id, projectId, email);
+  if (limits.error) return limits;
 
   // People who already have a verified account join straight away; everyone else
   // is picked up the first time they sign in with this address.
@@ -155,6 +173,7 @@ export async function resendShare(
     .maybeSingle();
   if (error) return err(error.message);
   if (!share) return NOT_FOUND;
+  if (!share.email) return err("This invite was sent as a link. Copy the link and send it again.", "NO_EMAIL");
 
   const last = share.last_emailed_at ? Date.parse(share.last_emailed_at as string) : 0;
   if (Date.now() - last < RESEND_COOLDOWN_MS) {
@@ -163,6 +182,138 @@ export async function resendShare(
   const emailSent = await sendShareEmail(share, project.data!, await displayName(user));
   if (!emailSent) return err("The email could not be sent. Try again shortly.", "EMAIL_FAILED");
   return { data: { emailSent }, error: null };
+}
+
+/**
+ * Invite by text message or any other app: a single-use link with no email attached. The
+ * person who opens it signs in (or signs up) and joins with whatever address they use.
+ */
+export async function createInviteLink(
+  user: AuthUser,
+  projectId: string,
+): Promise<ApiResult<{ share: AlbumShare; url: string; inviterName: string; albumName: string }>> {
+  const project = await ownedProject(user.id, projectId);
+  if (project.error) return project;
+  const limits = await checkInviteLimits(user.id, projectId, null);
+  if (limits.error) return limits;
+
+  const { data: share, error } = await db()
+    .from("library_project_shares")
+    .insert({
+      project_id: projectId,
+      email: null,
+      invited_via: "link",
+      invited_by: user.id,
+      user_id: null,
+      status: "pending",
+    })
+    .select("*")
+    .single();
+  if (error) return err(error.message);
+  return {
+    data: {
+      share: shareFromRow(share),
+      url: inviteLinkUrl(share.id as string),
+      inviterName: await displayName(user),
+      albumName: project.data!.name as string,
+    },
+    error: null,
+  };
+}
+
+/**
+ * The signed-in person opening an invite link joins the album. Link invites are claimed by
+ * whoever opens them first; an email invite only by the account with that address.
+ */
+export async function acceptInvite(
+  user: AuthUser,
+  shareId: string,
+): Promise<ApiResult<{ albumId: string }>> {
+  if (!UUID_PATTERN.test(shareId)) return NOT_FOUND;
+  const { data: share, error } = await db()
+    .from("library_project_shares")
+    .select("*")
+    .eq("id", shareId)
+    .maybeSingle();
+  if (error) return err(error.message);
+  if (!share) return NOT_FOUND;
+  const albumId = share.project_id as string;
+  const joined = { data: { albumId }, error: null };
+
+  const { data: project, error: pErr } = await db()
+    .from("library_projects")
+    .select("id, user_id")
+    .eq("id", albumId)
+    .maybeSingle();
+  if (pErr) return err(pErr.message);
+  if (!project) return NOT_FOUND;
+  if (project.user_id === user.id) return err("This is your own album, so you already have it.", "OWN_ALBUM");
+
+  if (share.user_id === user.id) return joined;
+  if (share.user_id) {
+    return err("This invite link has already been used. Ask for a new one.", "ALREADY_USED");
+  }
+
+  const email = user.emailVerified ? normalizeEmail(user.email) : "";
+  if (share.invited_via !== "link") {
+    // Email invites belong to the address they were sent to.
+    if (!email || share.email !== email) {
+      return err(
+        `This invitation was sent to ${share.email as string}. Sign in with that address to join.`,
+        "WRONG_ACCOUNT",
+      );
+    }
+  }
+
+  // Already in the album some other way (an earlier link, or an email invite to this address)?
+  const [byUser, byEmail] = await Promise.all([
+    db().from("library_project_shares").select("id, status").eq("project_id", albumId).neq("id", shareId).eq("user_id", user.id),
+    email
+      ? db().from("library_project_shares").select("id, status").eq("project_id", albumId).neq("id", shareId).eq("email", email)
+      : Promise.resolve({ data: [] as Row[], error: null }),
+  ]);
+  if (byUser.error) return err(byUser.error.message);
+  if (byEmail.error) return err(byEmail.error.message);
+  const now = new Date().toISOString();
+  const existing = [...(byUser.data ?? []), ...(byEmail.data ?? [])][0];
+  if (existing) {
+    if (existing.status !== "active") {
+      const { error: aErr } = await db()
+        .from("library_project_shares")
+        .update({ user_id: user.id, status: "active", accepted_at: now })
+        .eq("id", existing.id as string);
+      if (aErr) return err(aErr.message);
+    }
+    // The spare link is removed so it doesn't count against the album's limit.
+    if (share.invited_via === "link") {
+      await db().from("library_project_shares").delete().eq("id", shareId).is("user_id", null);
+    }
+    return joined;
+  }
+
+  // `user_id is null` keeps two people from claiming the same link at once.
+  const { data: claimed, error: cErr } = await db()
+    .from("library_project_shares")
+    .update({
+      user_id: user.id,
+      ...(share.invited_via === "link" && email ? { email } : {}),
+      status: "active",
+      accepted_at: now,
+    })
+    .eq("id", shareId)
+    .is("user_id", null)
+    .select("id")
+    .maybeSingle();
+  if (cErr) {
+    // Someone added this address while we were looking; they're in either way.
+    if (cErr.code === "23505") {
+      await db().from("library_project_shares").update({ user_id: user.id, status: "active", accepted_at: now }).eq("id", shareId).is("user_id", null);
+      return joined;
+    }
+    return err(cErr.message);
+  }
+  if (!claimed) return err("This invite link has already been used. Ask for a new one.", "ALREADY_USED");
+  return joined;
 }
 
 /** The owner removes someone, or a contributor leaves (`shareId` = "me"). Their photos stay in the album. */
@@ -204,7 +355,7 @@ export async function getInvitePreview(shareId: string): Promise<ApiResult<Album
   if (!UUID_PATTERN.test(shareId)) return NOT_FOUND;
   const { data: share, error } = await db()
     .from("library_project_shares")
-    .select("id, email, project_id, invited_by")
+    .select("id, email, project_id, invited_by, user_id, invited_via")
     .eq("id", shareId)
     .maybeSingle();
   if (error) return err(error.message);
@@ -219,7 +370,9 @@ export async function getInvitePreview(shareId: string): Promise<ApiResult<Album
       albumId: project.id as string,
       albumName: project.name as string,
       inviterName: (inviter?.display_name as string | null)?.trim() || "Someone",
-      email: share.email as string,
+      // A link's email, once claimed, is the joiner's own: never show it to others holding the link.
+      email: share.invited_via === "link" ? null : ((share.email as string | null) ?? null),
+      used: share.invited_via === "link" && Boolean(share.user_id),
     },
     error: null,
   };

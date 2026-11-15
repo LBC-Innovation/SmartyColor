@@ -137,6 +137,19 @@ export function inviteToAlbum(projectId: string, email: string) {
   });
 }
 
+/** A single-use invite link to send by text message or any other app. */
+export function createInviteLink(projectId: string) {
+  return api.request<{ share: AlbumShare; url: string; inviterName: string; albumName: string }>(
+    `${base}/projects/${projectId}/shares/link`,
+    { method: "POST" },
+  );
+}
+
+/** Join the album behind an invite link, as the signed-in person. */
+export function acceptInvite(inviteId: string) {
+  return api.request<{ albumId: string }>(`${base}/invites/${inviteId}`, { method: "POST" });
+}
+
 export function resendShare(projectId: string, shareId: string) {
   return api.request<{ emailSent: boolean }>(`${base}/projects/${projectId}/shares/${shareId}/resend`, {
     method: "POST",

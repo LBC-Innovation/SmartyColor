@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { Loader2, Mail, Send, Trash2, Users } from "lucide-react";
+import { Check, Copy, Link2, Loader2, Mail, MessageCircle, Send, Share2, Trash2, Users } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import * as library from "@/lib/library/client";
@@ -21,6 +21,23 @@ function formatInvitedAt(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** What the list shows for a share: their address, or a label for a link nobody has used yet. */
+function shareLabel(share: AlbumShare): string {
+  if (share.email) return share.email;
+  return share.joined ? "Joined with a link" : "Invite link";
+}
+
+function inviteMessage(inviterName: string, albumName: string, url: string): string {
+  return `${inviterName} invited you to add photos to “${albumName}” on Colorful Memories: ${url}`;
+}
+
+/** iOS wants `sms:&body=`, Android `sms:?body=`; `sms:?&body=` works on both. */
+function smsHref(body: string): string {
+  return `sms:?&body=${encodeURIComponent(body)}`;
+}
+
+type CreatedLink = { shareId: string; url: string; message: string };
+
 /** Invite people to add photos to an album, and manage who it's shared with. */
 export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChange }: Props) {
   const toast = useV2Toast();
@@ -33,6 +50,11 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
   // Removing access is immediate, so the first tap only arms the button.
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState<"sms" | "share" | null>(null);
+  // The link just made, kept on screen in case the text or share sheet didn't open.
+  const [created, setCreated] = useState<CreatedLink | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +97,59 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
     }
   }
 
+  /**
+   * Each link is single-use, so every tap makes a fresh one. The text or share sheet opens right
+   * after; if the browser won't open it without a fresh tap, the link stays on screen to send by hand.
+   */
+  async function onInviteByLink(how: "sms" | "share") {
+    if (linkBusy) return;
+    setLinkBusy(how);
+    setFormError(null);
+    const res = await library.createInviteLink(projectId);
+    setLinkBusy(null);
+    if (res.error) {
+      setFormError(res.error.message);
+      return;
+    }
+    const { share, url, inviterName, albumName } = res.data!;
+    applyShares([...(shares ?? []), share]);
+    const message = inviteMessage(inviterName, albumName, url);
+    setCreated({ shareId: share.id, url, message });
+
+    if (how === "sms") {
+      window.location.href = smsHref(message);
+      return;
+    }
+    if (canNativeShare) {
+      try {
+        await navigator.share({ title: `Join “${albumName}”`, text: message });
+      } catch {
+        // Dismissed, or the browser wanted a fresh tap: the Share button under the link works on its own.
+      }
+      return;
+    }
+    void copyLink(share.id, url, true);
+  }
+
+  async function copyLink(shareId: string, url: string, quiet = false) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(shareId);
+      setTimeout(() => setCopiedId((current) => (current === shareId ? null : current)), 2000);
+      if (quiet) toast.success({ title: "Link copied", message: "Paste it into any app to send it." });
+    } catch {
+      if (!quiet) toast.error("Copy the link from the box instead.", "Couldn't copy");
+    }
+  }
+
+  async function shareAgain(link: CreatedLink) {
+    try {
+      await navigator.share({ text: link.message });
+    } catch {
+      /* dismissed */
+    }
+  }
+
   async function onResend(share: AlbumShare) {
     setConfirmRemoveId(null);
     setBusyShareId(share.id);
@@ -94,7 +169,13 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
       return;
     }
     applyShares((shares ?? []).filter((s) => s.id !== share.id));
-    toast.success({ message: `${share.email} no longer has access. Photos they added stay in the album.` });
+    if (created?.shareId === share.id) setCreated(null);
+    toast.success({
+      message:
+        share.email || share.joined
+          ? `${share.email ?? "They"} no longer ${share.email ? "has" : "have"} access. Photos they added stay in the album.`
+          : "That invite link no longer works.",
+    });
   }
 
   return (
@@ -111,16 +192,105 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
       }
     >
       <div className="space-y-6 p-5 sm:p-6">
-        <div>
-          <p className="text-sm leading-relaxed text-v2-muted">
-            Invite someone to add their own photos to this album. They&apos;ll see everything in
-            it, can make coloring pages, and can arrange their own books. Only you can rename,
-            delete or share it.
-          </p>
+        <p className="text-sm leading-relaxed text-v2-muted">
+          Invite someone to add their own photos to this album. They&apos;ll see everything in it,
+          can make coloring pages, and can arrange their own books. Only you can rename, delete or
+          share it.
+        </p>
 
-          <form onSubmit={onInvite} className="mt-4">
+        <section aria-labelledby={`${inputId}-link`}>
+          <h3 id={`${inputId}-link`} className="v2-label">
+            Send an invite link
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={linkBusy !== null}
+              onClick={() => void onInviteByLink("sms")}
+              className="v2-btn-outline min-h-11 px-3 py-2.5"
+            >
+              {linkBusy === "sms" ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <MessageCircle className="h-4 w-4" aria-hidden />
+              )}
+              Text message
+            </button>
+            <button
+              type="button"
+              disabled={linkBusy !== null}
+              onClick={() => void onInviteByLink("share")}
+              className="v2-btn-outline min-h-11 px-3 py-2.5"
+            >
+              {linkBusy === "share" ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : canNativeShare ? (
+                <Share2 className="h-4 w-4" aria-hidden />
+              ) : (
+                <Link2 className="h-4 w-4" aria-hidden />
+              )}
+              {canNativeShare ? "Other apps" : "Copy a link"}
+            </button>
+          </div>
+
+          {created ? (
+            <div className="mt-3 rounded-xl border border-v2-primary/25 bg-v2-primary-light p-3">
+              <p className="text-xs font-semibold text-v2-ink">Your invite link</p>
+              <div className="mt-2 flex gap-2">
+                <input
+                  readOnly
+                  value={created.url}
+                  aria-label="Invite link"
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="v2-input min-w-0 flex-1 bg-white text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => void copyLink(created.shareId, created.url)}
+                  className="v2-btn-primary shrink-0 px-3 py-2"
+                  aria-label="Copy invite link"
+                >
+                  {copiedId === created.shareId ? (
+                    <Check className="h-4 w-4" aria-hidden />
+                  ) : (
+                    <Copy className="h-4 w-4" aria-hidden />
+                  )}
+                  <span className="hidden min-[400px]:inline">
+                    {copiedId === created.shareId ? "Copied" : "Copy"}
+                  </span>
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                <a
+                  href={smsHref(created.message)}
+                  className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-v2-link hover:underline sm:min-h-0"
+                >
+                  <MessageCircle className="h-4 w-4" aria-hidden />
+                  Open Messages
+                </a>
+                {canNativeShare ? (
+                  <button
+                    type="button"
+                    onClick={() => void shareAgain(created)}
+                    className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-v2-link hover:underline sm:min-h-0"
+                  >
+                    <Share2 className="h-4 w-4" aria-hidden />
+                    Share
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          <p className="mt-2 flex gap-1.5 text-xs leading-relaxed text-v2-muted">
+            <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            Each link works for one person. They&apos;ll make a free account (or sign in) to join.
+          </p>
+        </section>
+
+        <div>
+          <form onSubmit={onInvite}>
             <label className="v2-label" htmlFor={inputId}>
-              Email address
+              Or invite by email
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
@@ -195,7 +365,7 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
               <table className="w-full table-fixed text-left text-sm">
                 <thead className="bg-v2-bg-subtle text-xs font-semibold uppercase tracking-wide text-v2-muted">
                   <tr>
-                    <th scope="col" className="px-3 py-2">Email</th>
+                    <th scope="col" className="px-3 py-2">Person</th>
                     <th scope="col" className="hidden w-28 px-3 py-2 sm:table-cell">Invited</th>
                     <th scope="col" className="w-[9.5rem] px-3 py-2 text-right sm:w-[8.5rem]">
                       <span className="sr-only">Actions</span>
@@ -208,11 +378,21 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
                     return (
                       <tr key={share.id}>
                         <td className="px-3 py-2.5">
-                          <span className="block truncate font-medium text-v2-ink" title={share.email}>
-                            {share.email}
+                          <span
+                            className={
+                              share.email
+                                ? "block truncate font-medium text-v2-ink"
+                                : "flex items-center gap-1.5 truncate font-medium text-v2-ink"
+                            }
+                            title={shareLabel(share)}
+                          >
+                            {share.email ? null : <Link2 className="h-3.5 w-3.5 shrink-0 text-v2-muted" aria-hidden />}
+                            {shareLabel(share)}
                           </span>
-                          <span className="block text-xs text-v2-muted sm:hidden">
-                            {formatInvitedAt(share.invitedAt)}
+                          <span className="block text-xs text-v2-muted">
+                            {share.via === "link" && !share.joined ? "Waiting for them to join" : null}
+                            {share.via === "link" && !share.joined ? <span className="sm:hidden"> · </span> : null}
+                            <span className="sm:hidden">{formatInvitedAt(share.invitedAt)}</span>
                           </span>
                         </td>
                         <td className="hidden px-3 py-2.5 text-v2-muted sm:table-cell">
@@ -220,14 +400,25 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void onResend(share)}
-                              className="min-h-11 rounded-lg px-2 py-1.5 text-xs font-semibold text-v2-link transition hover:bg-v2-primary-light disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
-                            >
-                              Resend
-                            </button>
+                            {share.via === "email" ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void onResend(share)}
+                                className="min-h-11 rounded-lg px-2 py-1.5 text-xs font-semibold text-v2-link transition hover:bg-v2-primary-light disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
+                              >
+                                Resend
+                              </button>
+                            ) : !share.joined ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void copyLink(share.id, `${window.location.origin}/join/${share.id}`)}
+                                className="min-h-11 rounded-lg px-2 py-1.5 text-xs font-semibold text-v2-link transition hover:bg-v2-primary-light disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
+                              >
+                                {copiedId === share.id ? "Copied" : "Copy link"}
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               disabled={busy}
@@ -244,8 +435,8 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
                               }
                               aria-label={
                                 confirmRemoveId === share.id
-                                  ? `Confirm: stop sharing with ${share.email}`
-                                  : `Stop sharing with ${share.email}`
+                                  ? `Confirm: stop sharing with ${shareLabel(share)}`
+                                  : `Stop sharing with ${shareLabel(share)}`
                               }
                               title="Stop sharing"
                             >
