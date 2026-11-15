@@ -73,7 +73,7 @@ export function V2MyOrdersStudio() {
 
   return (
     <V2StudioFrame>
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
+      <main className="flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
         <div className="mx-auto w-full max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
           <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
             <div>

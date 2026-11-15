@@ -31,7 +31,8 @@ const luckiest = Luckiest_Guy({
 const APP_NAME = "Colorful Memories";
 const APP_DESCRIPTION =
   "Turn family photos into coloring pages and printed coloring books.";
-const THEME_COLOR = "#7446f0";
+// Matches the white header so the browser chrome blends into the page.
+const THEME_COLOR = "#ffffff";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -84,7 +85,7 @@ export default function RootLayout({
         <PwaShellScript />
       </head>
       <body
-        className="min-h-full bg-cream font-body text-ink"
+        className="min-h-full bg-white font-body text-ink"
         suppressHydrationWarning
       >
         <div id="pwa-splash" aria-hidden="true" suppressHydrationWarning>

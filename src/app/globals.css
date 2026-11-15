@@ -36,8 +36,13 @@ body {
   min-height: 100%;
 }
 
+/* White canvas: mobile browsers paint the status bar, notch and overscroll areas from this. */
+html {
+  background-color: #ffffff;
+}
+
 body {
-  background-color: var(--color-cream);
+  background-color: #ffffff;
   color: var(--color-ink);
   font-family: var(--font-body), "Comic Neue", ui-rounded, sans-serif;
 }

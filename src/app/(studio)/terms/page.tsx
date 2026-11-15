@@ -50,7 +50,7 @@ function Table({ rows }: { rows: Array<[string, string, string]> }) {
 
 export default function TermsPage() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-v2-bg text-v2-ink">
+    <div className="flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-bg text-v2-ink">
       <V2MarketingHeader />
       <main className="v2-gutter-x mx-auto w-full max-w-3xl py-10 sm:py-14">
         <p className="text-xs font-bold uppercase tracking-wider text-v2-primary">Terms &amp; privacy</p>

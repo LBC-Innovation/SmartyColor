@@ -260,7 +260,7 @@ export function V2ActivityStudio() {
 
   return (
     <V2StudioFrame>
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-8">
+      <main className="flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-8">
         <div className="mx-auto w-full max-w-5xl px-5 py-6 sm:px-8 sm:py-8">
           <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
