@@ -31,7 +31,12 @@ export type LibraryProjectRole = "owner" | "contributor";
 /** One invite on an album, as its owner sees it. Deliberately says nothing about the invitee's account. */
 export type AlbumShare = {
   id: string;
-  email: string;
+  /** Null for an invite link nobody has used yet (or whose joiner has no confirmed email). */
+  email: string | null;
+  /** Sent by email, or as a link by text message or another app. */
+  via: "email" | "link";
+  /** They have an account and are in the album. */
+  joined: boolean;
   invitedAt: string;
 };
 
@@ -40,7 +45,10 @@ export type AlbumInvitePreview = {
   albumId: string;
   albumName: string;
   inviterName: string;
-  email: string;
+  /** The address an email invite went to; null for an invite link. */
+  email: string | null;
+  /** An invite link someone has already joined with. */
+  used: boolean;
 };
 
 export type LibraryRevision = {
