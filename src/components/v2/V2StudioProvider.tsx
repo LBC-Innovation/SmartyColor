@@ -79,6 +79,11 @@ type V2StudioContextValue = {
   projects: V2ProjectMeta[];
   activeProjectId: string | null;
   activeProject: V2ProjectMeta | null;
+  /**
+   * True from the moment another album is picked until its photos are here. The old album's
+   * photos are already cleared, so show a loading placeholder rather than the empty state.
+   */
+  albumLoading: boolean;
   createProject: () => void;
   switchProject: (projectId: string) => void;
   renameActiveProject: (name: string) => void;
@@ -221,6 +226,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<V2ProjectMeta[]>([]);
   const projectsRef = useRef<V2ProjectMeta[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [albumLoading, setAlbumLoading] = useState(false);
   const [photos, setPhotos] = useState<V2PhotoEntry[]>([]);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -678,14 +684,18 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       switchingRef.current = true;
       persistSkipRef.current = true;
 
+      // Show the new album at once: its name, and a loading placeholder instead of the old photos.
+      const previousId = activeProjectIdRef.current;
+      const previousPhotoCount = photosRef.current.length;
+      const previousSnapshot = buildSnapshot();
+      setActiveProjectId(projectId);
+      activeProjectIdRef.current = projectId;
+      setAlbumLoading(true);
+      applySessionToState(emptyV2StudioSnapshot(), previewUrlsRef, setters);
+
       void (async () => {
         try {
-          const previousId = activeProjectIdRef.current;
-          const previousPhotoCount = photosRef.current.length;
-
           if (modeRef.current === "cloud") {
-            setActiveProjectId(projectId);
-            activeProjectIdRef.current = projectId;
             if (userIdRef.current) writeActiveProjectPref(userIdRef.current, projectId);
             try {
               await loadCloudProject(projectId, projectsRef.current);
@@ -698,13 +708,11 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          if (previousId) await saveV2ProjectSession(previousId, buildSnapshot());
+          if (previousId) await saveV2ProjectSession(previousId, previousSnapshot);
           revokeAllPreviews();
           setPendingUploads([]);
           const session = await loadV2ProjectSession(projectId);
           applySessionToState(session, previewUrlsRef, setters);
-          setActiveProjectId(projectId);
-          activeProjectIdRef.current = projectId;
           setProjects((prev) => {
             const next = prev.map((project) =>
               project.id === previousId ? { ...project, photoCount: previousPhotoCount } : project,
@@ -713,6 +721,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
             return next;
           });
         } finally {
+          setAlbumLoading(false);
           persistSkipRef.current = false;
           switchingRef.current = false;
         }
@@ -891,6 +900,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       projects,
       activeProjectId,
       activeProject,
+      albumLoading,
       createProject,
       switchProject,
       renameActiveProject,
@@ -931,6 +941,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       projects,
       activeProjectId,
       activeProject,
+      albumLoading,
       createProject,
       switchProject,
       renameActiveProject,

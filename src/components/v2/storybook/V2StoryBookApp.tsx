@@ -64,6 +64,7 @@ export function V2StoryBookApp() {
     hydrated,
     cloud,
     activeProject,
+    albumLoading,
     photos,
     photosRef,
     pendingUploads,
@@ -349,7 +350,7 @@ export function V2StoryBookApp() {
     }
   }
 
-  if (!hydrated) {
+  if (!hydrated || albumLoading) {
     return (
       <V2StudioFrame>
         <div className="flex flex-1 items-center justify-center pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">
