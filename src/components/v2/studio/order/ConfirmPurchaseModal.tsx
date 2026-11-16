@@ -483,7 +483,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     Place order
                     {order.dueCents != null
                       ? order.purchaseCode && order.dueCents === 0
-                        ? " · included with your code"
+                        ? " · nothing to pay"
                         : ` · ${formatCredits(order.dueCents)}${order.purchaseCode ? " extra" : ""}`
                       : ""}
                   </button>
@@ -618,6 +618,48 @@ function Overview({
         <p className="text-sm text-v2-muted">Delivered as a download in My orders.</p>
       )}
 
+      {order.purchaseCode ? (
+        <div className="space-y-2">
+          <div
+            className={cn(
+              "rounded-xl px-3 py-3 text-sm",
+              order.dueCents === 0 ? "bg-emerald-50 text-emerald-950" : "bg-v2-bg-subtle/70 text-v2-ink",
+            )}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="font-semibold">{order.dueCents ? "Extra to pay" : "You pay"}</p>
+              <p className="text-2xl font-bold tabular-nums">{order.dueCents != null ? formatCredits(order.dueCents) : "…"}</p>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed opacity-80">
+              {order.dueCents === 0
+                ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
+                : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your account credit.`}
+            </p>
+          </div>
+          <dl className="space-y-1 px-1 text-xs text-v2-muted">
+            <div className="flex items-baseline justify-between">
+              <dt>Book, {shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax</dt>
+              <dd className="tabular-nums">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
+            </div>
+            <div className="flex items-baseline justify-between text-v2-success-text">
+              <dt>Paid by code {order.purchaseCode.code}</dt>
+              <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
+            </div>
+            {creditApplied != null && creditApplied > 0 ? (
+              <div className="flex items-baseline justify-between">
+                <dt>From your account credit</dt>
+                <dd className="tabular-nums">−{formatCredits(creditApplied)}</dd>
+              </div>
+            ) : null}
+            {order.shortfallCents > 0 ? (
+              <div className="flex items-baseline justify-between font-semibold text-v2-ink">
+                <dt>To add by card</dt>
+                <dd className="tabular-nums">{formatCredits(order.shortfallCents)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      ) : (
       <dl className="space-y-1.5 rounded-xl bg-v2-bg-subtle/70 p-3 text-sm">
         {order.isDigital ? (
           <Line label="Print-at-home PDF" cents={order.quoteCents} />
@@ -632,21 +674,13 @@ function Overview({
           <dt className="font-semibold text-v2-ink">Total</dt>
           <dd className="text-lg font-bold tabular-nums text-v2-ink">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
         </div>
-        {order.purchaseCode && order.quoteCents != null ? (
-          <>
-            <Line label={`Included with code ${order.purchaseCode.code}`} cents={order.coveredCents} negative />
-            <div className="flex items-baseline justify-between">
-              <dt className="font-semibold text-v2-ink">{order.dueCents ? "Extra, not covered by your code" : "Left to pay"}</dt>
-              <dd className="font-semibold tabular-nums text-v2-ink">{formatCredits(order.dueCents ?? 0)}</dd>
-            </div>
-          </>
-        ) : null}
         {creditApplied != null && creditApplied > 0 ? <Line label="Your credit" cents={creditApplied} negative /> : null}
         {order.shortfallCents > 0 ? <Line label="You pay" cents={order.shortfallCents} /> : null}
         {balanceAfter != null && balanceAfter > 0 && order.shortfallCents <= 0 ? (
           <Line label="Credit left after" cents={balanceAfter} />
         ) : null}
       </dl>
+      )}
       {!order.isDigital && formatDeliveryRange(order.deliveryEstimate) ? (
         <p className="text-sm text-v2-ink">
           <span className="font-semibold">Estimated delivery:</span> {formatDeliveryRange(order.deliveryEstimate)}

@@ -59,6 +59,8 @@ type Props = {
   layout?: "grid" | "list";
   /** Each page printed on its own sheet with a blank back: the printed formats hold half as many. */
   blankBacks?: boolean;
+  /** The binding the album's purchase code pays for: shown as included, the others as extra. */
+  includedId?: BookBindingId | null;
 };
 
 type Card = {
@@ -147,7 +149,9 @@ export function BookBindingPicker({
   digitalPriceCents = null,
   layout = "grid",
   blankBacks = false,
+  includedId = null,
 }: Props) {
+  const includedPrice = includedId ? prices[includedId] : undefined;
   const CARDS = useMemo(() => formatCards(blankBacks), [blankBacks]);
   const filtering = contentPageCount > 0;
   const idBase = useId();
@@ -278,6 +282,22 @@ export function BookBindingPicker({
                         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none text-v2-primary" aria-hidden />
                         Pricing…
                       </span>
+                    ) : card.id === includedId ? (
+                      <span className="text-base font-bold text-v2-success-text">Included</span>
+                    ) : priced && includedId ? (
+                      includedPrice?.bookCents != null ? (
+                        price.bookCents! > includedPrice.bookCents ? (
+                          <span className="text-sm font-bold text-v2-ink">
+                            +{formatCredits(price.bookCents! - includedPrice.bookCents)} extra
+                          </span>
+                        ) : (
+                          <span className="text-sm font-bold text-v2-ink">No extra cost</span>
+                        )
+                      ) : (
+                        <span className="text-sm font-bold text-v2-ink">Extra cost</span>
+                      )
+                    ) : card.digital && includedId ? (
+                      <span className="text-sm font-bold text-v2-ink">Not included</span>
                     ) : priced ? (
                       <span className="text-base font-bold text-v2-ink">{formatCredits(price.bookCents!)}</span>
                     ) : card.digital && digitalPriceCents != null ? (
@@ -288,7 +308,11 @@ export function BookBindingPicker({
                 <span className="mt-0.5 block text-sm leading-snug text-v2-muted line-clamp-2">{card.blurb}</span>
                 <span id={`${idBase}-${card.id}-info`} className="mt-1 flex items-baseline justify-between gap-2 text-xs leading-snug">
                   <span className={cn("min-w-0", unavailable ? "font-semibold text-v2-navy" : "text-v2-muted")}>{facts}</span>
-                  {priced ? <span className="shrink-0 text-v2-muted">+ shipping &amp; tax</span> : null}
+                  {card.id === includedId ? (
+                    <span className="shrink-0 text-v2-success-text">Paid by your code</span>
+                  ) : priced && !includedId ? (
+                    <span className="shrink-0 text-v2-muted">+ shipping &amp; tax</span>
+                  ) : null}
                 </span>
               </span>
             </button>

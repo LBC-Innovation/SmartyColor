@@ -377,6 +377,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           digitalPriceCents={order.digitalCents}
           onChange={pickFormat}
           blankBacks={order.blankBacksChoice}
+          includedId={codeBindingId(order)}
         />
         {order.formatChosen && order.isDigital ? null : <BlankBacksOption order={order} className="mt-3 rounded-xl border border-gray-200 bg-v2-bg-subtle/60 p-3" />}
         {examplePrice ? <p className="mt-3 text-xs text-v2-muted">{examplePrice}</p> : null}
@@ -660,7 +661,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
       <div id={`${idBase}-next`} className="scroll-mt-3" aria-hidden />
       {order.signedIn ? (
         <div className="mt-4 rounded-2xl bg-v2-bg-subtle/70 p-4">
-          {order.formatChosen ? (
+          {order.formatChosen && order.purchaseCode ? (
+            <CodePriceSummary order={order} />
+          ) : order.formatChosen ? (
             <dl className="space-y-1.5 text-sm">
               {order.isDigital ? (
                 <Money label="Print-at-home PDF" cents={order.quoteCents} loading={order.quoteLoading} />
@@ -690,20 +693,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                         : "Pending"}
                 </dd>
               </div>
-              {order.purchaseCode && order.quoteCents != null && !order.quoteLoading && order.shippingChosen ? (
-                <>
-                  <div className="flex items-baseline justify-between text-v2-success-text">
-                    <dt>Included with code {order.purchaseCode.code}</dt>
-                    <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
-                  </div>
-                  <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
-                    <dt className="font-semibold text-v2-ink">
-                      {order.dueCents ? "Extra, not covered by your code" : "You pay"}
-                    </dt>
-                    <dd className="text-lg font-bold tabular-nums text-v2-ink">{formatCredits(order.dueCents ?? 0)}</dd>
-                  </div>
-                </>
-              ) : null}
             </dl>
           ) : (
             <p className="text-sm text-v2-muted">Choose a format to see your price.</p>
@@ -741,8 +730,8 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             <p className="mt-1 text-xs text-v2-muted">Delivery dates are the printer&apos;s estimate, not a guarantee.</p>
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
-          {order.purchaseCode && order.formatChosen ? <CodeBookNote order={order} /> : null}
-          {order.balanceCents != null && order.balanceCents > 0 && order.shortfallCents > 0 ? (
+
+          {order.purchaseCode ? null : order.balanceCents != null && order.balanceCents > 0 && order.shortfallCents > 0 ? (
             <p className="mt-2 text-xs text-v2-muted">
               Your credit covers <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
               You pay <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.shortfallCents)}</span>.
@@ -832,6 +821,9 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
   // Until the customer picks, nothing is selected and each speed shows its own price.
   const picked = order.shippingChosen;
   const current = picked ? (choices.find((c) => c.level === order.shippingLevel) ?? null) : null;
+  // With a purchase code, standard shipping is included and every other speed is priced as extra.
+  const includedLevel = order.purchaseCode?.bundle.shippingLevel ?? null;
+  const included = includedLevel ? (choices.find((c) => c.level === includedLevel) ?? null) : null;
   return (
     <fieldset data-shipping-speed className="scroll-mt-3">
       <legend className="text-sm font-semibold text-v2-ink">Shipping speed</legend>
@@ -874,8 +866,19 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
                     {choice.label}
                     {choice.service ? <span className="font-normal text-v2-muted"> · {choice.service}</span> : null}
                   </span>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-v2-ink">
-                    {selected
+                  <span
+                    className={cn(
+                      "shrink-0 text-sm font-semibold tabular-nums",
+                      included && choice.level === includedLevel ? "text-v2-success-text" : "text-v2-ink",
+                    )}
+                  >
+                    {included
+                      ? choice.level === includedLevel
+                        ? "Included"
+                        : choice.costCents != null && included.costCents != null
+                          ? `+${formatCredits(Math.max(0, choice.costCents - included.costCents))} extra`
+                          : "Extra cost"
+                      : selected
                       ? "Selected"
                       : !current
                         ? choice.costCents != null
@@ -923,30 +926,80 @@ export function ConfirmButton({
   );
 }
 
+/** The included binding while the PDF is picked (purchaseCode is null for the PDF). */
+function codeBindingId(order: BookOrder): BookBindingId | null {
+  return order.albumPurchaseCode?.bundle.bindingId ?? null;
+}
+
 /**
- * What the album's purchase code pays for here, and why anything is extra: a different binding,
- * more pages than included, or faster shipping than standard.
+ * The price box for an album with a purchase code. It leads with what the customer pays (nothing,
+ * when they keep to what the code includes) and shows the book's own price only as the amount
+ * the code covers. Anything extra says why: another binding, more pages, or faster shipping.
  */
-function CodeBookNote({ order }: { order: BookOrder }) {
-  const code = order.purchaseCode!;
+function CodePriceSummary({ order }: { order: BookOrder }) {
+  const code = order.purchaseCode;
+  if (!code) {
+    // The PDF isn't part of a code: it is priced and paid like any other purchase.
+    return (
+      <div className="space-y-2 text-sm">
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-amber-950">
+          Your code includes a printed {bindingName(order.albumPurchaseCode!.bundle.bindingId).toLowerCase()}, not the
+          print-at-home PDF. The PDF is an extra cost.
+        </p>
+        <dl>
+          <Money label="Print-at-home PDF (extra)" cents={order.quoteCents} loading={order.quoteLoading} />
+        </dl>
+      </div>
+    );
+  }
   const included = code.bundle;
   const reasons: string[] = [];
-  if (order.bindingId !== included.bindingId) reasons.push(`a ${bindingName(included.bindingId).toLowerCase()} is included and you picked another binding`);
+  if (order.bindingId !== included.bindingId) reasons.push(`another binding (a ${bindingName(included.bindingId).toLowerCase()} is included)`);
   if (order.contentCount > included.includedPages) {
-    reasons.push(`${order.contentCount - included.includedPages} more ${order.contentCount - included.includedPages === 1 ? "page" : "pages"} than the ${included.includedPages} included`);
+    const more = order.contentCount - included.includedPages;
+    reasons.push(`${more} more ${more === 1 ? "page" : "pages"} than the ${included.includedPages} included`);
   }
-  if (order.shippingLevel !== included.shippingLevel) reasons.push("faster shipping than the standard shipping included");
-  if (order.dueCents == null || order.quoteLoading) return null;
+  if (order.shippingLevel !== included.shippingLevel) reasons.push("faster shipping (standard is included)");
+  const ready = !order.quoteLoading && order.quoteCents != null && order.dueCents != null;
+  const due = order.dueCents ?? 0;
+
   return (
-    <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs leading-relaxed text-v2-muted">
-      {order.dueCents === 0 ? (
-        <>Your code {code.code} pays for this book, shipping included. Nothing more to pay.</>
-      ) : (
-        <>
-          <span className="font-semibold text-v2-ink">{formatCredits(order.dueCents)} is an extra cost</span> outside your code
-          {reasons.length ? <>: {reasons.join("; ")}.</> : "."} It comes from your account credit. Pick the included options to pay nothing.
-        </>
-      )}
-    </p>
+    <div className="space-y-3 text-sm">
+      <div
+        className={cn(
+          "rounded-xl px-3 py-3",
+          ready && due === 0 ? "bg-emerald-50 text-emerald-950" : "bg-white text-v2-ink",
+        )}
+        role="status"
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="font-semibold">{ready && due > 0 ? "Extra to pay" : "You pay"}</p>
+          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(due) : "…"}</p>
+        </div>
+        <p className="mt-1 text-xs leading-relaxed opacity-80">
+          {!ready
+            ? "Checking what your code covers…"
+            : due === 0
+              ? `Your code ${code.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
+              : `Your code ${code.code} pays ${formatCredits(order.coveredCents)} of it. The rest is an extra cost${
+                  reasons.length ? ` for ${reasons.join(", ")}` : ""
+                }, paid from your account credit. Choose the included options to pay nothing.`}
+        </p>
+      </div>
+      {ready ? (
+        <dl className="space-y-1 text-xs text-v2-muted">
+          <div className="flex items-baseline justify-between">
+            <dt>
+              Book, {shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax
+            </dt>
+            <dd className="tabular-nums">{formatCredits(order.quoteCents!)}</dd>
+          </div>
+          <div className="flex items-baseline justify-between text-v2-success-text">
+            <dt>Paid by code {code.code}</dt>
+            <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
+          </div>
+        </dl>
+      ) : null}
+    </div>
   );
 }

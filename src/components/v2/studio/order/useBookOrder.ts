@@ -1097,6 +1097,8 @@ export function useBookOrder({
     /** A speed is settled: picked by the customer, or the only one there is. */
     shippingChosen:
       chosenShippingLevel != null ||
+      // An album with a code starts on the standard shipping the code includes.
+      (purchaseCode != null && !isDigital) ||
       (shippingChoices.length <= 1 && printQuote != null && !printQuote.loading && printQuote.totalCents != null),
     choosePageFit: setChosenPageFit,
     formatFits,
@@ -1149,6 +1151,8 @@ export function useBookOrder({
     /** What the customer pays from their wallet: the total less what the code covers. */
     dueCents,
     purchaseCode: isDigital ? null : purchaseCode,
+    /** The album's code even while the PDF (which it doesn't pay for) is picked. */
+    albumPurchaseCode: purchaseCode,
     quoteLoading,
     quoteError: selectedQuote?.error ?? null,
     printCents: selectedQuote?.printCents ?? null,
