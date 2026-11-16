@@ -1,5 +1,6 @@
 "use client";
 
+import { orderPagesLabel } from "@/lib/orders/blankBacks";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useV2Toast } from "@/components/v2/V2Toast";
@@ -10,6 +11,7 @@ import { withNextParam } from "@/lib/auth/nextPath";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
+import { V2OrderThumb } from "@/components/v2/orders/V2OrderThumb";
 import { CancelOrderModal } from "@/components/v2/orders/CancelOrderModal";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
@@ -139,6 +141,9 @@ export function V2MyOrdersStudio() {
                     href={`/orders/${order.id}`}
                     className="block p-4 outline-none after:absolute after:inset-0 after:rounded-[inherit] after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-v2-primary sm:p-5"
                   >
+                    <div className="flex items-start gap-3 sm:gap-4">
+                    <V2OrderThumb order={order} className="w-14 sm:w-16" />
+                    <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-base font-semibold text-v2-ink">
@@ -146,7 +151,7 @@ export function V2MyOrdersStudio() {
                         </p>
                         <p className="mt-0.5 text-xs text-v2-muted">
                           {order.fulfillment === "digital" ? "Print at home · " : ""}
-                          {order.pageCount} pages · {formatMoney(order.totalCents)} ·{" "}
+                          {orderPagesLabel(order.pageCount, order.blankBacks, { lined: order.linedBacks })} · {formatMoney(order.totalCents)} ·{" "}
                           {new Date(order.createdAt).toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric",
@@ -174,6 +179,8 @@ export function V2MyOrdersStudio() {
                         )}
                       </p>
                     ) : null}
+                    </div>
+                    </div>
                   </Link>
                   {isUnpaid(order) ? (
                     <div className="border-t border-gray-100 px-4 py-3 sm:px-5">

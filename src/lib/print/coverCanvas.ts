@@ -31,9 +31,12 @@ export function clearCoverPictureCache() {
  * Decode a picture once, kept no larger than it needs to be to fill its cell
  * at print resolution, so a grid of many photos stays within memory.
  */
-function loadPicture(src: string, cell: LayoutBox): Promise<Picture> {
-  const needW = Math.ceil(cell.width * COVER_PRINT_PPI);
-  const needH = Math.ceil(cell.height * COVER_PRINT_PPI);
+function loadPicture(src: string, cell: LayoutBox, zoom: number): Promise<Picture> {
+  // Zoomed in, the photo needs more pixels; step up in doublings so dragging the zoom
+  // slider reuses one decode instead of making a new one at every step.
+  const zoomStep = 2 ** Math.ceil(Math.log2(Math.max(1, zoom)));
+  const needW = Math.ceil(cell.width * COVER_PRINT_PPI * zoomStep);
+  const needH = Math.ceil(cell.height * COVER_PRINT_PPI * zoomStep);
   const key = `${src}|${needW}x${needH}`;
   const cached = pictures.get(key);
   if (cached) return cached;
@@ -96,6 +99,8 @@ export type CoverRenderInput = {
 export type CoverRenderResult = {
   /** Lowest print resolution among the pictures used, or null when there are none. */
   lowestPpi: number | null;
+  /** Width / height of the single cover photo, or null for other layouts. */
+  photoAspect: number | null;
 };
 
 export async function drawFrontCover(
@@ -112,6 +117,12 @@ export async function drawFrontCover(
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   let lowestPpi: number | null = null;
+  let photoAspect: number | null = null;
+  const single = design.layout === "photo";
+  // The grid always fills each cell centred; only the single photo can be zoomed and moved.
+  const zoom = single ? design.photoZoom : 1;
+  const focusX = single ? design.photoX : 0.5;
+  const focusY = single ? design.photoY : 0.5;
   const sources = design.layout === "none" ? [] : input.sources;
   if (sources.length > 0) {
     const cells =
@@ -121,19 +132,20 @@ export async function drawFrontCover(
     for (const [i, cell] of cells.entries()) {
       let picture: Picture;
       try {
-        picture = await loadPicture(sources[i], cell);
+        picture = await loadPicture(sources[i], cell, zoom);
       } catch {
         continue; // Leave the background showing rather than fail the whole cover.
       }
-      // Fill the cell, cropping whichever side overflows, centred.
+      // Fill the cell (times the zoom), cropping the overflow at the chosen spot.
       const { canvas: src } = picture;
-      const scale = Math.max(cell.width / src.width, cell.height / src.height);
+      const scale = Math.max(cell.width / src.width, cell.height / src.height) * zoom;
       const sw = cell.width / scale;
       const sh = cell.height / scale;
+      if (single) photoAspect = src.width / src.height;
       ctx.drawImage(
         src,
-        (src.width - sw) / 2,
-        (src.height - sh) / 2,
+        (src.width - sw) * focusX,
+        (src.height - sh) * focusY,
         sw,
         sh,
         cell.x * pxPerIn,
@@ -141,7 +153,7 @@ export async function drawFrontCover(
         cell.width * pxPerIn,
         cell.height * pxPerIn,
       );
-      const ppi = Math.min(picture.naturalWidth / cell.width, picture.naturalHeight / cell.height);
+      const ppi = Math.min(picture.naturalWidth / cell.width, picture.naturalHeight / cell.height) / zoom;
       lowestPpi = lowestPpi == null ? ppi : Math.min(lowestPpi, ppi);
     }
 
@@ -196,7 +208,7 @@ export async function drawFrontCover(
     lines.forEach((line, i) => ctx.fillText(line, x, top + lineHeight * (i + 0.5)));
   }
 
-  return { lowestPpi };
+  return { lowestPpi, photoAspect };
 }
 
 /** The print-ready front cover: a 300 PPI JPEG, bleed included. */

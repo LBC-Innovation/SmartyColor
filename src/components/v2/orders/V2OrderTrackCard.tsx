@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronRight, ExternalLink, Truck } from "lucide-react";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
+import { V2OrderThumb } from "@/components/v2/orders/V2OrderThumb";
 import { isUnpaid, orderTitle } from "@/components/v2/orders/V2MyOrdersStudio";
 import { cn } from "@/lib/cn";
 import { formatDeliveryExpectation } from "@/lib/orders/fulfillmentTimeline";
@@ -39,9 +40,7 @@ export function V2OrderTrackCard({ order, className }: { order: BookOrderSummary
       )}
     >
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-v2-primary-light text-v2-primary" aria-hidden>
-          <Truck className="h-5 w-5" />
-        </span>
+        <V2OrderThumb order={order} className="w-12" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-base font-semibold text-v2-ink">
             <Link

@@ -73,6 +73,14 @@ export function mirrorPhoto(id: string) {
   return api.request<LibraryPhoto>(`${base}/photos/${id}/mirror`, { method: "POST" });
 }
 
+/** Copy a photo and its coloring pages into another album, or a new one named `newAlbumName`. */
+export function copyPhotoToAlbum(photoId: string, destination: { projectId: string } | { newAlbumName: string }) {
+  return api.request<{ project: LibraryProject; photoId: string }>(`${base}/photos/${photoId}/copy`, {
+    method: "POST",
+    body: JSON.stringify(destination),
+  });
+}
+
 export function deletePhotos(ids: string[]) {
   return api.request<{ deleted: string[] }>(`${base}/photos/delete`, { method: "POST", body: JSON.stringify({ ids }) });
 }

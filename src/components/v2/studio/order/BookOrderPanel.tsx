@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
 import { BookBindingPicker } from "@/components/v2/book-order/BookBindingPicker";
+import { BlankBacksOption } from "@/components/v2/studio/order/BlankBacksOption";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
+import { CoverCollageThumb } from "@/components/v2/book-order/CoverCollageThumb";
 import { BookPageFitPicker } from "@/components/v2/book-order/BookPageFitPicker";
 import { BookPrintQualityNotice } from "@/components/v2/book-order/BookPrintQualityNotice";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
@@ -25,7 +27,8 @@ import { holidayOrderBy } from "@/lib/marketing/holiday";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { GIFT_NOTE_MAX_CHARS } from "@/lib/orders/giftNote";
-import { getBookFormat, isDigitalFormat, type BookBindingId, type BookFormatId } from "@/lib/print/bookBindings";
+import { withCoverPhoto } from "@/lib/print/bookCover";
+import { isDigitalFormat, type BookBindingId, type BookFormatId } from "@/lib/print/bookBindings";
 import { bookFormatFit } from "@/lib/print/bookPagePlan";
 import type { BookWizardPhotoPage } from "@/lib/print/bookWizardTypes";
 import type { PageFit } from "@/lib/print/pageLayout";
@@ -124,6 +127,13 @@ function Money({ label, cents, loading }: { label: string; cents: number | null;
 
 type StepState = "done" | "warn" | "todo";
 
+/** "Paperback · 24 pages · blank backs": the pages the customer sees, and how they print. */
+export function formatSummary(order: BookOrder): string {
+  return `${order.binding.shortLabel} · ${order.plan.frontCount} ${order.plan.frontCount === 1 ? "page" : "pages"}${
+    order.blankBacks ? (order.linedBacks ? " · lined backs" : " · blank backs") : ""
+  }`;
+}
+
 /** The book's steps and how far each one is: the panel's progress bar and the gallery's book card. */
 export function bookSteps(order: BookOrder): { row: OrderRow; label: string; state: StepState }[] {
   const fits = order.formatFits && !order.overCapacity;
@@ -214,7 +224,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   function pickFormat(id: BookFormatId, via: "click" | "arrow") {
     order.chooseFormat(id);
     if (via !== "click") return;
-    const spec = getBookFormat(id);
+    const spec = order.formatSpec(id);
     const digital = isDigitalFormat(id);
     const fitsNext = bookFormatFit(order.contentCount, spec).fits;
     const pagesNeedLook =
@@ -352,7 +362,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         id={`${idBase}-format`}
         number={1}
         label="Format"
-        summary={order.formatChosen ? `${order.binding.shortLabel} · ${order.plan.totalPages} pages` : "Choose a format"}
+        summary={order.formatChosen ? formatSummary(order) : "Choose a format"}
         state={stateOf("format")}
         open={openRow === "format"}
         onToggle={() => toggle("format")}
@@ -365,7 +375,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           recommendedId={order.recommendedFormat}
           digitalPriceCents={order.digitalCents}
           onChange={pickFormat}
+          blankBacks={order.blankBacksChoice}
         />
+        {order.formatChosen && order.isDigital ? null : <BlankBacksOption order={order} className="mt-3 rounded-xl border border-gray-200 bg-v2-bg-subtle/60 p-3" />}
         {examplePrice ? <p className="mt-3 text-xs text-v2-muted">{examplePrice}</p> : null}
       </Row>
 
@@ -395,6 +407,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           <p>
             {order.contentCount} coloring {order.contentCount === 1 ? "page" : "pages"} in the same order as your album
             {order.giftNotePage ? ", plus your gift note on page 1" : ""}.
+            {order.blankBacks ? ` Each one prints on its own sheet with a ${order.linedBacks ? "lined" : "blank"} back.` : ""}
           </p>
           {fit.tooMany ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900" role="alert">
@@ -489,12 +502,16 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                     aria-checked={order.coverChoices.layout && order.coverDesign.layout === "grid"}
                     aria-label="All pictures"
                     className={cn(
-                      "flex aspect-square items-center justify-center rounded-lg border-2 bg-white text-v2-muted",
+                      "relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border-2 bg-white text-v2-muted",
                       order.coverChoices.layout && order.coverDesign.layout === "grid" ? "border-v2-primary" : "border-gray-200",
                     )}
                     onClick={() => order.chooseCover({ ...order.coverDesign, layout: "grid" }, { layout: true })}
                   >
-                    <LayoutGrid className="h-5 w-5" aria-hidden />
+                    {order.coverPictures.length > 0 ? (
+                      <CoverCollageThumb pictures={order.coverPictures} />
+                    ) : (
+                      <LayoutGrid className="h-5 w-5" aria-hidden />
+                    )}
                   </button>
                   {coverChoices.map((picture, i) => {
                     const on = order.coverChoices.layout && order.coverDesign.layout === "photo" && (order.coverDesign.coverPageId ?? coverChoices[0]?.pageId) === picture.pageId;
@@ -506,7 +523,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                         aria-checked={on}
                         aria-label={`Picture ${i + 1}`}
                         className={cn("relative aspect-square overflow-hidden rounded-lg border-2", on ? "border-v2-primary" : "border-gray-200")}
-                        onClick={() => order.chooseCover({ ...order.coverDesign, layout: "photo", coverPageId: picture.pageId }, { layout: true })}
+                        onClick={() => order.chooseCover(withCoverPhoto(order.coverDesign, picture.pageId), { layout: true })}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={picture.src} alt="" className="h-full w-full object-cover" />

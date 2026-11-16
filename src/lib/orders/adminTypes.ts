@@ -4,7 +4,11 @@ export type AdminUserOrderSummary = {
   id: string;
   projectTitle: string | null;
   productName: string;
+  /** Printed sides (blank backs included). */
   pageCount: number;
+  blankBacks: boolean;
+  /** With `blankBacks`, the backs are ruled for writing. */
+  linedBacks: boolean;
   status: BookOrderStatus;
   totalCents: number | null;
   createdAt: string;

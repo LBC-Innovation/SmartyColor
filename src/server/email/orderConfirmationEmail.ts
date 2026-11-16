@@ -85,7 +85,12 @@ export type OrderConfirmationInput = {
   title: string;
   /** e.g. "Paperback" */
   bindingLabel: string;
+  /** Printed sides (blank backs included). */
   pageCount: number;
+  /** Each page printed on its own sheet with a blank back. */
+  blankBacks?: boolean;
+  /** With `blankBacks`, the backs are ruled for writing. */
+  linedBacks?: boolean;
   isGift: boolean;
   /** One line per address row, already in display order. */
   shipTo: string[];
@@ -119,7 +124,7 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
     ["Order number", shortId],
     ["Book", input.title],
     ["Binding", input.bindingLabel],
-    ["Pages", String(input.pageCount)],
+    ["Pages", input.blankBacks ? `${Math.floor(input.pageCount / 2)}, each with a ${input.linedBacks ? "lined" : "blank"} back` : String(input.pageCount)],
     ["Gift", input.isGift ? "Yes" : "No"],
   ];
   const money: [string, string][] = [];

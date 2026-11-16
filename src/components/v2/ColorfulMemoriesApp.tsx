@@ -30,7 +30,7 @@ import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
 import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
 import { BookOrderCard } from "@/components/v2/studio/order/BookOrderCard";
-import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
+import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, formatSummary, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
 import { BookPromoCard, type BookProgress } from "@/components/v2/studio/order/BookPromoCard";
 import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
 import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
@@ -39,6 +39,8 @@ import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { BEST_PHOTOS, INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
 import { authedFetch } from "@/lib/api/client";
+import { copyPhotoToAlbum } from "@/lib/library/client";
+import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { GuestLimitScope } from "@/lib/guestLimit";
 import { formatCredits } from "@/lib/credits/money";
 import { freeEditsPerSheet, sheetUsageCostCents } from "@/lib/credits/pricing";
@@ -151,6 +153,7 @@ export function ColorfulMemoriesApp() {
     renameActiveProject,
     switchProject,
     refreshActiveProject,
+    upsertProject,
     photos,
     photosRef,
     pendingUploads,
@@ -572,7 +575,7 @@ export function ColorfulMemoriesApp() {
       ? {
           done: steps.filter((step) => step.state === "done").length,
           total: steps.length,
-          summary: order.formatChosen ? `${order.binding.shortLabel} · ${order.plan.totalPages} pages` : null,
+          summary: order.formatChosen ? formatSummary(order) : null,
         }
       : null;
   const bookCardOpen = desktop && bookOpen && hasBookPage;
@@ -862,7 +865,8 @@ export function ColorfulMemoriesApp() {
         </div>
       </div>
 
-      {hasBookPage && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden ? (
+      {/* Only once a coloring page is finished: a page still drawing isn't something to book yet. */}
+      {order.contentCount > 0 && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden ? (
         <BookPromoCard
           pageCount={order.contentCount}
           pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
@@ -964,6 +968,24 @@ export function ColorfulMemoriesApp() {
             closeEditor();
             deletePhoto(editorPhoto.id);
           }}
+          addToAlbum={
+            cloud && editorPhoto.remote
+              ? {
+                  albums: projects,
+                  currentAlbumId: activeProjectId,
+                  onAdd: async (destination) => {
+                    const res = await copyPhotoToAlbum(editorPhoto.remote!.photoId, destination);
+                    if (res.error) throw new Error(res.error.message);
+                    const meta = projectMetaFromLibrary(res.data!.project);
+                    upsertProject(meta);
+                    toast.success({
+                      title: "Photo added",
+                      message: `A copy is now in ${meta.name || "your new album"}${"newAlbumName" in destination ? ", your new album" : ""}.`,
+                    });
+                  },
+                }
+              : undefined
+          }
           onUndo={
             undo && undo.photoId === editorPhoto.id
               ? () => {

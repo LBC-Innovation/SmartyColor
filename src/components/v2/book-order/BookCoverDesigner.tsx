@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlignCenter, AlignLeft, AlignRight, Move, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { coverSourcesFor, type CoverPicture } from "@/components/v2/book-order/useCoverSources";
 import type { BookBindingSpec, BookBindingId } from "@/lib/print/bookBindings";
 import {
   COVER_FONTS,
   COVER_MIN_PPI,
+  COVER_PHOTO_ZOOM_MAX,
   COVER_TEXT_MAX_LENGTH,
   COVER_TEXT_SIZE_MAX_PT,
   COVER_TEXT_SIZE_MIN_PT,
+  DEFAULT_PHOTO_CROP,
+  coverPhotoSlack,
+  withCoverPhoto,
   type BookCoverDesign,
   type CoverLayout,
 } from "@/lib/print/bookCover";
@@ -87,28 +91,244 @@ function ColorField({ id, label, value, onChange }: { id: string; label: string;
   );
 }
 
+type PhotoCrop = Pick<BookCoverDesign, "photoZoom" | "photoX" | "photoY">;
+
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const cropOf = (d: BookCoverDesign): PhotoCrop => ({ photoZoom: d.photoZoom, photoX: d.photoX, photoY: d.photoY });
+
+/**
+ * Move a crop by a drag of (dx, dy), as shares of the cover's width and height,
+ * and scale its zoom. Dragging right shows more of the photo's left side.
+ */
+function moveCrop(crop: PhotoCrop, photoAspect: number, dx: number, dy: number, zoomBy = 1): PhotoCrop {
+  const photoZoom = clamp(crop.photoZoom * zoomBy, 1, COVER_PHOTO_ZOOM_MAX);
+  const slack = coverPhotoSlack(photoAspect, photoZoom);
+  return {
+    photoZoom,
+    photoX: slack.x > 1e-6 ? clamp(crop.photoX - dx / slack.x, 0, 1) : crop.photoX,
+    photoY: slack.y > 1e-6 ? clamp(crop.photoY - dy / slack.y, 0, 1) : crop.photoY,
+  };
+}
+
+/**
+ * The cover preview, with the single photo draggable (one finger or the mouse),
+ * pinch- or wheel-zoomable, and movable with the arrow keys.
+ */
+function PhotoAdjuster({
+  enabled,
+  photoAspect,
+  crop,
+  onLive,
+  onCommit,
+  children,
+}: {
+  enabled: boolean;
+  photoAspect: number | null;
+  crop: PhotoCrop;
+  /** While a drag or pinch is under way: shown, not yet saved. */
+  onLive: (crop: PhotoCrop | null) => void;
+  onCommit: (crop: PhotoCrop) => void;
+  children: React.ReactNode;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const live = useRef<PhotoCrop | null>(null);
+  const latest = useRef({ enabled, photoAspect, crop, onCommit });
+  useEffect(() => {
+    latest.current = { enabled, photoAspect, crop, onCommit };
+  });
+  const active = enabled && photoAspect != null;
+
+  // React's wheel listener is passive, so the page would scroll too; attach our own.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const onWheel = (e: WheelEvent) => {
+      const { enabled: on, photoAspect: aspect, crop: c, onCommit: commit } = latest.current;
+      if (!on || aspect == null) return;
+      e.preventDefault();
+      commit(moveCrop(c, aspect, 0, 0, Math.exp(-e.deltaY * 0.002)));
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, []);
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!active) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!live.current) live.current = crop;
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const before = pointers.current.get(e.pointerId);
+    const box = boxRef.current;
+    if (!before || !box || !live.current || photoAspect == null) return;
+    const others = [...pointers.current.entries()].filter(([id]) => id !== e.pointerId).map(([, p]) => p);
+    const after = { x: e.clientX, y: e.clientY };
+    pointers.current.set(e.pointerId, after);
+    const { width, height } = box.getBoundingClientRect();
+    let zoomBy = 1;
+    let dx = after.x - before.x;
+    let dy = after.y - before.y;
+    if (others.length === 1) {
+      // Pinch: zoom by the change in finger spread, pan by half the moving finger's travel.
+      const other = others[0];
+      const spread = (p: { x: number; y: number }) => Math.hypot(p.x - other.x, p.y - other.y);
+      if (spread(before) > 0) zoomBy = spread(after) / spread(before);
+      dx /= 2;
+      dy /= 2;
+    }
+    live.current = moveCrop(live.current, photoAspect, dx / width, dy / height, zoomBy);
+    onLive(live.current);
+  }
+
+  function onPointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pointers.current.delete(e.pointerId) || pointers.current.size > 0) return;
+    const done = live.current;
+    live.current = null;
+    if (done) onCommit(done);
+    onLive(null);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!active) return;
+    const step = 0.04;
+    const moves: Record<string, [number, number, number]> = {
+      ArrowLeft: [step, 0, 1],
+      ArrowRight: [-step, 0, 1],
+      ArrowUp: [0, step, 1],
+      ArrowDown: [0, -step, 1],
+      "+": [0, 0, 1.1],
+      "=": [0, 0, 1.1],
+      "-": [0, 0, 1 / 1.1],
+    };
+    const m = moves[e.key];
+    if (!m) return;
+    e.preventDefault();
+    onCommit(moveCrop(crop, photoAspect!, m[0], m[1], m[2]));
+  }
+
+  return (
+    <div
+      ref={boxRef}
+      className={cn(
+        "relative rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-v2-primary focus-visible:ring-offset-2",
+        active && "cursor-grab touch-none select-none active:cursor-grabbing",
+      )}
+      tabIndex={active ? 0 : undefined}
+      role={active ? "group" : undefined}
+      aria-label={active ? "Cover photo. Drag to move it, or use the arrow keys; plus and minus zoom." : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onKeyDown={onKeyDown}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Step 3 of the book wizard: build the front cover and see it exactly as it will print. */
 export function BookCoverDesigner({ design, onChange, binding, pictures, picturesLoading, canUseOriginals }: Props) {
   const [showGuides, setShowGuides] = useState(true);
   const [lowestPpi, setLowestPpi] = useState<number | null>(null);
+  const [photoAspect, setPhotoAspect] = useState<number | null>(null);
+  const [liveCrop, setLiveCrop] = useState<PhotoCrop | null>(null);
   const set = (patch: Partial<BookCoverDesign>) => onChange({ ...design, ...patch });
   const hasPictures = design.layout !== "none";
   const sources = coverSourcesFor(design, pictures);
+  const shown = liveCrop ? { ...design, ...liveCrop } : design;
+  const single = design.layout === "photo" && sources.length > 0;
+  const cropped =
+    design.photoZoom !== DEFAULT_PHOTO_CROP.photoZoom ||
+    design.photoX !== DEFAULT_PHOTO_CROP.photoX ||
+    design.photoY !== DEFAULT_PHOTO_CROP.photoY;
   const chosenId = pictures.find((p) => p.pageId === design.coverPageId)?.pageId ?? pictures[0]?.pageId;
+  // Pin the photo the crop belongs to, so it isn't reset when that photo is picked again.
+  const setCrop = (crop: PhotoCrop) => set({ ...crop, coverPageId: chosenId ?? design.coverPageId });
   const soft = hasPictures && !picturesLoading && lowestPpi != null && lowestPpi < COVER_MIN_PPI;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
       <div className="lg:sticky lg:top-0 lg:self-start">
-        <BookCoverCanvas
-          design={design}
-          sources={sources}
-          bindingId={binding.id as BookBindingId}
-          showGuides={showGuides}
-          loading={picturesLoading && hasPictures}
-          onRendered={(r) => setLowestPpi(r.lowestPpi)}
-          className="mx-auto w-full max-w-xs rounded-sm lg:max-w-none"
-        />
+        <div className="mx-auto w-full max-w-xs lg:max-w-none">
+          <PhotoAdjuster
+            enabled={single}
+            photoAspect={photoAspect}
+            crop={cropOf(design)}
+            onLive={setLiveCrop}
+            onCommit={setCrop}
+          >
+            <BookCoverCanvas
+              design={shown}
+              sources={sources}
+              bindingId={binding.id as BookBindingId}
+              showGuides={showGuides}
+              loading={picturesLoading && hasPictures}
+              onRendered={(r) => {
+                setLowestPpi(r.lowestPpi);
+                setPhotoAspect(r.photoAspect);
+              }}
+              className="w-full rounded-sm"
+            />
+          </PhotoAdjuster>
+        </div>
+        {single ? (
+          <div className="mx-auto mt-3 max-w-xs space-y-1 lg:max-w-none">
+            <p className="flex items-center justify-center gap-1.5 text-xs text-v2-muted">
+              <Move className="h-3.5 w-3.5" aria-hidden />
+              Drag the photo to choose what shows on the cover.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-primary-light disabled:opacity-40"
+                aria-label="Zoom out"
+                disabled={design.photoZoom <= 1}
+                onClick={() => photoAspect != null && setCrop(moveCrop(cropOf(design), photoAspect, 0, 0, 1 / 1.25))}
+              >
+                <ZoomOut className="h-5 w-5" aria-hidden />
+              </button>
+              <label htmlFor="cover-photo-zoom" className="sr-only">
+                Photo zoom
+              </label>
+              <input
+                id="cover-photo-zoom"
+                type="range"
+                className="min-w-0 flex-1 accent-[var(--color-v2-primary)]"
+                min={1}
+                max={COVER_PHOTO_ZOOM_MAX}
+                step={0.05}
+                value={shown.photoZoom}
+                disabled={photoAspect == null}
+                onChange={(e) =>
+                  photoAspect != null &&
+                  setCrop(moveCrop(cropOf(design), photoAspect, 0, 0, Number(e.target.value) / design.photoZoom))
+                }
+              />
+              <button
+                type="button"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-v2-navy hover:bg-v2-primary-light disabled:opacity-40"
+                aria-label="Zoom in"
+                disabled={design.photoZoom >= COVER_PHOTO_ZOOM_MAX}
+                onClick={() => photoAspect != null && setCrop(moveCrop(cropOf(design), photoAspect, 0, 0, 1.25))}
+              >
+                <ZoomIn className="h-5 w-5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-semibold text-v2-link disabled:opacity-40"
+                disabled={!cropped}
+                onClick={() => setCrop(DEFAULT_PHOTO_CROP)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                Reset
+              </button>
+            </div>
+          </div>
+        ) : null}
         <label className="mt-3 flex items-center justify-center gap-2 text-xs text-v2-muted">
           <input type="checkbox" checked={showGuides} onChange={(e) => setShowGuides(e.target.checked)} />
           Show print guides
@@ -123,7 +343,12 @@ export function BookCoverDesigner({ design, onChange, binding, pictures, picture
         {soft ? (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900" role="status">
             {design.layout === "photo" ? "This photo is" : "Some of these photos are"} small for a full-size
-            cover and may print a little soft. {design.layout === "photo" ? "A larger photo or the photo grid" : "A color overlay"}{" "}
+            cover and may print a little soft.{" "}
+            {design.layout === "photo"
+              ? design.photoZoom > 1
+                ? "Zooming out, a larger photo or the photo grid"
+                : "A larger photo or the photo grid"
+              : "A color overlay"}{" "}
             can help.
           </p>
         ) : null}
@@ -167,7 +392,7 @@ export function BookCoverDesigner({ design, onChange, binding, pictures, picture
                   role="radio"
                   aria-checked={p.pageId === chosenId}
                   aria-label={p.title || `Picture ${i + 1}`}
-                  onClick={() => set({ coverPageId: p.pageId })}
+                  onClick={() => onChange(withCoverPhoto(design, p.pageId))}
                   className={cn(
                     "h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-white",
                     p.pageId === chosenId ? "border-v2-primary" : "border-transparent hover:border-v2-primary/40",

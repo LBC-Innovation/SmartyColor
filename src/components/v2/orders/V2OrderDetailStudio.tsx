@@ -1,5 +1,6 @@
 "use client";
 
+import { orderPagesLabel } from "@/lib/orders/blankBacks";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -168,7 +169,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                     {order.projectTitle?.trim() || order.productName}
                   </h1>
                   <p className="mt-1 text-sm text-v2-muted">
-                    Order {order.id.slice(0, 8).toUpperCase()} · {order.pageCount} pages
+                    Order {order.id.slice(0, 8).toUpperCase()} · {orderPagesLabel(order.pageCount, order.blankBacks, { lined: order.linedBacks })}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

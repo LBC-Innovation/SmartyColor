@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
@@ -16,6 +17,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
 import { V2ShareAlbumModal } from "@/components/v2/V2ShareAlbumModal";
@@ -66,6 +68,7 @@ export function V2ProjectSwitcher({
     setProjectSharedCount,
   } = useV2Studio();
   const toast = useV2Toast();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditingState] = useState(false);
   const [draft, setDraft] = useState("");
@@ -107,6 +110,8 @@ export function V2ProjectSwitcher({
       setConfirmDelete(false);
       setEditing(false);
       toast.success({ title: "Album deleted", message: `“${name}” and its photos were removed.` });
+      // Back to the albums at home; guests have no home page, so they stay in the studio.
+      if (cloud) router.push(SIGNED_IN_HOME);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete the album.");
     } finally {

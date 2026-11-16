@@ -52,7 +52,9 @@ export function parsePages(input: unknown, maxPages = DIGITAL_FORMAT.maxPages): 
     if (!raw || typeof raw !== "object") return null;
     const p = raw as Record<string, unknown>;
     if (p.kind === "blank") {
-      pages.push({ kind: "blank", variant: p.variant === "lined" ? "lined" : "plain" });
+      // A blank back is empty or, when the customer asked for it, ruled for writing.
+      const variant = p.variant === "lined" ? "lined" : "plain";
+      pages.push(p.back === true ? { kind: "blank", variant, back: true } : { kind: "blank", variant });
     } else if (p.kind === "note") {
       // A gift note opens the book; there is only ever one.
       const text = normalizeGiftNote(p.text);

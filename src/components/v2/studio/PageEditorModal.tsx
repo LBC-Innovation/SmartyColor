@@ -29,6 +29,7 @@ import {
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { V2SheetRevisionStrip } from "@/components/v2/V2SheetRevisionStrip";
 import { V2WorkingOverlay } from "@/components/v2/V2WorkingOverlay";
+import { AddToAlbumMenu, type AddToAlbumDestination, type AddToAlbumOption } from "@/components/v2/studio/AddToAlbumMenu";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { useLayerHistory } from "@/components/v2/studio/useLayerHistory";
 import { activePageVersion, pageSourceVersion, pageVersions } from "@/components/v2/studio/order/galleryBookPages";
@@ -77,6 +78,12 @@ type Props = {
   onDelete: () => void;
   /** Shown after a quick fix: goes back to the version before it. */
   onUndo?: () => void;
+  /** "Add this photo to" an album; left out when the photo can't be copied (guests, still uploading). */
+  addToAlbum?: {
+    albums: AddToAlbumOption[];
+    currentAlbumId: string | null;
+    onAdd: (destination: AddToAlbumDestination) => Promise<void>;
+  };
 };
 
 /** One row in the tools panel: an icon tile, what it does, and (on the right) what it costs. */
@@ -278,33 +285,46 @@ export function PageEditorModal(props: Props) {
           </button>
         </header>
 
-        {hasPage ? (
+        {hasPage || props.addToAlbum ? (
           <div
             role="toolbar"
-            aria-label="Print and share"
+            aria-label="Print, share and add to album"
             className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-gray-100 bg-v2-bg-subtle/70 px-3 py-2 [scrollbar-width:none] sm:px-4 [&::-webkit-scrollbar]:hidden"
           >
-            <button type="button" className={toolbarButton} disabled={busy || props.pdfBusy != null} onClick={props.onPrint}>
-              {props.pdfBusy === "print" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-              ) : (
-                <Printer className="h-4 w-4" aria-hidden />
-              )}
-              Print
-            </button>
-            <button type="button" className={toolbarButton} disabled={busy || props.pdfBusy != null} onClick={props.onDownload}>
-              {props.pdfBusy === "download" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-              ) : (
-                <Download className="h-4 w-4" aria-hidden />
-              )}
-              Download
-            </button>
-            {canShare ? (
-              <button type="button" className={toolbarButton} disabled={busy} onClick={props.onShare}>
-                <Share2 className="h-4 w-4" aria-hidden />
-                Share
-              </button>
+            {hasPage ? (
+              <>
+                <button type="button" className={toolbarButton} disabled={busy || props.pdfBusy != null} onClick={props.onPrint}>
+                  {props.pdfBusy === "print" ? (
+                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+                  ) : (
+                    <Printer className="h-4 w-4" aria-hidden />
+                  )}
+                  Print
+                </button>
+                <button type="button" className={toolbarButton} disabled={busy || props.pdfBusy != null} onClick={props.onDownload}>
+                  {props.pdfBusy === "download" ? (
+                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+                  ) : (
+                    <Download className="h-4 w-4" aria-hidden />
+                  )}
+                  Download
+                </button>
+                {canShare ? (
+                  <button type="button" className={toolbarButton} disabled={busy} onClick={props.onShare}>
+                    <Share2 className="h-4 w-4" aria-hidden />
+                    Share
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+            {props.addToAlbum ? (
+              <AddToAlbumMenu
+                className={toolbarButton}
+                albums={props.addToAlbum.albums}
+                currentAlbumId={props.addToAlbum.currentAlbumId}
+                disabled={busy}
+                onAdd={props.addToAlbum.onAdd}
+              />
             ) : null}
           </div>
         ) : null}

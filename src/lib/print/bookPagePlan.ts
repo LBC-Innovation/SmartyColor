@@ -1,7 +1,9 @@
 import {
+  BLANK_BACKS_DEFAULT,
   BOOK_BINDINGS,
   PRINT_BINDING_IDS,
   recommendBinding,
+  withBlankBacks,
   type BookBindingSpec,
   type BookFormatId,
 } from "@/lib/print/bookBindings";
@@ -15,6 +17,16 @@ import type {
 
 export function isAutoBlank(page: BookWizardPage): page is BookWizardBlankPage {
   return page.kind === "blank" && page.auto === true;
+}
+
+/** The empty back of a page printed on one side only. */
+export function isBlankBack(page: BookWizardPage | null | undefined): page is BookWizardBlankPage {
+  return page?.kind === "blank" && page.back === true;
+}
+
+/** Id of the blank back behind a page. Stable, so a proof that was checked stays checked. */
+export function blankBackId(pageId: string): string {
+  return `${pageId}:back`;
 }
 
 /** Pages the user chose: photos plus any blank or lined pages they inserted. */
@@ -64,17 +76,20 @@ export function bookFormatFit(count: number, binding: BookBindingSpec): BookForm
 }
 
 /** The format to suggest for `count` pages: a printed book when one fits, else the PDF. */
-export function bestFitFormat(count: number): BookFormatId {
-  const preferred = recommendBinding(count);
+export function bestFitFormat(count: number, blankBacks = BLANK_BACKS_DEFAULT): BookFormatId {
+  const preferred = recommendBinding(count, blankBacks);
+  const spec = (id: (typeof PRINT_BINDING_IDS)[number]) => withBlankBacks(BOOK_BINDINGS[id], blankBacks);
   // Nothing chosen yet: keep the usual default rather than judging an empty book.
-  if (count === 0 || bookFormatFit(count, BOOK_BINDINGS[preferred]).fits) return preferred;
-  return PRINT_BINDING_IDS.find((id) => bookFormatFit(count, BOOK_BINDINGS[id]).fits) ?? "digital";
+  if (count === 0 || bookFormatFit(count, spec(preferred)).fits) return preferred;
+  return PRINT_BINDING_IDS.find((id) => bookFormatFit(count, spec(id)).fits) ?? "digital";
 }
 
 /**
  * Lay the book out. Padding blanks sit in the page list like any other page, so
  * the user can drag them where they want; this only adds or trims them (from the
- * end) so the total satisfies the binding.
+ * end) so the total satisfies the binding. A binding with blank backs (see
+ * `withBlankBacks`) pads in its own page units, then puts an empty back after
+ * every page, so each one prints alone on the front of its own sheet.
  */
 export function computeBookPagePlan(
   pages: BookWizardPage[],
@@ -104,6 +119,14 @@ export function computeBookPagePlan(
     autoKept += 1;
   }
 
+  const frontCount = allPages.length;
+  if (binding.blankBacks) {
+    const fronts = allPages.splice(0, allPages.length);
+    for (const page of fronts) {
+      allPages.push(page, { id: blankBackId(page.id), kind: "blank", back: true });
+    }
+  }
+
   const contentPages = allPages.filter((p): p is BookWizardPhotoPage => p.kind === "photo");
   const blankPages = allPages.filter((p): p is BookWizardBlankPage => p.kind === "blank");
   return {
@@ -111,6 +134,8 @@ export function computeBookPagePlan(
     blankPages,
     allPages,
     totalPages: allPages.length,
+    frontCount,
+    blankBackCount: allPages.length - frontCount,
     photoCount: contentPages.length,
     blankCount: blankPages.length,
     paddingCount: needed,
