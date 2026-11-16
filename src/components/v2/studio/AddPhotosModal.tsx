@@ -20,6 +20,8 @@ type Props = {
   onAutoPortraitChange: (on: boolean) => void;
   pagePriceCents: number | null;
   portraitPriceCents: number | null;
+  /** Pages the album's purchase code still includes; null when it has no code. */
+  codePagesLeft?: number | null;
   onUpload: (files: File[]) => void;
   onClose: () => void;
 };
@@ -86,6 +88,7 @@ export function AddPhotosModal({
   portraitPriceCents,
   onUpload,
   onClose,
+  codePagesLeft = null,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [initial] = useState(() => screen(initialFiles ?? [], []));
@@ -134,9 +137,11 @@ export function AddPhotosModal({
   const count = files.length;
   const formats = fillCopy(STUDIO_EMPTY.formats, { size: formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES) });
   const pageCost = signedIn
-    ? pagePriceCents != null
-      ? `${formatCredits(pagePriceCents)} per page`
-      : "Uses credit"
+    ? codePagesLeft != null && codePagesLeft > 0
+      ? `${codePagesLeft} included with your code${pagePriceCents != null ? `, then ${formatCredits(pagePriceCents)} each extra` : ""}`
+      : pagePriceCents != null
+        ? `${formatCredits(pagePriceCents)} per page${codePagesLeft != null ? " extra" : ""}`
+        : "Uses credit"
     : "Free to try";
   const portraitCost = signedIn
     ? portraitPriceCents != null

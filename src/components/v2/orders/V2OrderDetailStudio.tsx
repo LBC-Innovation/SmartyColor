@@ -482,7 +482,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
         <CancelOrderModal
           orderId={order.id}
           title={order.projectTitle}
-          totalCents={order.totalCents}
+          totalCents={order.totalCents != null ? order.totalCents - order.coveredCents : null}
           deadline={order.cancelDeadline}
           onClose={() => setCancelOpen(false)}
           onCanceled={(result) => {

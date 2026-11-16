@@ -244,7 +244,7 @@ async function handleLibraryModeForUser(
   }
 
   // Don't spend on the model for a wallet that can't cover it.
-  const quote = await quoteSheetUsage(userId, kind, record.editCount);
+  const quote = await quoteSheetUsage(userId, kind, record.editCount, record.id);
   timer.mark("quote");
   if (quote.error) return Response.json({ error: quote.error.message }, { status: 500 });
   if (!quote.data.affordable) {
@@ -316,12 +316,13 @@ async function handleLibraryModeForUser(
   const charge = await chargeSheetUsage(userId, record.id, kind);
   timer.mark("charge");
   let chargedCents = 0;
+  let purchaseCodeId: string | null = null;
   let creditsBalanceCents = quote.data.creditsBalanceCents;
   if (charge.error) {
     if (charge.error.code !== INSUFFICIENT_CREDITS_CODE) {
       return Response.json({ error: charge.error.message }, { status: 500 });
     }
-    const latest = await quoteSheetUsage(userId, kind, record.editCount);
+    const latest = await quoteSheetUsage(userId, kind, record.editCount, record.id);
     if (!latest.error) creditsBalanceCents = latest.data.creditsBalanceCents;
     console.warn(
       JSON.stringify({
@@ -336,6 +337,7 @@ async function handleLibraryModeForUser(
     );
   } else {
     chargedCents = charge.data.chargedCents;
+    purchaseCodeId = charge.data.purchaseCodeId;
     creditsBalanceCents = charge.data.creditsBalanceCents;
   }
   const charged = !charge.error;
@@ -345,23 +347,24 @@ async function handleLibraryModeForUser(
     stored = await addRevisionFromSheet(userId, { id: record.id, projectId: record.projectId }, sheet, meta);
     timer.mark("store");
   } catch (error) {
-    if (charged) await refundSheetUsage(userId, record.id, kind, chargedCents);
+    if (charged) await refundSheetUsage(userId, record.id, kind, chargedCents, purchaseCodeId);
     throw error;
   }
   if (stored.error) {
-    if (charged) await refundSheetUsage(userId, record.id, kind, chargedCents);
+    if (charged) await refundSheetUsage(userId, record.id, kind, chargedCents, purchaseCodeId);
     return Response.json({ error: stored.error.message }, { status: 500 });
   }
   // Charged sheets reach the history through their ledger entry; free ones have none.
   if (charged && chargedCents === 0) {
+    const how = purchaseCodeId ? "included with your code" : "free edit";
     await recordActivity({
       userId,
       category: "sheets",
       type: kind === "edit" ? "sheet_edited" : "sheet_generated",
       description:
         kind === "edit"
-          ? `Edited the coloring page for ${quoted(record.fileName, "a photo")} (free edit)`
-          : `Generated a coloring page from ${quoted(record.fileName, "a photo")}`,
+          ? `Edited the coloring page for ${quoted(record.fileName, "a photo")} (${how})`
+          : `Generated a coloring page from ${quoted(record.fileName, "a photo")}${purchaseCodeId ? " (included with your code)" : ""}`,
       referenceType: "library_photo",
       referenceId: record.id,
     });
@@ -370,5 +373,6 @@ async function handleLibraryModeForUser(
     photo: stored.data,
     chargedCents,
     creditsBalanceCents,
+    coveredByCode: Boolean(purchaseCodeId),
   });
 }

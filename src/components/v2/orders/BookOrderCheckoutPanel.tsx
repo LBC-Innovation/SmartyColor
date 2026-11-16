@@ -27,6 +27,8 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
   const [error, setError] = useState<string | null>(null);
 
   const totalCents = order.totalCents;
+  // The album's purchase code pays `coveredCents`; the wallet pays what is left.
+  const dueCents = totalCents != null ? Math.max(0, totalCents - order.coveredCents) : null;
   const holiday = holidayOrderBy();
   const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
   const balanceCents = user?.creditsBalanceCents ?? 0;
@@ -35,9 +37,9 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
     if (totalCents == null || totalCents <= 0) {
       return { shortfallCents: 0, canPlace: false };
     }
-    const shortfall = Math.max(0, totalCents - balanceCents);
+    const shortfall = Math.max(0, (dueCents ?? totalCents) - balanceCents);
     return { shortfallCents: shortfall, canPlace: shortfall === 0 };
-  }, [totalCents, balanceCents]);
+  }, [totalCents, dueCents, balanceCents]);
 
   async function handlePlaceOrder() {
     setPlacing(true);
@@ -99,6 +101,17 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
             {totalCents != null ? formatCredits(totalCents) : "—"}
           </dd>
         </div>
+        {order.coveredCents > 0 ? (
+          <div className="rounded-lg bg-v2-bg-subtle px-3 py-2 sm:col-span-2">
+            <dt className="text-xs font-semibold uppercase tracking-wider text-v2-muted">Paid by your purchase code</dt>
+            <dd className="mt-1 font-semibold tabular-nums text-v2-success-text">
+              −{formatCredits(order.coveredCents)}
+              <span className="ml-2 font-normal text-v2-muted">
+                {dueCents ? `${formatCredits(dueCents)} extra is yours to pay` : "Nothing more to pay"}
+              </span>
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       {shortfallCents > 0 ? (
@@ -137,7 +150,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
               onClick={() => void handlePlaceOrder()}
             >
               {placing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              {totalCents != null && totalCents > 0 ? `Place order · ${formatCredits(totalCents)}` : "Place order"}
+              {dueCents != null && dueCents > 0 ? `Place order · ${formatCredits(dueCents)}` : "Place order"}
             </button>
             {canPlace ? (
               <button

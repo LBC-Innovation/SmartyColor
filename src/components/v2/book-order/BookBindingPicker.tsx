@@ -25,6 +25,8 @@ export type BindingQuote = {
   /** The printer's estimated delivery window (YYYY-MM-DD), when the quote came with one. */
   deliveryMin?: string | null;
   deliveryMax?: string | null;
+  /** Part of the total the album's purchase code pays, when it has one. */
+  coveredCents?: number | null;
 };
 
 /** What one printed format costs for the book as it stands, before shipping and tax. */

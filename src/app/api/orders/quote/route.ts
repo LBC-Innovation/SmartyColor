@@ -6,6 +6,8 @@ import { defaultQuoteShippingAddress } from "@/server/lulu/costCalculation";
 import { luluShippingChoices } from "@/server/lulu/shippingOptions";
 import { DEFAULT_SHIPPING_LEVEL, isShippingLevel } from "@/lib/orders/shippingLevels";
 import { pricePrintOrder } from "@/server/pricingService";
+import { purchaseCodeBookCoverage } from "@/server/purchaseCodesService";
+import { orderProjectId } from "@/server/orderProject";
 import { lookupUsPostcode, normalizeUsPostcode } from "@/server/shipping/usPostcodeLookup";
 
 export async function POST(request: Request) {
@@ -19,6 +21,8 @@ export async function POST(request: Request) {
     shippingLevel?: string;
     /** The main quote asks for shipping speeds and delivery dates; per-format price checks don't. */
     withShipping?: boolean;
+    /** The album the book is made from: its purchase code's share is quoted too. */
+    projectId?: string;
     shippingAddress?: {
       street1?: string;
       street2?: string;
@@ -130,7 +134,8 @@ export async function POST(request: Request) {
   try {
     // The customer's price: Lulu's cost with our markup on the book, from the price catalog.
     // The printer's delivery dates come from a separate Lulu call; ask at the same time.
-    const [priced, choices] = await Promise.all([
+    const projectId = body.withShipping ? await orderProjectId(auth.user.id, body.projectId) : null;
+    const [priced, choices, coverage] = await Promise.all([
       pricePrintOrder({
         bindingId: body.bindingId,
         pageCount: body.pageCount,
@@ -144,6 +149,14 @@ export async function POST(request: Request) {
             address: shippingAddressOverride ?? defaultQuoteShippingAddress(),
           })
         : Promise.resolve(null),
+      projectId
+        ? purchaseCodeBookCoverage({
+            userId: auth.user.id,
+            projectId,
+            pageCount: body.pageCount,
+            shippingAddress: shippingAddressOverride ?? defaultQuoteShippingAddress(),
+          })
+        : Promise.resolve(null),
     ]);
     const delivery = choices?.find((c) => c.level === shippingLevel) ?? null;
     if (priced.error) throw new Error(priced.error.message);
@@ -151,6 +164,9 @@ export async function POST(request: Request) {
     return jsonResult({
       data: {
         estimatedTotalCents: price.totalCents,
+        // What the album's purchase code pays of the total (never more than it); null without one.
+        coveredCents: coverage?.data ? Math.min(coverage.data.coveredCents, price.totalCents) : null,
+        coverageError: coverage?.error ? "We couldn't price what your code covers right now." : null,
         printCents: price.printPriceCents,
         shippingCents: price.shippingCents,
         taxCents: price.taxCents,

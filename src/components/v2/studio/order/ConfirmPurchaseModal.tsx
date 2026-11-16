@@ -215,7 +215,8 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
     };
   }, [placed]);
 
-  const total = order.quoteCents;
+  // What the wallet pays: the total less what the album's purchase code covers.
+  const total = order.dueCents;
   const creditApplied = total != null && order.balanceCents != null ? Math.min(total, order.balanceCents) : null;
   const balanceAfter = total != null && order.balanceCents != null ? Math.max(0, order.balanceCents - total) : null;
 
@@ -479,7 +480,12 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     disabled={order.quoteCents == null || order.quoteLoading || !order.proofConfirmed}
                     onClick={() => void order.placeOrder()}
                   >
-                    Place order{order.quoteCents != null ? ` · ${formatCredits(order.quoteCents)}` : ""}
+                    Place order
+                    {order.dueCents != null
+                      ? order.purchaseCode && order.dueCents === 0
+                        ? " · included with your code"
+                        : ` · ${formatCredits(order.dueCents)}${order.purchaseCode ? " extra" : ""}`
+                      : ""}
                   </button>
                 )}
                 <p className="mt-1 text-center text-xs text-v2-muted">
@@ -626,6 +632,15 @@ function Overview({
           <dt className="font-semibold text-v2-ink">Total</dt>
           <dd className="text-lg font-bold tabular-nums text-v2-ink">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
         </div>
+        {order.purchaseCode && order.quoteCents != null ? (
+          <>
+            <Line label={`Included with code ${order.purchaseCode.code}`} cents={order.coveredCents} negative />
+            <div className="flex items-baseline justify-between">
+              <dt className="font-semibold text-v2-ink">{order.dueCents ? "Extra, not covered by your code" : "Left to pay"}</dt>
+              <dd className="font-semibold tabular-nums text-v2-ink">{formatCredits(order.dueCents ?? 0)}</dd>
+            </div>
+          </>
+        ) : null}
         {creditApplied != null && creditApplied > 0 ? <Line label="Your credit" cents={creditApplied} negative /> : null}
         {order.shortfallCents > 0 ? <Line label="You pay" cents={order.shortfallCents} /> : null}
         {balanceAfter != null && balanceAfter > 0 && order.shortfallCents <= 0 ? (

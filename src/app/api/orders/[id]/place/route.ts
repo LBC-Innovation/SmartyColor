@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: Params) {
   if (result.error?.code === "NOT_FOUND") {
     return jsonError(result.error.message, 404, result.error.code);
   }
-  if (result.error?.code === "INVALID_STATE") {
+  if (result.error?.code === "INVALID_STATE" || result.error?.code === "PURCHASE_CODE_INVALID") {
     return jsonError(result.error.message, 409, result.error.code);
   }
   if (result.error?.code === "INSUFFICIENT_CREDITS") {

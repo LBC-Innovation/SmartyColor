@@ -1,5 +1,6 @@
 "use client";
 
+import { bindingName } from "@/lib/purchaseCodes/types";
 import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
@@ -689,6 +690,20 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                         : "Pending"}
                 </dd>
               </div>
+              {order.purchaseCode && order.quoteCents != null && !order.quoteLoading && order.shippingChosen ? (
+                <>
+                  <div className="flex items-baseline justify-between text-v2-success-text">
+                    <dt>Included with code {order.purchaseCode.code}</dt>
+                    <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
+                    <dt className="font-semibold text-v2-ink">
+                      {order.dueCents ? "Extra, not covered by your code" : "You pay"}
+                    </dt>
+                    <dd className="text-lg font-bold tabular-nums text-v2-ink">{formatCredits(order.dueCents ?? 0)}</dd>
+                  </div>
+                </>
+              ) : null}
             </dl>
           ) : (
             <p className="text-sm text-v2-muted">Choose a format to see your price.</p>
@@ -726,12 +741,13 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             <p className="mt-1 text-xs text-v2-muted">Delivery dates are the printer&apos;s estimate, not a guarantee.</p>
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
+          {order.purchaseCode && order.formatChosen ? <CodeBookNote order={order} /> : null}
           {order.balanceCents != null && order.balanceCents > 0 && order.shortfallCents > 0 ? (
             <p className="mt-2 text-xs text-v2-muted">
               Your credit covers <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
               You pay <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.shortfallCents)}</span>.
             </p>
-          ) : order.balanceCents != null && order.shortfallCents <= 0 && order.formatChosen ? (
+          ) : order.balanceCents != null && order.shortfallCents <= 0 && order.formatChosen && order.dueCents !== 0 ? (
             <p className="mt-2 text-xs text-v2-muted">
               Paid from your credit. You have{" "}
               <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
@@ -904,5 +920,33 @@ export function ConfirmButton({
         <p className="mt-1.5 text-center text-xs text-v2-muted">You&apos;ll pay the remaining {formatCredits(order.shortfallCents)} at checkout.</p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * What the album's purchase code pays for here, and why anything is extra: a different binding,
+ * more pages than included, or faster shipping than standard.
+ */
+function CodeBookNote({ order }: { order: BookOrder }) {
+  const code = order.purchaseCode!;
+  const included = code.bundle;
+  const reasons: string[] = [];
+  if (order.bindingId !== included.bindingId) reasons.push(`a ${bindingName(included.bindingId).toLowerCase()} is included and you picked another binding`);
+  if (order.contentCount > included.includedPages) {
+    reasons.push(`${order.contentCount - included.includedPages} more ${order.contentCount - included.includedPages === 1 ? "page" : "pages"} than the ${included.includedPages} included`);
+  }
+  if (order.shippingLevel !== included.shippingLevel) reasons.push("faster shipping than the standard shipping included");
+  if (order.dueCents == null || order.quoteLoading) return null;
+  return (
+    <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs leading-relaxed text-v2-muted">
+      {order.dueCents === 0 ? (
+        <>Your code {code.code} pays for this book, shipping included. Nothing more to pay.</>
+      ) : (
+        <>
+          <span className="font-semibold text-v2-ink">{formatCredits(order.dueCents)} is an extra cost</span> outside your code
+          {reasons.length ? <>: {reasons.join("; ")}.</> : "."} It comes from your account credit. Pick the included options to pay nothing.
+        </>
+      )}
+    </p>
   );
 }

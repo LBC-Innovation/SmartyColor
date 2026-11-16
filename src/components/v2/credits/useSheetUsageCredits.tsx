@@ -35,9 +35,15 @@ type UsagePayload = {
  */
 export function useSheetUsageCredits(
   returnPath: string,
-  opts?: { handleCheckoutReturn?: boolean },
+  opts?: {
+    handleCheckoutReturn?: boolean;
+    /** The album's purchase code pays for this action, so the wallet isn't checked. */
+    covers?: (kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "id" | "editCount">) => boolean;
+    /** Called after every successful action, so what the code has left can be read again. */
+    onUsage?: () => void;
+  },
 ): {
-  canAfford: (kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "remote" | "editCount">) => boolean;
+  canAfford: (kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "id" | "remote" | "editCount">) => boolean;
   /** Call with every response; true when it was an out-of-credit refusal (modal is now open). */
   applyResponse: (status: number, payload: UsagePayload, kind: SheetUsageKind) => boolean;
   addCreditModal: ReactNode;
@@ -48,8 +54,9 @@ export function useSheetUsageCredits(
 
   useCreditCheckoutReturn({ enabled: opts?.handleCheckoutReturn !== false });
 
-  function canAfford(kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "remote" | "editCount">): boolean {
+  function canAfford(kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "id" | "remote" | "editCount">): boolean {
     if (!photo.remote || !user) return true;
+    if (opts?.covers?.(kind, photo)) return true;
     const cost = sheetUsageCostCents(prices, kind, photo.editCount ?? 0);
     // Price not loaded yet: let the server decide; it answers 402 if the wallet is short.
     if (cost == null || user.creditsBalanceCents >= cost) return true;
@@ -59,6 +66,7 @@ export function useSheetUsageCredits(
 
   function applyResponse(status: number, payload: UsagePayload, kind: SheetUsageKind): boolean {
     if (typeof payload.creditsBalanceCents === "number") setCreditsBalance(payload.creditsBalanceCents);
+    if (status >= 200 && status < 300) opts?.onUsage?.();
     if (status !== 402 || payload.code !== INSUFFICIENT_CREDITS_CODE) return false;
     setShortfall({ cents: payload.shortfallCents ?? payload.costCents ?? 0, kind });
     return true;
