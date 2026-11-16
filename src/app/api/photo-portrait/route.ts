@@ -28,6 +28,7 @@ import {
   quoteSheetUsage,
   refundSheetUsage,
 } from "@/server/sheetUsageService";
+import { withVisionRequest } from "@/server/visionAttribution";
 
 export const maxDuration = 120;
 
@@ -46,7 +47,12 @@ function readTarget(value: unknown): ReframeTarget | null {
   return value === "portrait" || value === "landscape" ? value : null;
 }
 
+/** AI costs from this request are recorded against the signed-in account, or the guest's address. */
 export async function POST(request: Request) {
+  return withVisionRequest(request, () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   try {
     const body = (await request.json()) as Body;
     const target = readTarget(body.target);

@@ -16,6 +16,7 @@ import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cartTypes";
 import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/lib/pricing/types";
 import type { FinanceCost, FinanceCostInput, FinanceReport, FinanceSettings } from "@/lib/finance/types";
+import type { GuestCall, GuestCostsReport } from "@/lib/guests/types";
 
 const TOKEN_KEY = "cm_access_token";
 const REFRESH_TOKEN_KEY = "cm_refresh_token";
@@ -651,6 +652,14 @@ export function fetchActivityReceiptUrl(activityId: string): Promise<ApiResult<{
 
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
   return request<CreditLedgerEntry[]>(`/admin/users/${userId}/credits`);
+}
+
+export function adminGuestCosts(): Promise<ApiResult<GuestCostsReport>> {
+  return request<GuestCostsReport>("/admin/guests");
+}
+
+export function adminGuestCalls(ip: string): Promise<ApiResult<GuestCall[]>> {
+  return request<GuestCall[]>(`/admin/guests?ip=${encodeURIComponent(ip)}`);
 }
 
 export function adminListUserOrders(

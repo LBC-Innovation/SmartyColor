@@ -2,6 +2,7 @@ import "server-only";
 import { getSupabaseAdmin, getSupabaseAuth } from "@/lib/supabase/service";
 import { supabaseServiceConfigured } from "@/lib/supabase/authServerConfig";
 import type { VisionErrorEvent, VisionUsageEvent } from "@/lib/visionCost/types";
+import type { VisionGuest } from "@/lib/visionCost/context";
 
 /**
  * Durable copy of vision usage/errors. The in-memory session is per server
@@ -22,9 +23,23 @@ function ready(): boolean {
 export async function persistUsageEvent(
   event: VisionUsageEvent & { imageOutputTokens?: number; textOutputTokens?: number; rateSource?: string | null },
   userId: string | null,
+  guest: VisionGuest | null = null,
 ): Promise<void> {
   if (!ready()) return;
-  const { error } = await getSupabaseAdmin().from("vision_usage_events").insert({
+  // Guest address and location (migration 0033), only for calls with no account behind them.
+  const guestColumns =
+    !userId && guest
+      ? {
+          guest_ip: guest.ip,
+          geo_country: guest.country,
+          geo_region: guest.region,
+          geo_city: guest.city,
+          geo_postal: guest.postal,
+          geo_latitude: guest.latitude,
+          geo_longitude: guest.longitude,
+        }
+      : {};
+  const row = {
     id: event.id,
     at: event.at,
     user_id: userId,
@@ -40,7 +55,12 @@ export async function persistUsageEvent(
     total_cost_usd: event.totalCostUsd,
     rate_source: event.rateSource ?? null,
     instance_id: INSTANCE_ID,
-  });
+  };
+  let { error } = await getSupabaseAdmin().from("vision_usage_events").insert({ ...row, ...guestColumns });
+  // Before migration 0033 the guest columns don't exist; keep the cost, drop the address.
+  if (error && Object.keys(guestColumns).length > 0 && /column|schema cache/i.test(error.message)) {
+    ({ error } = await getSupabaseAdmin().from("vision_usage_events").insert(row));
+  }
   if (error) console.error(JSON.stringify({ level: "warn", message: "vision usage persist failed", error: error.message }));
 }
 

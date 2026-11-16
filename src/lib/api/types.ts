@@ -43,6 +43,24 @@ export interface AdminUser {
   lifetimeSpendCents?: number;
   /** Latest account activity or sign-in, ISO; null if never. */
   lastActiveAt?: string | null;
+  /** What serving this account has cost so far. Null when the numbers couldn't be loaded. */
+  lifetimeCost?: CustomerCost | null;
+}
+
+/** AI calls and image storage for one account, in USD (AI amounts are often fractions of a cent). */
+export interface CustomerCost {
+  aiCalls: number;
+  aiUsd: number;
+  /** Library images held now (photos, versions, pages and thumbnails). */
+  storageFiles: number;
+  storageBytes: number;
+  /** Bytes held × time held, since each file was saved. */
+  storageGbMonths: number;
+  storageUsd: number;
+  /** What keeping today's files costs per month at the current rate. */
+  storageMonthlyUsd: number;
+  storageUsdPerGbMonth: number;
+  totalUsd: number;
 }
 
 /** Every grantable permission (see PERMISSION_META). */

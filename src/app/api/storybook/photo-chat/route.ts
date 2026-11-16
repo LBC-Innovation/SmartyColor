@@ -8,6 +8,7 @@ import {
   storybookStubPhotoChat,
 } from "@/lib/ai/storybookGemini";
 import type { StoryChatMessage } from "@/lib/v2/storybookTypes";
+import { withVisionRequest } from "@/server/visionAttribution";
 
 export const maxDuration = 60;
 
@@ -24,7 +25,12 @@ type Body = {
   photoId?: string;
 };
 
+/** AI costs from this request are recorded against the signed-in account, or the guest's address. */
 export async function POST(request: Request) {
+  return withVisionRequest(request, () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   try {
     const auth = await requireAuthRequest(request);
     if ("error" in auth) return auth.error;

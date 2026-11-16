@@ -26,6 +26,7 @@ import {
   PHOTO_MAX_CORRECTION_CHARS,
   type PhotoImageSizeHint,
 } from "@/lib/session/photoTypes";
+import { withVisionRequest } from "@/server/visionAttribution";
 
 export const maxDuration = 120;
 
@@ -70,7 +71,12 @@ function imageSizeHint(raw: unknown): PhotoImageSizeHint | undefined {
   return undefined;
 }
 
+/** AI costs from this request are recorded against the signed-in account, or the guest's address. */
 export async function POST(request: Request) {
+  return withVisionRequest(request, () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   try {
     const body = (await request.json()) as Body;
 

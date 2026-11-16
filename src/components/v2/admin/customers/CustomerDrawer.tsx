@@ -13,7 +13,7 @@ import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import { statusLabel } from "@/lib/orders/fulfillmentTimeline";
 import { Drawer } from "@/components/v2/admin/Drawer";
 import { DefinitionList, EmptyState, StatusPill, Switch, TabPanel, Tabs } from "@/components/v2/admin/ui";
-import { count, fullDateTime, money, ORDER_STATUS_TONE, relativeTime, shortDate, shortId } from "@/components/v2/admin/format";
+import { count, fileSize, fullDateTime, money, ORDER_STATUS_TONE, relativeTime, shortDate, shortId, usdCost } from "@/components/v2/admin/format";
 import { useUrlParam } from "@/components/v2/admin/useUrlParam";
 import { CustomerWalletTab } from "@/components/v2/admin/customers/CustomerWalletTab";
 import { CustomerAccountTab } from "@/components/v2/admin/customers/CustomerAccountTab";
@@ -101,6 +101,46 @@ export function CustomerDrawer({
 
 // --- Overview -----------------------------------------------------------------------------------
 
+/** What this account has cost to serve: AI calls and keeping their images. Printing is per order. */
+function CostSection({ user }: { user: AdminUser }) {
+  const cost = user.lifetimeCost;
+  if (cost === undefined) return null;
+  return (
+    <section aria-labelledby="customer-cost">
+      <h3 id="customer-cost" className="mb-1 text-sm font-semibold text-v2-ink">
+        Lifetime cost
+      </h3>
+      {cost === null ? (
+        <p className="text-sm text-v2-muted">Cost numbers aren&apos;t available right now.</p>
+      ) : (
+        <DefinitionList
+          items={[
+            {
+              label: "Total",
+              value: usdCost(cost.totalUsd),
+              note: "AI and image storage so far. Printing and shipping are counted on each order.",
+            },
+            {
+              label: "AI",
+              value: usdCost(cost.aiUsd),
+              note: cost.aiCalls
+                ? `${count(cost.aiCalls)} call${cost.aiCalls === 1 ? "" : "s"}: pages, edits, reframes and stories`
+                : "No AI calls yet",
+            },
+            {
+              label: "Image storage",
+              value: usdCost(cost.storageUsd),
+              note: cost.storageFiles
+                ? `${fileSize(cost.storageBytes)} in ${count(cost.storageFiles)} files now, about ${usdCost(cost.storageMonthlyUsd)} a month`
+                : "No saved images",
+            },
+          ]}
+        />
+      )}
+    </section>
+  );
+}
+
 function OverviewTab({ user, canManageOrders }: { user: AdminUser; canManageOrders: boolean }) {
   const [orders, setOrders] = useState<AdminUserOrderSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +178,8 @@ function OverviewTab({ user, canManageOrders }: { user: AdminUser; canManageOrde
           { label: "Wallet balance", value: money(user.creditsBalanceCents), note: "Unspent credit, applied at checkout" },
         ]}
       />
+
+      <CostSection user={user} />
 
       {canManageOrders ? (
         <section aria-labelledby="customer-orders">

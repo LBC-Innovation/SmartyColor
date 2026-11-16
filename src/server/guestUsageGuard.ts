@@ -25,7 +25,7 @@ function limitFor(kind: GuestUsageKind): number {
 }
 
 /** The visitor's address as the platform saw it. Vercel overwrites x-vercel-forwarded-for, so it can't be spoofed there. */
-function clientIp(request: Request): string {
+export function clientIp(request: Request): string {
   const h = request.headers;
   const vercel = h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
   if (vercel) return vercel;

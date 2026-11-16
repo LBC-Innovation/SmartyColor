@@ -12,6 +12,9 @@
 export const FINANCE_VIEW_PERMISSION = "finance:view";
 export const FINANCE_MANAGE_PERMISSION = "finance:manage";
 
+/** Supabase Storage past the plan's included space: $0.021 per GB-month. */
+export const DEFAULT_STORAGE_USD_PER_GB_MONTH = 0.021;
+
 export const COST_CATEGORIES = [
   { id: "hosting", label: "Hosting & infrastructure" },
   { id: "software", label: "Software & subscriptions" },
@@ -52,6 +55,8 @@ export type FinanceCostInput = Omit<FinanceCost, "id" | "updatedAt">;
 export type FinanceSettings = {
   cardFeePct: number;
   cardFeeFixedCents: number;
+  /** Image storage price per GB-month, for what each customer's photos cost to keep. */
+  storageUsdPerGbMonth: number;
   openingCashCents: number | null;
   openingCashOn: string | null;
   updatedAt: string | null;

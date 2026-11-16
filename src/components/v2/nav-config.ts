@@ -4,6 +4,7 @@ import type { Permission } from "@/lib/auth/permissionMeta";
 import {
   BookOpen,
   ClipboardList,
+  Globe,
   Home,
   LayoutDashboard,
   LineChart,
@@ -78,6 +79,14 @@ export const v2AdminNav: V2AdminNavItem[] = [
     label: "AI usage",
     icon: Sparkles,
     href: "/admin/vision-costs",
+    permission: "costs:viewai",
+    group: "money",
+  },
+  {
+    id: "guests",
+    label: "Guests",
+    icon: Globe,
+    href: "/admin/guests",
     permission: "costs:viewai",
     group: "money",
   },
