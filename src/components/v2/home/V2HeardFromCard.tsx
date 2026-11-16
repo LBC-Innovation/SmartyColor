@@ -7,6 +7,9 @@ import { HEARD_FROM_DETAIL_MAX, HEARD_FROM_OPTIONS, type HeardFromAnswer } from 
 import { track } from "@/lib/track";
 
 const DISMISSED_KEY = "cm_heard_from_dismissed";
+/** How long the "Thanks!" note stays before it fades away on its own. */
+const THANKS_MS = 4000;
+const FADE_MS = 300;
 
 function dismissedHere(): boolean {
   try {
@@ -26,6 +29,7 @@ export function V2HeardFromCard() {
   const [detail, setDetail] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     if (dismissedHere()) return;
@@ -37,6 +41,19 @@ export function V2HeardFromCard() {
       alive = false;
     };
   }, []);
+
+  // The thanks note pops off by itself after a few seconds.
+  useEffect(() => {
+    if (!done) return;
+    const fade = window.setTimeout(() => setLeaving(true), THANKS_MS);
+    return () => window.clearTimeout(fade);
+  }, [done]);
+
+  useEffect(() => {
+    if (!leaving) return;
+    const hide = window.setTimeout(() => setShow(false), FADE_MS);
+    return () => window.clearTimeout(hide);
+  }, [leaving]);
 
   async function save(answer: HeardFromAnswer, note = "") {
     setSaving(true);
@@ -60,9 +77,22 @@ export function V2HeardFromCard() {
 
   if (done) {
     return (
-      <section className="v2-panel flex items-center gap-3 p-4" aria-live="polite">
+      <section
+        className={`v2-panel flex items-center gap-3 py-2 pl-4 pr-2 transition-opacity duration-300 ${
+          leaving ? "opacity-0" : "opacity-100"
+        }`}
+        aria-live="polite"
+      >
         <Check className="h-5 w-5 shrink-0 text-v2-primary" aria-hidden />
-        <p className="text-sm text-v2-ink">Thanks! That helps us find more families like yours.</p>
+        <p className="flex-1 text-sm text-v2-ink">Thanks! That helps us find more families like yours.</p>
+        <button
+          type="button"
+          onClick={() => setShow(false)}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-v2-muted hover:bg-gray-100"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" aria-hidden />
+        </button>
       </section>
     );
   }
