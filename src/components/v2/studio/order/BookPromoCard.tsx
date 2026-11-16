@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowRight, Printer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, Printer, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fillCopy, numberValues } from "@/lib/marketing/copy";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
@@ -20,15 +21,20 @@ type Props = {
   /** A book already under way for this album: the card offers to pick it back up. */
   progress: BookProgress | null;
   onStart: () => void;
+  /** Hides the toast; the header's book button still opens the book. */
+  onDismiss: () => void;
   className?: string;
 };
+
+/** How long the gallery shows before the book toast slides in. */
+const APPEAR_AFTER_MS = 2_500;
 
 /** A small fanned stack of the album's own pages: the book they could hold. */
 function PageStack({ pictures }: { pictures: string[] }) {
   const shown = pictures.slice(0, 3);
   const tilt = ["-rotate-6 -translate-x-3", "rotate-3 translate-x-2", "rotate-0"];
   return (
-    <div className="relative h-24 w-[4.5rem] shrink-0 sm:h-28 sm:w-20" aria-hidden>
+    <div className="relative h-20 w-[3.75rem] shrink-0" aria-hidden>
       {shown.length === 0 ? (
         <span className="absolute inset-0 rounded-md border border-gray-200 bg-white shadow-sm" />
       ) : (
@@ -56,31 +62,47 @@ function PageStack({ pictures }: { pictures: string[] }) {
 }
 
 /**
- * The way into a printed book, at the top of the gallery. Making pages and printing them at home
- * stays in the gallery; this card is the one, deliberate step into building a book, and once a
- * book is under way it shows how far along it is.
+ * The way into a printed book, as a toast that slides into the lower right corner (above the tab
+ * bar on phones) 2.5 seconds after it mounts.
+ * Making pages and printing them at home stays in the gallery; this is the one, deliberate step
+ * into building a book, and once a book is under way it shows how far along it is.
  */
-export function BookPromoCard({ pageCount, pictures, progress, onStart, className }: Props) {
+export function BookPromoCard({ pageCount, pictures, progress, onStart, onDismiss, className }: Props) {
   const numbers = useMarketingNumbers(progress == null);
   const values = numberValues(numbers);
   const priceHint = values.price && values.refPages ? fillCopy("A {refPages}-page book is about {price} shipped.", values) : null;
   const pages = `${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
+  // Give them a moment with their pages before suggesting a book.
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(true), APPEAR_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!shown) return null;
 
   return (
     <section
       aria-label={progress ? "Your book in progress" : "Make a book"}
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-v2-primary/20 bg-gradient-to-br from-v2-primary-light via-white to-white p-4 sm:p-5",
+        "v2-toast-in group fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] z-30 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-v2-primary/20 bg-gradient-to-br from-v2-primary-light via-white to-white px-5 py-5 shadow-xl sm:px-6 shadow-slate-900/15 lg:right-8 lg:bottom-6 xl:right-10",
         className,
       )}
     >
-      <div className="flex items-center gap-4 sm:gap-5">
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="v2-hit absolute top-3 right-3 rounded-lg p-1 text-v2-muted transition hover:bg-black/5 hover:text-v2-ink"
+        aria-label="Hide book suggestion"
+      >
+        <X className="h-4 w-4" aria-hidden />
+      </button>
+      <div className="flex items-center gap-5 pr-6">
         <PageStack pictures={pictures} />
         <div className="min-w-0 flex-1">
           {progress ? (
             <>
               <p className="text-xs font-semibold uppercase tracking-wider text-v2-primary">Your book is under way</p>
-              <h2 className="mt-0.5 text-base font-semibold text-v2-ink sm:text-lg">
+              <h2 className="mt-0.5 text-base font-semibold text-v2-ink">
                 {progress.summary ?? `${pages} so far`}
               </h2>
               <div className="mt-2 flex items-center gap-2">
@@ -104,21 +126,21 @@ export function BookPromoCard({ pageCount, pictures, progress, onStart, classNam
             </>
           ) : (
             <>
-              <h2 className="text-base font-semibold text-v2-ink sm:text-lg">Turn these {pages} into a real book</h2>
+              <h2 className="text-base leading-snug font-semibold text-v2-ink">Turn these {pages} into a real book</h2>
               <p className="mt-0.5 text-sm text-v2-muted">
                 Printed, bound and mailed to your door, with a cover you design.
                 {priceHint ? <span className="hidden sm:inline"> {priceHint}</span> : null}
               </p>
             </>
           )}
-          <button type="button" className="v2-btn-primary mt-3 min-h-11 px-5 text-sm" onClick={onStart}>
+          <button type="button" className="v2-btn-primary mt-3 min-h-10 px-4 text-sm" onClick={onStart}>
             {progress ? "Continue your book" : "Start my book"}
             <ArrowRight className="h-4 w-4" aria-hidden />
           </button>
         </div>
       </div>
       {progress ? null : (
-        <p className="mt-3 flex items-center gap-1.5 border-t border-v2-primary/10 pt-2.5 text-xs text-v2-muted">
+        <p className="mt-4 hidden items-center gap-1.5 border-t border-v2-primary/10 pt-3 text-xs text-v2-muted sm:flex">
           <Printer className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Just printing a few at home? Use the printer button on any page. No book needed.
         </p>
