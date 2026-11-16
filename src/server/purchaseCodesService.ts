@@ -20,6 +20,7 @@ import {
   type PurchaseCodePreview,
   type PurchaseCodeStatus,
 } from "@/lib/purchaseCodes/types";
+import { isAutomaticAlbumName } from "@/components/v2/studio/albumNames";
 import { projectAccess } from "@/server/libraryAccess";
 import { createProject } from "@/server/libraryService";
 import { pricePrintOrder } from "@/server/pricingService";
@@ -328,6 +329,26 @@ export async function getPurchaseCodePreview(raw: string, userId: string | null)
   };
 }
 
+/** An album the user owns with no photos, no code and a name the studio made up; null if none. */
+async function emptyAutomaticAlbum(userId: string): Promise<string | null> {
+  const { data: albums } = await db()
+    .from("library_projects")
+    .select("id, name")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  const candidates = (albums ?? []).filter((a) => isAutomaticAlbumName((a.name as string) ?? ""));
+  for (const album of candidates) {
+    const id = album.id as string;
+    const [photos, code] = await Promise.all([
+      db().from("library_photos").select("id", { count: "exact", head: true }).eq("project_id", id),
+      db().from("purchase_codes").select("id").eq("project_id", id).maybeSingle(),
+    ]);
+    if (photos.error || photos.count !== 0 || code.data) continue;
+    return id;
+  }
+  return null;
+}
+
 /**
  * Binds a code to an album: one the caller owns that has no code yet, or a new album named
  * `albumName`. Returns the album to open.
@@ -360,10 +381,19 @@ export async function redeemPurchaseCode(input: {
     if (taken) return { data: null, error: { message: "That album already has a code. Pick another album or start a new one.", code: "ALBUM_HAS_CODE" } };
   } else {
     const name = cleanText(input.albumName, 80) ?? `My ${row.campaign as string} book`;
-    const project = await createProject(input.userId, name);
-    if (project.error) return { data: null, error: project.error };
-    albumId = project.data!.id;
-    createdAlbum = true;
+    // A new account already has an empty "Album 1" the studio made for it: use that (renamed)
+    // rather than leave a stray empty album beside the code's one.
+    const spare = await emptyAutomaticAlbum(input.userId);
+    if (spare) {
+      const { error: renameError } = await db().from("library_projects").update({ name }).eq("id", spare);
+      if (renameError) return { data: null, error: { message: renameError.message } };
+      albumId = spare;
+    } else {
+      const project = await createProject(input.userId, name);
+      if (project.error) return { data: null, error: project.error };
+      albumId = project.data!.id;
+      createdAlbum = true;
+    }
   }
 
   const { data: claimed, error } = await db()
