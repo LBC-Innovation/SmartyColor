@@ -25,6 +25,7 @@ export function projectMetaFromLibrary(p: LibraryProject): V2ProjectMeta {
     role: p.role,
     ownerName: p.ownerName,
     sharedCount: p.sharedCount,
+    coverUrl: p.previewUrls?.[0] ?? null,
   };
 }
 

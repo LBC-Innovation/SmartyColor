@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ChevronDown,
   CircleHelp,
@@ -19,7 +19,8 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import * as api from "@/lib/api/client";
-import { v2AdminNav } from "@/components/v2/nav-config";
+import { useVisibleNav } from "@/components/v2/V2Chrome";
+import { isV2NavItemActive, v2AdminNav, v2BottomNav } from "@/components/v2/nav-config";
 import { cn } from "@/lib/cn";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
@@ -30,11 +31,96 @@ type OpenModal = "profile" | "password" | null;
 const ITEM_CLASS =
   "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle hover:text-v2-ink";
 
+/**
+ * Guests: a plain Sign in link on desktop. On phones, where the studio can hide the bottom tab
+ * bar, it's a small menu that also offers the other tabs next to Sign in.
+ */
+function GuestEntry() {
+  const pathname = usePathname();
+  const nav = useVisibleNav(v2BottomNav);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const tabs = nav.items.filter((item) => item.href && item.id !== "home" && !isV2NavItemActive(pathname, item));
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const signIn = (
+    <Link
+      href="/sign-in"
+      aria-label="Sign in"
+      className="v2-hit inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
+    >
+      <User className="h-4 w-4" aria-hidden />
+      <span className="hidden sm:inline">Sign in</span>
+    </Link>
+  );
+  if (tabs.length === 0) return signIn;
+
+  return (
+    <>
+      <div className="hidden lg:block">{signIn}</div>
+      <div ref={rootRef} className="relative lg:hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          aria-label="Menu"
+          className="v2-hit inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
+        >
+          <User className="h-4 w-4" aria-hidden />
+          <span className="hidden sm:inline">Menu</span>
+          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} aria-hidden />
+        </button>
+        {open ? (
+          <div
+            id={menuId}
+            role="menu"
+            aria-label="Menu"
+            className="absolute right-0 top-full z-50 mt-1.5 w-56 overflow-hidden rounded-xl border border-gray-200 bg-v2-surface p-1 shadow-[0_12px_32px_rgb(10_16_26/0.14)]"
+          >
+            {tabs.map((tab) => (
+              <Link key={tab.id} href={tab.href!} role="menuitem" className={ITEM_CLASS} onClick={() => setOpen(false)}>
+                <tab.icon className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+                {tab.label}
+              </Link>
+            ))}
+            <hr className="my-1 border-gray-200" />
+            <Link href="/sign-in" role="menuitem" className={ITEM_CLASS} onClick={() => setOpen(false)}>
+              <User className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+              Sign in
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 /** Avatar button in the header; opens a small account dropdown. */
 export function V2UserMenu() {
   const { user, loading, signOut } = useAuth();
   const router = useRouter();
   const welcomeGuide = useV2WelcomeGuide();
+  // Phones hide the bottom tab bar while the studio's book bar shows, so Home and Story book live here too.
+  const nav = useVisibleNav(v2BottomNav);
+  const phoneTabs = nav.items.filter((item) => item.href && (item.id === "home" || item.id === "storybook"));
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<OpenModal>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -64,18 +150,7 @@ export function V2UserMenu() {
     );
   }
 
-  if (!user) {
-    return (
-      <Link
-        href="/sign-in"
-        aria-label="Sign in"
-        className="v2-hit inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-v2-link hover:bg-v2-bg-subtle"
-      >
-        <User className="h-4 w-4" aria-hidden />
-        <span className="hidden sm:inline">Sign in</span>
-      </Link>
-    );
-  }
+  if (!user) return <GuestEntry />;
 
   const name = user.displayName || user.email.split("@")[0];
   // The first admin page this account may open; no link when it may open none.
@@ -124,6 +199,18 @@ export function V2UserMenu() {
 </div>
 
           <div className="p-1">
+            {phoneTabs.map((tab) => (
+              <Link
+                key={tab.id}
+                href={tab.href!}
+                role="menuitem"
+                className={cn(ITEM_CLASS, "lg:hidden")}
+                onClick={() => setOpen(false)}
+              >
+                <tab.icon className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+                {tab.label}
+              </Link>
+            ))}
             <Link
               href="/account"
               role="menuitem"

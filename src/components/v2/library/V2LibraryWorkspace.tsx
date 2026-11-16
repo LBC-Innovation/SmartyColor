@@ -73,8 +73,6 @@ export function V2LibraryWorkspace({
   children,
 }: V2LibraryWorkspaceProps) {
   const { photos, pendingUploads, selectedId, replacePhotos, cloud } = useV2Studio();
-  /** While the project name is being edited the toolbar is given over to that. */
-  const [renamingProject, setRenamingProject] = useState(false);
   // The dock floats over the end of the list; reserve exactly its height so it never hides a photo.
   const dockRef = useRef<HTMLDivElement>(null);
   const [dockHeight, setDockHeight] = useState(0);
@@ -159,8 +157,8 @@ export function V2LibraryWorkspace({
             </>
           ) : (
             <>
-              <V2ProjectSwitcher onEditingChange={setRenamingProject} />
-              {!renamingProject && libraryPhotoCount > 0 ? (
+              <V2ProjectSwitcher />
+              {libraryPhotoCount > 0 ? (
                 <button
                   type="button"
                   onClick={openPicker}
@@ -175,7 +173,7 @@ export function V2LibraryWorkspace({
                   )}
                 </button>
               ) : null}
-              {deletion && !renamingProject && photos.length > 0 ? (
+              {deletion && photos.length > 0 ? (
                 <button
                   type="button"
                   onClick={deletion.enter}

@@ -1,7 +1,11 @@
 import { flushSync } from "react-dom";
 
 type DocumentWithViewTransitions = Document & {
-  startViewTransition?: (update: () => void) => unknown;
+  startViewTransition?: (update: () => void) => {
+    ready?: Promise<void>;
+    finished?: Promise<void>;
+    updateCallbackDone?: Promise<void>;
+  };
 };
 
 /**
@@ -22,7 +26,17 @@ export function withViewTransition(update: () => void): void {
     update();
     return;
   }
-  doc.startViewTransition(() => {
+  // A hidden tab (or a second transition) aborts the animation; the update still runs, so the
+  // rejection is expected and must not surface as an unhandled error.
+  if (document.visibilityState === "hidden") {
+    update();
+    return;
+  }
+  const transition = doc.startViewTransition(() => {
     flushSync(update);
   });
+  const ignore = () => {};
+  transition?.ready?.catch(ignore);
+  transition?.finished?.catch(ignore);
+  transition?.updateCallbackDone?.catch(ignore);
 }
