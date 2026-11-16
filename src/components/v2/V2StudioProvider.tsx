@@ -734,15 +734,34 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     [bootstrapCloud, buildSnapshot, loadCloudProject, revokeAllPreviews, setters],
   );
 
-  // Arriving at a share link after the studio has already loaded (e.g. straight from sign-in).
+  // Arriving at an album link after the studio has already loaded (straight from sign-in, or an
+  // album just made on the home page).
   useEffect(() => {
     if (!hydrated || !userId) return;
     const linked = readAlbumLink();
     if (!linked) return;
     clearAlbumLink();
     if (linked === activeProjectIdRef.current) return;
-    if (projectsRef.current.some((p) => p.id === linked)) switchProject(linked);
-    else notifyAlbumLinkMiss();
+    if (projectsRef.current.some((p) => p.id === linked)) {
+      switchProject(linked);
+      return;
+    }
+    // The list was loaded when the studio first mounted, so an album created or shared since then
+    // isn't in it yet. Ask the server before calling it unavailable.
+    // Not cancelled when this effect re-runs: the link is already cleared from the URL, so this
+    // fetch is the only thing left that will open the album.
+    void (async () => {
+      const res = await library.listProjects();
+      if (userIdRef.current !== userId) return;
+      if (res.error || !res.data!.some((p) => p.id === linked)) {
+        notifyAlbumLinkMiss();
+        return;
+      }
+      const meta = res.data!.map(projectMetaFromLibrary);
+      projectsRef.current = meta;
+      setProjects(meta);
+      switchProject(linked);
+    })();
   }, [hydrated, userId, pathname, switchProject, notifyAlbumLinkMiss]);
 
   const createProject = useCallback(() => {
