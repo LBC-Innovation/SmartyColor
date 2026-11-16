@@ -182,6 +182,7 @@ function photoLineArtStyleRules() {
 - ONE clean stroke per edge. No sketchy, feathered, doubled, overlapping, wobbly, broken, or scratchy lines. No pencil or charcoal look. No texture strokes.
 - Smooth flowing curves with clean joins — no jagged pixels, stair-steps, kinks, or tiny zig-zags.
 - Even line weight: outer silhouettes medium weight; interior details a little thinner. Never hairline-thin, never bold marker.
+- Every line is solid, fully black ink — never gray, pale, or faint. The page is cleaned up for print and any line too light or thin to see clearly is erased, so small details (noses, eyelids, fingers) must be as dark as the outlines.
 - SOLID continuous lines only — no dotted, dashed, or stippled lines anywhere, and no dots used as texture.
 - NO cross-hatching, NO hatch lines, NO gray shading, NO shadow marks, NO random scribbles in blank areas.
 - Draw only the outlines a child would color between — not photo edge-detection noise, not every crease and fold. Simplify small clutter into a few clear shapes.
@@ -207,9 +208,10 @@ Clothing patterns (common mistake: dense, scratchy plaid or gingham — never do
 
 Faces and eyes (common mistake: dramatic, oversized, heavily lined eyes — never do this):
 - Keep every face true to the photo and easy to recognize, with natural, relaxed features. Do not exaggerate, beautify, glamorize, or stylize.
+- Every visible face gets eyes (unless sunglasses hide them), a nose, and a mouth — however small the face is in a wide shot. Draw small faces simpler, never with a feature left out.
 - Eyes (only where the eyes are actually visible in the photo — see Eyewear below): keep the photo's real eye size and shape — never enlarge them. A simple eye outline, a round iris, a small solid pupil dot with a little white highlight, and at most one thin lid line above.
 - NO eyeliner, NO thick or long eyelashes, NO individual lashes, NO dark or filled irises, NO anime, cartoon, doll, or makeup look.
-- Nose: one or two short soft lines (nostrils and one side) — not a heavy full outline.
+- Nose: always drawn, as one clearly visible solid black stroke: a short line for the side of the nose joined to a small curve under the tip for the nostrils, in the same black ink and weight as the mouth. Not a heavy full outline, and never faint, dotted, or left out.
 - Mouth: a simple, clean lip outline. Teeth as one smooth shape with only a few light divisions.
 - Clean skin: NO wrinkles, pores, freckles, under-eye bags, cheek creases, or shading marks. A smile line only where it is strongly visible in the photo.
 - Hands and fingers: clean, simple outlines.
@@ -254,7 +256,7 @@ ${photoLayoutPromptBlock(layout, canvas)}
 
 ${coloringSheetOutputRules(prefs, title)}
 
-Final check: faithful to the photo (nobody added, missing, or restyled); hair, faces, eyes, and clothing drawn as the line-art rules say; plain clothing stays plain and real prints keep their motif (dots stay dots); facial hair is one smooth, empty shape; eyewear matches the photo (sunglasses stay sunglasses with no eyes drawn behind them); outlines only with white interiors; canvas is the ${canvas.aspectRatio} page shape, filled edge to edge.
+Final check: faithful to the photo (nobody added, missing, or restyled); hair, faces, eyes, and clothing drawn as the line-art rules say; plain clothing stays plain and real prints keep their motif (dots stay dots); every visible face has a clear black nose and mouth (and eyes unless sunglasses hide them); facial hair is one smooth, empty shape; eyewear matches the photo (sunglasses stay sunglasses with no eyes drawn behind them); outlines only with white interiors; canvas is the ${canvas.aspectRatio} page shape, filled edge to edge.
 
 Draw the photo as empty line art a kid can color.`;
 }
