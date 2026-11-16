@@ -43,15 +43,16 @@ export async function copyPhoto(photo: Row, revisions: Row[], target: PhotoCopyT
   const db = getSupabaseAdmin();
   const { projectId, ownerId } = target;
   const newPhotoId = crypto.randomUUID();
+  const audit = { actorId: target.uploadedBy ?? ((photo.uploaded_by as string | null) ?? null), source: "copied" as const };
   const originalPath = libraryPaths.original(ownerId, projectId, newPhotoId, photo.mime_type as string);
-  await copyObject(photo.storage_path as string, originalPath);
+  await copyObject(photo.storage_path as string, originalPath, audit);
 
   const revIds = new Map(revisions.map((r) => [r.id as string, crypto.randomUUID()]));
   const revCopies = await Promise.all(
     revisions.map(async (r) => {
       const newId = revIds.get(r.id as string)!;
       const path = libraryPaths.sheet(ownerId, projectId, newPhotoId, newId, r.mime_type as string);
-      await copyObject(r.storage_path as string, path);
+      await copyObject(r.storage_path as string, path, audit);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, photo_id, user_id, storage_path, source_revision_id, ...rest } = r;
       return {

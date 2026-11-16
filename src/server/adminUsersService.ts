@@ -463,7 +463,7 @@ export async function deleteUser(id: string, adminId: string): Promise<ApiResult
   // Most rows cascade from auth.users (orders and payments are unlinked instead); files don't, so
   // purge the user's folder, which also holds their book order files.
   try {
-    await removePrefix(id);
+    await removePrefix(id, { actorId: adminId, source: "account_delete" });
   } catch (e) {
     log("warn", "Library file purge failed", { targetId: id, error: String(e) });
   }

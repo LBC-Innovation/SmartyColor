@@ -5,6 +5,7 @@ import {
   BookOpen,
   ClipboardList,
   Globe,
+  HardDrive,
   Home,
   LayoutDashboard,
   LineChart,
@@ -88,6 +89,15 @@ export const v2AdminNav: V2AdminNavItem[] = [
     icon: Globe,
     href: "/admin/guests",
     permission: "costs:viewai",
+    group: "money",
+  },
+  {
+    id: "files",
+    label: "Files & storage",
+    icon: HardDrive,
+    href: "/admin/files",
+    permission: "costs:viewai",
+    anyPermission: ["costs:viewai", "finance:view"],
     group: "money",
   },
   {

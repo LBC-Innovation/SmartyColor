@@ -17,6 +17,7 @@ import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cart
 import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/lib/pricing/types";
 import type { FinanceCost, FinanceCostInput, FinanceReport, FinanceSettings } from "@/lib/finance/types";
 import type { GuestCall, GuestCostsReport } from "@/lib/guests/types";
+import type { FilesReport } from "@/lib/files/types";
 
 const TOKEN_KEY = "cm_access_token";
 const REFRESH_TOKEN_KEY = "cm_refresh_token";
@@ -656,6 +657,11 @@ export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLe
 
 export function adminGuestCosts(): Promise<ApiResult<GuestCostsReport>> {
   return request<GuestCostsReport>("/admin/guests");
+}
+
+export function adminFilesReport(options: { days: number | "all"; thumbnails: boolean }): Promise<ApiResult<FilesReport>> {
+  const qs = new URLSearchParams({ days: String(options.days), ...(options.thumbnails ? { thumbs: "1" } : {}) });
+  return request<FilesReport>(`/admin/files?${qs}`);
 }
 
 export function adminGuestCalls(ip: string): Promise<ApiResult<GuestCall[]>> {

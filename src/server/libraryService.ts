@@ -18,7 +18,7 @@ import {
   createSignedUpload,
   getObjectBytes,
   libraryPaths,
-  objectExists,
+  objectSize,
   putObject,
   removeObjects,
   removePrefix,
@@ -27,6 +27,7 @@ import {
 import { scheduleThumbnails } from "@/server/storage/libraryThumbs";
 import { copyPhoto, revisionsByPhoto } from "@/server/photoCopy";
 import { quoted, recordActivity } from "@/server/activityService";
+import { failSignedUpload, finishSignedUpload, startSignedUpload } from "@/server/storage/fileAudit";
 import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } from "@/server/libraryAccess";
 import { mirrorImageBytes } from "@/lib/photo/mirrorImageServer";
 import { mirrorPhotoCrop, type PhotoCropRect } from "@/lib/v2/storybookTypes";
@@ -379,7 +380,11 @@ export async function deleteProject(userId: string, projectId: string): Promise<
     metadata: { photoCount: photos },
   });
   try {
-    await removePrefix(libraryPaths.project(userId, projectId));
+    await removePrefix(libraryPaths.project(userId, projectId), {
+      actorId: userId,
+      source: "album_delete",
+      photoCount: photos,
+    });
   } catch (e) {
     // Row is gone; orphaned files are harmless and can be swept later.
     console.error(JSON.stringify({ level: "warn", message: "library: file cleanup failed", projectId, error: String(e) }));
@@ -536,12 +541,13 @@ export async function createPhotoUpload(
   const found = await accessFor(userId, projectId);
   if (found.error) return found;
   const photoId = crypto.randomUUID();
+  const path = libraryPaths.original(found.data!.ownerId, projectId, photoId, mimeType);
   try {
-    const upload = await createSignedUpload(
-      libraryPaths.original(found.data!.ownerId, projectId, photoId, mimeType),
-    );
+    const upload = await createSignedUpload(path);
+    await startSignedUpload({ path, uploadId: photoId, actorId: userId });
     return { data: { ...upload, photoId }, error: null };
   } catch (e) {
+    await failSignedUpload({ path, actorId: userId, error: e });
     return err(e instanceof Error ? e.message : "Could not create upload URL");
   }
 }
@@ -556,10 +562,18 @@ export async function registerPhoto(
   if (found.error) return found;
   const access = found.data!;
   const path = libraryPaths.original(access.ownerId, projectId, input.id, input.mimeType);
+  const finish = (ok: boolean, bytes: number | null, error?: unknown) =>
+    finishSignedUpload({ uploadId: input.id, path, actorId: userId, ok, bytes, error });
+  let size: number | null;
   try {
-    if (!(await objectExists(path))) return err("Upload not found — try again.", "UPLOAD_MISSING");
+    size = await objectSize(path);
   } catch (e) {
+    await finish(false, null, e);
     return err(e instanceof Error ? e.message : "Could not verify upload");
+  }
+  if (size == null) {
+    await finish(false, null, "The file never reached storage");
+    return err("Upload not found — try again.", "UPLOAD_MISSING");
   }
 
   let position = input.position;
@@ -594,7 +608,11 @@ export async function registerPhoto(
     })
     .select("*")
     .single();
-  if (error) return err(error.message);
+  if (error) {
+    await finish(false, size, error.message);
+    return err(error.message);
+  }
+  await finish(true, size);
   const album = quoted(access.project.name as string, "an album");
   await recordActivity({
     userId,
@@ -696,7 +714,7 @@ export async function mirrorPhoto(userId: string, photoId: string): Promise<ApiR
     const source = await getObjectBytes(oldPath);
     const mirrored = await mirrorImageBytes(source.bytes, mime);
     const path = pathFor(mirrored.mime);
-    await putObject(path, mirrored.bytes, mirrored.mime);
+    await putObject(path, mirrored.bytes, mirrored.mime, { actorId: userId, source: "mirrored" });
     written.push(path);
     return { oldPath, path, mime: mirrored.mime };
   };
@@ -716,7 +734,7 @@ export async function mirrorPhoto(userId: string, photoId: string): Promise<ApiR
       );
     }
   } catch (e) {
-    await removeObjects(written).catch(() => undefined);
+    await removeObjects(written, { actorId: userId, source: "cleanup" }).catch(() => undefined);
     return err(e instanceof Error ? e.message : "Could not mirror photo");
   }
 
@@ -743,7 +761,7 @@ export async function mirrorPhoto(userId: string, photoId: string): Promise<ApiR
 
   try {
     const oldPaths = [original.oldPath, ...[...sheets.values()].map((s) => s.oldPath)];
-    await removeObjects([...oldPaths, ...oldPaths.map(libraryPaths.thumb)]);
+    await removeObjects([...oldPaths, ...oldPaths.map(libraryPaths.thumb)], { actorId: userId, source: "replaced" });
   } catch (e) {
     // Rows already point at the mirrored files; orphans are harmless.
     console.error(JSON.stringify({ level: "warn", message: "library: mirror cleanup failed", photoId, error: String(e) }));
@@ -848,7 +866,11 @@ export async function deletePhotos(userId: string, photoIds: string[]): Promise<
   for (const row of data ?? []) {
     try {
       // Files live under the album owner's folder, whoever uploaded them.
-      await removePrefix(libraryPaths.photoDir(row.user_id as string, row.project_id as string, row.id as string));
+      await removePrefix(libraryPaths.photoDir(row.user_id as string, row.project_id as string, row.id as string), {
+        actorId: userId,
+        source: "photo_delete",
+        photoCount: 1,
+      });
     } catch (e) {
       console.error(JSON.stringify({ level: "warn", message: "library: photo file cleanup failed", photoId: row.id, error: String(e) }));
     }
@@ -953,7 +975,10 @@ export async function addRevisionFromBytes(
   const revisionId = crypto.randomUUID();
   const path = libraryPaths.sheet(ownerId, photo.projectId, photo.id, revisionId, input.mime);
   try {
-    await putObject(path, input.bytes, input.mime);
+    await putObject(path, input.bytes, input.mime, {
+      actorId: userId,
+      source: input.sourceRevisionId ? "edited" : "generated",
+    });
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not store page");
   }
@@ -981,12 +1006,13 @@ export async function createRevisionUpload(
   if (found.error) return found;
   const { row, access } = found.data!;
   const revisionId = crypto.randomUUID();
+  const path = libraryPaths.sheet(access.ownerId, row.project_id as string, photoId, revisionId, mimeType);
   try {
-    const upload = await createSignedUpload(
-      libraryPaths.sheet(access.ownerId, row.project_id as string, photoId, revisionId, mimeType),
-    );
+    const upload = await createSignedUpload(path);
+    await startSignedUpload({ path, uploadId: revisionId, actorId: userId, source: "migration" });
     return { data: { ...upload, revisionId }, error: null };
   } catch (e) {
+    await failSignedUpload({ path, actorId: userId, error: e, source: "migration" });
     return err(e instanceof Error ? e.message : "Could not create upload URL");
   }
 }
@@ -1000,10 +1026,18 @@ export async function registerRevision(
   if (found.error) return found;
   const { row, access } = found.data!;
   const path = libraryPaths.sheet(access.ownerId, row.project_id as string, photoId, input.revisionId, input.mimeType);
+  const finish = (ok: boolean, bytes: number | null, error?: unknown) =>
+    finishSignedUpload({ uploadId: input.revisionId, path, actorId: userId, ok, bytes, error, source: "migration" });
+  let size: number | null;
   try {
-    if (!(await objectExists(path))) return err("Upload not found — try again.", "UPLOAD_MISSING");
+    size = await objectSize(path);
   } catch (e) {
+    await finish(false, null, e);
     return err(e instanceof Error ? e.message : "Could not verify upload");
+  }
+  if (size == null) {
+    await finish(false, null, "The file never reached storage");
+    return err("Upload not found — try again.", "UPLOAD_MISSING");
   }
   const { error } = await db().from("library_sheet_revisions").insert({
     id: input.revisionId,
@@ -1015,7 +1049,11 @@ export async function registerRevision(
     title: input.title,
     ...revisionMetaColumns(input),
   });
-  if (error) return err(error.message);
+  if (error) {
+    await finish(false, size, error.message);
+    return err(error.message);
+  }
+  await finish(true, size);
   if (input.makeActive) return updatePhoto(userId, photoId, { activeRevisionId: input.revisionId });
   return getPhoto(userId, photoId);
 }
