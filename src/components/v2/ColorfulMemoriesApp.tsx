@@ -865,7 +865,8 @@ export function ColorfulMemoriesApp() {
         </div>
       </div>
 
-      {hasBookPage && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden ? (
+      {/* Only once a coloring page is finished: a page still drawing isn't something to book yet. */}
+      {order.contentCount > 0 && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden ? (
         <BookPromoCard
           pageCount={order.contentCount}
           pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
