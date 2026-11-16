@@ -291,7 +291,7 @@ export function BookBindingPicker({
                             +{formatCredits(price.bookCents! - includedPrice.bookCents)} extra
                           </span>
                         ) : (
-                          <span className="text-sm font-bold text-v2-ink">No extra cost</span>
+                          <span className="text-sm font-bold text-v2-ink">Upgrade for no extra cost</span>
                         )
                       ) : (
                         <span className="text-sm font-bold text-v2-ink">Extra cost</span>
