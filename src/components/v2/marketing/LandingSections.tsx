@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Copy, Gift, X } from "lucide-react";
+import { ArrowRight, Check, Copy, Download, Gift, X } from "lucide-react";
 import {
   BEST_PHOTOS,
   CONTACT_EMAIL,
@@ -26,7 +26,7 @@ import {
 } from "@/content/marketing";
 import { fillCopy, type CopyValues } from "@/lib/marketing/copy";
 import { trackCta } from "@/lib/track";
-import { BOOK_BINDINGS, DIGITAL_FORMAT, type BookBindingId } from "@/lib/print/bookBindings";
+import { BINDING_PHOTOS, BOOK_BINDINGS, DIGITAL_FORMAT, type BookBindingId } from "@/lib/print/bookBindings";
 import { cn } from "@/lib/cn";
 import { BeforeAfter, ICONS, LifestyleImage, PrintedBook, SectionHeading, readyLifestyle } from "@/components/v2/marketing/landingParts";
 
@@ -249,23 +249,44 @@ export function FinishedBookSection({ values, coverTitle }: { values: CopyValues
               {PRINT_ORDER.map((id) => {
                 const b = BOOK_BINDINGS[id];
                 const pages = fillCopy(FINISHED_BOOK.pages, { min: String(b.minPages), max: String(b.maxPages) });
+                const photo = BINDING_PHOTOS[id];
                 return (
-                  <li key={id} className="px-4 py-3.5">
-                    <p className="flex flex-wrap items-baseline justify-between gap-x-3">
-                      <span className="font-semibold text-v2-ink">{b.shortLabel}</span>
-                      {pages ? <span className="text-xs font-semibold text-v2-link">{pages}</span> : null}
-                    </p>
-                    <p className="mt-0.5 text-sm text-v2-muted">{b.blurb}</p>
+                  <li key={id} className="flex items-center gap-4 px-4 py-3.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.src}
+                      width={photo.width}
+                      height={photo.height}
+                      alt={photo.alt}
+                      className="aspect-video w-24 shrink-0 rounded-lg border border-gray-200 object-cover sm:w-32"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <span className="font-semibold text-v2-ink">{b.shortLabel}</span>
+                        {pages ? <span className="text-xs font-semibold text-v2-link">{pages}</span> : null}
+                      </p>
+                      <p className="mt-0.5 text-sm text-v2-muted">{b.blurb}</p>
+                    </div>
                   </li>
                 );
               })}
-              <li className="px-4 py-3.5">
-                <p className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span className="font-semibold text-v2-ink">{DIGITAL_FORMAT.shortLabel}</span>
-                  <span className="text-xs font-semibold text-v2-link">{FINISHED_BOOK.digital.pages}</span>
-                </p>
-                <p className="mt-0.5 text-sm text-v2-muted">{FINISHED_BOOK.digital.body}</p>
-                {pdfPrice ? <p className="mt-1 text-sm font-semibold text-v2-navy">{pdfPrice}</p> : null}
+              <li className="flex items-center gap-4 px-4 py-3.5">
+                <span
+                  className="flex aspect-video w-24 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-v2-primary-light text-v2-primary sm:w-32"
+                  aria-hidden
+                >
+                  <Download className="h-6 w-6" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="font-semibold text-v2-ink">{DIGITAL_FORMAT.shortLabel}</span>
+                    <span className="text-xs font-semibold text-v2-link">{FINISHED_BOOK.digital.pages}</span>
+                  </p>
+                  <p className="mt-0.5 text-sm text-v2-muted">{FINISHED_BOOK.digital.body}</p>
+                  {pdfPrice ? <p className="mt-1 text-sm font-semibold text-v2-navy">{pdfPrice}</p> : null}
+                </div>
               </li>
             </ul>
             <p className="mt-3 text-sm text-v2-muted">{FINISHED_BOOK.sizeNote}</p>

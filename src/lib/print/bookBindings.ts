@@ -106,3 +106,25 @@ export function isDigitalFormat(id: BookFormatId): id is "digital" {
 export function getBookFormat(id: BookFormatId): BookBindingSpec {
   return id === "digital" ? DIGITAL_FORMAT : BOOK_BINDINGS[id];
 }
+
+/** A close-up photo of each printed binding, for the format pickers and the landing page. */
+export const BINDING_PHOTOS: Record<BookBindingId, { src: string; alt: string; width: number; height: number }> = {
+  perfect_bound: {
+    src: "/marketing/binding-paperback.webp",
+    alt: "Corner of a paperback book with a square glued spine",
+    width: 960,
+    height: 540,
+  },
+  saddle_stitch: {
+    src: "/marketing/binding-saddle-stitch.webp",
+    alt: "Corner of a thin stapled booklet with a folded spine",
+    width: 960,
+    height: 540,
+  },
+  coil_bound: {
+    src: "/marketing/binding-coil.webp",
+    alt: "Corner of a spiral bound book with a black plastic coil",
+    width: 960,
+    height: 540,
+  },
+};
