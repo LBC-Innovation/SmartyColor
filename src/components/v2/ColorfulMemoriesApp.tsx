@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { BookOpen, Loader2, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Download, FolderInput, Loader2, Pencil, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
@@ -22,6 +22,9 @@ import { PageEditorModal, type EditorView } from "@/components/v2/studio/PageEdi
 import { shapePlan } from "@/components/v2/studio/pageShape";
 import { useOnDemandPdf } from "@/components/v2/usePrintablePdf";
 import { StudioGallery } from "@/components/v2/studio/StudioGallery";
+import { AddPhotosModal } from "@/components/v2/studio/AddPhotosModal";
+import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedDialog";
+import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
 import { PLACEHOLDER_ALBUM_NAME } from "@/components/v2/studio/albumNames";
@@ -302,7 +305,7 @@ export function ColorfulMemoriesApp() {
 
   /** What happens to a batch once it's known whether pages are made for it. */
   function startBatch(ids: string[], draw: boolean) {
-    const landscape = autoPortrait
+    const landscape = optionsRef.current.autoPortrait
       ? ids.filter((id) => {
           const p = photosRef.current.find((e) => e.id === id);
           return p ? photoOrientation(p) === "landscape" : false;
@@ -321,7 +324,15 @@ export function ColorfulMemoriesApp() {
     void reframeThenDraw(landscape, draw);
   }
 
+  // Uploads finish long after they start; the options in force then are what counts, not the ones
+  // captured when the upload began.
+  const optionsRef = useRef({ autoOn, autoPortrait, autoPref });
+  useEffect(() => {
+    optionsRef.current = { autoOn, autoPortrait, autoPref };
+  });
+
   function onPhotosAdded(added: V2PhotoEntry[]) {
+    const { autoOn, autoPref } = optionsRef.current;
     const ids = added.map((p) => p.id);
     if (!signedIn) {
       // Guests: the first few of each batch are drawn by themselves; each photo at most once.
@@ -337,7 +348,8 @@ export function ColorfulMemoriesApp() {
   }
 
   const ingestFiles = useV2PhotoIngest({ onAdded: onPhotosAdded });
-  const fileRef = useRef<HTMLInputElement>(null);
+  // Everything that adds photos opens this modal; dropped files arrive already staged.
+  const [addPhotos, setAddPhotos] = useState<{ files: File[] } | null>(null);
 
   function chooseAuto(make: boolean) {
     setAuto(make);
@@ -479,6 +491,8 @@ export function ColorfulMemoriesApp() {
 
   // ---- deleting and selecting -----------------------------------------------------------
   const deletion = useV2LibraryDeletion();
+  const [bulk, setBulk] = useState<"move" | "download" | null>(null);
+  const selectedPhotos = photos.filter((p) => deletion.selectedIds.has(p.id));
 
   function deletePhoto(id: string) {
     queue.cancel([id]);
@@ -526,7 +540,7 @@ export function ColorfulMemoriesApp() {
     if (!e.dataTransfer.files.length) return;
     e.preventDefault();
     setDropping(false);
-    void ingestFiles(e.dataTransfer.files);
+    setAddPhotos({ files: Array.from(e.dataTransfer.files) });
   }
 
   // ---- printing ----------------------------------------------------------------------
@@ -682,20 +696,25 @@ export function ColorfulMemoriesApp() {
   const buyButton = order.signedIn && hasBookPage ? <ConfirmButton order={order} blocker={blocker} onConfirm={openConfirm} /> : undefined;
 
   return (
-    <V2StudioFrame pageScroll hideBottomNav={showBookBar}>
+    <V2StudioFrame pageScroll hideBottomNav={showBookBar || deletion.active}>
       <div className="flex w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,.heic,.heif"
-          multiple
-          className="sr-only"
-          onChange={(event) => {
-            const list = event.target.files;
-            if (list?.length) void ingestFiles(list);
-            event.target.value = "";
-          }}
-        />
+        {addPhotos ? (
+          <AddPhotosModal
+            initialFiles={addPhotos.files}
+            signedIn={signedIn}
+            autoOn={autoOn}
+            onAutoChange={setAuto}
+            autoPortrait={autoPortrait}
+            onAutoPortraitChange={setAutoPortrait}
+            pagePriceCents={pagePriceCents}
+            portraitPriceCents={portraitPriceCents}
+            onClose={() => setAddPhotos(null)}
+            onUpload={(files) => {
+              setAddPhotos(null);
+              void ingestFiles(files);
+            }}
+          />
+        ) : null}
         <V2LibraryMigrationBanner />
         <p className="sr-only" aria-live="polite" role="status">
           {liveMessage}
@@ -709,7 +728,11 @@ export function ColorfulMemoriesApp() {
             className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 ${
               bookCardOpen ? "lg:w-[58%] xl:w-[60%]" : "lg:w-full"
             } ${
-              showBookBar ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]" : "pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
+              deletion.active
+                ? "pb-[calc(9rem+env(safe-area-inset-bottom))]"
+                : showBookBar
+                  ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+                  : "pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
             }`}
             onDragOver={onDragOver}
             onDragLeave={() => setDropping(false)}
@@ -720,13 +743,11 @@ export function ColorfulMemoriesApp() {
                 pageCount={order.contentCount}
                 photoCount={photos.length}
                 uploading={uploading}
-                onAddPhotos={() => fileRef.current?.click()}
+                onAddPhotos={() => setAddPhotos({ files: [] })}
                 onSelectPhotos={deletion.enter}
                 selectDisabled={activeCount > 0}
-                autoMake={autoOn}
-                onAutoMakeChange={setAuto}
-                autoPortrait={autoPortrait}
-                onAutoPortraitChange={setAutoPortrait}
+                selecting={deletion.active}
+                onCancelSelect={deletion.exit}
                 book={
                   hasBookPage && !bookCardOpen && !deletion.active
                     ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
@@ -795,11 +816,11 @@ export function ColorfulMemoriesApp() {
                   ))}
                 </div>
               ) : photos.length + pendingUploads.length === 0 ? (
-                <V2UploadDropzone className="min-h-[18rem]" onFiles={(files) => void ingestFiles(files)}>
+                <V2UploadDropzone className="min-h-[18rem]" onFiles={(files) => setAddPhotos({ files: Array.from(files) })}>
                   <div className="flex flex-col items-center gap-3 text-center">
                     <h2 className="v2-brand-title text-xl text-v2-ink">{STUDIO_EMPTY.title}</h2>
                     <p className="text-sm text-v2-muted">{STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}</p>
-                    <button type="button" onClick={() => fileRef.current?.click()} className="v2-btn-primary v2-breathe min-h-11 w-full max-w-xs">
+                    <button type="button" onClick={() => setAddPhotos({ files: [] })} className="v2-btn-primary v2-breathe min-h-11 w-full max-w-xs">
                       {STUDIO_EMPTY.button}
                     </button>
                     <div className="w-full max-w-xs text-left">
@@ -878,23 +899,70 @@ export function ColorfulMemoriesApp() {
 
       {deletion.active ? (
         <div
-          className={`fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 lg:left-0 ${
+          role="region"
+          aria-label="Selected photos"
+          className={`fixed inset-x-0 bottom-0 z-50 bg-v2-primary px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_-8px_24px_rgb(10_16_26/0.18)] sm:pt-3 lg:left-0 ${
             bookCardOpen ? "lg:right-[42%] xl:right-[40%]" : ""
           }`}
         >
-          <div className="mx-auto flex max-w-xl items-center gap-2">
-            <button type="button" className="v2-btn-outline min-h-11 px-4 text-sm" onClick={deletion.exit}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full bg-red-600 px-4 text-sm font-semibold text-white disabled:opacity-40"
-              disabled={deletion.selectedIds.size === 0}
-              onClick={deletion.requestSelected}
-            >
-              <Trash2 className="h-4 w-4" aria-hidden />
-              Delete {deletion.selectedIds.size} {deletion.selectedIds.size === 1 ? "photo" : "photos"}
-            </button>
+          <div className="mx-auto flex max-w-2xl flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <div className="flex min-w-0 items-center gap-1 sm:flex-1 sm:gap-3">
+              <p className="min-w-0 flex-1 text-sm font-semibold tabular-nums sm:flex-none" aria-live="polite">
+                {deletion.selectedIds.size === 0 ? "Pick photos" : `${deletion.selectedIds.size} selected`}
+              </p>
+              <button
+                type="button"
+                className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-white underline-offset-2 hover:underline"
+                onClick={deletion.toggleAll}
+              >
+                {deletion.allSelected ? "Deselect all" : "Select all"}
+              </button>
+              <button
+                type="button"
+                className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-semibold text-white underline-offset-2 hover:underline sm:hidden"
+                onClick={deletion.exit}
+              >
+                Cancel
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0 sm:items-center">
+              <button
+                type="button"
+                className="hidden min-h-11 items-center rounded-full border border-white/60 px-4 text-sm font-semibold text-white transition hover:bg-white/10 sm:inline-flex"
+                onClick={deletion.exit}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletion.selectedIds.size === 0}
+                onClick={() => setBulk("move")}
+                className="inline-flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/60 px-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50 sm:min-h-11 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:text-sm"
+              >
+                <FolderInput className="h-5 w-5 sm:h-4 sm:w-4" aria-hidden />
+                <span>
+                  Move<span className="hidden sm:inline"> to album</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={deletion.selectedIds.size === 0}
+                onClick={() => setBulk("download")}
+                className="inline-flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/60 px-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50 sm:min-h-11 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:text-sm"
+              >
+                <Download className="h-5 w-5 sm:h-4 sm:w-4" aria-hidden />
+                Download
+              </button>
+              <button
+                type="button"
+                disabled={deletion.selectedIds.size === 0}
+                onClick={deletion.requestSelected}
+                className="inline-flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl bg-white px-2 text-xs font-semibold text-red-700 shadow-sm transition hover:bg-red-50 disabled:opacity-50 sm:min-h-11 sm:flex-row sm:gap-2 sm:rounded-full sm:px-4 sm:text-sm"
+              >
+                <Trash2 className="h-5 w-5 sm:h-4 sm:w-4" aria-hidden />
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       ) : showBookBar ? (
@@ -1041,11 +1109,10 @@ export function ColorfulMemoriesApp() {
             if (target) openEditor(target.id, "page");
           }}
           onAddPhoto={() => {
-            // Opened from the tap itself, so the browser allows the picker. The book updates
-            // as the new photo's page is made; the proof then asks only about what changed.
+            // The book updates as the new photo's page is made; the proof then asks only about what changed.
             setConfirm(null);
             if (!desktop) setBookOpen(false);
-            fileRef.current?.click();
+            setAddPhotos({ files: [] });
           }}
           onEditRow={(row) => {
             setConfirm(null);
@@ -1076,6 +1143,17 @@ export function ColorfulMemoriesApp() {
         <V2GuestLimitModal scope={guestLimit.scope} kind={guestLimit.kind} onClose={() => setGuestLimit(null)} />
       ) : null}
       {deletion.modal}
+      {bulk === "move" && selectedPhotos.length > 0 ? (
+        <MoveSelectedDialog photos={selectedPhotos} onClose={() => setBulk(null)} onDone={deletion.exit} />
+      ) : null}
+      {bulk === "download" && selectedPhotos.length > 0 ? (
+        <DownloadSelectedDialog
+          photos={selectedPhotos}
+          albumName={activeProject?.name ?? "album"}
+          makePagePdf={makePagePdf}
+          onClose={() => setBulk(null)}
+        />
+      ) : null}
     </V2StudioFrame>
   );
 }

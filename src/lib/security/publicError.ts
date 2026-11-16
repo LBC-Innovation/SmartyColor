@@ -69,12 +69,26 @@ export function toPublicErrorMessage(
 
   if (!sanitized) return fallback;
 
+  // JavaScript engine errors ("Maximum call stack size exceeded", "x is not a function",
+  // "Cannot read properties of undefined") are our bugs, not something a customer can act on.
+  if (
+    error instanceof RangeError ||
+    error instanceof TypeError ||
+    error instanceof ReferenceError ||
+    error instanceof SyntaxError ||
+    /maximum call stack|is not (a function|defined|iterable)|cannot read propert|cannot set propert|invalid array length|out of memory/i.test(
+      sanitized,
+    )
+  ) {
+    return fallback;
+  }
+
   const safety = friendlySafetyMessage(sanitized);
   if (safety) return safety;
 
   // Provider SDK dumps often embed request URLs / auth material even after scrubbing.
   if (
-    /generativelanguage\.googleapis|googleapis\.com\/v1|api\.openai|supabase\.co\/auth|credential|private[_-]?key/i.test(
+    /generativelanguage\.googleapis|googleapis\.com\/v1|openai\.com|supabase\.co\/auth|credential|private[_-]?key|quota|billing|no credits remaining/i.test(
       sanitized,
     )
   ) {

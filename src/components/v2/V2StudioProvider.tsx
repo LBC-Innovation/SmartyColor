@@ -87,6 +87,8 @@ type V2StudioContextValue = {
   createProject: () => void;
   switchProject: (projectId: string) => void;
   renameActiveProject: (name: string) => void;
+  /** Renames any album (not just the open one). */
+  renameProject: (projectId: string, name: string) => void;
   /**
    * Permanently removes a project and all its photos; switches to another project (or a fresh one).
    * For an album someone else shared, this leaves it instead and nothing is deleted.
@@ -801,19 +803,26 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     })();
   }, [buildSnapshot, revokeAllPreviews, setters]);
 
-  const renameActiveProject = useCallback((name: string) => {
+  const renameProject = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
-    const id = activeProjectIdRef.current;
     if (!trimmed || !id) return;
     setProjects((prev) => {
       const next = prev.map((project) =>
         project.id === id ? { ...project, name: trimmed, updatedAt: new Date().toISOString() } : project,
       );
       if (modeRef.current === "cloud") void library.updateProject(id, { name: trimmed });
-      else void saveV2ProjectsMeta({ activeProjectId: id, projects: next });
+      else void saveV2ProjectsMeta({ activeProjectId: activeProjectIdRef.current ?? id, projects: next });
       return next;
     });
   }, []);
+
+  const renameActiveProject = useCallback(
+    (name: string) => {
+      const id = activeProjectIdRef.current;
+      if (id) renameProject(id, name);
+    },
+    [renameProject],
+  );
 
   const deleteProject = useCallback(
     async (projectId: string) => {
@@ -918,6 +927,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       createProject,
       switchProject,
       renameActiveProject,
+      renameProject,
       deleteProject,
       setProjectSharedCount,
       upsertProject,
@@ -960,6 +970,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       createProject,
       switchProject,
       renameActiveProject,
+      renameProject,
       deleteProject,
       setProjectSharedCount,
       upsertProject,

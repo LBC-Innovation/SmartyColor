@@ -166,6 +166,8 @@ export type V2ProjectMeta = {
   ownerName?: string | null;
   /** How many people this user has invited to the album (owner rows). */
   sharedCount?: number;
+  /** Cloud albums: a thumbnail of the first photo, when the list was fetched with previews. */
+  coverUrl?: string | null;
 };
 
 export type V2ProjectsMeta = {
