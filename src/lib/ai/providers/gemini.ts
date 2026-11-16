@@ -10,7 +10,7 @@ import {
 } from "@/lib/ai/prompts";
 import { createImageGenerator } from "@/lib/ai/image";
 import { createPhotoHandlers } from "@/lib/ai/photoHandlers";
-import type { PhotoLayout } from "@/lib/photo/orientation";
+import { letterCanvas } from "@/lib/photo/orientation";
 import type { ColoringAI } from "@/lib/ai/types";
 import type { FeedbackPoint, FeedbackTurn, GeneratedSheet } from "@/lib/session/types";
 
@@ -59,13 +59,6 @@ const refineModel =
 
 function newId() {
   return crypto.randomUUID();
-}
-
-/** Canvas for a text-to-image sheet; only orientation and aspect ratio matter. */
-function sheetLayout(orientation: "portrait" | "landscape"): PhotoLayout {
-  return orientation === "landscape"
-    ? { orientation, aspectRatio: "4:3", width: 1600, height: 1200 }
-    : { orientation, aspectRatio: "3:4", width: 1200, height: 1600 };
 }
 
 async function toSheet(
@@ -160,7 +153,7 @@ export function createGeminiProvider(): ColoringAI {
         operation: "generateImage" as const,
         prompt,
         references: [],
-        layout: sheetLayout(session.printPrefs.orientation),
+        layout: letterCanvas(session.printPrefs.orientation),
         purpose: "lineArt" as const,
       };
 

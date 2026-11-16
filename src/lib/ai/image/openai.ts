@@ -28,8 +28,9 @@ function edgeFromEnv(name: string, fallback: number): number {
  * Long edge of the output in pixels.
  * - Photos (portrait versions) print as-is: 2400 matches Gemini's 2K
  *   (1792×2400 on a 3:4 page, about 218 DPI on US Letter). OPENAI_IMAGE_LONG_EDGE.
- * - Coloring sheets are resampled to 2048 by the line-art step, so drawing
- *   them bigger only adds time and cost. OPENAI_SHEET_LONG_EDGE.
+ * - Coloring sheets are upscaled to print size (3500 px, US Letter at 300 PPI)
+ *   by the line-art step, so drawing them bigger only adds time and cost.
+ *   OPENAI_SHEET_LONG_EDGE.
  */
 function longEdge(purpose: ImagePurpose): number {
   return purpose === "photo"
