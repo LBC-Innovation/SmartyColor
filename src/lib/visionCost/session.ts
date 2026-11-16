@@ -8,7 +8,7 @@ import { appendVisionCostLogLine } from "@/lib/visionCost/log";
 import { VISION_COST_LOG_FILE } from "@/lib/visionCost/paths";
 import { classifyVisionError } from "@/lib/visionCost/classifyError";
 import { sanitizeSecretText } from "@/lib/security/publicError";
-import { currentVisionUserId } from "@/lib/visionCost/context";
+import { currentVisionGuest, currentVisionUserId } from "@/lib/visionCost/context";
 import { persistErrorEvent, persistUsageEvent } from "@/lib/visionCost/store";
 import type {
   ModelRateSnapshot,
@@ -217,6 +217,7 @@ export async function recordVisionUsage(input: {
   await persistUsageEvent(
     { ...event, imageOutputTokens: split?.imageOutputTokens, textOutputTokens: split?.textOutputTokens, rateSource: rate.source },
     currentVisionUserId(),
+    currentVisionGuest(),
   );
 }
 

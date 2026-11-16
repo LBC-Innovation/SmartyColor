@@ -381,6 +381,7 @@ export function V2FinanceSettingsForm({
 }) {
   const [feePct, setFeePct] = useState(String(settings.cardFeePct));
   const [feeFixed, setFeeFixed] = useState((settings.cardFeeFixedCents / 100).toFixed(2));
+  const [storageRate, setStorageRate] = useState(String(settings.storageUsdPerGbMonth));
   const [cash, setCash] = useState(settings.openingCashCents == null ? "" : (settings.openingCashCents / 100).toFixed(2));
   const [cashOn, setCashOn] = useState(settings.openingCashOn ?? "");
   const [saving, setSaving] = useState(false);
@@ -390,22 +391,26 @@ export function V2FinanceSettingsForm({
   const pctValue = /^\d+(\.\d{1,3})?$/.test(feePct.trim()) ? Number.parseFloat(feePct) : null;
   const fixedCents = parseDollarsToCents(feeFixed);
   const cashCents = cash.trim() === "" ? null : parseDollarsToCents(cash);
+  const storageValue = /^\d+(\.\d{1,5})?$/.test(storageRate.trim()) ? Number.parseFloat(storageRate) : null;
   const valid =
     pctValue != null &&
     pctValue <= 20 &&
     fixedCents != null &&
     fixedCents >= 0 &&
     fixedCents <= 1000 &&
+    storageValue != null &&
+    storageValue <= 10 &&
     (cash.trim() === "") === (cashOn === "") &&
     (cash.trim() === "" || cashCents != null);
 
   async function save() {
-    if (!valid || pctValue == null || fixedCents == null) return;
+    if (!valid || pctValue == null || fixedCents == null || storageValue == null) return;
     setSaving(true);
     setError(null);
     const result = await api.adminUpdateFinanceSettings({
       cardFeePct: pctValue,
       cardFeeFixedCents: fixedCents,
+      storageUsdPerGbMonth: storageValue,
       openingCashCents: cashCents,
       openingCashOn: cashOn || null,
     });
@@ -425,13 +430,15 @@ export function V2FinanceSettingsForm({
       description={
         <>
           Card fees are estimated per top-up (Stripe&apos;s standard US rate is 2.9% + $0.30). Enter your bank balance on a
-          known day to track cash on hand and runway; every cash flow after that day is added to it.
+          known day to track cash on hand and runway; every cash flow after that day is added to it. The storage price
+          sets what each customer&apos;s photos cost to keep (Supabase charges $0.021 per GB-month past the plan&apos;s
+          included space).
         </>
       }
     >
     <div className="v2-panel p-5">
       {!canManage ? <p className="mb-3 text-xs text-v2-muted">Read only: changing these needs the Manage financials permission.</p> : null}
-      <fieldset disabled={!canManage} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <fieldset disabled={!canManage} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <label className="v2-label" htmlFor="fee-pct">
             Card fee (%)
@@ -448,6 +455,18 @@ export function V2FinanceSettingsForm({
             inputMode="decimal"
             value={feeFixed}
             onChange={(e) => setFeeFixed(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="v2-label" htmlFor="storage-rate">
+            Image storage ($ per GB-month)
+          </label>
+          <input
+            id="storage-rate"
+            className="v2-input"
+            inputMode="decimal"
+            value={storageRate}
+            onChange={(e) => setStorageRate(e.target.value)}
           />
         </div>
         <div>

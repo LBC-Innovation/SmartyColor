@@ -5,6 +5,7 @@ import {
   storybookGenerateStory,
   storybookStubGenerate,
 } from "@/lib/ai/storybookGemini";
+import { withVisionRequest } from "@/server/visionAttribution";
 
 export const maxDuration = 120;
 
@@ -20,7 +21,12 @@ type Body = {
   }>;
 };
 
+/** AI costs from this request are recorded against the signed-in account, or the guest's address. */
 export async function POST(request: Request) {
+  return withVisionRequest(request, () => handlePost(request));
+}
+
+async function handlePost(request: Request) {
   try {
     const auth = await requireAuthRequest(request);
     if ("error" in auth) return auth.error;

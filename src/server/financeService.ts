@@ -3,6 +3,7 @@ import type { ApiResult } from "@/lib/api/types";
 import {
   COST_CADENCES,
   COST_CATEGORIES,
+  DEFAULT_STORAGE_USD_PER_GB_MONTH,
   type CostLine,
   type FinanceCost,
   type FinanceCostInput,
@@ -129,6 +130,8 @@ type CostRow = {
 type SettingsRow = {
   card_fee_pct: string | number;
   card_fee_fixed_cents: number;
+  /** Added in 0033; absent on older databases. */
+  storage_usd_per_gb_month?: string | number | null;
   opening_cash_cents: string | number | null;
   opening_cash_on: string | null;
   updated_at: string;
@@ -137,6 +140,7 @@ type SettingsRow = {
 const DEFAULT_SETTINGS: FinanceSettings = {
   cardFeePct: 2.9,
   cardFeeFixedCents: 30,
+  storageUsdPerGbMonth: DEFAULT_STORAGE_USD_PER_GB_MONTH,
   openingCashCents: null,
   openingCashOn: null,
   updatedAt: null,
@@ -223,6 +227,8 @@ function toSettings(row: SettingsRow | null): FinanceSettings {
   return {
     cardFeePct: Number(row.card_fee_pct),
     cardFeeFixedCents: row.card_fee_fixed_cents,
+    storageUsdPerGbMonth:
+      row.storage_usd_per_gb_month == null ? DEFAULT_STORAGE_USD_PER_GB_MONTH : Number(row.storage_usd_per_gb_month),
     openingCashCents: row.opening_cash_cents == null ? null : Number(row.opening_cash_cents),
     openingCashOn: row.opening_cash_on,
     updatedAt: row.updated_at,
@@ -272,7 +278,7 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       .order("starts_on", { ascending: true }),
     db
       .from("finance_settings")
-      .select("card_fee_pct, card_fee_fixed_cents, opening_cash_cents, opening_cash_on, updated_at")
+      .select("*")
       .maybeSingle(),
   ]);
 
@@ -1058,7 +1064,7 @@ export async function deleteFinanceCost(id: string): Promise<ApiResult<{ id: str
 }
 
 export function parseSettingsInput(body: Record<string, unknown>): Omit<FinanceSettings, "updatedAt"> | { error: string } {
-  const { cardFeePct, cardFeeFixedCents, openingCashCents, openingCashOn } = body;
+  const { cardFeePct, cardFeeFixedCents, storageUsdPerGbMonth, openingCashCents, openingCashOn } = body;
   if (typeof cardFeePct !== "number" || !Number.isFinite(cardFeePct) || cardFeePct < 0 || cardFeePct > 20) {
     return { error: "Card fee % must be between 0 and 20" };
   }
@@ -1069,6 +1075,15 @@ export function parseSettingsInput(body: Record<string, unknown>): Omit<FinanceS
     cardFeeFixedCents > 1000
   ) {
     return { error: "Fixed card fee must be between $0 and $10" };
+  }
+  if (
+    storageUsdPerGbMonth != null &&
+    (typeof storageUsdPerGbMonth !== "number" ||
+      !Number.isFinite(storageUsdPerGbMonth) ||
+      storageUsdPerGbMonth < 0 ||
+      storageUsdPerGbMonth > 10)
+  ) {
+    return { error: "Storage price must be between $0 and $10 per GB-month" };
   }
   const hasCash = openingCashCents != null && openingCashCents !== "";
   const hasDate = openingCashOn != null && openingCashOn !== "";
@@ -1082,6 +1097,10 @@ export function parseSettingsInput(body: Record<string, unknown>): Omit<FinanceS
   return {
     cardFeePct: Math.round(cardFeePct * 1000) / 1000,
     cardFeeFixedCents,
+    storageUsdPerGbMonth:
+      typeof storageUsdPerGbMonth === "number"
+        ? Math.round(storageUsdPerGbMonth * 1e5) / 1e5
+        : DEFAULT_STORAGE_USD_PER_GB_MONTH,
     openingCashCents: hasCash ? (openingCashCents as number) : null,
     openingCashOn: hasCash ? (openingCashOn as string) : null,
   };
@@ -1096,12 +1115,13 @@ export async function updateFinanceSettings(
     .update({
       card_fee_pct: input.cardFeePct,
       card_fee_fixed_cents: input.cardFeeFixedCents,
+      storage_usd_per_gb_month: input.storageUsdPerGbMonth,
       opening_cash_cents: input.openingCashCents,
       opening_cash_on: input.openingCashOn,
       updated_by: userId,
     })
     .eq("id", true)
-    .select("card_fee_pct, card_fee_fixed_cents, opening_cash_cents, opening_cash_on, updated_at")
+    .select("*")
     .single();
   if (error) return { data: null, error: { message: error.message } };
   return { data: toSettings(data as SettingsRow), error: null };

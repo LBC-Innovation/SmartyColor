@@ -28,6 +28,29 @@ export function usd4(dollars: number | null | undefined): string {
   return `${dollars < 0 ? "−" : ""}$${Math.abs(dollars).toFixed(4)}`;
 }
 
+/** Cost in dollars: cents precision normally, four decimals below a cent so tiny costs don't read as $0.00. */
+export function usdCost(dollars: number | null | undefined): string {
+  if (dollars == null || !Number.isFinite(dollars)) return "—";
+  if (dollars === 0) return "$0.00";
+  if (Math.abs(dollars) < 0.01) return usd4(dollars);
+  const text = Math.abs(dollars).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${dollars < 0 ? "−" : ""}$${text}`;
+}
+
+/** "1.2 GB", "340 MB", "12 KB" (decimal units, as storage is billed). */
+export function fileSize(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes)) return "—";
+  if (bytes < 1e3) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1e3;
+  let i = 0;
+  while (value >= 1e3 && i < units.length - 1) {
+    value /= 1e3;
+    i += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
 export function percent(value: number | null | undefined, digits = 1): string {
   return value == null || !Number.isFinite(value) ? "—" : `${value.toFixed(digits)}%`;
 }

@@ -1,5 +1,6 @@
 import { removePrefix } from "@/server/storage/libraryFiles";
-import type { AdminUser, ApiResult } from "@/lib/api/types";
+import type { AdminUser, ApiResult, CustomerCost } from "@/lib/api/types";
+import { DEFAULT_STORAGE_USD_PER_GB_MONTH } from "@/lib/finance/types";
 import { USERMANAGE_PERMISSIONS } from "@/lib/api/types";
 import type { AuthUser } from "@/lib/auth/authenticate";
 import { PRODUCT_FEATURES, storedFeatureAccess, type FeatureAccess } from "@/lib/auth/features";
@@ -25,6 +26,67 @@ function serviceKey(): string {
 /** Orders that earned money: paid and not canceled or refunded. */
 const SPEND_STATUSES = ["paid", "submitting_to_lulu", "submitted_to_lulu", "in_production", "shipped", "delivered"];
 
+type UserCostRow = {
+  user_id: string;
+  ai_calls: number | string;
+  ai_cost_usd: number | string;
+  storage_objects: number | string;
+  storage_bytes: number | string;
+  storage_gb_months: number | string;
+};
+
+/**
+ * AI spend and storage per account (admin_user_costs, migration 0033). Null when the function
+ * isn't there yet or fails, so the list still loads and the cost shows as unavailable.
+ */
+async function loadCustomerCosts(): Promise<{ byUser: Map<string, CustomerCost>; rate: number } | null> {
+  const db = getSupabaseAdmin();
+  const [costs, settings] = await Promise.all([
+    db.rpc("admin_user_costs"),
+    db.from("finance_settings").select("*").maybeSingle(),
+  ]);
+  if (costs.error) {
+    log("warn", "customer costs unavailable", { error: costs.error.message });
+    return null;
+  }
+  const rawRate = (settings.data as { storage_usd_per_gb_month?: number | string | null } | null)?.storage_usd_per_gb_month;
+  const rate = rawRate == null ? DEFAULT_STORAGE_USD_PER_GB_MONTH : Number(rawRate);
+  const map = new Map<string, CustomerCost>();
+  for (const r of (costs.data ?? []) as UserCostRow[]) {
+    const aiUsd = Number(r.ai_cost_usd);
+    const storageBytes = Number(r.storage_bytes);
+    const storageGbMonths = Number(r.storage_gb_months);
+    const storageUsd = storageGbMonths * rate;
+    map.set(r.user_id, {
+      aiCalls: Number(r.ai_calls),
+      aiUsd,
+      storageFiles: Number(r.storage_objects),
+      storageBytes,
+      storageGbMonths,
+      storageUsd,
+      storageMonthlyUsd: (storageBytes / 1e9) * rate,
+      storageUsdPerGbMonth: rate,
+      totalUsd: aiUsd + storageUsd,
+    });
+  }
+  return { byUser: map, rate };
+}
+
+/** An account with no AI calls or files yet. */
+function noCost(rate: number): CustomerCost {
+  return {
+    aiCalls: 0,
+    aiUsd: 0,
+    storageFiles: 0,
+    storageBytes: 0,
+    storageGbMonths: 0,
+    storageUsd: 0,
+    storageMonthlyUsd: 0,
+    storageUsdPerGbMonth: rate,
+    totalUsd: 0,
+  };
+}
+
 export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
   const {
     data: { users },
@@ -35,7 +97,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
   }
 
   const db = getSupabaseAdmin();
-  const [{ data: profiles }, { data: orders }, { data: activity }] = await Promise.all([
+  const [{ data: profiles }, { data: orders }, { data: activity }, costs] = await Promise.all([
     db.from("profiles").select("id, display_name, avatar_url, status, credits_balance"),
     db
       .from("book_orders")
@@ -45,6 +107,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       .not("status", "in", "(draft,quoted)"),
     // Latest activity per account; the table is small, newest first.
     db.from("account_activity").select("user_id, occurred_at").order("occurred_at", { ascending: false }).limit(5000),
+    loadCustomerCosts(),
   ]);
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, p]));
 
@@ -90,6 +153,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       ordersCount: stats?.count ?? 0,
       lifetimeSpendCents: stats?.spend ?? 0,
       lastActiveAt,
+      lifetimeCost: costs ? (costs.byUser.get(u.id) ?? noCost(costs.rate)) : null,
     };
   });
 

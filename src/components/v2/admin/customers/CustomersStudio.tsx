@@ -9,7 +9,7 @@ import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
 import { V2CreateUserModal } from "@/components/v2/auth/V2CreateUserModal";
 import { DataTable, type Column } from "@/components/v2/admin/DataTable";
 import { EmptyState, ErrorPanel, PageHeader, RefreshButton, SearchInput, StatusPill, TabPanel, Tabs } from "@/components/v2/admin/ui";
-import { count, fullDateTime, money, relativeTime, shortDate } from "@/components/v2/admin/format";
+import { count, fullDateTime, money, relativeTime, shortDate, usdCost } from "@/components/v2/admin/format";
 import { useUrlParam } from "@/components/v2/admin/useUrlParam";
 import { CustomerDrawer } from "@/components/v2/admin/customers/CustomerDrawer";
 import { customerName, customerStatus, isStaff, useSetUrlParams } from "@/components/v2/admin/customers/shared";
@@ -125,6 +125,14 @@ export function CustomersStudio() {
       align: "right",
       cell: (u) => money(u.lifetimeSpendCents ?? 0),
       sortValue: (u) => u.lifetimeSpendCents ?? 0,
+    },
+    {
+      key: "cost",
+      header: "Cost",
+      align: "right",
+      hideBelow: "xl",
+      cell: (u) => (u.lifetimeCost ? usdCost(u.lifetimeCost.totalUsd) : "—"),
+      sortValue: (u) => u.lifetimeCost?.totalUsd ?? null,
     },
     { key: "wallet", header: "Wallet", align: "right", cell: (u) => money(u.creditsBalanceCents), sortValue: (u) => u.creditsBalanceCents },
     {
