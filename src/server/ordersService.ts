@@ -17,6 +17,7 @@ import type {
 import { isShippingAddressComplete, normalizeShippingAddress } from "@/lib/orders/shippingAddress";
 import type { DigitalBookPage } from "@/lib/orders/types";
 import { bindingIdForProduct, type BookBindingId } from "@/lib/print/bookBindings";
+import { hasBlankBacks, orderPagesLabel } from "@/lib/orders/blankBacks";
 import { normalizeCoverDesign, type BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
 import {
@@ -67,6 +68,8 @@ type OrderRow = {
   product_id: string;
   project_title: string | null;
   page_count: number;
+  /** Absent on rows read without the column; those print both sides. */
+  blank_backs?: boolean | null;
   status: BookOrderStatus;
   fulfillment?: BookFulfillment | null;
   payment_method: BookPaymentMethod | null;
@@ -123,6 +126,7 @@ function mapSummary(row: OrderRow): BookOrderSummary {
     productId: row.product_id,
     productName: productName(row),
     pageCount: row.page_count,
+    blankBacks: row.blank_backs === true,
     status: row.status,
     fulfillment: row.fulfillment ?? "print",
     luluStatusName: row.lulu_status_name,
@@ -287,6 +291,7 @@ function draftContentColumns(input: DraftBookContent) {
     is_gift: input.isGift === true,
     // Kept beside the pages so support and reports can read it without parsing the page list.
     gift_note: first?.kind === "note" ? first.text : null,
+    blank_backs: hasBlankBacks(input.printPages),
     print_pages: input.printPages ?? null,
     cover_design: input.coverDesign ?? null,
     billing_address: input.billingAddress ? normalizeShippingAddress(input.billingAddress) : null,
@@ -332,7 +337,7 @@ export async function createDraftBookOrder(input: DraftBookContent & {
   await appendOrderEvent(data.id as string, {
     kind: "draft_created",
     title: "Book draft saved",
-    detail: `${input.pageCount} pages configured — checkout coming soon.`,
+    detail: `${orderPagesLabel(input.pageCount, hasBlankBacks(input.printPages), { withPrinted: true })} configured — checkout coming soon.`,
   });
 
   return { data: { orderId: data.id as string }, error: null };
@@ -422,7 +427,7 @@ export async function updateDraftBookOrder(input: DraftBookContent & {
   await appendOrderEvent(input.orderId, {
     kind: "draft_updated",
     title: "Book draft updated",
-    detail: `${input.pageCount} pages — ready when you confirm.`,
+    detail: `${orderPagesLabel(input.pageCount, hasBlankBacks(input.printPages), { withPrinted: true })} — ready when you confirm.`,
   });
 
   return { data: { orderId: input.orderId }, error: null };
@@ -577,7 +582,7 @@ export async function registerBookOrderJob(
 ): Promise<ApiResult<{ orderId: string }>> {
   const { data: order, error } = await getSupabaseAdmin()
     .from("book_orders")
-    .select("id, user_id, status, lulu_external_id, total_cents, page_count")
+    .select("id, user_id, status, lulu_external_id, total_cents, page_count, blank_backs")
     .eq("id", orderId)
     .eq("user_id", userId)
     .is("deleted_at", null)
@@ -611,7 +616,7 @@ export async function registerBookOrderJob(
     await appendOrderEvent(orderId, {
       kind: "job_registered",
       title: "Print job registered",
-      detail: `${order.page_count} pages queued for fulfillment once you place the order.`,
+      detail: `${orderPagesLabel(order.page_count as number, order.blank_backs === true, { withPrinted: true })} queued for fulfillment once you place the order.`,
       metadata: { luluExternalId: externalId },
     });
   }
@@ -784,6 +789,7 @@ export async function sendOrderConfirmationEmail(
         title: (order.project_title as string | null)?.trim() || "Coloring book",
         bindingLabel: bindingId ? getBookBinding(bindingId).shortLabel : "Printed book",
         pageCount: order.page_count as number,
+        blankBacks: order.blank_backs === true,
         isGift: order.is_gift === true,
         shipTo,
         printCents: order.subtotal_cents as number | null,
@@ -1112,7 +1118,7 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
     .from("book_orders")
     .select(
       `
-      id, user_id, product_id, project_title, page_count, status, fulfillment, payment_method,
+      id, user_id, product_id, project_title, page_count, blank_backs, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, tracking_number, tracking_urls,
       estimated_delivery_min, estimated_delivery_max, created_at, updated_at, paid_at,
       lulu_production_due_at, refunded_cents,
@@ -1149,7 +1155,7 @@ export async function getOrderForUser(
     .from("book_orders")
     .select(
       `
-      id, user_id, product_id, project_title, page_count, status, fulfillment, payment_method,
+      id, user_id, product_id, project_title, page_count, blank_backs, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, lulu_status_message,
       lulu_print_job_id, tracking_number, tracking_urls, carrier,
       estimated_delivery_min, estimated_delivery_max, estimated_dispatch_min,
@@ -1306,6 +1312,7 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     projectTitle: row.project_title,
     productName: productName(row),
     pageCount: row.page_count,
+    blankBacks: row.blank_backs === true,
     status: row.status,
     totalCents: row.total_cents,
     createdAt: row.created_at,
@@ -1322,7 +1329,7 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
 }
 
 const ADMIN_ORDER_COLUMNS = `
-      id, user_id, project_title, page_count, status, total_cents, created_at, contact_email,
+      id, user_id, project_title, page_count, blank_backs, status, total_cents, created_at, contact_email,
       canceled_at, cancel_reason, refunded_cents, deleted_at, lulu_print_job_id, lulu_status_name,
       lulu_production_due_at, fulfillment,
       print_products ( name )

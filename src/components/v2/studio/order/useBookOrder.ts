@@ -35,9 +35,11 @@ import {
 } from "@/lib/orders/shippingAddress";
 import type { AddressSuggestion, DigitalBookPage, ShippingAddress } from "@/lib/orders/types";
 import {
+  BLANK_BACKS_DEFAULT,
   BOOK_BINDINGS,
   PRINT_BINDING_IDS,
   getBookFormat,
+  withBlankBacks,
   isDigitalFormat,
   isPrintBindingId,
   type BookBindingId,
@@ -74,6 +76,8 @@ type StudioCartState = BookCartState & {
   blankChoices?: Record<string, "plain" | "lined">;
   /** Which parts of the cover the customer chose (older carts with a cover count as both). */
   coverChoices?: CoverChoices;
+  /** Each page printed on its own sheet with a blank back. Carts saved before the choice existed printed both sides. */
+  blankBacks?: boolean;
 };
 
 /** Parts of the cover the customer picked themselves. */
@@ -145,11 +149,17 @@ export function useBookOrder({
   // ---- format ----------------------------------------------------------------
   // Nothing is picked for the customer: no format until they choose one (a saved book restores theirs).
   const [chosenBindingId, setChosenBindingId] = useState<BookFormatId | null>(null);
+  // Blank backs are on until the customer turns them off to save money. They halve how many
+  // pages each binding holds, so every limit below is read through them.
+  const [blankBacks, setBlankBacks] = useState(BLANK_BACKS_DEFAULT);
   const contentCount = photoPages.length;
-  const recommendedFormat = bestFitFormat(contentCount);
+  const recommendedFormat = bestFitFormat(contentCount, blankBacks);
   const bindingId: BookFormatId = chosenBindingId ?? recommendedFormat;
   const isDigital = isDigitalFormat(bindingId);
-  const binding = getBookFormat(bindingId);
+  /** The format's limits in pages the customer arranges (see `withBlankBacks`). */
+  const binding = getBookFormat(bindingId, blankBacks);
+  /** Each format's limits as the customer counts pages, with the blank-backs choice applied. */
+  const formatSpec = (id: BookFormatId) => getBookFormat(id, blankBacks);
 
   function chooseFormat(id: BookFormatId) {
     setChosenBindingId(id);
@@ -427,11 +437,31 @@ export function useBookOrder({
   }
 
   /** Printed size of the book in each format: the chosen pages, padded as that binding needs. */
+  const formatPlans = useMemo(() => {
+    const plans = {} as Record<BookBindingId, { totalPages: number; frontCount: number }>;
+    for (const id of PRINT_BINDING_IDS) {
+      const { totalPages, frontCount } = computeBookPagePlan(photoPages, withBlankBacks(BOOK_BINDINGS[id], blankBacks));
+      plans[id] = { totalPages, frontCount };
+    }
+    return plans;
+  }, [photoPages, blankBacks]);
   const formatPageCounts = useMemo(() => {
     const counts = {} as Record<BookBindingId, number>;
-    for (const id of PRINT_BINDING_IDS) counts[id] = computeBookPagePlan(photoPages, BOOK_BINDINGS[id]).totalPages;
+    for (const id of PRINT_BINDING_IDS) counts[id] = formatPlans[id].totalPages;
     return counts;
-  }, [photoPages]);
+  }, [formatPlans]);
+
+  /**
+   * The chosen binding printed the other way (blank backs off when they're on, and the reverse),
+   * so the choice can say what it costs. Null when the pages wouldn't fit that way.
+   */
+  const otherBacksPageCount = useMemo(() => {
+    if (!isPrintBindingId(bindingId)) return null;
+    const other = getBookFormat(bindingId, !blankBacks);
+    if (!bookFormatFit(contentCount, other).fits) return null;
+    return computeBookPagePlan(plannedPages, other).totalPages;
+  }, [bindingId, blankBacks, contentCount, plannedPages]);
+
   const [formatQuotes, setFormatQuotes] = useState<Record<string, number | null>>({});
   const formatQuotesAsked = useRef(new Set<string>());
 
@@ -439,10 +469,15 @@ export function useBookOrder({
     // Quotes need an account; a guest sees the example price instead.
     if (!user || contentCount === 0) return;
     const t = window.setTimeout(() => {
-      for (const id of PRINT_BINDING_IDS) {
-        const pageCount = formatPageCounts[id];
+      const wanted: [BookBindingId, number][] = PRINT_BINDING_IDS.filter((id) =>
+        bookFormatFit(contentCount, withBlankBacks(BOOK_BINDINGS[id], blankBacks)).fits,
+      ).map((id) => [id, formatPageCounts[id]]);
+      if (isPrintBindingId(bindingId) && otherBacksPageCount != null) {
+        wanted.push([bindingId, plan.totalPages], [bindingId, otherBacksPageCount]);
+      }
+      for (const [id, pageCount] of wanted) {
         const key = `${id}:${pageCount}`;
-        if (!bookFormatFit(contentCount, BOOK_BINDINGS[id]).fits || formatQuotesAsked.current.has(key)) continue;
+        if (formatQuotesAsked.current.has(key)) continue;
         formatQuotesAsked.current.add(key);
         void api.fetchOrderQuote({ bindingId: id, pageCount }).then((result) => {
           // Before tax: the quote address is only a placeholder here, so its tax would mislead.
@@ -452,7 +487,16 @@ export function useBookOrder({
       }
     }, 500);
     return () => window.clearTimeout(t);
-  }, [user, contentCount, formatPageCounts]);
+  }, [user, contentCount, formatPageCounts, blankBacks, bindingId, plan.totalPages, otherBacksPageCount]);
+
+  /** What blank backs add to the book's price (before shipping and tax), once both prices are in. */
+  const blankBacksExtraCents = useMemo(() => {
+    if (!isPrintBindingId(bindingId) || otherBacksPageCount == null) return null;
+    const current = formatQuotes[`${bindingId}:${plan.totalPages}`];
+    const other = formatQuotes[`${bindingId}:${otherBacksPageCount}`];
+    if (current == null || other == null) return null;
+    return blankBacks ? current - other : other - current;
+  }, [bindingId, otherBacksPageCount, formatQuotes, plan.totalPages, blankBacks]);
 
   const formatPrices = useMemo(() => {
     const out: Partial<Record<BookBindingId, FormatPrice>> = {};
@@ -461,13 +505,14 @@ export function useBookOrder({
       const key = `${id}:${pageCount}`;
       out[id] = {
         pageCount,
+        frontCount: formatPlans[id].frontCount,
         bookCents: formatQuotes[key] ?? null,
         loading: signedIn && !(key in formatQuotes),
         overCapacity: pageCount > BOOK_BINDINGS[id].maxPages,
       };
     }
     return out;
-  }, [formatPageCounts, formatQuotes, signedIn]);
+  }, [formatPageCounts, formatPlans, formatQuotes, signedIn]);
 
   const selectedQuote: BindingQuote | null = chosenBindingId == null
     ? null
@@ -543,6 +588,7 @@ export function useBookOrder({
     setChosenShippingLevel(null);
     setCoverDraft(null);
     setGiftNoteRaw("");
+    setBlankBacks(BLANK_BACKS_DEFAULT);
   }, [projectId]);
 
   // Read a saved book back from the cart.
@@ -584,6 +630,8 @@ export function useBookOrder({
         saved.coverChoices ?? (saved.coverDesign ? { title: true, layout: true } : { title: false, layout: false }),
       );
       if (saved.blankChoices && typeof saved.blankChoices === "object") setBlankChoices(saved.blankChoices);
+      // A cart from before the choice existed was laid out printing both sides; keep it that way.
+      setBlankBacks(typeof saved.blankBacks === "boolean" ? saved.blankBacks : false);
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
       setCartAlbum(album ?? projectId);
@@ -613,6 +661,7 @@ export function useBookOrder({
       pageFitChosen: chosenPageFit != null,
       ...(chosenShippingLevel ? { shippingLevel: chosenShippingLevel } : {}),
       blankChoices,
+      blankBacks,
       coverChoices,
       pages: cartPages(photoPages),
       removedIds: [],
@@ -627,12 +676,13 @@ export function useBookOrder({
       title: coverDesign.text?.trim() || projectTitle,
       step: "review",
       bindingId,
-      pageCount: plan.totalPages,
+      // The pages the customer sees; with blank backs the printer counts twice as many.
+      pageCount: plan.frontCount,
       photoCount: plan.photoCount,
       thumbRevisionId: firstPhoto?.revisionId ?? null,
       state,
     };
-  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, chosenShippingLevel, blankChoices, coverChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
+  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, chosenShippingLevel, blankChoices, blankBacks, coverChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
 
   // Saved as it changes once it is in the cart; before that, only after "Start my book" and a format.
   const cartReady =
@@ -714,6 +764,7 @@ export function useBookOrder({
     storeFormat(null);
     setChosenPageFit(null);
     setBlankChoices({});
+    setBlankBacks(BLANK_BACKS_DEFAULT);
     setGiftNoteRaw("");
     setIsGift(false);
     setError(null);
@@ -749,7 +800,11 @@ export function useBookOrder({
     const pages: DigitalBookPage[] = [];
     for (const page of plan.allPages) {
       if (page.kind === "blank") {
-        pages.push({ kind: "blank", variant: page.variant === "lined" ? "lined" : "plain" });
+        pages.push(
+          page.back
+            ? { kind: "blank", variant: "plain", back: true }
+            : { kind: "blank", variant: page.variant === "lined" ? "lined" : "plain" },
+        );
         continue;
       }
       if (page.kind === "note") {
@@ -961,7 +1016,9 @@ export function useBookOrder({
     discard,
     // format
     bindingId,
+    /** The chosen format's limits in pages the customer arranges, blank backs applied. */
     binding,
+    formatSpec,
     isDigital,
     chosenBindingId,
     /** False until the customer picks a format; there is no default. */
@@ -981,6 +1038,15 @@ export function useBookOrder({
     // filler pages
     blankChoices,
     chooseBlank,
+    // blank backs
+    /** Each page prints alone on its own sheet (printed books only). */
+    blankBacks: blankBacks && !isDigital,
+    /** The customer's choice, kept while the PDF is picked so a printed format gets it back. */
+    blankBacksChoice: blankBacks,
+    chooseBlankBacks: setBlankBacks,
+    blankBacksExtraCents,
+    /** The pages also fit the chosen binding printed the other way. */
+    otherBacksFits: otherBacksPageCount != null,
     // shipping speed
     shippingLevel,
     shippingChoices,

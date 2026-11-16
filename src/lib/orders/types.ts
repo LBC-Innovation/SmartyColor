@@ -28,7 +28,8 @@ export type DigitalBookPage =
       /** "full" fills the page edge to edge; otherwise the sheet is framed inside the margin. */
       fit?: "framed" | "full";
     }
-  | { kind: "blank"; variant: "plain" | "lined" }
+  /** `back` marks the empty back of the page before it, when each page prints on its own sheet. */
+  | { kind: "blank"; variant: "plain" | "lined"; back?: true }
   /** A gift note, printed as plain text on its own page (always the first page). */
   | { kind: "note"; text: string };
 
@@ -57,7 +58,10 @@ export type BookOrderSummary = {
   projectTitle: string | null;
   productId: string;
   productName: string;
+  /** Printed sides, as the printer counts them (blank backs included). */
   pageCount: number;
+  /** Each page printed on its own sheet with a blank back, so `pageCount` is twice the pages the customer made. */
+  blankBacks: boolean;
   status: BookOrderStatus;
   fulfillment: BookFulfillment;
   luluStatusName: string | null;

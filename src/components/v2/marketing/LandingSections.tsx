@@ -26,7 +26,7 @@ import {
 } from "@/content/marketing";
 import { fillCopy, type CopyValues } from "@/lib/marketing/copy";
 import { trackCta } from "@/lib/track";
-import { BINDING_PHOTOS, BOOK_BINDINGS, DIGITAL_FORMAT, type BookBindingId } from "@/lib/print/bookBindings";
+import { BINDING_PHOTOS, BLANK_BACKS_DEFAULT, BOOK_BINDINGS, DIGITAL_FORMAT, withBlankBacks, type BookBindingId } from "@/lib/print/bookBindings";
 import { cn } from "@/lib/cn";
 import { BeforeAfter, ICONS, LifestyleImage, PrintedBook, SectionHeading, readyLifestyle } from "@/components/v2/marketing/landingParts";
 
@@ -247,7 +247,7 @@ export function FinishedBookSection({ values, coverTitle }: { values: CopyValues
             <h3 className="text-lg font-semibold text-v2-ink">{FINISHED_BOOK.formatsTitle}</h3>
             <ul className="mt-3 divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
               {PRINT_ORDER.map((id) => {
-                const b = BOOK_BINDINGS[id];
+                const b = withBlankBacks(BOOK_BINDINGS[id], BLANK_BACKS_DEFAULT);
                 const pages = fillCopy(FINISHED_BOOK.pages, { min: String(b.minPages), max: String(b.maxPages) });
                 const photo = BINDING_PHOTOS[id];
                 return (

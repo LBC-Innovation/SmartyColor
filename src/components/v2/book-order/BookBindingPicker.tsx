@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, type KeyboardEvent } from "react";
 import { Check, Download, Loader2 } from "lucide-react";
 import { formatCredits } from "@/lib/credits/money";
 import {
@@ -8,6 +8,7 @@ import {
   BOOK_BINDINGS,
   DIGITAL_FORMAT,
   getBookFormat,
+  withBlankBacks,
   type BookBindingId,
   type BookFormatId,
 } from "@/lib/print/bookBindings";
@@ -28,8 +29,10 @@ export type BindingQuote = {
 
 /** What one printed format costs for the book as it stands, before shipping and tax. */
 export type FormatPrice = {
-  /** Printed pages the price is for, padding included. */
+  /** Printed sides the price is for, padding and blank backs included. */
   pageCount: number;
+  /** Pages the customer sees in that book, padding included (the fronts, with blank backs); `pageCount` when absent. */
+  frontCount?: number;
   /** The book before shipping and tax; null while loading or when no price is available. */
   bookCents: number | null;
   loading: boolean;
@@ -52,6 +55,8 @@ type Props = {
   digitalPriceCents?: number | null;
   /** "list" stacks the cards in one column, for narrow panels and sheets. */
   layout?: "grid" | "list";
+  /** Each page printed on its own sheet with a blank back: the printed formats hold half as many. */
+  blankBacks?: boolean;
 };
 
 type Card = {
@@ -67,30 +72,32 @@ type Card = {
 
 const PRINT_IDS = Object.keys(BOOK_BINDINGS) as BookBindingId[];
 
-const CARDS: Card[] = [
-  {
-    id: DIGITAL_FORMAT.id,
-    title: DIGITAL_FORMAT.shortLabel,
-    blurb: DIGITAL_FORMAT.blurb,
-    headline: "Print at home",
-    detail: "Any number of pages",
-    digital: true,
-  },
-  ...PRINT_IDS.map((id) => {
-    const spec = BOOK_BINDINGS[id];
-    return {
-      id,
-      title: spec.shortLabel,
-      blurb: spec.blurb,
-      headline: "Printed & shipped",
-      detail: "Priced once you pick pages",
-      pageRule:
-        spec.pageMultiple > 2
-          ? `${spec.minPages}–${spec.maxPages} pages, in sets of ${spec.pageMultiple}`
-          : `${spec.minPages}–${spec.maxPages} pages`,
-    } satisfies Card;
-  }),
-];
+function formatCards(blankBacks: boolean): Card[] {
+  return [
+    {
+      id: DIGITAL_FORMAT.id,
+      title: DIGITAL_FORMAT.shortLabel,
+      blurb: DIGITAL_FORMAT.blurb,
+      headline: "Print at home",
+      detail: "Any number of pages",
+      digital: true,
+    },
+    ...PRINT_IDS.map((id) => {
+      const spec = withBlankBacks(BOOK_BINDINGS[id], blankBacks);
+      return {
+        id,
+        title: spec.shortLabel,
+        blurb: spec.blurb,
+        headline: "Printed & shipped",
+        detail: "Priced once you pick pages",
+        pageRule:
+          spec.pageMultiple > 2
+            ? `${spec.minPages}–${spec.maxPages} pages, in sets of ${spec.pageMultiple}`
+            : `${spec.minPages}–${spec.maxPages} pages`,
+      } satisfies Card;
+    }),
+  ];
+}
 
 /**
  * A photo of the binding (decorative: the title names it), or a download tile for the PDF, so
@@ -117,8 +124,10 @@ function FormatThumb({ id, className }: { id: BookFormatId; className?: string }
 }
 
 /** Why a format can't be picked, and what would unlock it. Shown on the card. */
-function unfitReason(id: BookFormatId, fit: BookFormatFit, count: number): string {
-  if (fit.tooMany) return `Holds up to ${getBookFormat(id).maxPages} pages, you have ${count}`;
+function unfitReason(id: BookFormatId, fit: BookFormatFit, count: number, blankBacks: boolean): string {
+  if (fit.tooMany) {
+    return `Holds up to ${getBookFormat(id, blankBacks).maxPages} pages${blankBacks ? " with blank backs" : ""}, you have ${count}`;
+  }
   return `Needs ${fit.shortBy} more coloring ${fit.shortBy === 1 ? "page" : "pages"}`;
 }
 
@@ -135,12 +144,14 @@ export function BookBindingPicker({
   recommendedId,
   digitalPriceCents = null,
   layout = "grid",
+  blankBacks = false,
 }: Props) {
+  const CARDS = useMemo(() => formatCards(blankBacks), [blankBacks]);
   const filtering = contentPageCount > 0;
   const idBase = useId();
   const groupRef = useRef<HTMLDivElement>(null);
   const isUnavailable = (card: Card) =>
-    filtering && !bookFormatFit(contentPageCount, getBookFormat(card.id)).fits;
+    filtering && !bookFormatFit(contentPageCount, getBookFormat(card.id, blankBacks)).fits;
   const fitCount = CARDS.filter((c) => !isUnavailable(c)).length;
   // Best fit first, then the other printed formats that work, then those that can't be picked,
   // and print-at-home last.
@@ -181,16 +192,17 @@ export function BookBindingPicker({
       onKeyDown={onKeyDown}
     >
       {ordered.map((card) => {
-        const fit = bookFormatFit(contentPageCount, getBookFormat(card.id));
+        const fit = bookFormatFit(contentPageCount, getBookFormat(card.id, blankBacks));
         const unavailable = filtering && !fit.fits;
         const selected = value === card.id && !unavailable;
         const price = card.digital || unavailable ? undefined : prices[card.id as BookBindingId];
         const priced = price?.bookCents != null && !price.overCapacity;
         const pricing = Boolean(price?.loading) && !price?.overCapacity;
-        const pages = price ? `${price.pageCount} page${price.pageCount === 1 ? "" : "s"}` : "";
+        const shownPages = price ? (price.frontCount ?? price.pageCount) : 0;
+        const pages = price ? `${shownPages} page${shownPages === 1 ? "" : "s"}` : "";
         // What the price is for; the format's page rules follow on their own line.
         const basis = unavailable
-          ? unfitReason(card.id, fit, contentPageCount)
+          ? unfitReason(card.id, fit, contentPageCount, blankBacks)
           : card.digital
             ? "Instant PDF"
             : !price
@@ -200,8 +212,8 @@ export function BookBindingPicker({
                 : priced
                   ? contentPageCount === 0
                     ? `Smallest book, ${pages}`
-                    : price.pageCount > contentPageCount
-                      ? `${pages}: your ${contentPageCount} and ${price.pageCount - contentPageCount} blank`
+                    : shownPages > contentPageCount
+                      ? `${pages}: your ${contentPageCount} and ${shownPages - contentPageCount} blank`
                       : `For your ${pages}`
                   : pricing
                     ? "Pricing your book"

@@ -4,7 +4,9 @@ export type AdminUserOrderSummary = {
   id: string;
   projectTitle: string | null;
   productName: string;
+  /** Printed sides (blank backs included). */
   pageCount: number;
+  blankBacks: boolean;
   status: BookOrderStatus;
   totalCents: number | null;
   createdAt: string;

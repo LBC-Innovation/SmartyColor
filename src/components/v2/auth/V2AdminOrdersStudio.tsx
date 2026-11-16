@@ -1,5 +1,6 @@
 "use client";
 
+import { orderPagesLabel } from "@/lib/orders/blankBacks";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Loader2, RefreshCw, XCircle } from "lucide-react";
@@ -134,7 +135,7 @@ export function V2AdminOrdersStudio() {
                             {order.id.slice(0, 8).toUpperCase()} ·{" "}
                             {order.userEmail ?? order.contactEmail ?? (order.userId ? order.userId.slice(0, 8) : "Deleted account")} ·{" "}
                             {order.fulfillment === "digital" ? "Print at home · " : ""}
-                            {order.pageCount} pages ·{" "}
+                            {orderPagesLabel(order.pageCount, order.blankBacks, { withPrinted: true })} ·{" "}
                             {order.totalCents != null ? formatCredits(order.totalCents) : "—"} ·{" "}
                             {shortTime(order.createdAt)}
                           </p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { orderPagesLabel } from "@/lib/orders/blankBacks";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useV2Toast } from "@/components/v2/V2Toast";
@@ -146,7 +147,7 @@ export function V2MyOrdersStudio() {
                         </p>
                         <p className="mt-0.5 text-xs text-v2-muted">
                           {order.fulfillment === "digital" ? "Print at home · " : ""}
-                          {order.pageCount} pages · {formatMoney(order.totalCents)} ·{" "}
+                          {orderPagesLabel(order.pageCount, order.blankBacks)} · {formatMoney(order.totalCents)} ·{" "}
                           {new Date(order.createdAt).toLocaleDateString(undefined, {
                             month: "short",
                             day: "numeric",

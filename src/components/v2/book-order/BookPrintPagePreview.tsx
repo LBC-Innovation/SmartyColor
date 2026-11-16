@@ -72,8 +72,9 @@ export function BookPrintPagePreview({
             ) : page.kind === "blank" && page.variant === "lined" ? (
               <BookLinedPageArt />
             ) : page.kind === "blank" ? (
-              <div className="flex h-full w-full flex-col items-center justify-center text-v2-muted">
-                <p className="text-xs font-semibold">Blank</p>
+              <div className="flex h-full w-full flex-col items-center justify-center px-2 text-center text-v2-muted">
+                <p className="text-xs font-semibold">{page.back ? "Blank back" : "Blank"}</p>
+                {page.back ? <p className="mt-0.5 text-[10px] leading-tight">Keeps markers off the next picture</p> : null}
               </div>
             ) : (
               <BookPageImageFill

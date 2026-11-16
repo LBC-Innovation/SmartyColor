@@ -52,6 +52,8 @@ export type BookWizardBlankPage = {
    * the book changes; pages the user inserts are never auto.
    */
   auto?: boolean;
+  /** The empty back of the page before it, printed one-sided. Always plain, never chosen by the customer. */
+  back?: boolean;
 };
 
 /** The gift note, printed on its own page at the front of the book. Never stored in the page list itself. */
@@ -66,9 +68,14 @@ export type BookWizardPage = BookWizardPhotoPage | BookWizardBlankPage | BookWiz
 export type BookPagePlan = {
   contentPages: BookWizardPhotoPage[];
   blankPages: BookWizardBlankPage[];
-  /** Every printed page, in order, including blank and lined ones. */
+  /** Every printed page, in order, including blank and lined ones (and blank backs). */
   allPages: BookWizardPage[];
+  /** Printed sides: what the printer counts and charges for. */
   totalPages: number;
+  /** Pages the customer sees: every page, or with blank backs, every front. */
+  frontCount: number;
+  /** Empty backs added so each page prints on its own sheet; 0 when printing both sides. */
+  blankBackCount: number;
   photoCount: number;
   /** All non-photo pages: auto padding plus any the user inserted. */
   blankCount: number;

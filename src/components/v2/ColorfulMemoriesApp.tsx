@@ -30,7 +30,7 @@ import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
 import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
 import { BookOrderCard } from "@/components/v2/studio/order/BookOrderCard";
-import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
+import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, formatSummary, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
 import { BookPromoCard, type BookProgress } from "@/components/v2/studio/order/BookPromoCard";
 import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
 import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
@@ -572,7 +572,7 @@ export function ColorfulMemoriesApp() {
       ? {
           done: steps.filter((step) => step.state === "done").length,
           total: steps.length,
-          summary: order.formatChosen ? `${order.binding.shortLabel} · ${order.plan.totalPages} pages` : null,
+          summary: order.formatChosen ? formatSummary(order) : null,
         }
       : null;
   const bookCardOpen = desktop && bookOpen && hasBookPage;

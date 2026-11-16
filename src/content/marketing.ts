@@ -730,7 +730,7 @@ export const FINISHED_BOOK = {
   title: "A real book, printed and shipped",
   body: "Your coloring pages, printed in the US and mailed to you, or to someone you are giving it to.",
   mockCaption: "A sample cover. Yours is made from your own pages.",
-  sizeNote: "Letter-size pages (8.5 by 11 inches), black and white inside, ready to color.",
+  sizeNote: "Letter-size pages (8.5 by 11 inches), black and white inside, ready to color. Each page gets its own sheet with a blank back, so markers don't bleed through.",
   formatsTitle: "Choose how to get it",
   /** "{min} to {max} pages" per printed format. */
   pages: "{min} to {max} pages",
@@ -1034,6 +1034,11 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
       a: "As an example, a {refPages}-page {refFormat} is about {price} with US shipping, before tax. The price depends on page count, binding and where it ships, and you see the exact price before you pay.",
       fallback:
         "It depends on page count, binding and where it ships. You'll see the exact price, printing and shipping included, before you pay.",
+    },
+    {
+      id: "bleed",
+      q: "Will markers bleed through the paper?",
+      a: "Not onto another picture. Each coloring page prints on its own sheet with the back left blank. You can turn that off at checkout to print on both sides and pay less.",
     },
     {
       id: "deadline",

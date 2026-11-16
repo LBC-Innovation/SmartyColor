@@ -12,7 +12,7 @@ import { useModalLayer } from "@/components/v2/ui/useModalLayer";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useLayerHistory } from "@/components/v2/studio/useLayerHistory";
 import { Confetti } from "@/components/v2/studio/order/Confetti";
-import type { OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
+import { formatSummary, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
 import { proofPageKey, type BookOrder } from "@/components/v2/studio/order/useBookOrder";
 import * as api from "@/lib/api/client";
 import { cn } from "@/lib/cn";
@@ -20,6 +20,7 @@ import { formatCredits } from "@/lib/credits/money";
 import { formatDeliveryRange } from "@/lib/orders/deliveryEstimate";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 import { bookOpenSpreads } from "@/lib/print/bookCover";
+import { isBlankBack } from "@/lib/print/bookPagePlan";
 import type { BookWizardPage } from "@/lib/print/bookWizardTypes";
 
 export type ConfirmStep = "proof" | "overview";
@@ -73,9 +74,10 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
 
   // ---- proof items ------------------------------------------------------------------
   const allItems = useMemo<ProofItem[]>(() => {
-    const pages = order.plan.allPages.map(
-      (page, i): ProofItem => ({ kind: "page", key: proofPageKey(page), page, number: i + 1 }),
-    );
+    // Blank backs are empty by design: they show in the open-book spreads but aren't pages to check one by one.
+    const pages = order.plan.allPages
+      .map((page, i): ProofItem => ({ kind: "page", key: proofPageKey(page), page, number: i + 1 }))
+      .filter((item) => item.kind !== "page" || !isBlankBack(item.page));
     return printed ? [{ kind: "front", key: order.coverKey }, ...pages, { kind: "back", key: "back" }] : pages;
   }, [order.plan.allPages, order.coverKey, printed]);
   // Coming back after fixing a page: only what changed since the last check is shown again.
@@ -366,7 +368,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                                 <div className="mt-1 flex justify-center">
                                   <FixButton onClick={() => onFixPage(page.photoId)} />
                                 </div>
-                              ) : page.kind === "blank" ? (
+                              ) : page.kind === "blank" && !page.back ? (
                                 <BlankPageChoices
                                   className="mt-1"
                                   compact
@@ -577,7 +579,7 @@ function Overview({
           </div>
           <div className="flex items-center justify-between gap-2 text-sm text-v2-muted">
             <span>
-              {order.binding.shortLabel} · {order.plan.totalPages} pages
+              {formatSummary(order)}
             </span>
             {edit("format")}
           </div>

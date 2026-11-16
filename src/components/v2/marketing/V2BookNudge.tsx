@@ -4,7 +4,7 @@ import { BookOpen } from "lucide-react";
 import { BOOK_NUDGE, PRICE_LINE } from "@/content/marketing";
 import { fillCopy, numberValues } from "@/lib/marketing/copy";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
-import { getBookBinding, recommendBinding } from "@/lib/print/bookBindings";
+import { BLANK_BACKS_DEFAULT, getBookFormat, recommendBinding } from "@/lib/print/bookBindings";
 
 /**
  * The photo list's dock when an album has coloring pages: a short caption ("You have N pages.
@@ -13,7 +13,8 @@ import { getBookBinding, recommendBinding } from "@/lib/print/bookBindings";
  */
 export function V2BookNudge({ pageCount, disabled, onMakeBook }: { pageCount: number; disabled?: boolean; onMakeBook: () => void }) {
   const numbers = useMarketingNumbers();
-  const binding = getBookBinding(recommendBinding(pageCount));
+  // Limits as checkout starts out, with blank backs on.
+  const binding = getBookFormat(recommendBinding(pageCount), BLANK_BACKS_DEFAULT);
   const underMin = pageCount < binding.minPages;
   const title = pageCount === 1 ? BOOK_NUDGE.titleOne : fillCopy(BOOK_NUDGE.title, { count: String(pageCount) });
   const detail = underMin

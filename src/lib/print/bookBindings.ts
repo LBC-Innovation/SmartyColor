@@ -17,6 +17,11 @@ export type BookBindingSpec = {
   /** Pad total page count to this multiple (saddle stitch folds in fours, coil sheets have two sides). */
   pageMultiple: number;
   requiredOrientation: "portrait";
+  /**
+   * Every page is printed on its own sheet with the back left blank. The limits above
+   * are then counted in pages the customer arranges, each one two printed sides.
+   */
+  blankBacks?: boolean;
 };
 
 export const BOOK_BINDINGS: Record<BookBindingId, BookBindingSpec> = {
@@ -24,9 +29,9 @@ export const BOOK_BINDINGS: Record<BookBindingId, BookBindingSpec> = {
     id: "perfect_bound",
     productId: "coloring-book-pb-bw-85x11",
     label: "Perfect bound",
-    description: "Paperback book — great for larger albums (32+ pages).",
+    description: "Paperback book — great for larger albums.",
     shortLabel: "Paperback",
-    blurb: "Glued spine like a bookstore paperback. Best for 32 pages or more.",
+    blurb: "Glued spine like a bookstore paperback. Best for bigger books.",
     podPackageId: "0850X1100.BW.STD.PB.060UW444.MXX",
     minPages: 32,
     maxPages: 800,
@@ -37,10 +42,9 @@ export const BOOK_BINDINGS: Record<BookBindingId, BookBindingSpec> = {
     id: "saddle_stitch",
     productId: "coloring-book-saddle-bw-85x11",
     label: "Saddle stitch",
-    description:
-      "Stapled booklet — 4–48 pages. Total must be a multiple of 4 (e.g. 4, 8, 12…), so 5–7 coloring pages become an 8-page book.",
+    description: "Stapled booklet — the printed page count is a multiple of 4, so blank pages may be added at the end.",
     shortLabel: "Stapled booklet",
-    blurb: "Folded and stapled, lies flat. Up to 48 pages, in sets of 4.",
+    blurb: "Folded and stapled, lies flat. Best for smaller books.",
     podPackageId: "0850X1100.BW.STD.SS.060UW444.MXX",
     minPages: 4,
     maxPages: 48,
@@ -51,7 +55,7 @@ export const BOOK_BINDINGS: Record<BookBindingId, BookBindingSpec> = {
     id: "coil_bound",
     productId: "coloring-book-coil-bw-85x11",
     label: "Coil bound",
-    description: "Spiral bound book — lies flat and folds back on itself, 2–470 pages.",
+    description: "Spiral bound book — lies flat and folds back on itself.",
     shortLabel: "Spiral bound",
     blurb: "Plastic coil spine. Lies flat and folds all the way back, great for coloring.",
     podPackageId: "0850X1100.BW.STD.CO.060UW444.MXX",
@@ -76,9 +80,32 @@ export function getBookBinding(id: BookBindingId): BookBindingSpec {
   return BOOK_BINDINGS[id];
 }
 
+/**
+ * Leave the back of every page blank, so markers can't bleed through onto the next
+ * picture. On unless the customer turns it off to save money.
+ */
+export const BLANK_BACKS_DEFAULT = true;
+
+/**
+ * A format's limits in pages the customer arranges. With blank backs each page takes a
+ * whole sheet (two printed sides), so a binding holds half as many and its minimum and
+ * multiple halve too. The PDF prints at home and never has blank backs.
+ */
+export function withBlankBacks(spec: BookBindingSpec, blankBacks: boolean): BookBindingSpec {
+  if (!blankBacks || spec.id === "digital") return spec;
+  return {
+    ...spec,
+    minPages: Math.ceil(spec.minPages / 2),
+    maxPages: Math.floor(spec.maxPages / 2),
+    pageMultiple: Math.max(1, Math.ceil(spec.pageMultiple / 2)),
+    blankBacks: true,
+  };
+}
+
 /** Best default for a given number of coloring pages. */
-export function recommendBinding(photoCount: number): BookBindingId {
-  return photoCount <= BOOK_BINDINGS.saddle_stitch.maxPages ? "saddle_stitch" : "perfect_bound";
+export function recommendBinding(photoCount: number, blankBacks = BLANK_BACKS_DEFAULT): BookBindingId {
+  const booklet = withBlankBacks(BOOK_BINDINGS.saddle_stitch, blankBacks);
+  return photoCount <= booklet.maxPages ? "saddle_stitch" : "perfect_bound";
 }
 
 /**
@@ -103,8 +130,9 @@ export function isDigitalFormat(id: BookFormatId): id is "digital" {
   return id === "digital";
 }
 
-export function getBookFormat(id: BookFormatId): BookBindingSpec {
-  return id === "digital" ? DIGITAL_FORMAT : BOOK_BINDINGS[id];
+/** A format's spec; pass `blankBacks` for its limits as the customer counts pages. */
+export function getBookFormat(id: BookFormatId, blankBacks = false): BookBindingSpec {
+  return withBlankBacks(id === "digital" ? DIGITAL_FORMAT : BOOK_BINDINGS[id], blankBacks);
 }
 
 /** A close-up photo of each printed binding, for the format pickers and the landing page. */
