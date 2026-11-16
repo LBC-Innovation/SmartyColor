@@ -64,7 +64,7 @@ export async function decodePhotoToJpegExport(bytes: Buffer): Promise<Buffer> {
     return await sharp(bytes).rotate().jpeg({ quality: 90, mozjpeg: true }).toBuffer();
   } catch {
     throw new Error(
-      "Could not read that HEIC photo. Try again or export it as JPG from Photos.",
+      "We couldn't open that iPhone photo. Try taking a screenshot of it and uploading that instead.",
     );
   }
 }
@@ -90,7 +90,7 @@ async function normalizePhotoBytesForModel(input: Buffer): Promise<Buffer> {
     return pipeline.jpeg({ quality: 92, mozjpeg: true }).toBuffer();
   } catch {
     throw new Error(
-      "That photo could not be read. Try re-uploading it as JPG or PNG.",
+      "We couldn't open that photo. Try a different one, or take a screenshot of it and upload that.",
     );
   }
 }

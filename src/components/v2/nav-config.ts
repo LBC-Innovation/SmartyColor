@@ -9,6 +9,8 @@ import {
   Home,
   LayoutDashboard,
   LineChart,
+  Link2,
+  Megaphone,
   Palette,
   Package,
   Sparkles,
@@ -50,7 +52,7 @@ export const v2BottomNav: V2NavItem[] = [
 ];
 
 export type V2AdminNavItem = V2NavItem & {
-  group: "overview" | "operate" | "money";
+  group: "overview" | "operate" | "grow" | "money";
   /** Any one of these opens the page (`permission` is the first). */
   anyPermission?: Permission[];
 };
@@ -67,6 +69,22 @@ export const v2AdminNav: V2AdminNavItem[] = [
     group: "operate",
   },
   { id: "users", label: "Customers", icon: Users, href: "/admin/users", permission: "usermanage:listusers", group: "operate" },
+  {
+    id: "acquisition",
+    label: "Acquisition",
+    icon: Megaphone,
+    href: "/admin/acquisition",
+    permission: "finance:view",
+    group: "grow",
+  },
+  {
+    id: "links",
+    label: "Campaign links",
+    icon: Link2,
+    href: "/admin/links",
+    permission: "finance:view",
+    group: "grow",
+  },
   {
     id: "finance",
     label: "Financials",

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       const limit = formatPhotoSizeLimit(PHOTO_SERVER_UPLOAD_MAX_BYTES);
       return Response.json(
         {
-          error: `That file is too large for server conversion (max ${limit}). Convert it to JPG on your device, or use a smaller HEIC.`,
+          error: `That photo is too big for us to open (the limit is ${limit}). Try taking a screenshot of it and uploading that instead.`,
         },
         { status: 400 },
       );
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       bytes = Buffer.from(await decodePhotoToJpegExport(bytes));
     } else if (!type.startsWith("image/") && !sniffHeicBytes(bytes)) {
       return Response.json(
-        { error: "Please use a JPG, PNG, WebP, or HEIC photo." },
+        { error: "That file isn't a photo we can use. Try a picture from your phone or computer." },
         { status: 400 },
       );
     } else if (type !== "image/jpeg") {

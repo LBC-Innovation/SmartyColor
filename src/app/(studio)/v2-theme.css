@@ -16,9 +16,12 @@
   --color-v2-success-border: #a7f3d0;
   --color-v2-success-text: #047857;
   --font-v2-display: var(--font-fredoka);
-  /* Landing pages: a warm paper base, a butter band and one deep plum band (see docs/landing-redesign.md) */
-  --color-v2-cream: #fff9f0;
-  --color-v2-butter: #fff1c4;
+  /* Landing pages: a cool lavender-white base, a lilac band and one deep plum band. Kept in the
+     violet family so tints sit with the primary instead of fighting it (was cream + butter yellow). */
+  --color-v2-cream: #f8f6ff;
+  --color-v2-butter: #ece6ff;
+  /* Backdrop behind the plum hero card: a mid lilac so the dark card doesn't slam into near-white. */
+  --color-v2-mast: #d9cefc;
   --color-v2-plum: #241a4d;
   /* The five logo colors, exactly as drawn — for decoration, not body text */
   --color-brand-coral: #fb513b;

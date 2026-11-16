@@ -4,11 +4,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SharedPagePrintButton } from "@/components/v2/share/SharedPagePrintButton";
 import { findSharedPage } from "@/server/pageSharesService";
+import { referralCodeFor } from "@/server/referralService";
 
 type Props = { params: Promise<{ token: string }> };
 
-/** Where "Make your own" goes: the landing page, tagged so sign-ups from shared pages can be counted. */
-const MAKE_YOUR_OWN_HREF = "/?utm_source=share&utm_medium=page_link&utm_campaign=shared_page";
+/**
+ * Where "Make your own" goes: the landing page, tagged so sign-ups from shared pages can be
+ * counted, with the sharer's referral code so they're credited for a friend who joins.
+ */
+function makeYourOwnHref(refCode: string | null): string {
+  const ref = refCode ? `&ref=${encodeURIComponent(refCode)}` : "";
+  return `/?utm_source=share&utm_medium=page_link&utm_campaign=shared_page${ref}`;
+}
 
 // Revoking a link must take effect on the next request.
 export const dynamic = "force-dynamic";
@@ -39,11 +46,12 @@ export default async function SharedPage({ params }: Props) {
   const { token } = await params;
   const page = await findSharedPage(token).catch(() => null);
   if (!page) notFound();
+  const refCode = await referralCodeFor(page.sharerId);
 
   return (
     <main className="px-4 py-6 sm:py-10">
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-5">
-        <Link href={MAKE_YOUR_OWN_HREF} className="print:hidden" aria-label="Colorful Memories">
+        <Link href={makeYourOwnHref(refCode)} className="print:hidden" aria-label="Colorful Memories">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/wordmark.svg" alt="Colorful Memories" width={220} height={27} className="h-6 w-auto" />
         </Link>
@@ -59,7 +67,7 @@ export default async function SharedPage({ params }: Props) {
 
         <div className="flex w-full flex-col items-center gap-3 text-center print:hidden">
           <SharedPagePrintButton />
-          <SharedPageSignUp />
+          <SharedPageSignUp refCode={refCode} />
         </div>
       </div>
     </main>

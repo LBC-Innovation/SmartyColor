@@ -5,6 +5,7 @@ import { clientOrigin } from "@/lib/auth/clientOrigin";
 import type { PageShare } from "@/lib/library/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { photoAccess } from "@/server/libraryAccess";
+import { referralCodeFor } from "@/server/referralService";
 import { getObjectBytes } from "@/server/storage/libraryFiles";
 
 /**
@@ -27,14 +28,18 @@ function log(level: string, message: string, ctx: Record<string, unknown> = {}) 
   console.log(JSON.stringify({ level, message, ...ctx }));
 }
 
-/** Where a shared page lives. utm_source=share marks visits that came from a shared link. */
-export function pageShareUrl(token: string): string {
-  return `${clientOrigin()}/p/${token}?utm_source=share&utm_medium=page_link`;
+/**
+ * Where a shared page lives. utm_source=share marks visits that came from a shared link; ref is
+ * the sharer's referral code, so a friend who signs up from it counts as their referral.
+ */
+export function pageShareUrl(token: string, refCode?: string | null): string {
+  const ref = refCode ? `&ref=${encodeURIComponent(refCode)}` : "";
+  return `${clientOrigin()}/p/${token}?utm_source=share&utm_medium=page_link&utm_campaign=shared_page${ref}`;
 }
 
-function shareFromRow(row: Row): PageShare {
+function shareFromRow(row: Row, refCode: string | null = null): PageShare {
   return {
-    url: pageShareUrl(row.token as string),
+    url: pageShareUrl(row.token as string, refCode),
     revisionId: row.revision_id as string,
     createdAt: row.created_at as string,
   };
@@ -69,7 +74,7 @@ export async function getPageShare(userId: string, photoId: string): Promise<Api
   if (photo.error) return photo;
   try {
     const row = await liveShare(userId, photoId);
-    return { data: row ? shareFromRow(row) : null, error: null };
+    return { data: row ? shareFromRow(row, await referralCodeFor(userId)) : null, error: null };
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not read the link");
   }
@@ -92,9 +97,10 @@ export async function sharePage(userId: string, photoId: string, revisionId: str
   }
 
   try {
+    const refCode = await referralCodeFor(userId);
     const existing = await liveShare(userId, photoId);
     if (existing) {
-      if (existing.revision_id === revisionId) return { data: shareFromRow(existing), error: null };
+      if (existing.revision_id === revisionId) return { data: shareFromRow(existing, refCode), error: null };
       const { data, error } = await db()
         .from("page_shares")
         .update({ revision_id: revisionId })
@@ -102,7 +108,7 @@ export async function sharePage(userId: string, photoId: string, revisionId: str
         .select("*")
         .single();
       if (error || !data) return err(error?.message ?? "Could not update the link");
-      return { data: shareFromRow(data), error: null };
+      return { data: shareFromRow(data, refCode), error: null };
     }
 
     const { data, error } = await db()
@@ -117,7 +123,7 @@ export async function sharePage(userId: string, photoId: string, revisionId: str
       .single();
     if (error || !data) return err(error?.message ?? "Could not create the link");
     log("info", "page share created", { userId, photoId });
-    return { data: shareFromRow(data), error: null };
+    return { data: shareFromRow(data, refCode), error: null };
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not create the link");
   }
@@ -138,8 +144,11 @@ export async function stopSharingPage(userId: string, photoId: string): Promise<
   return { data: { revoked: data.length > 0 }, error: null };
 }
 
-/** Deliberately no title: a sheet's title can name the people in the photo. */
-export type SharedPage = { token: string; storagePath: string; mimeType: string };
+/**
+ * Deliberately no title: a sheet's title can name the people in the photo. sharerId is for the
+ * server only (to look up the sharer's referral code); never render it.
+ */
+export type SharedPage = { token: string; storagePath: string; mimeType: string; sharerId: string };
 
 /**
  * The page behind a public link, or null when the link is unknown, revoked, or its owner can
@@ -171,6 +180,7 @@ export async function findSharedPage(token: string): Promise<SharedPage | null> 
     token,
     storagePath: revision.storage_path as string,
     mimeType: revision.mime_type as string,
+    sharerId: share.user_id as string,
   };
 }
 

@@ -34,6 +34,46 @@ const APP_DESCRIPTION =
 // Matches the white header so the browser chrome blends into the page.
 const THEME_COLOR = "#ffffff";
 
+/** Search-engine ownership checks, set in the deployment's environment (the code from each console). */
+const GOOGLE_SITE_VERIFICATION = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
+const BING_SITE_VERIFICATION = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION?.trim();
+const PINTEREST_SITE_VERIFICATION = process.env.NEXT_PUBLIC_PINTEREST_SITE_VERIFICATION?.trim();
+const META_DOMAIN_VERIFICATION = process.env.NEXT_PUBLIC_META_DOMAIN_VERIFICATION?.trim();
+
+/** Social profiles, comma-separated full URLs, for the Organization structured data. */
+const SOCIAL_PROFILES = (process.env.NEXT_PUBLIC_SOCIAL_PROFILES ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => /^https:\/\/[^\s"<>]+$/.test(s));
+
+/** Tells search engines who runs the site and what it's called (Organization + WebSite). */
+const STRUCTURED_DATA = JSON.stringify({
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: APP_NAME,
+      url: SITE_URL,
+      logo: `${SITE_URL}/pwa/icon-512.png`,
+      ...(SOCIAL_PROFILES.length ? { sameAs: SOCIAL_PROFILES } : {}),
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: APP_NAME,
+      url: SITE_URL,
+      description: APP_DESCRIPTION,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+  ],
+}).replace(/</g, "\\u003c");
+
+const otherVerification: Record<string, string> = {};
+if (BING_SITE_VERIFICATION) otherVerification["msvalidate.01"] = BING_SITE_VERIFICATION;
+if (PINTEREST_SITE_VERIFICATION) otherVerification["p:domain_verify"] = PINTEREST_SITE_VERIFICATION;
+if (META_DOMAIN_VERIFICATION) otherVerification["facebook-domain-verification"] = META_DOMAIN_VERIFICATION;
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: APP_NAME,
@@ -53,6 +93,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+  },
+  verification: {
+    ...(GOOGLE_SITE_VERIFICATION ? { google: GOOGLE_SITE_VERIFICATION } : {}),
+    ...(Object.keys(otherVerification).length ? { other: otherVerification } : {}),
   },
   icons: {
     icon: [
@@ -83,6 +127,7 @@ export default function RootLayout({
     >
       <head>
         <PwaShellScript />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: STRUCTURED_DATA }} />
       </head>
       <body
         className="min-h-full bg-white font-body text-ink"

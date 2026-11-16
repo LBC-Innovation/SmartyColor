@@ -16,6 +16,10 @@ export type VisionGuest = {
   postal: string | null;
   latitude: number | null;
   longitude: number | null;
+  /** Where the guest came from (their cm_attr cookie's last touch), for acquisition reports. */
+  channel?: string | null;
+  source?: string | null;
+  campaign?: string | null;
 };
 
 type VisionContext = { userId: string | null; guest?: VisionGuest | null };

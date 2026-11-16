@@ -33,7 +33,7 @@ function screen(files: File[], existing: File[]): { ok: File[]; problems: string
   const problems: string[] = [];
   for (const file of files) {
     if (!isAllowedPhotoFile(file)) {
-      problems.push(`"${file.name}" isn't a photo (JPG, PNG, WebP or HEIC).`);
+      problems.push(`"${file.name}" isn't a photo we can use. Try a picture from your phone or computer.`);
     } else if (file.size > PHOTO_UPLOAD_MAX_BYTES) {
       problems.push(`"${file.name}" is over ${formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES)}.`);
     } else if (!seen.has(fileKey(file))) {

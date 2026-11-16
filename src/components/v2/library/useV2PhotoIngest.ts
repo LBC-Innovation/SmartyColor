@@ -45,7 +45,7 @@ export function useV2PhotoIngest(options?: IngestOptions) {
     const queue: { file: File; pendingId: string }[] = [];
     for (const file of files) {
       if (!isAllowedPhotoFile(file)) {
-        toast.error("Please choose photos only (JPG, PNG, WebP, or HEIC).");
+        toast.error("Only photos can be added here. Try a picture from your phone or computer.");
         continue;
       }
       if (file.size > PHOTO_UPLOAD_MAX_BYTES) {

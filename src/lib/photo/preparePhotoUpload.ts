@@ -50,12 +50,13 @@ function heicServerFallbackError(file: File, cause?: string): Error {
   const limit = formatPhotoSizeLimit(PHOTO_SERVER_UPLOAD_MAX_BYTES);
   const base =
     file.size > PHOTO_SERVER_UPLOAD_MAX_BYTES
-      ? `This HEIC is over ${limit}, so we cannot convert it on the server.`
-      : "Browser conversion failed and server conversion did not succeed.";
+      ? `This iPhone photo is over ${limit}, too big for us to open.`
+      : "We couldn't open this iPhone photo.";
   const hint =
-    " Try opening the photo in Photos and using Share → Save to Files or Duplicate as JPG, then upload the JPG.";
-  const detail = cause ? ` (${cause})` : "";
-  return new Error(`${base}${detail}${hint}`);
+    " Try taking a screenshot of it and uploading that instead.";
+  // The underlying reason is technical (or repeats this message); keep it out of the toast.
+  if (cause) console.warn("[photo] iPhone photo conversion failed:", cause);
+  return new Error(`${base}${hint}`);
 }
 
 /**

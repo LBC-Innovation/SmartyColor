@@ -57,6 +57,27 @@ async function ensureCode(userId: string): Promise<ApiResult<string>> {
   return err("Could not create a referral code");
 }
 
+/**
+ * The account's referral code (assigned now if it has none), for tagging links the account sends
+ * out: shared pages, album invites, family emails. Null when it can't be read; links then go
+ * out untagged rather than failing.
+ */
+export async function referralCodeFor(userId: string): Promise<string | null> {
+  try {
+    const code = await ensureCode(userId);
+    return code.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** `url` with the sharer's referral code and campaign tags added (existing tags are kept). */
+export function withShareTags(url: string, tags: Record<string, string | null | undefined>): string {
+  const u = new URL(url);
+  for (const [k, v] of Object.entries(tags)) if (v && !u.searchParams.has(k)) u.searchParams.set(k, v);
+  return u.toString();
+}
+
 export async function getReferralSummary(userId: string): Promise<ApiResult<ReferralSummary>> {
   const code = await ensureCode(userId);
   if (code.error) return code;

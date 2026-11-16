@@ -31,15 +31,15 @@ function resolveMediaType(declared: string, bytes: Buffer): string {
     return "image/heic";
   }
   if (type === "application/octet-stream" || type === "") {
-    throw new Error("Please use a JPG, PNG, WebP, or HEIC photo.");
+    throw new Error("That file isn't a photo we can use. Try a picture from your phone or computer.");
   }
-  throw new Error("Please use a JPG, PNG, WebP, or HEIC photo.");
+  throw new Error("That file isn't a photo we can use. Try a picture from your phone or computer.");
 }
 
 export function parsePhotoDataUrl(dataUrl: string): ParsedPhoto {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) {
-    throw new Error("That photo format did not look right. Try JPG or HEIC.");
+    throw new Error("That photo didn't come through right. Please try adding it again.");
   }
   const base64 = match[2];
   const bytes = Buffer.from(base64, "base64");

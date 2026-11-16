@@ -6,6 +6,7 @@ import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import * as library from "@/lib/library/client";
 import type { AlbumShare } from "@/lib/library/types";
+import { track } from "@/lib/track";
 
 type Props = {
   projectId: string;
@@ -117,12 +118,14 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
     setCreated({ shareId: share.id, url, message });
 
     if (how === "sms") {
+      track("share", { method: "sms", content_type: "album" });
       window.location.href = smsHref(message);
       return;
     }
     if (canNativeShare) {
       try {
         await navigator.share({ title: `Join “${albumName}”`, text: message });
+        track("share", { method: "native", content_type: "album" });
       } catch {
         // Dismissed, or the browser wanted a fresh tap: the Share button under the link works on its own.
       }
@@ -134,6 +137,7 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
   async function copyLink(shareId: string, url: string, quiet = false) {
     try {
       await navigator.clipboard.writeText(url);
+      track("share", { method: "copy", content_type: "album" });
       setCopiedId(shareId);
       setTimeout(() => setCopiedId((current) => (current === shareId ? null : current)), 2000);
       if (quiet) toast.success({ title: "Link copied", message: "Paste it into any app to send it." });

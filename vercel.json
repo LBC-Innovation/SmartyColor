@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/lulu-sync", "schedule": "0 9 * * *" },
-    { "path": "/api/cron/guest-retention", "schedule": "30 9 * * *" }
+    { "path": "/api/cron/guest-retention", "schedule": "30 9 * * *" },
+    { "path": "/api/cron/lifecycle-emails", "schedule": "0 17 * * *" }
   ]
 }

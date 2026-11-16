@@ -80,6 +80,7 @@ const GROUP_LABEL: Record<V2AdminNavItem["group"], string | null> = {
   overview: null,
   operate: "Operate",
   money: "Money",
+  grow: "Growth",
 };
 
 function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlerts }) {
@@ -102,7 +103,7 @@ function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlerts 
 
 function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: AdminAlerts }) {
   const pathname = usePathname();
-  const groups = (["overview", "operate", "money"] as const)
+  const groups = (["overview", "operate", "grow", "money"] as const)
     .map((g) => ({ id: g, items: items.filter((i) => i.group === g) }))
     .filter((g) => g.items.length > 0);
   return (
