@@ -37,6 +37,12 @@ export interface AdminUser {
   creditsBalanceCents: number;
   /** Product-line toggles saved on the account. */
   features: FeatureAccess;
+  /** Book orders placed (drafts and quotes left out). Optional: single-user endpoints may omit it. */
+  ordersCount?: number;
+  /** Total of paid, not canceled or refunded, orders in USD cents. */
+  lifetimeSpendCents?: number;
+  /** Latest account activity or sign-in, ISO; null if never. */
+  lastActiveAt?: string | null;
 }
 
 /** Every grantable permission (see PERMISSION_META). */

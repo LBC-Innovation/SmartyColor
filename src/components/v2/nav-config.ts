@@ -3,13 +3,13 @@ import type { ProductFeature } from "@/lib/auth/features";
 import type { Permission } from "@/lib/auth/permissionMeta";
 import {
   BookOpen,
-  CircleDollarSign,
   ClipboardList,
-  Gift,
   Home,
+  LayoutDashboard,
   LineChart,
   Palette,
   Package,
+  Sparkles,
   Tags,
   Users,
 } from "lucide-react";
@@ -47,48 +47,65 @@ export const v2BottomNav: V2NavItem[] = [
   { id: "orders", label: "Orders", icon: Package, href: "/orders" },
 ];
 
-/** Secondary menu shown on admin pages. */
-export const v2AdminNav: V2NavItem[] = [
-  { id: "users", label: "Users", icon: Users, href: "/admin/users", permission: "usermanage:listusers" },
+export type V2AdminNavItem = V2NavItem & {
+  group: "overview" | "operate" | "money";
+  /** Any one of these opens the page (`permission` is the first). */
+  anyPermission?: Permission[];
+};
+
+/** The admin sidebar, in order. Overview opens for any admin permission; each card checks its own. */
+export const v2AdminNav: V2AdminNavItem[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard, href: "/admin", group: "overview" },
   {
     id: "orders",
     label: "Orders",
     icon: Package,
     href: "/admin/orders",
     permission: "usermanage:manageorders",
+    group: "operate",
   },
+  { id: "users", label: "Customers", icon: Users, href: "/admin/users", permission: "usermanage:listusers", group: "operate" },
   {
     id: "finance",
     label: "Financials",
     icon: LineChart,
     href: "/admin/finance",
     permission: "finance:view",
+    group: "money",
   },
   {
     id: "vision-costs",
-    label: "Vision costs",
-    icon: CircleDollarSign,
+    label: "AI usage",
+    icon: Sparkles,
     href: "/admin/vision-costs",
     permission: "costs:viewai",
+    group: "money",
   },
   {
     id: "pricing",
-    label: "Prices",
+    label: "Pricing & promos",
     icon: Tags,
     href: "/admin/pricing",
     permission: "pricing:manage",
-  },
-  {
-    id: "promo-credits",
-    label: "Promo credits",
-    icon: Gift,
-    href: "/admin/promo-credits",
-    permission: "usermanage:adjustcredits",
+    anyPermission: ["pricing:manage", "usermanage:adjustcredits"],
+    group: "money",
   },
 ];
 
+/** Permissions that make someone an admin: any one of them opens /admin. */
+export const ADMIN_PERMISSIONS: Permission[] = [
+  ...new Set(v2AdminNav.flatMap((item) => item.anyPermission ?? (item.permission ? [item.permission] : []))),
+];
+
+export function canOpenAdminItem(permissions: readonly string[], item: V2AdminNavItem): boolean {
+  if (item.id === "overview") return ADMIN_PERMISSIONS.some((p) => permissions.includes(p));
+  const needed = item.anyPermission ?? (item.permission ? [item.permission] : []);
+  return needed.length === 0 || needed.some((p) => permissions.includes(p));
+}
+
 export function isV2NavItemActive(pathname: string, item: V2NavItem): boolean {
   if (!item.href) return false;
+  if (item.href === "/admin") return pathname === "/admin";
   if (item.href === STUDIO_HOME) {
     return pathname === STUDIO_HOME || pathname.startsWith(`${STUDIO_HOME}/`);
   }

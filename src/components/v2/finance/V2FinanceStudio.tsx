@@ -1,29 +1,44 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AlertOctagon, AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw } from "lucide-react";
-import { V2StudioFrame } from "@/components/v2/V2Chrome";
-import { ADMIN_CONTENT_CLASS, V2AdminToolbar } from "@/components/v2/auth/V2AdminSubNav";
+import { DataTable, type Column } from "@/components/v2/admin/DataTable";
+import { count, money, percent, signedMoney } from "@/components/v2/admin/format";
+import {
+  AttentionList,
+  Callout,
+  DefinitionList,
+  EmptyState,
+  ErrorPanel,
+  KpiGrid,
+  KpiTile,
+  PageHeader,
+  PageLoading,
+  RefreshButton,
+  Section,
+  SegmentedControl,
+  TabPanel,
+  Tabs,
+  type AttentionItemData,
+} from "@/components/v2/admin/ui";
+import { useUrlParam } from "@/components/v2/admin/useUrlParam";
 import { V2FinanceCashChart } from "@/components/v2/finance/V2FinanceCashChart";
 import { V2FinanceCosts, V2FinanceSettingsForm } from "@/components/v2/finance/V2FinanceCosts";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { cn } from "@/lib/cn";
-import { formatCredits } from "@/lib/credits/money";
 import {
   FINANCE_MANAGE_PERMISSION,
   type CostLine,
   type FinanceReport,
-  type Insight,
   type PeriodTotals,
   type ProductLine,
 } from "@/lib/finance/types";
 
 const DAY_MS = 86_400_000;
 
-type PresetId = "30d" | "90d" | "mtd" | "last_month" | "ytd" | "12m" | "all" | "custom";
+type PresetId = "30d" | "90d" | "mtd" | "last_month" | "ytd" | "12m" | "all";
 
-const PRESETS: Array<{ id: Exclude<PresetId, "custom">; label: string }> = [
+const PRESETS: Array<{ id: PresetId; label: string }> = [
   { id: "30d", label: "30 days" },
   { id: "90d", label: "90 days" },
   { id: "mtd", label: "This month" },
@@ -38,7 +53,7 @@ function iso(ms: number): string {
 }
 
 /** Preset → inclusive UTC dates. */
-function presetRange(id: Exclude<PresetId, "custom">): { from: string; to: string } {
+function presetRange(id: PresetId): { from: string; to: string } {
   const now = new Date();
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const y = now.getUTCFullYear();
@@ -61,35 +76,34 @@ function presetRange(id: Exclude<PresetId, "custom">): { from: string; to: strin
   }
 }
 
-/** Sub-cent AI amounts round to zero; never show "-$0.00". */
-function money(cents: number): string {
-  return formatCredits(Math.abs(cents) < 0.5 ? 0 : cents);
-}
+type TabId = "products" | "statements" | "balances" | "costs";
 
-function pct(value: number | null, digits = 0): string {
-  return value == null ? "—" : `${value.toFixed(digits)}%`;
-}
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: "products", label: "Products" },
+  { id: "statements", label: "Statements" },
+  { id: "balances", label: "Balances" },
+  { id: "costs", label: "Costs & assumptions" },
+];
 
-function signed(cents: number): string {
-  return `${cents >= 0.5 ? "+" : ""}${money(cents)}`;
-}
+const GROSS_PROFIT_TIP = "Gross profit here is the contribution margin: net revenue minus the variable costs each sale causes.";
 
 export function V2FinanceStudio() {
   const { user } = useAuth();
   const canManage = user?.permissions.includes(FINANCE_MANAGE_PERMISSION) ?? false;
-  const [preset, setPreset] = useState<PresetId>("30d");
+  const [preset, setPreset] = useState<PresetId | null>("30d");
   const [range, setRange] = useState(() => presetRange("30d"));
   const [report, setReport] = useState<FinanceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tabParam, setTabParam] = useUrlParam("tab");
+  const tab: TabId = TABS.some((t) => t.id === tabParam) ? (tabParam as TabId) : "products";
 
   const load = useCallback(async (r: { from: string; to: string }) => {
     setLoading(true);
     const result = await api.adminGetFinance(r);
     setLoading(false);
-    if (api.isError(result)) {
-      setError(result.error.message);
-    } else {
+    if (api.isError(result)) setError(result.error.message);
+    else {
       setError(null);
       setReport(result.data);
     }
@@ -111,154 +125,85 @@ export function V2FinanceStudio() {
     };
   }, [range]);
 
-  function choose(id: Exclude<PresetId, "custom">) {
+  function choose(id: PresetId) {
     setPreset(id);
     setLoading(true);
     setRange(presetRange(id));
   }
 
+  function setCustom(part: "from" | "to", value: string) {
+    if (!value) return;
+    setPreset(null);
+    setLoading(true);
+    setRange((r) => ({ ...r, [part]: value }));
+  }
+
   const reload = () => void load(range);
 
   return (
-    <V2StudioFrame>
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-        <V2AdminToolbar />
-        <main className="flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-6">
-          <div className={`${ADMIN_CONTENT_CLASS} py-6 sm:py-8`}>
-            <header className="mb-5">
-              <h1 className="v2-brand-title text-2xl tracking-tight text-v2-ink sm:text-3xl">Financials</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-v2-muted sm:text-base">
-                Where the money comes from and where it goes. Cash shows what actually moved through the bank;
-                profit counts revenue when customers spend their wallet, not when they top it up.
-              </p>
-            </header>
-
-            <div className="mb-6 flex flex-wrap items-center gap-2">
-              <div className="flex flex-wrap gap-1 rounded-xl bg-v2-bg-subtle p-1" role="group" aria-label="Period">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => choose(p.id)}
-                    aria-pressed={preset === p.id}
-                    className={cn(
-                      "h-8 rounded-lg px-3 text-xs font-semibold transition-colors",
-                      preset === p.id ? "bg-white text-v2-primary shadow-sm" : "text-v2-navy hover:text-v2-ink",
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-v2-muted">
-                <input
-                  type="date"
-                  aria-label="From"
-                  className="v2-input h-8 w-[9.5rem] py-0 text-xs"
-                  value={report && range.from === "all" ? report.range.from : range.from}
-                  max={range.to}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    setPreset("custom");
-                    setLoading(true);
-                    setRange((r) => ({ ...r, from: e.target.value }));
-                  }}
-                />
-                <span>to</span>
-                <input
-                  type="date"
-                  aria-label="To"
-                  className="v2-input h-8 w-[9.5rem] py-0 text-xs"
-                  value={range.to}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    setPreset("custom");
-                    setLoading(true);
-                    setRange((r) => ({ ...r, to: e.target.value }));
-                  }}
-                />
-              </div>
-              <button type="button" className="v2-btn-sm text-v2-muted" onClick={reload} aria-label="Refresh">
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
-              </button>
+    <>
+      <PageHeader
+        title="Financials"
+        description="Profit counts revenue when customers spend their wallet; cash counts money that actually moved."
+        actions={
+          <>
+            <SegmentedControl options={PRESETS} value={preset} onChange={choose} ariaLabel="Period" />
+            <div className="flex items-center gap-1.5 text-sm text-v2-muted">
+              <input
+                type="date"
+                aria-label="From"
+                className="v2-input h-9 w-[9.5rem] py-0 text-sm"
+                value={report && range.from === "all" ? report.range.from : range.from}
+                max={range.to}
+                onChange={(e) => setCustom("from", e.target.value)}
+              />
+              <span aria-hidden>–</span>
+              <input
+                type="date"
+                aria-label="To"
+                className="v2-input h-9 w-[9.5rem] py-0 text-sm"
+                value={range.to}
+                onChange={(e) => setCustom("to", e.target.value)}
+              />
             </div>
+            <RefreshButton onClick={reload} loading={loading} />
+          </>
+        }
+      />
 
-            {error ? (
-              <p className="v2-panel mb-6 p-4 text-sm text-red-700" role="alert">
-                {error}
-              </p>
-            ) : null}
+      {error ? <div className="mb-6"><ErrorPanel>{error}</ErrorPanel></div> : null}
 
-            {!report ? (
-              loading ? (
-                <div className="flex min-h-[30vh] items-center justify-center text-v2-muted">
-                  <Loader2 className="h-8 w-8 animate-spin text-v2-primary" aria-label="Loading" />
-                </div>
-              ) : null
-            ) : (
-              <div className={cn("space-y-8 transition-opacity", loading && "opacity-60")}>
-                {!report.setupComplete ? (
-                  <p className="v2-panel p-4 text-sm text-amber-800" role="status">
-                    The finance tables aren&apos;t set up yet (migration 0023), so entered costs and assumptions are
-                    unavailable. Everything the app records is still shown.
-                  </p>
-                ) : null}
+      {!report ? (
+        loading ? <PageLoading label="Loading financials" /> : null
+      ) : (
+        <div className={cn("space-y-8 transition-opacity", loading && "opacity-60")} aria-busy={loading}>
+          {!report.setupComplete ? (
+            <Callout tone="info" title="Fixed costs and assumptions aren't set up yet">
+              Profit leaves them out until they are. Everything the app records is still shown.
+            </Callout>
+          ) : null}
 
-                <KpiRow report={report} />
+          <Kpis report={report} />
+          <Insights report={report} />
 
-                {report.insights.length ? (
-                  <section>
-                    <p className="v2-section-title mb-3">What to pay attention to</p>
-                    <InsightTable insights={report.insights} />
-                  </section>
-                ) : null}
+          <Section
+            title="Cash in vs. cash out"
+            description={`By ${report.range.granularity}, ${report.range.from} to ${report.range.to} (UTC). Cash in is card top-ups; cash out is card fees, AI, the printer and your entered costs.`}
+          >
+            <div className="v2-panel p-5">
+              <V2FinanceCashChart series={report.series} />
+            </div>
+          </Section>
 
-                <section>
-                  <p className="v2-section-title mb-1">Cash in vs. cash out</p>
-                  <p className="mb-3 text-xs text-v2-muted">
-                    By {report.range.granularity}, {report.range.from} to {report.range.to} (UTC). Cash in is card
-                    top-ups; cash out is card fees, AI, Lulu and your entered costs.
-                  </p>
-                  <div className="v2-panel p-4 sm:p-5">
-                    <V2FinanceCashChart series={report.series} />
-                  </div>
-                </section>
-
-                <section className="grid gap-6 lg:grid-cols-2">
-                  <div>
-                    <p className="v2-section-title mb-3">Profit & loss</p>
-                    <ProfitAndLoss current={report.current} previous={report.previous} />
-                  </div>
-                  <div>
-                    <p className="v2-section-title mb-3">Cash flow</p>
-                    <CashFlow current={report.current} previous={report.previous} report={report} />
-                  </div>
-                </section>
-
-                <section>
-                  <p className="v2-section-title mb-1">Contribution margin by product</p>
-                  <p className="mb-3 max-w-3xl text-xs leading-relaxed text-v2-muted">
-                    What each product earns after the costs it causes. Variable cost counts every AI call made for the
-                    product, including free edits, retries and failures, and Lulu&apos;s full charge (printing,
-                    shipping, tax) for books. List margin is the margin at full price before promo credit.
-                  </p>
-                  <ProductTable products={report.products} />
-                </section>
-
-                <section className="grid gap-6 lg:grid-cols-2">
-                  <div>
-                    <p className="v2-section-title mb-3">Balances & obligations</p>
-                    <Balances report={report} />
-                  </div>
-                  <div>
-                    <p className="v2-section-title mb-3">Customers & unit economics</p>
-                    <UnitEconomics report={report} />
-                  </div>
-                </section>
-
-                {report.setupComplete ? (
-                  <section className="space-y-4">
-                    <p className="v2-section-title">Costs & assumptions</p>
+          <div>
+            <Tabs tabs={TABS} value={tab} onChange={(id) => setTabParam(id === "products" ? null : id)} ariaLabel="Financial detail" idPrefix="finance" />
+            <TabPanel idPrefix="finance" id={tab} className="pt-6">
+              {tab === "products" ? <ProductTable products={report.products} /> : null}
+              {tab === "statements" ? <Statements report={report} /> : null}
+              {tab === "balances" ? <Balances report={report} /> : null}
+              {tab === "costs" ? (
+                report.setupComplete ? (
+                  <div className="space-y-8">
                     <V2FinanceCosts costs={report.costs} canManage={canManage} onChanged={reload} />
                     <V2FinanceSettingsForm
                       key={report.settings.updatedAt ?? "defaults"}
@@ -266,165 +211,215 @@ export function V2FinanceStudio() {
                       canManage={canManage}
                       onSaved={reload}
                     />
-                  </section>
-                ) : null}
-
-                <Methodology />
-              </div>
-            )}
+                  </div>
+                ) : (
+                  <Callout tone="info" title="Costs and assumptions aren't available yet">
+                    The tables that hold them haven&apos;t been set up on this database.
+                  </Callout>
+                )
+              ) : null}
+            </TabPanel>
           </div>
-        </main>
-      </div>
-    </V2StudioFrame>
+        </div>
+      )}
+    </>
   );
 }
 
-// --- KPIs ---------------------------------------------------------------------------------------
+// --- KPIs and insights --------------------------------------------------------------------------
 
-function KpiRow({ report }: { report: FinanceReport }) {
+function Kpis({ report }: { report: FinanceReport }) {
   const c = report.current;
   const p = report.previous;
   const cash = report.balances.cashOnHandCents;
+  const s = report.series;
+  const delta = (cur: number, prev: number) => ({ value: cur - prev, text: signedMoney(cur - prev), goodWhen: "up" as const });
   return (
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-      <Kpi
-        label="Cash in"
-        value={money(c.cash.cashInCents)}
-        sub={`${c.cash.topUpCount} top-up${c.cash.topUpCount === 1 ? "" : "s"}`}
-        delta={c.cash.cashInCents - p.cash.cashInCents}
-      />
-      <Kpi
-        label="Net cash flow"
-        value={money(c.cash.netCashFlowCents)}
-        sub={`${money(c.cash.cashOutCents)} out`}
-        delta={c.cash.netCashFlowCents - p.cash.netCashFlowCents}
-        negative={c.cash.netCashFlowCents < 0}
-      />
-      <Kpi
+    <KpiGrid>
+      <KpiTile
         label="Net revenue"
         value={money(c.pnl.netRevenueCents)}
-        sub={`${money(c.pnl.grossSalesCents)} sales, ${money(c.pnl.promoCents)} promo`}
-        delta={c.pnl.netRevenueCents - p.pnl.netRevenueCents}
+        delta={delta(c.pnl.netRevenueCents, p.pnl.netRevenueCents)}
+        sub={`${money(c.pnl.grossSalesCents)} sales, ${money(c.pnl.promoCents)} paid with promo credit`}
+        trend={s.map((x) => x.netRevenueCents)}
       />
-      <Kpi
-        label="Contribution margin"
-        value={money(c.pnl.contributionCents)}
-        sub={`${pct(c.pnl.contributionPct)} of net revenue`}
-        delta={c.pnl.contributionCents - p.pnl.contributionCents}
-        negative={c.pnl.contributionCents < 0}
-      />
-      <Kpi
+      <div title={GROSS_PROFIT_TIP}>
+        <KpiTile
+          label="Gross profit"
+          value={money(c.pnl.contributionCents)}
+          delta={delta(c.pnl.contributionCents, p.pnl.contributionCents)}
+          sub={`${percent(c.pnl.contributionPct)} margin`}
+          tone={c.pnl.contributionCents < 0 ? "bad" : "default"}
+        />
+      </div>
+      <KpiTile
         label="Operating profit"
         value={money(c.pnl.operatingProfitCents)}
-        sub={`${pct(c.pnl.operatingMarginPct)} margin`}
-        delta={c.pnl.operatingProfitCents - p.pnl.operatingProfitCents}
-        negative={c.pnl.operatingProfitCents < 0}
+        delta={delta(c.pnl.operatingProfitCents, p.pnl.operatingProfitCents)}
+        sub={`${percent(c.pnl.operatingMarginPct)} margin, after fixed costs`}
+        tone={c.pnl.operatingProfitCents < 0 ? "bad" : "default"}
+        trend={s.map((x) => x.operatingProfitCents)}
       />
       {cash != null ? (
-        <Kpi
+        <KpiTile
           label="Cash on hand"
           value={money(cash)}
           sub={
             report.unitEconomics.runwayMonths != null
               ? `${report.unitEconomics.runwayMonths.toFixed(1)} months of runway`
-              : "Cash-positive over 90 days"
+              : "Cash-positive over the last 90 days"
           }
-          negative={cash < 0}
+          tone={cash < 0 ? "bad" : "default"}
+          trend={s.map((x) => x.netCashFlowCents)}
         />
       ) : (
-        <Kpi
+        <KpiTile
           label="Owed to customers"
           value={money(report.balances.paidWalletCents)}
-          sub="Prepaid wallet balance, unearned"
+          sub="Prepaid wallet balance not yet spent"
         />
       )}
-    </section>
+    </KpiGrid>
   );
 }
 
-function Kpi({
-  label,
-  value,
-  sub,
-  delta,
-  negative,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  delta?: number;
-  negative?: boolean;
-}) {
+function Insights({ report }: { report: FinanceReport }) {
+  const [showAll, setShowAll] = useState(false);
+  const actionable = report.insights.filter((i) => i.tone !== "good");
+  const good = report.insights.filter((i) => i.tone === "good");
+  if (report.insights.length === 0) return null;
+  const items: AttentionItemData[] = actionable.map((i) => ({
+    tone: i.tone === "critical" ? "critical" : i.tone === "warning" ? "warning" : "info",
+    title: i.title,
+    detail: i.detail,
+  }));
+  const rank = { critical: 0, warning: 1, info: 2 } as const;
+  const sorted = [...items].sort((a, b) => rank[a.tone] - rank[b.tone]);
+  const shown = showAll ? sorted : sorted.slice(0, 5);
   return (
-    <div className="v2-panel p-4">
-      <p className="text-xs font-semibold text-v2-muted">{label}</p>
-      <p className={cn("mt-1 text-xl font-bold tabular-nums sm:text-2xl", negative ? "text-red-700" : "text-v2-ink")}>{value}</p>
-      <p className="mt-0.5 text-xs text-v2-muted">{sub}</p>
-      {delta != null ? (
-        <p className="mt-1 text-xs tabular-nums text-v2-muted">
-          <span className={cn("font-semibold", delta > 0 ? "text-v2-success-text" : delta < 0 ? "text-red-700" : "")}>
-            {signed(delta)}
-          </span>{" "}
-          vs. previous period
-        </p>
-      ) : null}
-    </div>
+    <Section
+      title="What to pay attention to"
+      action={
+        sorted.length > 5 ? (
+          <button type="button" className="text-sm font-semibold text-v2-link hover:underline" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show fewer" : `Show all ${sorted.length}`}
+          </button>
+        ) : null
+      }
+    >
+      <div className="space-y-3">
+        {shown.length ? <AttentionList items={shown} /> : null}
+        {good.length ? (
+          <Callout tone="good" title={good[0].title}>
+            {good.length > 1 ? good.map((g) => g.title).slice(1).join(" · ") : good[0].detail}
+          </Callout>
+        ) : null}
+      </div>
+    </Section>
   );
 }
 
-const TONE: Record<Insight["tone"], { icon: typeof Info; className: string; label: string }> = {
-  critical: { icon: AlertOctagon, className: "border-red-200 bg-red-50 text-red-800", label: "Critical" },
-  warning: { icon: AlertTriangle, className: "border-amber-200 bg-amber-50 text-amber-900", label: "Watch" },
-  good: { icon: CheckCircle2, className: "border-v2-success-border bg-v2-success-bg text-v2-success-text", label: "Good" },
-  info: { icon: Info, className: "border-gray-200 bg-white text-v2-navy", label: "Note" },
-};
+// --- Products -----------------------------------------------------------------------------------
 
-/** Most urgent first. */
-const TONE_ORDER: Insight["tone"][] = ["critical", "warning", "info", "good"];
-
-function InsightTable({ insights }: { insights: Insight[] }) {
-  const sorted = [...insights].sort((a, b) => TONE_ORDER.indexOf(a.tone) - TONE_ORDER.indexOf(b.tone));
+function ProductTable({ products }: { products: ProductLine[] }) {
+  const t = products.reduce(
+    (a, p) => ({
+      units: a.units + p.units,
+      gross: a.gross + p.grossSalesCents,
+      promo: a.promo + p.promoCents,
+      net: a.net + p.netRevenueCents,
+      cost: a.cost + p.variableCostCents,
+      contribution: a.contribution + p.contributionCents,
+    }),
+    { units: 0, gross: 0, promo: 0, net: 0, cost: 0, contribution: 0 },
+  );
+  const red = (bad: boolean, node: ReactNode) => <span className={cn(bad && "font-semibold text-red-700")}>{node}</span>;
+  const columns: Column<ProductLine>[] = [
+    {
+      key: "name",
+      header: "Product",
+      sortValue: (p) => p.name,
+      cell: (p) => (
+        <span className="block">
+          <span className="font-semibold text-v2-ink">{p.name}</span>
+          {p.units > 0 && p.variableCostCents > 0 ? (
+            <span className="block text-xs text-v2-muted">
+              {money(p.grossSalesCents / p.units)} price · {money(p.variableCostCents / p.units)} cost per sale
+            </span>
+          ) : null}
+        </span>
+      ),
+      footer: "Total",
+    },
+    {
+      key: "units",
+      header: "Sold",
+      align: "right",
+      sortValue: (p) => p.units,
+      cell: (p) => <span title={p.aiCalls ? `${count(p.aiCalls)} AI calls, including free edits, retries and failures` : undefined}>{count(p.units)}</span>,
+      footer: count(t.units),
+    },
+    { key: "gross", header: "Gross sales", align: "right", hideBelow: "lg", sortValue: (p) => p.grossSalesCents, cell: (p) => money(p.grossSalesCents), footer: money(t.gross) },
+    {
+      key: "promo",
+      header: "Promo",
+      align: "right",
+      hideBelow: "xl",
+      sortValue: (p) => p.promoCents,
+      cell: (p) => <span className="text-v2-muted">{p.promoCents ? money(-p.promoCents) : "—"}</span>,
+      footer: money(-t.promo),
+    },
+    { key: "net", header: "Net revenue", align: "right", sortValue: (p) => p.netRevenueCents, cell: (p) => money(p.netRevenueCents), footer: money(t.net) },
+    {
+      key: "cost",
+      header: "Variable cost",
+      align: "right",
+      sortValue: (p) => p.variableCostCents,
+      cell: (p) => <span className="text-v2-muted">{money(-p.variableCostCents)}</span>,
+      footer: money(-t.cost),
+    },
+    {
+      key: "contribution",
+      header: <span title={GROSS_PROFIT_TIP}>Gross profit</span>,
+      align: "right",
+      sortValue: (p) => p.contributionCents,
+      cell: (p) => red(p.contributionCents < 0, <span className="font-semibold text-v2-ink">{money(p.contributionCents)}</span>),
+      footer: red(t.contribution < 0, money(t.contribution)),
+    },
+    {
+      key: "margin",
+      header: "Margin",
+      align: "right",
+      sortValue: (p) => p.contributionPct,
+      cell: (p) => red((p.contributionPct ?? 0) < 0, percent(p.contributionPct)),
+      footer: t.net > 0 ? percent((t.contribution / t.net) * 100) : "—",
+    },
+    {
+      key: "list",
+      header: <span title="Margin at full price, before promo credit">List margin</span>,
+      align: "right",
+      hideBelow: "md",
+      sortValue: (p) => p.listMarginPct,
+      cell: (p) => red((p.listMarginPct ?? 0) < 0, percent(p.listMarginPct)),
+      footer: t.gross > 0 ? percent(((t.gross - t.cost) / t.gross) * 100) : "—",
+    },
+  ];
   return (
-    // On phones the details sit under each title instead of in a column of their own.
-    <div className="v2-panel overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 text-xs text-v2-muted">
-            <th className="w-28 px-4 py-2.5 text-left font-semibold">Status</th>
-            <th className="px-2 py-2.5 text-left font-semibold sm:w-1/3">What</th>
-            <th className="hidden px-4 py-2.5 text-left font-semibold sm:table-cell">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((insight, i) => {
-            const tone = TONE[insight.tone];
-            const Icon = tone.icon;
-            return (
-              <tr key={i} className="border-b border-gray-100 align-top last:border-b-0">
-                <td className="px-4 py-2.5">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold",
-                      tone.className,
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    {tone.label}
-                  </span>
-                </td>
-                <td className="py-2.5 pr-4 pl-2 sm:pr-2">
-                  <p className="font-semibold text-v2-ink">{insight.title}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-v2-navy sm:hidden">{insight.detail}</p>
-                </td>
-                <td className="hidden px-4 py-2.5 text-xs leading-relaxed text-v2-navy sm:table-cell">
-                  {insight.detail}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <Section
+      title="What each product earns"
+      description="After the costs it causes: every AI call made for it (free edits, retries and failures included) and the printer's full charge for books. List margin is the margin at full price, before promo credit."
+    >
+      <DataTable
+        caption="Gross profit by product"
+        columns={columns}
+        rows={products}
+        rowKey={(p) => p.key}
+        showFooter
+        defaultSort={{ key: "net", dir: "desc" }}
+        empty={<EmptyState title="No sales in this period">Pick a longer period to see what each product earns.</EmptyState>}
+      />
+      <p className="mt-2 text-xs text-v2-muted">Card processing fees aren&apos;t split by product; they appear in the statements.</p>
+    </Section>
   );
 }
 
@@ -432,18 +427,21 @@ function InsightTable({ insights }: { insights: Insight[] }) {
 
 type StatementRow =
   | { kind: "line"; label: ReactNode; current: number; previous: number; indent?: boolean; negate?: boolean }
-  | { kind: "total"; label: ReactNode; current: number; previous: number; note?: string };
+  | { kind: "total"; label: ReactNode; current: number; previous: number; title?: string };
 
-function Statement({ rows, base }: { rows: StatementRow[]; base?: number }) {
+function Statement({ caption, rows, base }: { caption: string; rows: StatementRow[]; base?: number }) {
   return (
     <div className="v2-panel overflow-x-auto">
       <table className="w-full min-w-[22rem] text-sm tabular-nums">
-        <thead>
+        <caption className="sr-only">{caption}</caption>
+        <thead className="bg-v2-bg-subtle">
           <tr className="text-xs text-v2-muted">
-            <th className="px-4 pt-3 pb-2 text-left font-semibold" />
-            <th className="px-2 pt-3 pb-2 text-right font-semibold">This period</th>
-            <th className="px-2 pt-3 pb-2 text-right font-semibold">Previous</th>
-            {base != null ? <th className="px-4 pt-3 pb-2 text-right font-semibold">% of rev.</th> : null}
+            <th scope="col" className="h-10 px-4 text-left font-semibold">
+              <span className="sr-only">Line</span>
+            </th>
+            <th scope="col" className="h-10 px-3 text-right font-semibold">This period</th>
+            <th scope="col" className="h-10 px-3 text-right font-semibold">Previous</th>
+            {base != null ? <th scope="col" className="h-10 px-4 text-right font-semibold">% of revenue</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -454,18 +452,17 @@ function Statement({ rows, base }: { rows: StatementRow[]; base?: number }) {
             const prev = r.previous * sign;
             return (
               <tr key={i} className={cn(isTotal ? "border-t border-gray-200 font-semibold text-v2-ink" : "text-v2-navy")}>
-                <td className={cn("px-4 py-1.5", r.kind === "line" && r.indent && "pl-8")}>
+                <th
+                  scope="row"
+                  title={r.kind === "total" ? r.title : undefined}
+                  className={cn("px-4 py-2 text-left", isTotal ? "font-semibold" : "font-normal", r.kind === "line" && r.indent && "pl-8")}
+                >
                   {r.label}
-                  {isTotal && r.note ? <span className="ml-1.5 text-xs font-normal text-v2-muted">{r.note}</span> : null}
-                </td>
-                <td className={cn("px-2 py-1.5 text-right", cur < 0 && "text-red-700")}>{money(cur)}</td>
-                <td className={cn("px-2 py-1.5 text-right text-v2-muted", prev < 0 && isTotal && "text-red-700")}>
-                  {money(prev)}
-                </td>
+                </th>
+                <td className={cn("px-3 py-2 text-right", cur < 0 && "text-red-700")}>{money(cur)}</td>
+                <td className={cn("px-3 py-2 text-right text-v2-muted", prev < 0 && isTotal && "text-red-700")}>{money(prev)}</td>
                 {base != null ? (
-                  <td className="px-4 py-1.5 text-right text-xs text-v2-muted">
-                    {base > 0 ? pct((cur / base) * 100) : "—"}
-                  </td>
+                  <td className="px-4 py-2 text-right text-xs text-v2-muted">{base > 0 ? percent((cur / base) * 100, 0) : "—"}</td>
                 ) : null}
               </tr>
             );
@@ -494,283 +491,87 @@ function costRows(current: CostLine[], previous: CostLine[]): StatementRow[] {
     .filter((r) => Math.abs(r.current) >= 0.5 || Math.abs(r.previous) >= 0.5);
 }
 
-function ProfitAndLoss({ current: c, previous: p }: { current: PeriodTotals; previous: PeriodTotals }) {
-  const rows: StatementRow[] = [
+function profitAndLossRows(c: PeriodTotals, p: PeriodTotals): StatementRow[] {
+  return [
     { kind: "line", label: "Gross sales", current: c.pnl.grossSalesCents, previous: p.pnl.grossSalesCents },
     { kind: "line", label: "Less promo credit redeemed", current: c.pnl.promoCents, previous: p.pnl.promoCents, negate: true },
     { kind: "total", label: "Net revenue", current: c.pnl.netRevenueCents, previous: p.pnl.netRevenueCents },
     ...costRows(c.pnl.variableCosts, p.pnl.variableCosts),
-    {
-      kind: "total",
-      label: "Contribution margin",
-      current: c.pnl.contributionCents,
-      previous: p.pnl.contributionCents,
-    },
+    { kind: "total", label: "Gross profit", title: "Contribution margin", current: c.pnl.contributionCents, previous: p.pnl.contributionCents },
     ...costRows(c.pnl.operatingCosts, p.pnl.operatingCosts),
     ...(c.pnl.operatingCosts.length || p.pnl.operatingCosts.length
       ? []
-      : [
-          {
-            kind: "line" as const,
-            label: <span className="text-v2-muted">No fixed costs entered</span>,
-            current: 0,
-            previous: 0,
-            indent: true,
-          },
-        ]),
-    {
-      kind: "total",
-      label: "Operating profit",
-      current: c.pnl.operatingProfitCents,
-      previous: p.pnl.operatingProfitCents,
-    },
+      : [{ kind: "line" as const, label: <span className="text-v2-muted">No fixed costs entered</span>, current: 0, previous: 0, indent: true }]),
+    { kind: "total", label: "Operating profit", current: c.pnl.operatingProfitCents, previous: p.pnl.operatingProfitCents },
   ];
-  return <Statement rows={rows} base={c.pnl.netRevenueCents} />;
 }
 
-function CashFlow({
-  current: c,
-  previous: p,
-  report,
-}: {
-  current: PeriodTotals;
-  previous: PeriodTotals;
-  report: FinanceReport;
-}) {
-  const rows: StatementRow[] = [
+function cashFlowRows(c: PeriodTotals, p: PeriodTotals): StatementRow[] {
+  return [
     { kind: "line", label: "Card top-ups", current: c.cash.topUpsCents, previous: p.cash.topUpsCents },
     { kind: "total", label: "Cash in", current: c.cash.cashInCents, previous: p.cash.cashInCents },
     { kind: "line", label: "Card processing fees (est.)", current: c.cash.cardFeesCents, previous: p.cash.cardFeesCents, indent: true, negate: true },
     { kind: "line", label: "AI provider", current: c.cash.aiSpendCents, previous: p.cash.aiSpendCents, indent: true, negate: true },
-    { kind: "line", label: "Lulu (printing & shipping)", current: c.cash.printSpendCents, previous: p.cash.printSpendCents, indent: true, negate: true },
+    { kind: "line", label: "Printing & shipping (Lulu)", current: c.cash.printSpendCents, previous: p.cash.printSpendCents, indent: true, negate: true },
     { kind: "line", label: "Fixed & operating costs", current: c.cash.operatingCents, previous: p.cash.operatingCents, indent: true, negate: true },
     { kind: "total", label: "Cash out", current: -c.cash.cashOutCents, previous: -p.cash.cashOutCents },
     { kind: "total", label: "Net cash flow", current: c.cash.netCashFlowCents, previous: p.cash.netCashFlowCents },
   ];
+}
+
+function Statements({ report }: { report: FinanceReport }) {
+  const c = report.current;
+  const p = report.previous;
   const gap = c.cash.cashInCents - c.pnl.netRevenueCents;
   return (
-    <div>
-      <Statement rows={rows} />
-      <p className="mt-2 text-xs leading-relaxed text-v2-muted">
-        Cash in {gap >= 0 ? "exceeded" : "trailed"} net revenue by {money(Math.abs(gap))}:{" "}
-        {gap >= 0
-          ? "customers topped up more than they spent, which grows what you owe them in product."
-          : "customers spent balance they topped up earlier."}{" "}
-        Prepaid balance owed at {report.range.to}: {money(report.balances.paidWalletCents)}.
-      </p>
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Section title="Profit & loss" description="Revenue when wallet money is spent.">
+          <Statement caption="Profit and loss" rows={profitAndLossRows(c, p)} base={c.pnl.netRevenueCents} />
+        </Section>
+        <Section title="Cash flow" description="Money that moved through the bank.">
+          <Statement caption="Cash flow" rows={cashFlowRows(c, p)} />
+          <p className="mt-2 text-sm text-v2-muted">
+            Cash in {gap >= 0 ? "exceeded" : "trailed"} net revenue by {money(Math.abs(gap))}:{" "}
+            {gap >= 0
+              ? "customers topped up more than they spent, which grows what you owe them in product."
+              : "customers spent balance they topped up earlier."}{" "}
+            Prepaid balance owed at {report.range.to}: {money(report.balances.paidWalletCents)}.
+          </p>
+        </Section>
+      </div>
+      <Methodology />
     </div>
-  );
-}
-
-// --- Products -----------------------------------------------------------------------------------
-
-function ProductTable({ products }: { products: ProductLine[] }) {
-  if (products.length === 0) {
-    return <p className="v2-panel p-4 text-sm text-v2-muted">No sales or product costs in this period.</p>;
-  }
-  const totals = products.reduce(
-    (t, p) => ({
-      units: t.units + p.units,
-      gross: t.gross + p.grossSalesCents,
-      promo: t.promo + p.promoCents,
-      net: t.net + p.netRevenueCents,
-      cost: t.cost + p.variableCostCents,
-      contribution: t.contribution + p.contributionCents,
-    }),
-    { units: 0, gross: 0, promo: 0, net: 0, cost: 0, contribution: 0 },
-  );
-  return (
-    <div className="v2-panel overflow-x-auto">
-      <table className="w-full min-w-[52rem] text-sm tabular-nums">
-        <thead>
-          <tr className="border-b border-gray-200 text-xs text-v2-muted">
-            <th className="px-4 py-2.5 text-left font-semibold">Product</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Sold</th>
-            <th className="px-2 py-2.5 text-right font-semibold">AI calls</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Gross sales</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Promo</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Net revenue</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Variable cost</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Contribution</th>
-            <th className="px-2 py-2.5 text-right font-semibold">CM %</th>
-            <th className="px-4 py-2.5 text-right font-semibold">List margin</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((p) => (
-            <tr key={p.key} className="border-b border-gray-100 text-v2-navy">
-              <td className="px-4 py-2 text-left">
-                <span className="font-semibold text-v2-ink">{p.name}</span>
-                {p.units > 0 && p.variableCostCents > 0 ? (
-                  <span className="block text-xs text-v2-muted">
-                    {money(p.grossSalesCents / p.units)} price · {money(p.variableCostCents / p.units)} cost per sale
-                  </span>
-                ) : null}
-              </td>
-              <td className="px-2 py-2 text-right">{p.units}</td>
-              <td className="px-2 py-2 text-right">{p.aiCalls || "—"}</td>
-              <td className="px-2 py-2 text-right">{money(p.grossSalesCents)}</td>
-              <td className="px-2 py-2 text-right text-v2-muted">{money(-p.promoCents)}</td>
-              <td className="px-2 py-2 text-right">{money(p.netRevenueCents)}</td>
-              <td className="px-2 py-2 text-right text-v2-muted">{money(-p.variableCostCents)}</td>
-              <td className={cn("px-2 py-2 text-right font-semibold", p.contributionCents < 0 ? "text-red-700" : "text-v2-ink")}>
-                {money(p.contributionCents)}
-              </td>
-              <td className="px-2 py-2 text-right">{pct(p.contributionPct)}</td>
-              <td className={cn("px-4 py-2 text-right", p.listMarginPct != null && p.listMarginPct < 0 && "text-red-700")}>
-                {pct(p.listMarginPct)}
-              </td>
-            </tr>
-          ))}
-          <tr className="font-semibold text-v2-ink">
-            <td className="px-4 py-2.5 text-left">Total</td>
-            <td className="px-2 py-2.5 text-right">{totals.units}</td>
-            <td className="px-2 py-2.5 text-right" />
-            <td className="px-2 py-2.5 text-right">{money(totals.gross)}</td>
-            <td className="px-2 py-2.5 text-right">{money(-totals.promo)}</td>
-            <td className="px-2 py-2.5 text-right">{money(totals.net)}</td>
-            <td className="px-2 py-2.5 text-right">{money(-totals.cost)}</td>
-            <td className={cn("px-2 py-2.5 text-right", totals.contribution < 0 && "text-red-700")}>{money(totals.contribution)}</td>
-            <td className="px-2 py-2.5 text-right">{totals.net > 0 ? pct((totals.contribution / totals.net) * 100) : "—"}</td>
-            <td className="px-4 py-2.5 text-right">
-              {totals.gross > 0 ? pct(((totals.gross - totals.cost) / totals.gross) * 100) : "—"}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p className="px-4 pb-3 text-xs text-v2-muted">
-        Card processing fees aren&apos;t assigned to products; they appear in the P&amp;L.
-      </p>
-    </div>
-  );
-}
-
-// --- Balances & unit economics ------------------------------------------------------------------
-
-function Facts({ items }: { items: Array<{ label: string; value: string; note?: string; negative?: boolean }> }) {
-  return (
-    <dl className="v2-panel divide-y divide-gray-100">
-      {items.map((item) => (
-        <div key={item.label} className="flex items-start justify-between gap-4 px-4 py-2.5">
-          <dt className="text-sm text-v2-navy">
-            {item.label}
-            {item.note ? <span className="block text-xs text-v2-muted">{item.note}</span> : null}
-          </dt>
-          <dd className={cn("shrink-0 text-sm font-semibold tabular-nums", item.negative ? "text-red-700" : "text-v2-ink")}>
-            {item.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Balances({ report }: { report: FinanceReport }) {
-  const b = report.balances;
-  return (
-    <Facts
-      items={[
-        {
-          label: "Cash on hand",
-          value: b.cashOnHandCents == null ? "Not tracked" : money(b.cashOnHandCents),
-          note: b.cashOnHandCents == null ? "Enter a bank balance under Assumptions" : `As of ${report.range.to}`,
-          negative: (b.cashOnHandCents ?? 0) < 0,
-        },
-        {
-          label: "Prepaid customer balance",
-          value: money(b.paidWalletCents),
-          note: "Deferred revenue: collected, not yet earned. A liability.",
-        },
-        {
-          label: "Promo credit outstanding",
-          value: money(b.promoWalletCents),
-          note: "Given away, unspent. Brings in no cash.",
-        },
-        {
-          label: "Est. cost to honor promo credit",
-          value: money(b.promoCostExposureCents),
-          note: "Outstanding promo × all-time variable cost ratio",
-        },
-      ]}
-    />
-  );
-}
-
-function UnitEconomics({ report }: { report: FinanceReport }) {
-  const c = report.current.customers;
-  const ue = report.unitEconomics;
-  const conversion = ue.totalUsers > 0 ? (ue.everPaidUsers / ue.totalUsers) * 100 : null;
-  return (
-    <Facts
-      items={[
-        { label: "New sign-ups", value: String(c.signups) },
-        {
-          label: "Paying customers",
-          value: String(c.payingCustomers),
-          note: `${c.firstTimePayers} paying for the first time`,
-        },
-        {
-          label: "Paid conversion (all time)",
-          value: pct(conversion, 1),
-          note: `${ue.everPaidUsers} of ${ue.totalUsers} accounts have ever topped up`,
-        },
-        {
-          label: "Average top-up",
-          value: c.avgTopUpCents == null ? "—" : money(c.avgTopUpCents),
-          note: c.arppuCents == null ? undefined : `${money(c.arppuCents)} per paying customer`,
-        },
-        { label: "Promo credit granted", value: money(c.promoGrantedCents), note: "Welcome credit and admin grants" },
-        {
-          label: "Fixed & operating costs",
-          value: `${money(ue.monthlyOperatingCents)} / mo`,
-          note: `Net revenue run rate ${money(ue.monthlyNetRevenueCents)} / mo`,
-        },
-        {
-          label: "Break-even net revenue",
-          value: ue.breakEvenMonthlyRevenueCents == null ? "—" : `${money(ue.breakEvenMonthlyRevenueCents)} / mo`,
-          note:
-            ue.breakEvenMonthlyRevenueCents == null
-              ? "Needs a positive contribution margin"
-              : "Fixed costs ÷ contribution margin %",
-        },
-        {
-          label: "Burn (last 90 days)",
-          value: ue.monthlyBurnCents == null ? "Cash-positive" : `${money(ue.monthlyBurnCents)} / mo`,
-          note: ue.runwayMonths == null ? undefined : `${ue.runwayMonths.toFixed(1)} months of runway`,
-          negative: ue.monthlyBurnCents != null,
-        },
-      ]}
-    />
   );
 }
 
 function Methodology() {
   return (
-    <details className="v2-panel p-4 text-sm text-v2-navy">
+    <details className="v2-panel p-5 text-sm text-v2-navy">
       <summary className="cursor-pointer font-semibold text-v2-ink">How these numbers are worked out</summary>
-      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-v2-muted">
+      <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-v2-muted">
         <li>
-          <strong className="text-v2-navy">Cash vs. profit.</strong> Top-ups are cash when the card is charged, but
-          revenue only when the wallet is spent. Unspent paid balance is a liability (deferred revenue).
+          <strong className="text-v2-navy">Cash vs. profit.</strong> Top-ups are cash when the card is charged, but revenue
+          only when the wallet is spent. Unspent paid balance is owed to customers (deferred revenue).
         </li>
         <li>
-          <strong className="text-v2-navy">Promo credit.</strong> Each account&apos;s wallet history is replayed with
-          two buckets, and purchases spend promo credit first. The promo-funded part of a sale is a discount, not
-          revenue, but its AI and printing costs are still real.
+          <strong className="text-v2-navy">Promo credit.</strong> Each account&apos;s wallet history is replayed with two
+          buckets, and purchases spend promo credit first. The promo-funded part of a sale is a discount, not revenue,
+          but its AI and printing costs are still real.
         </li>
         <li>
-          <strong className="text-v2-navy">Variable costs.</strong> AI is the measured cost of every model call,
-          assigned to products by operation (calls no product charges for appear as &ldquo;not sold&rdquo;). Printing is
+          <strong className="text-v2-navy">Variable costs.</strong> AI is the measured cost of every model call, assigned
+          to products by what it was for (calls no product charges for appear as &ldquo;not sold&rdquo;). Printing is
           Lulu&apos;s quoted total for orders that were paid and not canceled. Card fees are estimated per top-up from the
-          rate under Assumptions.
+          rate under Costs &amp; assumptions.
         </li>
         <li>
-          <strong className="text-v2-navy">Fixed costs.</strong> Monthly and yearly costs accrue evenly per day;
-          one-time costs land on their date. Cash out assumes they are paid as they accrue.
+          <strong className="text-v2-navy">Fixed costs.</strong> Monthly and yearly costs accrue evenly per day; one-time
+          costs land on their date. Cash out assumes they are paid as they accrue.
         </li>
         <li>
           <strong className="text-v2-navy">Comparisons.</strong> &ldquo;Previous&rdquo; is the same number of days
-          immediately before the selected range ({"UTC"} dates).
+          immediately before the selected range (UTC dates).
         </li>
         <li>
           <strong className="text-v2-navy">Not included.</strong> Stripe refunds or disputes, sales tax remitted
@@ -778,5 +579,72 @@ function Methodology() {
         </li>
       </ul>
     </details>
+  );
+}
+
+// --- Balances -----------------------------------------------------------------------------------
+
+function Balances({ report }: { report: FinanceReport }) {
+  const b = report.balances;
+  const c = report.current.customers;
+  const ue = report.unitEconomics;
+  const conversion = ue.totalUsers > 0 ? (ue.everPaidUsers / ue.totalUsers) * 100 : null;
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Section title="What you hold and owe" description={`At ${report.range.to}.`}>
+        <div className="v2-panel px-5 py-1">
+          <DefinitionList
+            items={[
+              {
+                label: "Cash on hand",
+                value: b.cashOnHandCents == null ? "Not tracked" : money(b.cashOnHandCents),
+                note: b.cashOnHandCents == null ? "Enter a bank balance under Costs & assumptions" : undefined,
+                tone: (b.cashOnHandCents ?? 0) < 0 ? "bad" : "default",
+              },
+              { label: "Prepaid customer balance", value: money(b.paidWalletCents), note: "Collected but not yet earned; owed to customers in product" },
+              { label: "Promo credit outstanding", value: money(b.promoWalletCents), note: "Given away and unspent; brings in no cash" },
+              { label: "Est. cost to honor promo credit", value: money(b.promoCostExposureCents), note: "Outstanding promo × the all-time share of sales spent on variable costs" },
+            ]}
+          />
+        </div>
+      </Section>
+      <Section title="Customers & break-even" description="For the selected period unless noted.">
+        <div className="v2-panel px-5 py-1">
+          <DefinitionList
+            items={[
+              { label: "New sign-ups", value: count(c.signups) },
+              { label: "Paying customers", value: count(c.payingCustomers), note: `${count(c.firstTimePayers)} paying for the first time` },
+              {
+                label: "Paid conversion (all time)",
+                value: percent(conversion),
+                note: `${count(ue.everPaidUsers)} of ${count(ue.totalUsers)} accounts have ever topped up`,
+              },
+              {
+                label: "Average top-up",
+                value: c.avgTopUpCents == null ? "—" : money(c.avgTopUpCents),
+                note: c.arppuCents == null ? undefined : `${money(c.arppuCents)} per paying customer`,
+              },
+              { label: "Promo credit granted", value: money(c.promoGrantedCents), note: "Welcome, referral and manual grants" },
+              {
+                label: "Fixed & operating costs",
+                value: `${money(ue.monthlyOperatingCents)} / mo`,
+                note: `Net revenue is running at ${money(ue.monthlyNetRevenueCents)} / mo`,
+              },
+              {
+                label: "Break-even net revenue",
+                value: ue.breakEvenMonthlyRevenueCents == null ? "—" : `${money(ue.breakEvenMonthlyRevenueCents)} / mo`,
+                note: ue.breakEvenMonthlyRevenueCents == null ? "Needs a positive gross profit margin" : "Fixed costs ÷ gross profit margin",
+              },
+              {
+                label: "Burn (last 90 days)",
+                value: ue.monthlyBurnCents == null ? "Cash-positive" : `${money(ue.monthlyBurnCents)} / mo`,
+                note: ue.runwayMonths == null ? undefined : `${ue.runwayMonths.toFixed(1)} months of runway`,
+                tone: ue.monthlyBurnCents != null ? "bad" : "good",
+              },
+            ]}
+          />
+        </div>
+      </Section>
+    </div>
   );
 }

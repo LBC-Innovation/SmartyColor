@@ -1168,3 +1168,15 @@
     animation: none;
   }
 }
+
+/* Admin drawers slide in from the right (skipped under reduced motion via motion-safe). */
+@keyframes v2-drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}

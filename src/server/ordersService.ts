@@ -1367,6 +1367,10 @@ export async function recordOrderPlacedEvent(orderId: string): Promise<void> {
 }
 
 type AdminOrderRow = OrderRow & {
+  subtotal_cents?: number | null;
+  shipping_cents?: number | null;
+  tax_cents?: number | null;
+  lulu_cost_cents?: number | null;
   canceled_at: string | null;
   deleted_at: string | null;
   lulu_print_job_id: number | null;
@@ -1393,13 +1397,17 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     cancelReason: row.cancel_reason ?? null,
     refundedCents: row.refunded_cents ?? null,
     luluProductionDueAt: row.lulu_production_due_at ?? null,
+    subtotalCents: row.subtotal_cents ?? null,
+    shippingCents: row.shipping_cents ?? null,
+    taxCents: row.tax_cents ?? null,
+    luluCostCents: row.lulu_cost_cents ?? null,
   };
 }
 
 const ADMIN_ORDER_COLUMNS = `
       id, user_id, project_title, page_count, blank_backs, lined_backs, status, total_cents, created_at, contact_email,
       canceled_at, cancel_reason, refunded_cents, deleted_at, lulu_print_job_id, lulu_status_name,
-      lulu_production_due_at, fulfillment,
+      lulu_production_due_at, fulfillment, subtotal_cents, shipping_cents, tax_cents, lulu_cost_cents,
       print_products ( name )
     `;
 
@@ -1437,7 +1445,7 @@ export async function listAllOrdersForAdmin(options?: {
     .is("deleted_at", null)
     .not("status", "in", "(draft,quoted)")
     .order("created_at", { ascending: false })
-    .limit(Math.min(Math.max(options?.limit ?? 200, 1), 500));
+    .limit(Math.min(Math.max(options?.limit ?? 500, 1), 500));
   if (options?.status === "active") {
     query = query.in("status", ["awaiting_payment", "paid", "submitting_to_lulu", "submitted_to_lulu", "in_production", "failed"]);
   } else if (options?.status) {

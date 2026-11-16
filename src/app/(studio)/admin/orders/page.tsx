@@ -1,10 +1,10 @@
+import { AdminOrdersScreen } from "@/components/v2/admin/orders/AdminOrdersScreen";
 import { V2AdminPermissionGate } from "@/components/v2/auth/V2AdminPermissionGate";
-import { V2AdminOrdersStudio } from "@/components/v2/auth/V2AdminOrdersStudio";
 
 export default function AdminOrdersPage() {
   return (
     <V2AdminPermissionGate permission="usermanage:manageorders">
-      <V2AdminOrdersStudio />
+      <AdminOrdersScreen />
     </V2AdminPermissionGate>
   );
 }
