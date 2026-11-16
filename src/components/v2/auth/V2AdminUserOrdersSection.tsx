@@ -107,7 +107,7 @@ export function V2AdminUserOrdersSection({ userId }: { userId: string }) {
                         {order.projectTitle ?? order.productName}
                       </p>
                       <p className="text-xs text-v2-muted">
-                        {orderPagesLabel(order.pageCount, order.blankBacks, { withPrinted: true })} ·{" "}
+                        {orderPagesLabel(order.pageCount, order.blankBacks, { withPrinted: true, lined: order.linedBacks })} ·{" "}
                         {order.totalCents != null ? formatCredits(order.totalCents) : "—"} ·{" "}
                         {new Date(order.createdAt).toLocaleDateString()}
                       </p>

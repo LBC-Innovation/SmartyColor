@@ -119,11 +119,22 @@ export const COVER_TEXT_MAX_LENGTH = 240;
 export const COVER_TEXT_SIZE_MIN_PT = 24;
 export const COVER_TEXT_SIZE_MAX_PT = 140;
 
+/** How far past "just fills the cover" the single cover photo can be zoomed. */
+export const COVER_PHOTO_ZOOM_MAX = 4;
+
 export type BookCoverDesign = {
   layout: CoverLayout;
   imageSource: CoverImageSource;
   /** Wizard page id of the picture used by the single-photo layout. */
   coverPageId: string | null;
+  /** Single-photo layout: 1 just fills the cover, larger zooms in. */
+  photoZoom: number;
+  /**
+   * Single-photo layout: which part of the photo shows where it overflows the cover,
+   * 0 the left (top) edge, 0.5 centred, 1 the right (bottom) edge.
+   */
+  photoX: number;
+  photoY: number;
   text: string;
   textColor: string;
   fontId: CoverFontId;
@@ -140,11 +151,32 @@ export type BookCoverDesign = {
   backgroundColor: string;
 };
 
+export const DEFAULT_PHOTO_CROP = { photoZoom: 1, photoX: 0.5, photoY: 0.5 } as const;
+
+/** Pick the single cover photo; a different photo starts uncropped. */
+export function withCoverPhoto(design: BookCoverDesign, pageId: string): BookCoverDesign {
+  return design.coverPageId === pageId
+    ? { ...design, layout: "photo" }
+    : { ...design, layout: "photo", coverPageId: pageId, ...DEFAULT_PHOTO_CROP };
+}
+
+/**
+ * How much of a photo is hidden past the cover on each axis, as a share of
+ * what shows (0 when that axis fits exactly). `photoAspect` is width / height.
+ */
+export function coverPhotoSlack(photoAspect: number, zoom: number): { x: number; y: number } {
+  const coverAspect = COVER_FRONT_WIDTH_IN / COVER_FRONT_HEIGHT_IN;
+  const shownW = Math.min(1, coverAspect / photoAspect) / zoom;
+  const shownH = Math.min(1, photoAspect / coverAspect) / zoom;
+  return { x: 1 / shownW - 1, y: 1 / shownH - 1 };
+}
+
 export function defaultCoverDesign(text: string): BookCoverDesign {
   return {
     layout: "grid",
     imageSource: "photos",
     coverPageId: null,
+    ...DEFAULT_PHOTO_CROP,
     text,
     textColor: "#ffffff",
     fontId: "rounded",
@@ -180,6 +212,9 @@ export function normalizeCoverDesign(input: unknown): BookCoverDesign {
     layout: pick(d.layout, COVER_LAYOUTS, base.layout),
     imageSource: pick(d.imageSource, COVER_IMAGE_SOURCES, base.imageSource),
     coverPageId: typeof d.coverPageId === "string" && d.coverPageId ? d.coverPageId.slice(0, 200) : null,
+    photoZoom: clamp(d.photoZoom, 1, COVER_PHOTO_ZOOM_MAX, base.photoZoom),
+    photoX: clamp(d.photoX, 0, 1, base.photoX),
+    photoY: clamp(d.photoY, 0, 1, base.photoY),
     text: typeof d.text === "string" ? d.text.slice(0, COVER_TEXT_MAX_LENGTH) : "",
     textColor: color(d.textColor, base.textColor),
     fontId: pick(d.fontId, COVER_FONTS.map((f) => f.id), base.fontId),

@@ -135,7 +135,7 @@ export function V2AdminOrdersStudio() {
                             {order.id.slice(0, 8).toUpperCase()} ·{" "}
                             {order.userEmail ?? order.contactEmail ?? (order.userId ? order.userId.slice(0, 8) : "Deleted account")} ·{" "}
                             {order.fulfillment === "digital" ? "Print at home · " : ""}
-                            {orderPagesLabel(order.pageCount, order.blankBacks, { withPrinted: true })} ·{" "}
+                            {orderPagesLabel(order.pageCount, order.blankBacks, { withPrinted: true, lined: order.linedBacks })} ·{" "}
                             {order.totalCents != null ? formatCredits(order.totalCents) : "—"} ·{" "}
                             {shortTime(order.createdAt)}
                           </p>

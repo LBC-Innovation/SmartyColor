@@ -28,7 +28,7 @@ export type DigitalBookPage =
       /** "full" fills the page edge to edge; otherwise the sheet is framed inside the margin. */
       fit?: "framed" | "full";
     }
-  /** `back` marks the empty back of the page before it, when each page prints on its own sheet. */
+  /** `back` marks the back of the page before it (empty, or lined), when each page prints on its own sheet. */
   | { kind: "blank"; variant: "plain" | "lined"; back?: true }
   /** A gift note, printed as plain text on its own page (always the first page). */
   | { kind: "note"; text: string };
@@ -62,6 +62,13 @@ export type BookOrderSummary = {
   pageCount: number;
   /** Each page printed on its own sheet with a blank back, so `pageCount` is twice the pages the customer made. */
   blankBacks: boolean;
+  /** With `blankBacks`, the backs are ruled for writing. */
+  linedBacks: boolean;
+  /**
+   * Small picture of the book: its front cover, or for a print-at-home PDF its first picture page.
+   * Only filled in by the order list; null until the thumbnail has been made.
+   */
+  thumbUrl: string | null;
   status: BookOrderStatus;
   fulfillment: BookFulfillment;
   luluStatusName: string | null;

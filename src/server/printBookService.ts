@@ -25,7 +25,8 @@ import {
 } from "@/lib/print/pageLayout";
 import type { PdfGrayImage } from "@/lib/print/pdf";
 import { buildPdf, parsePages } from "@/server/digitalBookService";
-import { createSignedUpload, getObjectBytes, putObject } from "@/server/storage/libraryFiles";
+import { createSignedUpload, getObjectBytes, libraryPaths, putObject, removeObjects } from "@/server/storage/libraryFiles";
+import { makeThumbnail } from "@/server/storage/libraryThumbs";
 
 const deflateAsync = promisify(deflate);
 
@@ -52,8 +53,11 @@ export function parsePrintPages(input: unknown, bindingId: BookBindingId): ApiRe
   return { data: pages, error: null };
 }
 
-export function createCoverFrontUpload(userId: string, orderId: string) {
-  return createSignedUpload(printOrderPaths.coverFront(userId, orderId));
+export async function createCoverFrontUpload(userId: string, orderId: string) {
+  const cover = printOrderPaths.coverFront(userId, orderId);
+  // A new cover is on its way: drop the old one's thumbnail so the order list makes a fresh one.
+  await removeObjects([libraryPaths.thumb(cover)]).catch(() => {});
+  return createSignedUpload(cover);
 }
 
 /** Never build a page image longer than this, however oddly a sheet is fitted (two page heights at print resolution). */
@@ -149,6 +153,11 @@ async function loadCoverFront(userId: string, orderId: string): Promise<ApiResul
   } catch {
     return { data: null, error: { message: "This book doesn't have a cover yet.", code: "COVER_REQUIRED" } };
   }
+  // The cover is final now: make the order list's thumbnail while the bytes are in hand.
+  const coverPath = printOrderPaths.coverFront(userId, orderId);
+  void makeThumbnail(bytes)
+    .then((thumb) => putObject(libraryPaths.thumb(coverPath), thumb, "image/webp"))
+    .catch(() => {});
   try {
     const meta = await sharp(bytes).metadata();
     const ratio = (meta.width ?? 0) / (meta.height ?? 1);

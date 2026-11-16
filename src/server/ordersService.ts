@@ -17,7 +17,7 @@ import type {
 import { isShippingAddressComplete, normalizeShippingAddress } from "@/lib/orders/shippingAddress";
 import type { DigitalBookPage } from "@/lib/orders/types";
 import { bindingIdForProduct, type BookBindingId } from "@/lib/print/bookBindings";
-import { hasBlankBacks, orderPagesLabel } from "@/lib/orders/blankBacks";
+import { hasBlankBacks, hasLinedBacks, orderPagesLabel } from "@/lib/orders/blankBacks";
 import { normalizeCoverDesign, type BookCoverDesign } from "@/lib/print/bookCover";
 import type { SignedUpload } from "@/lib/library/types";
 import {
@@ -42,7 +42,8 @@ import { estimateLuluDelivery } from "@/server/lulu/shippingOptions";
 import type { ShippingLevel } from "@/lib/orders/shippingLevels";
 import { buildLuluPrintJobPayload, validateLuluPayload } from "@/lib/print/luluPayload";
 import { getBookBinding } from "@/lib/print/bookBindings";
-import { getObjectBytes, signedReadUrls } from "@/server/storage/libraryFiles";
+import { getObjectBytes, libraryPaths, signedReadUrls } from "@/server/storage/libraryFiles";
+import { scheduleThumbnails } from "@/server/storage/libraryThumbs";
 import sharp from "sharp";
 import { clientOrigin } from "@/lib/auth/clientOrigin";
 import { getSupabaseAuth } from "@/lib/supabase/service";
@@ -70,6 +71,7 @@ type OrderRow = {
   page_count: number;
   /** Absent on rows read without the column; those print both sides. */
   blank_backs?: boolean | null;
+  lined_backs?: boolean | null;
   status: BookOrderStatus;
   fulfillment?: BookFulfillment | null;
   payment_method: BookPaymentMethod | null;
@@ -127,6 +129,8 @@ function mapSummary(row: OrderRow): BookOrderSummary {
     productName: productName(row),
     pageCount: row.page_count,
     blankBacks: row.blank_backs === true,
+    linedBacks: row.lined_backs === true,
+    thumbUrl: null,
     status: row.status,
     fulfillment: row.fulfillment ?? "print",
     luluStatusName: row.lulu_status_name,
@@ -292,6 +296,7 @@ function draftContentColumns(input: DraftBookContent) {
     // Kept beside the pages so support and reports can read it without parsing the page list.
     gift_note: first?.kind === "note" ? first.text : null,
     blank_backs: hasBlankBacks(input.printPages),
+    lined_backs: hasLinedBacks(input.printPages),
     print_pages: input.printPages ?? null,
     cover_design: input.coverDesign ?? null,
     billing_address: input.billingAddress ? normalizeShippingAddress(input.billingAddress) : null,
@@ -337,7 +342,7 @@ export async function createDraftBookOrder(input: DraftBookContent & {
   await appendOrderEvent(data.id as string, {
     kind: "draft_created",
     title: "Book draft saved",
-    detail: `${orderPagesLabel(input.pageCount, hasBlankBacks(input.printPages), { withPrinted: true })} configured — checkout coming soon.`,
+    detail: `${orderPagesLabel(input.pageCount, hasBlankBacks(input.printPages), { withPrinted: true, lined: hasLinedBacks(input.printPages) })} configured — checkout coming soon.`,
   });
 
   return { data: { orderId: data.id as string }, error: null };
@@ -427,7 +432,7 @@ export async function updateDraftBookOrder(input: DraftBookContent & {
   await appendOrderEvent(input.orderId, {
     kind: "draft_updated",
     title: "Book draft updated",
-    detail: `${orderPagesLabel(input.pageCount, hasBlankBacks(input.printPages), { withPrinted: true })} — ready when you confirm.`,
+    detail: `${orderPagesLabel(input.pageCount, hasBlankBacks(input.printPages), { withPrinted: true, lined: hasLinedBacks(input.printPages) })} — ready when you confirm.`,
   });
 
   return { data: { orderId: input.orderId }, error: null };
@@ -582,7 +587,7 @@ export async function registerBookOrderJob(
 ): Promise<ApiResult<{ orderId: string }>> {
   const { data: order, error } = await getSupabaseAdmin()
     .from("book_orders")
-    .select("id, user_id, status, lulu_external_id, total_cents, page_count, blank_backs")
+    .select("id, user_id, status, lulu_external_id, total_cents, page_count, blank_backs, lined_backs")
     .eq("id", orderId)
     .eq("user_id", userId)
     .is("deleted_at", null)
@@ -616,7 +621,7 @@ export async function registerBookOrderJob(
     await appendOrderEvent(orderId, {
       kind: "job_registered",
       title: "Print job registered",
-      detail: `${orderPagesLabel(order.page_count as number, order.blank_backs === true, { withPrinted: true })} queued for fulfillment once you place the order.`,
+      detail: `${orderPagesLabel(order.page_count as number, order.blank_backs === true, { withPrinted: true, lined: order.lined_backs === true })} queued for fulfillment once you place the order.`,
       metadata: { luluExternalId: externalId },
     });
   }
@@ -790,6 +795,7 @@ export async function sendOrderConfirmationEmail(
         bindingLabel: bindingId ? getBookBinding(bindingId).shortLabel : "Printed book",
         pageCount: order.page_count as number,
         blankBacks: order.blank_backs === true,
+        linedBacks: order.lined_backs === true,
         isGift: order.is_gift === true,
         shipTo,
         printCents: order.subtotal_cents as number | null,
@@ -1118,10 +1124,10 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
     .from("book_orders")
     .select(
       `
-      id, user_id, product_id, project_title, page_count, blank_backs, status, fulfillment, payment_method,
+      id, user_id, product_id, project_title, page_count, blank_backs, lined_backs, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, tracking_number, tracking_urls,
       estimated_delivery_min, estimated_delivery_max, created_at, updated_at, paid_at,
-      lulu_production_due_at, refunded_cents,
+      lulu_production_due_at, refunded_cents, first_page:print_pages->0,
       print_products ( name )
     `,
     )
@@ -1133,10 +1139,71 @@ export async function listOrdersForUser(userId: string): Promise<ApiResult<BookO
     return { data: null, error: { message: error.message } };
   }
 
+  const rows = data as (OrderRow & { first_page: unknown })[];
+  const summaries = rows.map(mapSummary);
+  const thumbs = await orderThumbUrls(rows).catch(() => new Map<string, string>());
   return {
-    data: (data as OrderRow[]).map(mapSummary),
+    data: summaries.map((s) => ({ ...s, thumbUrl: thumbs.get(s.id) ?? null })),
     error: null,
   };
+}
+
+const photoRevisionId = (page: unknown): string | null => {
+  const p = page as { kind?: unknown; revisionId?: unknown } | null;
+  return p?.kind === "photo" && typeof p.revisionId === "string" ? p.revisionId : null;
+};
+
+/**
+ * Signed URLs of the tile-sized thumbnails of each order's picture: the front cover of a
+ * printed book, or the first picture page of a print-at-home PDF (which has no cover).
+ * Uses the library's ~480px WebP copies, never the 300 PPI originals; any not made yet are
+ * made in the background after this response, so they show from the next load on.
+ */
+async function orderThumbUrls(rows: (OrderRow & { first_page: unknown })[]): Promise<Map<string, string>> {
+  const imageByOrder = new Map<string, string>();
+  const revisionByOrder = new Map<string, string>();
+  const needPages: string[] = [];
+  for (const row of rows) {
+    if ((row.fulfillment ?? "print") !== "digital") {
+      if (row.user_id) imageByOrder.set(row.id, printOrderPaths.coverFront(row.user_id, row.id));
+      continue;
+    }
+    const revisionId = photoRevisionId(row.first_page);
+    if (revisionId) revisionByOrder.set(row.id, revisionId);
+    else if (row.first_page) needPages.push(row.id); // Opens on a blank page: find the first picture.
+  }
+
+  const db = getSupabaseAdmin();
+  if (needPages.length > 0) {
+    const { data } = await db.from("book_orders").select("id, print_pages").in("id", needPages);
+    for (const r of data ?? []) {
+      const pages = Array.isArray(r.print_pages) ? r.print_pages : [];
+      const revisionId = pages.map(photoRevisionId).find(Boolean);
+      if (revisionId) revisionByOrder.set(r.id as string, revisionId);
+    }
+  }
+  if (revisionByOrder.size > 0) {
+    const { data } = await db
+      .from("library_sheet_revisions")
+      .select("id, storage_path")
+      .in("id", [...new Set(revisionByOrder.values())]);
+    const pathById = new Map((data ?? []).map((r) => [r.id as string, r.storage_path as string]));
+    for (const [orderId, revisionId] of revisionByOrder) {
+      const path = pathById.get(revisionId);
+      if (path) imageByOrder.set(orderId, path);
+    }
+  }
+  if (imageByOrder.size === 0) return new Map();
+
+  const images = [...new Set(imageByOrder.values())];
+  const signed = await signedReadUrls(images.map(libraryPaths.thumb));
+  scheduleThumbnails(images.filter((path) => !signed.has(libraryPaths.thumb(path))));
+  const out = new Map<string, string>();
+  for (const [orderId, path] of imageByOrder) {
+    const url = signed.get(libraryPaths.thumb(path));
+    if (url) out.set(orderId, url);
+  }
+  return out;
 }
 
 export async function getOrderForUser(
@@ -1155,7 +1222,7 @@ export async function getOrderForUser(
     .from("book_orders")
     .select(
       `
-      id, user_id, product_id, project_title, page_count, blank_backs, status, fulfillment, payment_method,
+      id, user_id, product_id, project_title, page_count, blank_backs, lined_backs, status, fulfillment, payment_method,
       total_cents, shipping_level, lulu_status_name, lulu_status_message,
       lulu_print_job_id, tracking_number, tracking_urls, carrier,
       estimated_delivery_min, estimated_delivery_max, estimated_dispatch_min,
@@ -1313,6 +1380,7 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     productName: productName(row),
     pageCount: row.page_count,
     blankBacks: row.blank_backs === true,
+    linedBacks: row.lined_backs === true,
     status: row.status,
     totalCents: row.total_cents,
     createdAt: row.created_at,
@@ -1329,7 +1397,7 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
 }
 
 const ADMIN_ORDER_COLUMNS = `
-      id, user_id, project_title, page_count, blank_backs, status, total_cents, created_at, contact_email,
+      id, user_id, project_title, page_count, blank_backs, lined_backs, status, total_cents, created_at, contact_email,
       canceled_at, cancel_reason, refunded_cents, deleted_at, lulu_print_job_id, lulu_status_name,
       lulu_production_due_at, fulfillment,
       print_products ( name )

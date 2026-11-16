@@ -52,7 +52,7 @@ export type BookWizardBlankPage = {
    * the book changes; pages the user inserts are never auto.
    */
   auto?: boolean;
-  /** The empty back of the page before it, printed one-sided. Always plain, never chosen by the customer. */
+  /** The back of the page before it, printed one-sided: empty, or lined when the customer picks lined backs. */
   back?: boolean;
 };
 

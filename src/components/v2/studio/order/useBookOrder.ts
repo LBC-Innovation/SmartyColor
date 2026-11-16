@@ -78,6 +78,8 @@ type StudioCartState = BookCartState & {
   coverChoices?: CoverChoices;
   /** Each page printed on its own sheet with a blank back. Carts saved before the choice existed printed both sides. */
   blankBacks?: boolean;
+  /** The blank backs are ruled for writing. Absent on carts from before the choice existed. */
+  linedBacks?: boolean;
 };
 
 /** Parts of the cover the customer picked themselves. */
@@ -152,6 +154,8 @@ export function useBookOrder({
   // Blank backs are on until the customer turns them off to save money. They halve how many
   // pages each binding holds, so every limit below is read through them.
   const [blankBacks, setBlankBacks] = useState(BLANK_BACKS_DEFAULT);
+  // The backs can be ruled for journaling or notes instead of left empty; same sheets, same price.
+  const [linedBacks, setLinedBacks] = useState(false);
   const contentCount = photoPages.length;
   const recommendedFormat = bestFitFormat(contentCount, blankBacks);
   const bindingId: BookFormatId = chosenBindingId ?? recommendedFormat;
@@ -281,12 +285,21 @@ export function useBookOrder({
   const [blankChoices, setBlankChoices] = useState<Record<string, "plain" | "lined">>({});
   const plan = useMemo(() => {
     const base = computeBookPagePlan(plannedPages, binding);
-    if (Object.keys(blankChoices).length === 0) return base;
+    const ruleBacks = linedBacks && binding.blankBacks === true;
+    if (Object.keys(blankChoices).length === 0 && !ruleBacks) return base;
     const allPages = base.allPages.map((page) =>
-      page.kind === "blank" && blankChoices[page.id] ? { ...page, variant: blankChoices[page.id] } : page,
+      page.kind !== "blank"
+        ? page
+        : page.back
+          ? ruleBacks
+            ? { ...page, variant: "lined" as const }
+            : page
+          : blankChoices[page.id]
+            ? { ...page, variant: blankChoices[page.id] }
+            : page,
     );
     return { ...base, allPages, blankPages: allPages.filter((p): p is BookWizardBlankPage => p.kind === "blank") };
-  }, [plannedPages, binding, blankChoices]);
+  }, [plannedPages, binding, blankChoices, linedBacks]);
   function chooseBlank(id: string, variant: "plain" | "lined") {
     setBlankChoices((prev) => ({ ...prev, [id]: variant }));
   }
@@ -589,6 +602,7 @@ export function useBookOrder({
     setCoverDraft(null);
     setGiftNoteRaw("");
     setBlankBacks(BLANK_BACKS_DEFAULT);
+    setLinedBacks(false);
   }, [projectId]);
 
   // Read a saved book back from the cart.
@@ -632,6 +646,7 @@ export function useBookOrder({
       if (saved.blankChoices && typeof saved.blankChoices === "object") setBlankChoices(saved.blankChoices);
       // A cart from before the choice existed was laid out printing both sides; keep it that way.
       setBlankBacks(typeof saved.blankBacks === "boolean" ? saved.blankBacks : false);
+      setLinedBacks(saved.linedBacks === true);
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
       setCartAlbum(album ?? projectId);
@@ -662,6 +677,7 @@ export function useBookOrder({
       ...(chosenShippingLevel ? { shippingLevel: chosenShippingLevel } : {}),
       blankChoices,
       blankBacks,
+      linedBacks,
       coverChoices,
       pages: cartPages(photoPages),
       removedIds: [],
@@ -682,7 +698,7 @@ export function useBookOrder({
       thumbRevisionId: firstPhoto?.revisionId ?? null,
       state,
     };
-  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, chosenShippingLevel, blankChoices, blankBacks, coverChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
+  }, [plan, projectId, bindingId, chosenBindingId, photoPages, pageFit, chosenPageFit, chosenShippingLevel, blankChoices, blankBacks, linedBacks, coverChoices, coverDraft, shipDifferent, isGift, giftNote, confirmedProofKey, quoteCents, coverDesign.text, projectTitle]);
 
   // Saved as it changes once it is in the cart; before that, only after "Start my book" and a format.
   const cartReady =
@@ -765,6 +781,7 @@ export function useBookOrder({
     setChosenPageFit(null);
     setBlankChoices({});
     setBlankBacks(BLANK_BACKS_DEFAULT);
+    setLinedBacks(false);
     setGiftNoteRaw("");
     setIsGift(false);
     setError(null);
@@ -802,7 +819,7 @@ export function useBookOrder({
       if (page.kind === "blank") {
         pages.push(
           page.back
-            ? { kind: "blank", variant: "plain", back: true }
+            ? { kind: "blank", variant: page.variant === "lined" ? "lined" : "plain", back: true }
             : { kind: "blank", variant: page.variant === "lined" ? "lined" : "plain" },
         );
         continue;
@@ -1044,6 +1061,9 @@ export function useBookOrder({
     /** The customer's choice, kept while the PDF is picked so a printed format gets it back. */
     blankBacksChoice: blankBacks,
     chooseBlankBacks: setBlankBacks,
+    /** The blank backs are ruled for journaling or notes. */
+    linedBacks,
+    chooseLinedBacks: setLinedBacks,
     blankBacksExtraCents,
     /** The pages also fit the chosen binding printed the other way. */
     otherBacksFits: otherBacksPageCount != null,
