@@ -240,7 +240,11 @@ function Kpis({ report }: { report: FinanceReport }) {
         label="Net revenue"
         value={money(c.pnl.netRevenueCents)}
         delta={delta(c.pnl.netRevenueCents, p.pnl.netRevenueCents)}
-        sub={`${money(c.pnl.grossSalesCents)} sales, ${money(c.pnl.promoCents)} paid with promo credit`}
+        sub={
+          c.pnl.purchaseCodeCents > 0
+            ? `${money(c.pnl.walletSalesCents)} wallet sales, ${money(c.pnl.purchaseCodeCents)} paid by purchase codes, ${money(c.pnl.promoCents)} promo credit`
+            : `${money(c.pnl.grossSalesCents)} sales, ${money(c.pnl.promoCents)} paid with promo credit`
+        }
         trend={s.map((x) => x.netRevenueCents)}
       />
       <div title={GROSS_PROFIT_TIP}>
@@ -327,11 +331,12 @@ function ProductTable({ products }: { products: ProductLine[] }) {
       units: a.units + p.units,
       gross: a.gross + p.grossSalesCents,
       promo: a.promo + p.promoCents,
+      code: a.code + p.purchaseCodeCents,
       net: a.net + p.netRevenueCents,
       cost: a.cost + p.variableCostCents,
       contribution: a.contribution + p.contributionCents,
     }),
-    { units: 0, gross: 0, promo: 0, net: 0, cost: 0, contribution: 0 },
+    { units: 0, gross: 0, promo: 0, code: 0, net: 0, cost: 0, contribution: 0 },
   );
   const red = (bad: boolean, node: ReactNode) => <span className={cn(bad && "font-semibold text-red-700")}>{node}</span>;
   const columns: Column<ProductLine>[] = [
@@ -342,6 +347,11 @@ function ProductTable({ products }: { products: ProductLine[] }) {
       cell: (p) => (
         <span className="block">
           <span className="font-semibold text-v2-ink">{p.name}</span>
+          {p.purchaseCodeCents > 0 ? (
+            <span className="block text-xs text-v2-muted">
+              {money(p.purchaseCodeCents)} paid by purchase codes (prepaid offline)
+            </span>
+          ) : null}
           {p.units > 0 && p.variableCostCents > 0 ? (
             <span className="block text-xs text-v2-muted">
               {money(p.grossSalesCents / p.units)} price · {money(p.variableCostCents / p.units)} cost per sale
@@ -360,6 +370,19 @@ function ProductTable({ products }: { products: ProductLine[] }) {
       footer: count(t.units),
     },
     { key: "gross", header: "Gross sales", align: "right", hideBelow: "lg", sortValue: (p) => p.grossSalesCents, cell: (p) => money(p.grossSalesCents), footer: money(t.gross) },
+    ...(t.code
+      ? [
+          {
+            key: "code",
+            header: <span title="Book value a purchase code paid for. Codes are prepaid outside the app, so this is revenue but not cash in.">Purchase codes</span>,
+            align: "right",
+            hideBelow: "lg",
+            sortValue: (p) => p.purchaseCodeCents,
+            cell: (p) => <span className="text-v2-muted">{p.purchaseCodeCents ? money(p.purchaseCodeCents) : "—"}</span>,
+            footer: money(t.code),
+          } satisfies Column<ProductLine>,
+        ]
+      : []),
     {
       key: "promo",
       header: "Promo",
@@ -407,7 +430,7 @@ function ProductTable({ products }: { products: ProductLine[] }) {
   return (
     <Section
       title="What each product earns"
-      description="After the costs it causes: every AI call made for it (free edits, retries and failures included) and the printer's full charge for books. List margin is the margin at full price, before promo credit."
+      description="After the costs it causes: every AI call made for it (free edits, retries and failures included) and the printer's full charge for books. Gross sales include what purchase codes paid for books. List margin is the margin at full price, before promo credit."
     >
       <DataTable
         caption="Gross profit by product"
@@ -492,8 +515,25 @@ function costRows(current: CostLine[], previous: CostLine[]): StatementRow[] {
 }
 
 function profitAndLossRows(c: PeriodTotals, p: PeriodTotals): StatementRow[] {
+  const codes = c.pnl.purchaseCodeCents || p.pnl.purchaseCodeCents;
   return [
-    { kind: "line", label: "Gross sales", current: c.pnl.grossSalesCents, previous: p.pnl.grossSalesCents },
+    ...(codes
+      ? [
+          { kind: "line" as const, label: "Wallet sales", current: c.pnl.walletSalesCents, previous: p.pnl.walletSalesCents, indent: true },
+          {
+            kind: "line" as const,
+            label: (
+              <span title="Books a purchase code paid for. Codes are prepaid outside the app, so this matches the book's cost but isn't cash in.">
+                Paid by purchase codes (prepaid offline)
+              </span>
+            ),
+            current: c.pnl.purchaseCodeCents,
+            previous: p.pnl.purchaseCodeCents,
+            indent: true,
+          },
+          { kind: "total" as const, label: "Gross sales", current: c.pnl.grossSalesCents, previous: p.pnl.grossSalesCents },
+        ]
+      : [{ kind: "line" as const, label: "Gross sales", current: c.pnl.grossSalesCents, previous: p.pnl.grossSalesCents }]),
     { kind: "line", label: "Less promo credit redeemed", current: c.pnl.promoCents, previous: p.pnl.promoCents, negate: true },
     { kind: "total", label: "Net revenue", current: c.pnl.netRevenueCents, previous: p.pnl.netRevenueCents },
     ...costRows(c.pnl.variableCosts, p.pnl.variableCosts),
@@ -522,7 +562,9 @@ function cashFlowRows(c: PeriodTotals, p: PeriodTotals): StatementRow[] {
 function Statements({ report }: { report: FinanceReport }) {
   const c = report.current;
   const p = report.previous;
-  const gap = c.cash.cashInCents - c.pnl.netRevenueCents;
+  // Purchase-code revenue was paid for outside the app, so compare cash in with wallet revenue only.
+  const walletRevenue = c.pnl.netRevenueCents - c.pnl.purchaseCodeCents;
+  const gap = c.cash.cashInCents - walletRevenue;
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2">
@@ -532,11 +574,19 @@ function Statements({ report }: { report: FinanceReport }) {
         <Section title="Cash flow" description="Money that moved through the bank.">
           <Statement caption="Cash flow" rows={cashFlowRows(c, p)} />
           <p className="mt-2 text-sm text-v2-muted">
-            Cash in {gap >= 0 ? "exceeded" : "trailed"} net revenue by {money(Math.abs(gap))}:{" "}
+            Cash in {gap >= 0 ? "exceeded" : "trailed"} {c.pnl.purchaseCodeCents ? "wallet revenue" : "net revenue"} by{" "}
+            {money(Math.abs(gap))}:{" "}
             {gap >= 0
               ? "customers topped up more than they spent, which grows what you owe them in product."
               : "customers spent balance they topped up earlier."}{" "}
             Prepaid balance owed at {report.range.to}: {money(report.balances.paidWalletCents)}.
+            {c.pnl.purchaseCodeCents ? (
+              <>
+                {" "}
+                The {money(c.pnl.purchaseCodeCents)} purchase codes paid for books was prepaid outside the app and isn&apos;t
+                counted as cash in.
+              </>
+            ) : null}
           </p>
         </Section>
       </div>
@@ -558,6 +608,12 @@ function Methodology() {
           <strong className="text-v2-navy">Promo credit.</strong> Each account&apos;s wallet history is replayed with two
           buckets, and purchases spend promo credit first. The promo-funded part of a sale is a discount, not revenue,
           but its AI and printing costs are still real.
+        </li>
+        <li>
+          <strong className="text-v2-navy">Purchase codes.</strong> When a purchase code pays for a printed book, its
+          share of the order is counted as a sale on the day the order is paid, so the book&apos;s Lulu cost has matching
+          revenue. Codes are prepaid outside the app, so that share never appears in cash in; a canceled order gives
+          its code back and drops out.
         </li>
         <li>
           <strong className="text-v2-navy">Variable costs.</strong> AI is the measured cost of every model call, assigned

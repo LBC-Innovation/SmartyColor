@@ -75,8 +75,10 @@ export type ProductLine = {
   units: number;
   /** AI calls made for this line (sold, free, retried and failed alike). */
   aiCalls: number;
-  /** What the wallet was charged, net of refunds. */
+  /** What the wallet was charged, net of refunds, plus what purchase codes paid. */
   grossSalesCents: number;
+  /** The part of gross sales a purchase code paid for (prepaid offline, no wallet or card money). */
+  purchaseCodeCents: number;
   /** The part of gross sales paid for with promo credit. */
   promoCents: number;
   /** Gross sales minus promo: revenue funded by customers' own money. */
@@ -106,7 +108,14 @@ export type PeriodTotals = {
     netCashFlowCents: number;
   };
   pnl: {
+    /** Wallet sales plus purchase-code sales. */
     grossSalesCents: number;
+    /** What customers' wallets were charged (paid and promo money alike). */
+    walletSalesCents: number;
+    /** Book value purchase codes paid for: prepaid offline, so it is not in cash in. */
+    purchaseCodeCents: number;
+    /** Books (orders) a purchase code paid toward. */
+    purchaseCodeBooks: number;
     promoCents: number;
     netRevenueCents: number;
     variableCosts: CostLine[];

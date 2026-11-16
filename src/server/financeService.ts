@@ -21,7 +21,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/service";
  * Builds the financials report from what the app already records:
  *
  *   credit_stripe_sessions / credit_ledger  card top-ups, wallet charges, promo grants, refunds
- *   book_orders                             print orders and what Lulu charged us
+ *   book_orders                             print orders, what Lulu charged us, and what a
+ *                                           purchase code paid (covered_cents, no ledger row)
  *   vision_usage_events                     every AI call's cost (summed per day in SQL)
  *   finance_costs / finance_settings        what the app can't see, entered on the page
  *
@@ -98,6 +99,8 @@ type OrderRow = {
   product_id: string;
   price_sku: string | null;
   credits_applied: number;
+  /** Part of the order a purchase code paid (0037); the ledger only records the wallet part. */
+  covered_cents: number | null;
   lulu_cost_cents: number | null;
   paid_at: string | null;
   submitted_to_lulu_at: string | null;
@@ -170,6 +173,8 @@ type Sale = {
   /** Negative for refunds. */
   grossCents: number;
   promoCents: number;
+  /** Part of grossCents a purchase code paid for (not wallet money). */
+  codeCents: number;
   units: number;
   /** Our cost recorded with the charge, per unit (catalog items only). */
   unitCogsCents: number | null;
@@ -256,7 +261,7 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       db
         .from("book_orders")
         .select(
-          "id, status, fulfillment, product_id, price_sku, credits_applied, lulu_cost_cents, paid_at, submitted_to_lulu_at, canceled_at, refunded_at",
+          "id, status, fulfillment, product_id, price_sku, credits_applied, covered_cents, lulu_cost_cents, paid_at, submitted_to_lulu_at, canceled_at, refunded_at",
         )
         .order("created_at", { ascending: true })
         .range(from, to),
@@ -362,6 +367,7 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
         sku,
         grossCents: amount,
         promoCents: fromPromo,
+        codeCents: 0,
         units: 1,
         unitCogsCents: e.cogs_cents == null ? null : Number(e.cogs_cents),
       });
@@ -389,10 +395,18 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
         charge.paid = Math.max(0, charge.paid - backPaid);
         b.promo += backPromo;
         b.paid += backPaid;
-        sales.push({ at, sku: charge.sku, grossCents: -e.delta, promoCents: -backPromo, units: -1, unitCogsCents: null });
+        sales.push({
+          at,
+          sku: charge.sku,
+          grossCents: -e.delta,
+          promoCents: -backPromo,
+          codeCents: 0,
+          units: -1,
+          unitCogsCents: null,
+        });
       } else {
         b.paid += e.delta;
-        sales.push({ at, sku: "other", grossCents: -e.delta, promoCents: 0, units: 0, unitCogsCents: null });
+        sales.push({ at, sku: "other", grossCents: -e.delta, promoCents: 0, codeCents: 0, units: 0, unitCogsCents: null });
       }
     } else if (e.delta > 0) {
       // Welcome credit, admin grants, anything else given away.
@@ -408,6 +422,27 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
     paidTotal += b.paid - beforePaid;
     promoTotal += b.promo - beforePromo;
     wallet.push({ at, paid: paidTotal, promo: promoTotal });
+  }
+
+  // --- What purchase codes paid ---
+  // place_book_order_with_credits charges the wallet only total - covered and writes no ledger row
+  // for the code's part, so without this a code-paid book shows Lulu's cost with no revenue. The
+  // code was prepaid offline: it is revenue (matching the book's cost), never cash in. A canceled
+  // order gives its code back, so only paid, non-canceled orders count. The sale lands on paid_at,
+  // as the wallet part's ledger row does, and counts as the unit sold only when there is no
+  // wallet charge for the order (otherwise that charge already counted it).
+  for (const o of orders) {
+    const covered = o.covered_cents ?? 0;
+    if (covered <= 0 || !o.paid_at || o.canceled_at || o.status === "canceled") continue;
+    sales.push({
+      at: Date.parse(o.paid_at),
+      sku: orderSku(o),
+      grossCents: covered,
+      promoCents: 0,
+      codeCents: covered,
+      units: o.credits_applied > 0 ? 0 : 1,
+      unitCogsCents: null,
+    });
   }
 
   // --- Top-ups, the card fee on each, and each payer's first top-up ---
@@ -504,12 +539,12 @@ function sumBy<T>(rows: T[], from: number, to: number, at: (r: T) => number, val
 }
 
 function productLines(d: Dataset, from: number, to: number): ProductLine[] {
-  type Acc = { units: number; aiCalls: number; gross: number; promo: number; cost: number };
+  type Acc = { units: number; aiCalls: number; gross: number; promo: number; code: number; cost: number };
   const acc = new Map<string, Acc>();
   const get = (sku: string) => {
     let a = acc.get(sku);
     if (!a) {
-      a = { units: 0, aiCalls: 0, gross: 0, promo: 0, cost: 0 };
+      a = { units: 0, aiCalls: 0, gross: 0, promo: 0, code: 0, cost: 0 };
       acc.set(sku, a);
     }
     return a;
@@ -521,6 +556,7 @@ function productLines(d: Dataset, from: number, to: number): ProductLine[] {
     a.units += s.units;
     a.gross += s.grossCents;
     a.promo += s.promoCents;
+    a.code += s.codeCents;
     // Non-AI, non-print items (the PDF) are costed at what the charge recorded.
     const group = d.products.get(s.sku)?.group ?? groupForSku(s.sku);
     if (group === "digital") {
@@ -551,6 +587,7 @@ function productLines(d: Dataset, from: number, to: number): ProductLine[] {
         units: a.units,
         aiCalls: a.aiCalls,
         grossSalesCents: a.gross,
+        purchaseCodeCents: a.code,
         promoCents: a.promo,
         netRevenueCents: net,
         variableCostCents: a.cost,
@@ -569,6 +606,9 @@ function productLines(d: Dataset, from: number, to: number): ProductLine[] {
 function periodTotals(d: Dataset, from: number, to: number, lines = productLines(d, from, to)): PeriodTotals {
   const grossSales = lines.reduce((t, l) => t + l.grossSalesCents, 0);
   const promo = lines.reduce((t, l) => t + l.promoCents, 0);
+  const purchaseCode = lines.reduce((t, l) => t + l.purchaseCodeCents, 0);
+  let purchaseCodeBooks = 0;
+  for (const s of d.sales) if (s.codeCents > 0 && inRange(s.at, from, to)) purchaseCodeBooks += 1;
   const netRevenue = grossSales - promo;
 
   const ai = sumBy(d.aiCosts, from, to, (c) => c.at, (c) => c.cents);
@@ -619,6 +659,9 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
     },
     pnl: {
       grossSalesCents: grossSales,
+      walletSalesCents: grossSales - purchaseCode,
+      purchaseCodeCents: purchaseCode,
+      purchaseCodeBooks,
       promoCents: promo,
       netRevenueCents: netRevenue,
       variableCosts,
@@ -833,6 +876,15 @@ function buildInsights(
         detail: `The average top-up is ${usd(cur.customers.avgTopUpCents ?? 0)}, so the fixed ${usd(d.settings.cardFeeFixedCents)} per charge hurts. Nudge customers toward larger top-ups (e.g. a $10 minimum or bonus credit on $20+).`,
       });
     }
+  }
+
+  if (cur.pnl.purchaseCodeCents > 0) {
+    const books = cur.pnl.purchaseCodeBooks;
+    out.push({
+      tone: "info",
+      title: `${usd(cur.pnl.purchaseCodeCents)} of books paid by purchase codes`,
+      detail: `${books} printed book${books === 1 ? "" : "s"} this period ${books === 1 ? "was" : "were"} paid for in full or in part by a purchase code. It's counted as revenue so it matches the book's Lulu cost, but codes are prepaid outside the app, so it isn't in cash in. Record what you were paid for codes yourself.`,
+    });
   }
 
   if (d.canceledCharged.count > 0) {
