@@ -9,13 +9,27 @@ import { cn } from "@/lib/cn";
 
 /**
  * `intent`: the landing page this header sits on, sent with the Sign up tap. `wide`: span the screen
- * like the landing page's edge-to-edge sections instead of the usual centered column.
+ * like the landing page's edge-to-edge sections instead of the usual centered column. `tinted`: a little
+ * more see-through, for the landing page, where lilac sits behind the bar and should show faintly.
  */
-export function V2MarketingHeader({ intent = "default", wide = false }: { intent?: LandingIntent; wide?: boolean }) {
+export function V2MarketingHeader({
+  intent = "default",
+  wide = false,
+  tinted = false,
+}: {
+  intent?: LandingIntent;
+  wide?: boolean;
+  tinted?: boolean;
+}) {
   const { user, loading } = useAuth();
 
   return (
-    <header className="shrink-0 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
+    <header
+      className={cn(
+        "sticky top-0 z-40 shrink-0 border-b backdrop-blur-sm",
+        tinted ? "border-v2-primary/10 bg-white/90" : "border-gray-200 bg-white/90",
+      )}
+    >
       <div className={cn("mx-auto flex w-full items-center justify-between gap-4 py-4", wide ? "px-5 sm:px-8 lg:px-12" : "v2-gutter-x max-w-6xl")}>
         <Link href="/" className="inline-flex min-h-11 min-w-0 items-center rounded-lg outline-offset-2">
           <V2BrandLogo />

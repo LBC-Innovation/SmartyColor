@@ -110,16 +110,18 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   }, []);
 
   // Rendered without waiting for the session check so the hero is in the server HTML.
+  // A strip of the hero band's light top color across the top, under the header, so the translucent white bar
+  // picks up a faint tint where it starts. bg-local keeps it with the content when this box scrolls.
   return (
-    <div className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream text-v2-ink">
+    <div className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream bg-[linear-gradient(var(--color-v2-butter),var(--color-v2-butter))] bg-[length:100%_12rem] bg-no-repeat bg-local text-v2-ink">
       {showBanner && holiday ? <HolidayBanner label={holiday.label} /> : null}
-      <V2MarketingHeader intent={intent} wide />
+      <V2MarketingHeader intent={intent} wide tinted />
 
       <main className="flex-1">
         {/* ---------------------------------------------------------- hero */}
         {/* Edge to edge, like a photo: the picture fills the right (the top on a phone) and the text
             sits on the plum it fades into. A thin inset keeps the rounded corners off the screen edge. */}
-        <section className="px-2 pt-2 sm:px-3 sm:pt-3" aria-labelledby="hero-title">
+        <section className="bg-gradient-to-b from-v2-butter to-v2-mast px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6" aria-labelledby="hero-title">
           <div className="relative isolate overflow-hidden rounded-[1.75rem] bg-v2-plum text-white lg:flex lg:min-h-[min(88vh,50rem)] lg:items-center lg:rounded-[2.25rem]">
             <div className="relative aspect-[4/3] w-full sm:aspect-[16/9] lg:absolute lg:inset-y-0 lg:left-[30%] lg:right-0 lg:aspect-auto lg:w-auto">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -519,7 +521,7 @@ function Testimonials() {
   return (
     <section className="border-y border-gray-200 bg-white">
       <div className="v2-gutter-x mx-auto w-full max-w-7xl py-12 sm:py-16">
-        <SectionHeading eyebrow="From families" title="What parents tell us" />
+        <SectionHeading eyebrow="From families" title="What families tell us" />
         <ul className="mt-8 grid gap-4 sm:mt-10 md:grid-cols-3 md:gap-5">
           {TESTIMONIALS.map((t) => (
             <li key={`${t.firstName}-${t.consentDate}`} className="flex flex-col rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
@@ -567,7 +569,7 @@ function TransformSection({ pairs, onStart }: { pairs: HeroPair[]; onStart: () =
               ))}
             </div>
           ) : null}
-          <div className="mt-6 rounded-2xl bg-v2-butter p-4 sm:p-5">
+          <div className="mt-6 rounded-2xl border-l-4 border-v2-primary bg-v2-primary-light p-4 sm:p-5">
             <p className="font-semibold text-v2-ink">{TRANSFORM.fixTitle}</p>
             <p className="mt-1 text-sm leading-relaxed text-v2-navy">{TRANSFORM.fixBody}</p>
           </div>

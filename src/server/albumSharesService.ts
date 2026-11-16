@@ -5,6 +5,7 @@ import type { AuthUser } from "@/lib/auth/authenticate";
 import { clientOrigin } from "@/lib/auth/clientOrigin";
 import type { AlbumInvitePreview, AlbumShare } from "@/lib/library/types";
 import { albumShareEmail } from "@/server/email/albumShareEmail";
+import { referralCodeFor, withShareTags } from "@/server/referralService";
 import { sendEmail } from "@/server/email/resend";
 import { normalizeEmail, projectAccess } from "@/server/libraryAccess";
 
@@ -33,9 +34,17 @@ function shareFromRow(row: Row): AlbumShare {
   };
 }
 
-/** Where an invite link points. Signed-in people join from there; everyone else signs up first. */
-export function inviteLinkUrl(shareId: string): string {
-  return `${clientOrigin()}/join/${encodeURIComponent(shareId)}`;
+/**
+ * Where an invite link points. Signed-in people join from there; everyone else signs up first.
+ * Tagged as an album invite, with the inviter's referral code so a new account counts as theirs.
+ */
+export function inviteLinkUrl(shareId: string, refCode: string | null = null): string {
+  return withShareTags(`${clientOrigin()}/join/${encodeURIComponent(shareId)}`, {
+    utm_source: "album_invite",
+    utm_medium: "invite_link",
+    utm_campaign: "album_share",
+    ref: refCode,
+  });
 }
 
 async function ownedProject(userId: string, projectId: string): Promise<ApiResult<Row>> {
@@ -58,7 +67,12 @@ async function sendShareEmail(share: Row, project: Row, inviterName: string): Pr
   const origin = clientOrigin();
   const url = existingUser
     ? `${origin}/studio?album=${encodeURIComponent(project.id as string)}`
-    : `${origin}/sign-up?invite=${encodeURIComponent(share.id as string)}`;
+    : withShareTags(`${origin}/sign-up?invite=${encodeURIComponent(share.id as string)}`, {
+        utm_source: "album_invite",
+        utm_medium: "email",
+        utm_campaign: "album_share",
+        ref: await referralCodeFor(project.user_id as string),
+      });
   const sent = await sendEmail(
     albumShareEmail({
       to: share.email as string,
@@ -213,7 +227,7 @@ export async function createInviteLink(
   return {
     data: {
       share: shareFromRow(share),
-      url: inviteLinkUrl(share.id as string),
+      url: inviteLinkUrl(share.id as string, await referralCodeFor(user.id)),
       inviterName: await displayName(user),
       albumName: project.data!.name as string,
     },

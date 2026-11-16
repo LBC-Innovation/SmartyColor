@@ -18,6 +18,7 @@ import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/l
 import type { FinanceCost, FinanceCostInput, FinanceReport, FinanceSettings } from "@/lib/finance/types";
 import type { GuestCall, GuestCostsReport } from "@/lib/guests/types";
 import type { FilesReport } from "@/lib/files/types";
+import type { AcquisitionReport, AttributionModel, MarketingLink, MarketingLinkInput, SpendEntry } from "@/lib/marketing/acquisitionTypes";
 
 const TOKEN_KEY = "cm_access_token";
 const REFRESH_TOKEN_KEY = "cm_refresh_token";
@@ -664,6 +665,42 @@ export function adminFilesReport(options: { days: number | "all"; thumbnails: bo
   return request<FilesReport>(`/admin/files?${qs}`);
 }
 
+export function adminAcquisition(options: { days: "7" | "30" | "90" | "365" | "all"; model: AttributionModel }): Promise<ApiResult<AcquisitionReport>> {
+  const qs = new URLSearchParams({ days: options.days, model: options.model });
+  return request<AcquisitionReport>(`/admin/acquisition?${qs}`);
+}
+
+export function adminListSpend(): Promise<ApiResult<SpendEntry[]>> {
+  return request<SpendEntry[]>("/admin/acquisition/spend");
+}
+
+export function adminSaveSpend(input: {
+  month: string;
+  channel: string;
+  source?: string;
+  campaign?: string;
+  amountCents: number;
+  note?: string;
+}): Promise<ApiResult<SpendEntry>> {
+  return request<SpendEntry>("/admin/acquisition/spend", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function adminDeleteSpend(id: string): Promise<ApiResult<{ deleted: boolean }>> {
+  return request<{ deleted: boolean }>(`/admin/acquisition/spend?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function adminListLinks(): Promise<ApiResult<MarketingLink[]>> {
+  return request<MarketingLink[]>("/admin/links");
+}
+
+export function adminCreateLink(input: MarketingLinkInput): Promise<ApiResult<MarketingLink>> {
+  return request<MarketingLink>("/admin/links", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function adminArchiveLink(id: string, archived: boolean): Promise<ApiResult<MarketingLink>> {
+  return request<MarketingLink>(`/admin/links/${id}`, { method: "PATCH", body: JSON.stringify({ archived }) });
+}
+
 export function adminGuestCalls(ip: string): Promise<ApiResult<GuestCall[]>> {
   return request<GuestCall[]>(`/admin/guests?ip=${encodeURIComponent(ip)}`);
 }
@@ -760,6 +797,14 @@ export function adminUpdatePromoCredits(input: {
 
 export function fetchReferral(): Promise<ApiResult<ReferralSummary>> {
   return request<ReferralSummary>("/account/referral");
+}
+
+export function fetchHeardFrom(): Promise<ApiResult<{ answered: boolean }>> {
+  return request<{ answered: boolean }>("/account/heard-from");
+}
+
+export function saveHeardFrom(answer: string, detail = ""): Promise<ApiResult<{ saved: boolean }>> {
+  return request<{ saved: boolean }>("/account/heard-from", { method: "POST", body: JSON.stringify({ answer, detail }) });
 }
 
 // ---- carts: books started in the order wizard and not ordered yet ----------

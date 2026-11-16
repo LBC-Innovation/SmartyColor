@@ -20,6 +20,10 @@ export type TrackEventParams = {
   cta_click: { location: CtaLocation; intent: TrackIntent };
   /** The partners page's email link was tapped or its address copied. Not a confirmed lead. */
   partner_inquiry: { location: "hero" | "final" };
+  /** Answer to "How did you hear about us?" (a fixed option id, never free text). */
+  heard_from: { answer: string };
+  /** A share link was copied or sent. `method` is how; `content_type` is what. */
+  share: { method: "copy" | "email" | "native" | "sms"; content_type: "page" | "referral" | "album" };
 };
 
 export type TrackEvent = keyof TrackEventParams;
@@ -47,20 +51,28 @@ export function centsToValue(cents: number): number {
   return Math.round(cents) / 100;
 }
 
-/** How each of our events is named on each platform. null = not sent there. */
+/**
+ * How each of our events is named on each platform. null = not sent there.
+ * TikTok gets only its standard funnel events, so custom ones never train its optimization.
+ * Google Ads gets only conversions whose label is configured (see GOOGLE_ADS_LABELS in track.ts).
+ */
 export const VENDOR_EVENT_NAMES: Record<
   TrackEvent,
-  { ga4: string; meta: { name: string; custom: boolean }; pinterest: string | null }
+  { ga4: string; meta: { name: string; custom: boolean }; pinterest: string | null; tiktok: string | null }
 > = {
-  page_generated: { ga4: "page_generated", meta: { name: "PageGenerated", custom: true }, pinterest: "custom" },
-  sign_up: { ga4: "sign_up", meta: { name: "CompleteRegistration", custom: false }, pinterest: "signup" },
-  book_started: { ga4: "book_started", meta: { name: "AddToCart", custom: false }, pinterest: "addtocart" },
-  checkout_started: { ga4: "begin_checkout", meta: { name: "InitiateCheckout", custom: false }, pinterest: null },
-  purchase: { ga4: "purchase", meta: { name: "Purchase", custom: false }, pinterest: "checkout" },
-  // Custom on GA4 and Meta so they stay out of ad optimization; not sent to Pinterest.
-  cta_click: { ga4: "cta_click", meta: { name: "CtaClick", custom: true }, pinterest: null },
+  page_generated: { ga4: "page_generated", meta: { name: "PageGenerated", custom: true }, pinterest: "custom", tiktok: "ViewContent" },
+  sign_up: { ga4: "sign_up", meta: { name: "CompleteRegistration", custom: false }, pinterest: "signup", tiktok: "CompleteRegistration" },
+  book_started: { ga4: "book_started", meta: { name: "AddToCart", custom: false }, pinterest: "addtocart", tiktok: "AddToCart" },
+  checkout_started: { ga4: "begin_checkout", meta: { name: "InitiateCheckout", custom: false }, pinterest: null, tiktok: "InitiateCheckout" },
+  purchase: { ga4: "purchase", meta: { name: "Purchase", custom: false }, pinterest: "checkout", tiktok: "CompletePayment" },
+  // Custom on GA4 and Meta so they stay out of ad optimization; not sent to Pinterest or TikTok.
+  cta_click: { ga4: "cta_click", meta: { name: "CtaClick", custom: true }, pinterest: null, tiktok: null },
   // A tap is intent, not a lead: custom events only, so it never trains ad optimization as a conversion.
-  partner_inquiry: { ga4: "partner_contact_click", meta: { name: "PartnerContactClick", custom: true }, pinterest: null },
+  partner_inquiry: { ga4: "partner_contact_click", meta: { name: "PartnerContactClick", custom: true }, pinterest: null, tiktok: null },
+  // Self-reported source after sign-up: analytics only.
+  heard_from: { ga4: "heard_from", meta: { name: "HeardFrom", custom: true }, pinterest: null, tiktok: null },
+  // Someone shared a page or their referral link.
+  share: { ga4: "share", meta: { name: "Share", custom: true }, pinterest: null, tiktok: null },
 };
 
 /** Cookie set by "Do not sell or share my personal information". Honored in the browser and on the server. */

@@ -10,6 +10,7 @@ import { emailConfigured, sendEmail } from "@/server/email/resend";
 import { senderDisplayName } from "@/server/familySendService";
 import { normalizeEmail } from "@/server/libraryAccess";
 import { sharePage } from "@/server/pageSharesService";
+import { referralCodeFor } from "@/server/referralService";
 
 const err = (message: string, code?: string): ApiResult<never> => ({ data: null, error: { message, ...(code ? { code } : {}) } });
 
@@ -40,13 +41,14 @@ function imageUrlFor(pageUrl: string): string {
   return url.toString();
 }
 
-function authUrl(path: "/sign-up" | "/sign-in"): string {
+function authUrl(path: "/sign-up" | "/sign-in", refCode: string | null): string {
   const params = new URLSearchParams({
     next: AFTER_SIGN_UP,
     utm_source: "share",
     utm_medium: "email",
     utm_campaign: "shared_page",
   });
+  if (refCode) params.set("ref", refCode);
   return `${clientOrigin()}${path}?${params.toString()}`;
 }
 
@@ -80,6 +82,7 @@ export async function emailPageShare(input: {
   const shared = await sharePage(user.id, photoId, revisionId);
   if (shared.error) return shared;
   const share = shared.data!;
+  const refCode = await referralCodeFor(user.id);
 
   const sent = await sendEmail(
     pageShareEmail({
@@ -88,8 +91,8 @@ export async function emailPageShare(input: {
       note,
       pageUrl: share.url,
       imageUrl: imageUrlFor(share.url),
-      signUpUrl: authUrl("/sign-up"),
-      signInUrl: authUrl("/sign-in"),
+      signUpUrl: authUrl("/sign-up", refCode),
+      signInUrl: authUrl("/sign-in", refCode),
     }),
   );
   if (!sent) return err("The email couldn't be sent. Please try again.", "SEND_FAILED");

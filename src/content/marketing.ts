@@ -177,12 +177,12 @@ export const BEST_PHOTOS = {
 };
 
 export const WHY_FAMILIES: WhyBlock = {
-  eyebrow: "Why families love it",
+  eyebrow: "Why it's different",
   title: "It's them on the page",
-  body: "Generic coloring books are fine. A page of your kid, your dog and your backyard is the one that ends up on the fridge.",
+  body: "A store-bought coloring book gets a few scribbles and a spot on the shelf. A page with your own kids, your own dog and your own backyard gets colored slowly, shown to everyone, and kept.",
   points: [
-    { icon: "message", title: "Fix anything by typing", body: "“Thicker lines.” “Take out the stroller.” It redraws the page." },
-    { icon: "truck", title: "Real books, real paper", body: "Stapled, spiral or paperback, printed in the US and shipped where you choose." },
+    { icon: "message", title: "Change anything by typing", body: "“Give him a shave.” “Take out the stroller.” It draws the page again." },
+    { icon: "truck", title: "A real book on real paper", body: "Stapled, spiral or paperback. Printed in the US and mailed wherever you like." },
     {
       icon: "shield",
       title: "Your photos stay yours",
@@ -191,8 +191,54 @@ export const WHY_FAMILIES: WhyBlock = {
   ],
   example: BOYS_CATFISH,
   photo: "fridge",
-  useCasesTitle: "Perfect for",
-  useCases: ["Grandparent gifts", "Birthday parties", "Rainy afternoons", "Road trips", "Classrooms", "Family reunions"],
+  useCasesTitle: "People make them for",
+  useCases: [
+    "Grandparents who love to color",
+    "Quiet time at home",
+    "Birthday parties",
+    "Holiday visits",
+    "Road trips",
+    "Classrooms",
+  ],
+};
+
+/** Homepage ideas: who colors these and where they get used, beyond the occasion pages. */
+const HOME_IDEAS: IdeasBlock = {
+  eyebrow: "Ideas",
+  title: "Not just for kids",
+  body: "A coloring page of people you know works at almost any age, and for more occasions than you'd think.",
+  items: [
+    {
+      icon: "sparkles",
+      title: "For grown-ups who color",
+      body: "If coloring is how you unwind, ask for “more detail” and get a page with plenty to fill in. It's more fun when the faces are your own.",
+    },
+    {
+      icon: "users",
+      title: "Grandma and the grandkids",
+      body: "Print the same page twice and color it side by side. Someone always starts telling the story behind the photo.",
+    },
+    {
+      icon: "gift",
+      title: "The kids' table at a wedding",
+      body: "Print pages of the couple and set out crayons. The little guests stay busy right through the toasts.",
+    },
+    {
+      icon: "camera",
+      title: "Family reunions",
+      body: "Bring a stack of pages from last year's photos. The kids color, and the grown-ups argue about who's who.",
+    },
+    {
+      icon: "book",
+      title: "A new big brother or sister",
+      body: "A few pages of the family with the new baby help an older child feel like part of the big news.",
+    },
+    {
+      icon: "heart",
+      title: "Visiting someone in memory care",
+      body: "Familiar faces give you something calm to do together, and something to talk about while you color.",
+    },
+  ],
 };
 
 const ALL_SECTIONS_OFF: LandingSections = {
@@ -221,24 +267,25 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
   default: {
     intent: "default",
     path: "/",
-    title: "Color the moments that matter | Colorful Memories",
+    title: "Coloring books made from your family photos | Colorful Memories",
     description:
-      "Turn photos from your phone into a coloring book that stars the people you love. Try a free coloring page, no account needed. Order a printed book as a gift.",
+      "Turn the photos on your phone into coloring pages of your own family. Print them at home or order a printed book for the kids, the grandparents or yourself. Try a page free, no account needed.",
     shareImage: "/share/home.png",
     shareImageAlt: "A family photo next to the coloring page made from it",
     eyebrow: "Personalized coloring books",
     eyebrowIcon: "sparkles",
     ready: true,
     coverTitle: "Our Family Book",
-    headline: ["Color the moments", "that matter."],
+    headline: ["Family photos", "you can color."],
     subhead:
-      "Turn the photos already on your phone into a coloring book that stars the people you love. A gift made from a picture you already have.",
+      "Pick a photo from your phone and get a coloring page of it in about a minute. Print it at home, or put a few together into a real book for the kids, the grandparents, or yourself.",
     primaryCta: PRIMARY_CTA,
     trustBullets: ["No account to start", "First page in about a minute", "Your photos stay private"],
     hero: FAMILY_BALCONY,
     heroPhoto: "living-room-floor",
     sections: { ...CONSUMER_SECTIONS, occasions: true },
     why: WHY_FAMILIES,
+    ideas: HOME_IDEAS,
     faq: [],
   },
   gift: {
@@ -357,7 +404,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
         {
           icon: "message",
           title: "Fix it by typing",
-          body: "“Thicker lines.” “Take out the car.” It redraws the page.",
+          body: "“Make the cake say 6.” “Take out the car.” It redraws the page.",
         },
       ],
       // TODO(owner): a birthday-party pair (child with a cake or friends), with written consent.
@@ -436,7 +483,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
         {
           icon: "message",
           title: "Fix it by typing",
-          body: "“Thicker lines.” “Remove the leash.” It redraws the page.",
+          body: "“Give her a bow.” “Remove the leash.” It redraws the page.",
         },
         {
           icon: "gift",
@@ -511,7 +558,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       body: "Families remember a day through its photos. Turn those photos into coloring pages and a book, and the day comes home with them.",
       points: [
         { icon: "image", title: "Starts with a photo", body: "A session favorite, a class picture or a day-out snapshot." },
-        { icon: "message", title: "Easy to adjust", body: "Type a note like “thicker lines” and the page redraws." },
+        { icon: "message", title: "Easy to adjust", body: "Type a note like “take out the sign” and the page redraws." },
         { icon: "truck", title: "Printed in the US", body: "Printed books are made to order and shipped." },
       ],
       // TODO(owner): a photographer-session or event pair, with written consent.
@@ -642,37 +689,37 @@ export const HEADER = {
 /** The occasions cards. The card for the page you are on is left out. */
 export const OCCASIONS = {
   eyebrow: "Occasions",
-  title: "Made for the moments that matter",
+  title: "A few good reasons to make one",
   cards: [
     {
       intent: "gift",
       icon: "gift",
       image: "kitchen-table",
-      title: "A gift book",
+      title: "For the grandparents",
       /** Used instead of `title` while the Christmas order-by date is set. */
       holidayTitle: "Christmas gifts",
-      body: "A printed book starring the grandkids, shipped to them with a note.",
+      body: "A book of the grandkids, mailed straight to Grandma and Grandpa with a note from you.",
     },
     {
       intent: "birthday",
       icon: "cake",
       image: "birthday-table",
       title: "Birthdays",
-      body: "A book starring the birthday kid, or pages to print for every guest.",
+      body: "Pages of the birthday kid for every guest to color, or a book they get to keep.",
     },
     {
       intent: "pets",
       icon: "paw",
       image: "dog-coloring",
       title: "Pets",
-      body: "Their dog or cat as a coloring page, for the pet lover in your life.",
+      body: "Your dog or cat on a page to color. A sweet gift for anyone who talks about their pet nonstop.",
     },
     {
       intent: "partners",
       icon: "briefcase",
       image: "birthday-table",
       title: "Photographers and businesses",
-      body: "Turn a session, a class or an event into a coloring book families keep.",
+      body: "Photographers, schools and event planners: give families a coloring book of their day.",
       /** This card goes to its page instead of starting a free page. */
       link: "See how it works for businesses",
     },
@@ -687,36 +734,38 @@ export const OCCASIONS = {
     link?: string;
   }[],
   /** Plain text, no links. Items tied to a page are listed here while that page is not ready. */
-  othersLead: "Also made for",
+  othersLead: "People also make them for",
   others: [
     { label: "birthdays", intent: "birthday" },
     { label: "pets", intent: "pets" },
     { label: "weddings" },
-    { label: "vacations" },
+    { label: "anniversaries" },
     { label: "family reunions" },
-    { label: "new homes" },
+    { label: "a new baby in the family" },
+    { label: "vacations" },
+    { label: "a move to a new house" },
   ] as { label: string; intent?: LandingIntent }[],
 };
 
 export const HOW_IT_WORKS = {
   eyebrow: "How it works",
-  title: "Three steps. No design skills.",
-  body: "If you can send a photo, you can make a coloring book.",
+  title: "If you can text a photo, you can make one",
+  body: "No drawing, no design, nothing to install.",
   steps: [
     {
       icon: "image",
-      title: "Upload a photo",
-      body: "Any family picture from your phone. Birthdays, the beach, the dog. HEIC works too.",
+      title: "Pick a photo",
+      body: "Any picture from your phone. The beach, a birthday, the dog asleep on the couch. iPhone and Android both work.",
     },
     {
       icon: "sparkles",
       title: "Get a coloring page",
-      body: "In about a minute it becomes clean black-and-white line art your kid can color.",
+      body: "About a minute later you have clean black-and-white line art, ready for crayons, markers or colored pencils.",
     },
     {
       icon: "printer",
-      title: "Print or order a book",
-      body: "Download a free PDF for your home printer, or turn your pages into a real stapled, spiral or paperback book, shipped where you choose.",
+      title: "Print it or order a book",
+      body: "Print a page free at home, or put your pages together into a stapled, spiral or paperback book and have it mailed wherever you like.",
     },
   ],
 } as const;
@@ -841,19 +890,19 @@ export const LIFESTYLE_PHOTOS: Record<LifestyleId, LifestylePhoto> = {
  * the strip is hidden until at least three of the rest are ready.
  */
 export const PHOTO_BAND = {
-  eyebrow: "Made for real life",
-  title: "Pages that get colored, not filed",
-  body: "Rainy days, grandma's table, the birthday party. Then straight onto the fridge.",
+  eyebrow: "Who's coloring",
+  title: "Kids, grandparents and everyone in between",
+  body: "A rainy Saturday on the living room floor. Grandma's kitchen table. The end of a long party table. The best ones end up on the fridge.",
   ids: ["kitchen-table", "living-room-floor", "fridge", "birthday-table", "dog-coloring"] as LifestyleId[],
 };
 
 /** The real before/after, shown big. The switcher lists every real pair on the page. */
 export const TRANSFORM = {
-  eyebrow: "Real photos, real pages",
-  title: "Your photo in. Their page out.",
-  body: "Every page here was made in the studio from a real family photo. Drag the slider to compare.",
+  eyebrow: "Before and after",
+  title: "This started as an everyday photo",
+  body: "Every page on this site was made from a real family photo. Drag the slider to see both.",
   fixTitle: "Not quite right?",
-  fixBody: "Type “thicker lines” or “take out the stroller” and it redraws the page.",
+  fixBody: "Type what you'd change, like “take out the stroller” or “make the hat say Duke,” and it draws the page again. Want more to color? Ask for more detail.",
 };
 
 /** Photo behind the final call to action: the first one that is ready. */
@@ -913,7 +962,7 @@ export const STUDIO_EMPTY = {
   /** Mouse and trackpad only; touch screens don't drag files in. */
   dragHint: "Or drag a photo in.",
   /** "{size}" is the upload limit per photo. */
-  formats: "JPG, PNG, WebP or HEIC, up to {size} each.",
+  formats: "Any photo from your phone or computer, up to {size} each.",
   /** Guests only. */
   guestNote: "No account needed. Your photo is only used to draw your page.",
   howItWorks: "How it works",
@@ -1036,6 +1085,16 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
         "It depends on page count, binding and where it ships. You'll see the exact price, printing and shipping included, before you pay.",
     },
     {
+      id: "adults",
+      q: "Is it only for kids?",
+      a: "Not at all. Plenty of grown-ups color too. Ask for “more detail” on any page and you'll get finer lines and more to fill in.",
+    },
+    {
+      id: "events",
+      q: "Can I use it for a wedding or a family party?",
+      a: "Yes. Print single pages free at home for the kids' table, or make the whole book as a print-at-home PDF and print as many copies as you need. A printed book order is one book.",
+    },
+    {
       id: "bleed",
       q: "Will markers bleed through the paper?",
       a: "Not onto another picture. Each coloring page prints on its own sheet with the back left blank. You can turn that off at checkout to print on both sides and pay less.",
@@ -1077,7 +1136,7 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
 
 export const FINAL_CTA = {
   title: "Start with one free coloring page",
-  body: "Pick a photo from your camera roll. You'll have a coloring page before the kettle boils.",
+  body: "Pick a photo from your camera roll. In about a minute you'll have a page ready to print and color.",
   creditBadge: "Sign up free and get a {credit} credit toward your first book",
   cta: PRIMARY_CTA,
   points: ["Free to try, no account", "Exact price before you pay", "Printed in the US"],

@@ -8,6 +8,7 @@ import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderTrackCard } from "@/components/v2/orders/V2OrderTrackCard";
 import { isUnpaid } from "@/components/v2/orders/V2MyOrdersStudio";
 import { V2YearAlbumModal } from "@/components/v2/home/V2YearAlbumModal";
+import { V2HeardFromCard } from "@/components/v2/home/V2HeardFromCard";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { activeSeasonalPrompt } from "@/content/seasonalPrompt";
 import { useAuth } from "@/context/AuthContext";
@@ -212,6 +213,7 @@ export function V2HomeStudio() {
               ) : null}
 
               <div className="min-w-0 space-y-8 lg:col-start-1 lg:row-start-1">
+              <V2HeardFromCard />
               {cart ? (
                 <section aria-label="Continue your book">
                   <Link
