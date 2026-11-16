@@ -519,7 +519,7 @@ function Testimonials() {
   return (
     <section className="border-y border-gray-200 bg-white">
       <div className="v2-gutter-x mx-auto w-full max-w-7xl py-12 sm:py-16">
-        <SectionHeading eyebrow="From families" title="What parents tell us" />
+        <SectionHeading eyebrow="From families" title="What families tell us" />
         <ul className="mt-8 grid gap-4 sm:mt-10 md:grid-cols-3 md:gap-5">
           {TESTIMONIALS.map((t) => (
             <li key={`${t.firstName}-${t.consentDate}`} className="flex flex-col rounded-2xl border border-gray-200 bg-v2-bg p-5 sm:p-6">
