@@ -4,11 +4,14 @@ import { INSUFFICIENT_CREDITS_CODE, sheetUsageCostCents, type SheetUsageKind } f
 import type { PriceSku } from "@/lib/pricing/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { chargeableCents, getPublicPriceList } from "@/server/pricingService";
+import { purchaseCodeCovers, releasePurchaseCodeUse } from "@/server/purchaseCodesService";
 
 export type SheetUsageCharge = {
   chargedCents: number;
   creditsBalanceCents: number;
   editCount: number;
+  /** Set when the album's purchase code paid instead of the wallet. */
+  purchaseCodeId: string | null;
 };
 
 function log(level: string, message: string, ctx: Record<string, unknown> = {}) {
@@ -44,21 +47,37 @@ async function walletBalance(userId: string): Promise<ApiResult<number>> {
   return { data: data.credits_balance as number, error: null };
 }
 
-type UsageQuote = { costCents: number; creditsBalanceCents: number; affordable: boolean };
+type UsageQuote = {
+  costCents: number;
+  creditsBalanceCents: number;
+  affordable: boolean;
+  /** The album's purchase code pays for it. */
+  coveredByCode: boolean;
+};
 
-/** Cheap check before spending on the model; the charge itself re-checks atomically. */
+/**
+ * Cheap check before spending on the model; the charge itself re-checks atomically. With a
+ * `photoId`, an action the album's purchase code pays for costs nothing.
+ */
 export async function quoteSheetUsage(
   userId: string,
   kind: SheetUsageKind,
   editCount: number,
+  photoId?: string,
 ): Promise<ApiResult<UsageQuote>> {
-  const [prices, balance] = await Promise.all([getPublicPriceList(), walletBalance(userId)]);
+  const [prices, balance, covered] = await Promise.all([
+    getPublicPriceList(),
+    walletBalance(userId),
+    photoId ? purchaseCodeCovers(photoId, kind) : Promise.resolve(false),
+  ]);
   if (prices.error) return prices;
   if (balance.error) return balance;
-  const costCents = sheetUsageCostCents(prices.data, kind, editCount);
-  if (costCents == null) return { data: null, error: { message: `No price is set for ${kind}` } };
+  const listCents = sheetUsageCostCents(prices.data, kind, editCount);
+  if (listCents == null) return { data: null, error: { message: `No price is set for ${kind}` } };
+  const coveredByCode = covered && listCents > 0;
+  const costCents = coveredByCode ? 0 : listCents;
   return {
-    data: { costCents, creditsBalanceCents: balance.data, affordable: balance.data >= costCents },
+    data: { costCents, creditsBalanceCents: balance.data, affordable: balance.data >= costCents, coveredByCode },
     error: null,
   };
 }
@@ -69,7 +88,12 @@ export async function quoteWalletUsage(userId: string, sku: PriceSku): Promise<A
   if (price.error) return price;
   if (balance.error) return balance;
   return {
-    data: { costCents: price.data, creditsBalanceCents: balance.data, affordable: balance.data >= price.data },
+    data: {
+      costCents: price.data,
+      creditsBalanceCents: balance.data,
+      affordable: balance.data >= price.data,
+      coveredByCode: false,
+    },
     error: null,
   };
 }
@@ -91,7 +115,8 @@ export async function chargeSheetUsage(
     }
     return { data: null, error: { message: error.message } };
   }
-  const charge = data as SheetUsageCharge;
+  const raw = data as Omit<SheetUsageCharge, "purchaseCodeId"> & { purchaseCodeId?: string | null };
+  const charge: SheetUsageCharge = { ...raw, purchaseCodeId: raw.purchaseCodeId ?? null };
   log("info", "Sheet usage charged", { userId, photoId, kind, ...charge });
   return { data: charge, error: null };
 }
@@ -124,7 +149,10 @@ export async function refundSheetUsage(
   photoId: string,
   kind: SheetUsageKind,
   chargedCents: number,
+  /** The charge's purchaseCodeId: the code's use is handed back too. */
+  purchaseCodeId?: string | null,
 ): Promise<void> {
+  if (purchaseCodeId) await releasePurchaseCodeUse(photoId, kind);
   const { error } = await getSupabaseAdmin().rpc("refund_sheet_usage", {
     p_user_id: userId,
     p_photo_id: photoId,

@@ -15,6 +15,7 @@ import {
   Package,
   Sparkles,
   Tags,
+  Ticket,
   Users,
 } from "lucide-react";
 
@@ -69,6 +70,14 @@ export const v2AdminNav: V2AdminNavItem[] = [
     group: "operate",
   },
   { id: "users", label: "Customers", icon: Users, href: "/admin/users", permission: "usermanage:listusers", group: "operate" },
+  {
+    id: "purchase-codes",
+    label: "Purchase codes",
+    icon: Ticket,
+    href: "/admin/purchase-codes",
+    permission: "usermanage:adjustcredits",
+    group: "operate",
+  },
   {
     id: "acquisition",
     label: "Acquisition",

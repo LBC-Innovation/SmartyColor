@@ -59,6 +59,7 @@ import type { PageFit } from "@/lib/print/pageLayout";
 import { DEFAULT_SHIPPING_LEVEL, isShippingLevel, type ShippingChoice, type ShippingLevel } from "@/lib/orders/shippingLevels";
 import { readStoredQuoteShippingZip } from "@/lib/print/quoteShippingZip";
 import { unitPriceCents } from "@/lib/credits/pricing";
+import type { AlbumPurchaseCode } from "@/lib/purchaseCodes/types";
 import { usePriceList } from "@/lib/pricing/usePriceList";
 import { track, trackBookStarted, trackPurchaseOnce } from "@/lib/track";
 
@@ -119,6 +120,7 @@ export function useBookOrder({
   projectTitle,
   cartParam,
   onRestoreProject,
+  purchaseCode = null,
 }: {
   /** Pages in the book, in gallery order. */
   pages: BookWizardPhotoPage[];
@@ -131,9 +133,13 @@ export function useBookOrder({
   cartParam: string | null;
   /** A saved book from another album asks the studio to open that album. */
   onRestoreProject?: (projectId: string) => void;
+  /** The album's purchase code: it pays for its included book, the customer for anything more. */
+  purchaseCode?: AlbumPurchaseCode | null;
 }) {
   const router = useRouter();
   const { user, loading: authLoading, refreshUser } = useAuth();
+  // Quotes ask what the album's code covers only when the album has one.
+  const codeAlbumId = purchaseCode ? projectId : null;
   const prices = usePriceList();
   const digitalCents = useMemo(() => unitPriceCents(prices, "book.digital"), [prices]);
   const signedIn = Boolean(user);
@@ -407,7 +413,7 @@ export function useBookOrder({
         ...prev,
         loading: true,
       }));
-      void api.fetchOrderQuote({ bindingId, pageCount: quotePageCount, shippingLevel, withShipping: true, ...shipping }).then((result) => {
+      void api.fetchOrderQuote({ bindingId, pageCount: quotePageCount, shippingLevel, withShipping: true, projectId: codeAlbumId, ...shipping }).then((result) => {
         if (cancelled) return;
         const choices = api.isError(result) ? [] : (result.data.shippingChoices ?? []);
         setShippingChoices(choices);
@@ -428,6 +434,7 @@ export function useBookOrder({
                 error: result.data.quoteError ?? null,
                 deliveryMin: result.data.estimatedDeliveryMin ?? null,
                 deliveryMax: result.data.estimatedDeliveryMax ?? null,
+                coveredCents: result.data.coveredCents ?? null,
               },
         );
       });
@@ -436,7 +443,7 @@ export function useBookOrder({
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [user, quoteActive, bindingId, quotePageCount, shippingLevel, shippingZip, addressComplete, suggestionKey, shippingAddress.street1, shippingAddress.street2, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
+  }, [user, quoteActive, bindingId, quotePageCount, shippingLevel, shippingZip, addressComplete, suggestionKey, codeAlbumId, shippingAddress.street1, shippingAddress.street2, shippingAddress.city, shippingAddress.state_code, shippingAddress.postcode, shippingAddress.country_code]);
 
   function answerSuggestion(use: boolean) {
     if (!visibleSuggestion) return;
@@ -534,8 +541,13 @@ export function useBookOrder({
     : printQuote;
   const quoteCents = selectedQuote?.totalCents ?? null;
   const quoteLoading = selectedQuote?.loading ?? false;
+  // The album's code pays for its included book (printed books only); the customer pays the rest.
+  const coveredCents =
+    purchaseCode && !isDigital && quoteCents != null ? Math.min(printQuote?.coveredCents ?? 0, quoteCents) : 0;
+  /** What the customer pays: the total less what the code covers. */
+  const dueCents = quoteCents != null ? Math.max(0, quoteCents - coveredCents) : null;
   const balanceCents = user?.creditsBalanceCents ?? null;
-  const shortfallCents = balanceCents != null && quoteCents != null ? Math.max(0, quoteCents - balanceCents) : 0;
+  const shortfallCents = balanceCents != null && dueCents != null ? Math.max(0, dueCents - balanceCents) : 0;
 
   // ---- saved cart --------------------------------------------------------------------
   // A book is saved to the cart only once the customer has started it on purpose ("Start my
@@ -906,6 +918,7 @@ export function useBookOrder({
       proofConfirmed,
       isGift,
       shippingLevel,
+      projectId,
     };
     let orderId = savedDraftIdRef.current;
     if (orderId) {
@@ -1005,6 +1018,16 @@ export function useBookOrder({
     return true;
   }
 
+  // An album with a purchase code starts on the binding the code includes; the customer can still
+  // pick another (the difference is shown as extra).
+  const codeFormatAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!purchaseCode || restoring || chosenBindingId != null) return;
+    if (codeFormatAppliedRef.current === purchaseCode.codeId) return;
+    codeFormatAppliedRef.current = purchaseCode.codeId;
+    setChosenBindingId(purchaseCode.bundle.bindingId);
+  }, [purchaseCode, restoring, chosenBindingId]);
+
   /** After the thanks screen: a fresh book can be started from the same album. */
   function startOver() {
     setPlaced(null);
@@ -1074,6 +1097,8 @@ export function useBookOrder({
     /** A speed is settled: picked by the customer, or the only one there is. */
     shippingChosen:
       chosenShippingLevel != null ||
+      // An album with a code starts on the standard shipping the code includes.
+      (purchaseCode != null && !isDigital) ||
       (shippingChoices.length <= 1 && printQuote != null && !printQuote.loading && printQuote.totalCents != null),
     choosePageFit: setChosenPageFit,
     formatFits,
@@ -1121,6 +1146,13 @@ export function useBookOrder({
     answerSuggestion,
     // price
     quoteCents,
+    /** Part of the total the album's purchase code pays (0 without one). */
+    coveredCents,
+    /** What the customer pays from their wallet: the total less what the code covers. */
+    dueCents,
+    purchaseCode: isDigital ? null : purchaseCode,
+    /** The album's code even while the PDF (which it doesn't pay for) is picked. */
+    albumPurchaseCode: purchaseCode,
     quoteLoading,
     quoteError: selectedQuote?.error ?? null,
     printCents: selectedQuote?.printCents ?? null,

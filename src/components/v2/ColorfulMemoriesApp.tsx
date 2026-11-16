@@ -51,6 +51,9 @@ import { fillCopy, readIntent } from "@/lib/marketing/copy";
 import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
 import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import { usePriceList } from "@/lib/pricing/usePriceList";
+import { codeCoversAction, newPagesCovered } from "@/lib/purchaseCodes/types";
+import { AlbumCodeBanner } from "@/components/v2/redeem/AlbumCodeBanner";
+import { useAlbumPurchaseCode } from "@/components/v2/redeem/useAlbumPurchaseCode";
 import { photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 
 const INTENT_NAMED_KEY = "cm_intent_named";
@@ -182,8 +185,15 @@ export function ColorfulMemoriesApp() {
 
   // ---- making pages ------------------------------------------------------------------
   const locks = usePhotoLocks();
+  // The album's purchase code, if it has one: it pays for its included pages, edits and book first.
+  const albumCode = useAlbumPurchaseCode(signedIn ? activeProjectId : null);
+  const code = albumCode.code;
   // The order panel handles the return from adding credit, so it can finish the purchase.
-  const sheetCredits = useSheetUsageCredits("/studio", { handleCheckoutReturn: false });
+  const sheetCredits = useSheetUsageCredits("/studio", {
+    handleCheckoutReturn: false,
+    covers: (kind, photo) => codeCoversAction(code, kind, photo),
+    onUsage: albumCode.refresh,
+  });
   const [guestLimit, setGuestLimit] = useState<{ scope: GuestLimitScope; kind: "page" | "edit" } | null>(null);
   const guestLimitShownRef = useRef(false);
   const showGuestLimit = useCallback((scope: GuestLimitScope, kind: "page" | "edit") => {
@@ -235,10 +245,28 @@ export function ColorfulMemoriesApp() {
   const portraitPriceCents = signedIn ? sheetUsageCostCents(prices, "portrait") : null;
   const balanceCents = user?.creditsBalanceCents ?? null;
 
-  /** How many more pages the wallet covers, after what is already running or waiting. */
+  /** A price beyond the album's purchase code, said as extra so it is never mistaken for included. */
+  function extraLabel(cents: number | null): string | null {
+    return cents != null ? `${formatCredits(cents)} extra` : null;
+  }
+
+  /** "Make the rest": how many the code includes and what the others cost. */
+  function restCostLabel(count: number): string {
+    if (!signedIn) return "free to try";
+    if (pagePriceCents == null) return "uses credit";
+    const included = Math.min(count, newPagesCovered(code));
+    const paid = count - included;
+    if (!code) return formatCredits(pagePriceCents * count);
+    if (paid === 0) return "included with your code";
+    return included > 0
+      ? `${included} included, ${formatCredits(pagePriceCents * paid)} extra`
+      : `${formatCredits(pagePriceCents * paid)} extra`;
+  }
+
+  /** How many more pages the album's code and the wallet cover, after what is already running or waiting. */
   function pagesAffordable(): number {
     if (!signedIn || pagePriceCents == null || pagePriceCents <= 0 || balanceCents == null) return Number.POSITIVE_INFINITY;
-    return Math.max(0, Math.floor(balanceCents / pagePriceCents) - (queue.running + queue.queued));
+    return Math.max(0, newPagesCovered(code) + Math.floor(balanceCents / pagePriceCents) - (queue.running + queue.queued));
   }
 
   const [shortCount, setShortCount] = useState(0);
@@ -397,6 +425,7 @@ export function ColorfulMemoriesApp() {
     projectId: activeProjectId,
     projectTitle: activeProject?.name ?? "My coloring book",
     cartParam,
+    purchaseCode: code,
     onRestoreProject: (id) => {
       if (projects.some((p) => p.id === id)) switchProject(id);
     },
@@ -606,6 +635,19 @@ export function ColorfulMemoriesApp() {
             ? "Free"
             : !signedIn
               ? "Free"
+              : editorPhoto &&
+                  (editorShapePlan.kind === "draw"
+                    ? codeCoversAction(code, "generation", editorPhoto)
+                    : codeCoversAction(code, "portrait", editorPhoto))
+                ? "Included"
+                : code
+                  ? extraLabel(
+                      editorShapePlan.kind === "draw"
+                        ? pagePriceCents
+                        : pagePriceCents != null && portraitPriceCents != null
+                          ? pagePriceCents + portraitPriceCents
+                          : null,
+                    )
               : editorShapePlan.kind === "draw"
                 ? pagePriceCents != null
                   ? formatCredits(pagePriceCents)
@@ -634,7 +676,14 @@ export function ColorfulMemoriesApp() {
   }
 
   const editCost = editorPhoto
-    ? editorPhoto.remote && signedIn
+    ? editorPhoto.remote && signedIn && codeCoversAction(code, "edit", editorPhoto)
+      ? "Included"
+      : editorPhoto.remote && signedIn && code
+        ? (() => {
+            const c = sheetUsageCostCents(prices, "edit", editorPhoto.editCount ?? 0);
+            return c === 0 ? "Free" : extraLabel(c);
+          })()
+      : editorPhoto.remote && signedIn
       ? (() => {
           const free = freeEditsPerSheet(prices);
           if ((editorPhoto.editCount ?? 0) < free) return "Free";
@@ -646,6 +695,26 @@ export function ColorfulMemoriesApp() {
   // What the next edit in the chat will cost, said under the box so a paid edit is never a surprise.
   const editNotice = (() => {
     if (!editorPhoto?.remote || !signedIn || !prices) return null;
+    if (code) {
+      const paidCents = sheetUsageCostCents(prices, "edit", Number.MAX_SAFE_INTEGER);
+      const paid = paidCents != null ? formatCredits(paidCents) : null;
+      if (codeCoversAction(code, "edit", editorPhoto)) {
+        const left = code.bundle.editsPerPage - (editorPhoto.editCount ?? 0);
+        return {
+          tone: "info" as const,
+          text: `${left} of ${code.bundle.editsPerPage} edits included with your code left on this page${paid ? `, then ${paid} each (extra)` : ""}.`,
+        };
+      }
+      const free = freeEditsPerSheet(prices);
+      if ((editorPhoto.editCount ?? 0) < free) return null;
+      if (!paid) return null;
+      return {
+        tone: "cost" as const,
+        text: code.photos[editorPhoto.id]
+          ? `This page's included edits are used. Each edit from here is an extra ${paid}, not covered by your code.`
+          : `This page isn't one of your code's included pages. Each edit is an extra ${paid}.`,
+      };
+    }
     const free = freeEditsPerSheet(prices);
     const used = editorPhoto.editCount ?? 0;
     const paidCents = sheetUsageCostCents(prices, "edit", Math.max(used, free));
@@ -669,9 +738,21 @@ export function ColorfulMemoriesApp() {
           : `Each edit costs ${paid}.`,
     };
   })();
-  const makeCost = signedIn ?(pagePriceCents != null ? formatCredits(pagePriceCents) : null) : "Free";
+  const makeCost = !signedIn
+    ? "Free"
+    : editorPhoto && codeCoversAction(code, "generation", editorPhoto)
+      ? "Included"
+      : code
+        ? extraLabel(pagePriceCents)
+        : pagePriceCents != null
+          ? formatCredits(pagePriceCents)
+          : null;
   const bookPriceLabel =
-    order.signedIn && order.quoteCents != null && !order.quoteLoading
+    order.signedIn && order.purchaseCode && order.dueCents != null && !order.quoteLoading
+      ? order.dueCents === 0
+        ? "Included"
+        : `${formatCredits(order.dueCents)} extra`
+      : order.signedIn && order.quoteCents != null && !order.quoteLoading
       ? order.isDigital
         ? formatCredits(order.quoteCents)
         : `${formatCredits(order.printCents ?? order.quoteCents)} + shipping`
@@ -708,6 +789,7 @@ export function ColorfulMemoriesApp() {
             onAutoPortraitChange={setAutoPortrait}
             pagePriceCents={pagePriceCents}
             portraitPriceCents={portraitPriceCents}
+            codePagesLeft={code ? newPagesCovered(code) : null}
             onClose={() => setAddPhotos(null)}
             onUpload={(files) => {
               setAddPhotos(null);
@@ -757,6 +839,15 @@ export function ColorfulMemoriesApp() {
             </div>
 
             <div className="space-y-3">
+              {code && !deletion.active ? (
+                <AlbumCodeBanner
+                  code={code}
+                  photoCount={photos.length}
+                  onAddPhotos={() => setAddPhotos({ files: [] })}
+                  onOrderBook={openBook}
+                  canOrder={hasBookPage}
+                />
+              ) : null}
               {showStrip ? (
                 <UploadStrip
                   signedIn={signedIn}
@@ -768,6 +859,7 @@ export function ColorfulMemoriesApp() {
                   reframingCount={reframing}
                   pagePriceCents={pagePriceCents}
                   balanceCents={signedIn ? balanceCents : null}
+                  codePagesLeft={code ? newPagesCovered(code) : null}
                   uploading={uploading}
                   activeCount={activeCount}
                   queuedCount={queue.queued}
@@ -792,7 +884,7 @@ export function ColorfulMemoriesApp() {
                     <Pencil className="h-4 w-4" aria-hidden />
                     Make the rest
                     <span className="font-normal text-v2-muted">
-                      ({signedIn ? (pagePriceCents != null ? formatCredits(pagePriceCents * withoutPageIds.length) : "uses credit") : "free to try"})
+                      ({restCostLabel(withoutPageIds.length)})
                     </span>
                   </button>
                 </div>

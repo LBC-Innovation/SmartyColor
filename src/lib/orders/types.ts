@@ -74,6 +74,11 @@ export type BookOrderSummary = {
   luluStatusName: string | null;
   shippingLevel: string;
   totalCents: number | null;
+  /**
+   * Part of `totalCents` the album's purchase code pays; the customer's wallet pays the rest.
+   * 0 when no code is involved.
+   */
+  coveredCents: number;
   paymentMethod: BookPaymentMethod | null;
   estimatedDeliveryMin: string | null;
   estimatedDeliveryMax: string | null;

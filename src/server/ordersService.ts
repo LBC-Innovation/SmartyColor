@@ -30,6 +30,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { quoted, recordActivity } from "@/server/activityService";
 import { luluConfigured } from "@/server/lulu/config";
 import { pricePrintOrder } from "@/server/pricingService";
+import { purchaseCodeBookCoverage } from "@/server/purchaseCodesService";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
 import {
   cancelLuluPrintJob,
@@ -103,6 +104,9 @@ type OrderRow = {
   refunded_cents?: number | null;
   canceled_at?: string | null;
   cancel_reason?: string | null;
+  project_id?: string | null;
+  purchase_code_id?: string | null;
+  covered_cents?: number | null;
   print_products?: { name: string } | { name: string }[] | null;
 };
 
@@ -136,6 +140,7 @@ function mapSummary(row: OrderRow): BookOrderSummary {
     luluStatusName: row.lulu_status_name,
     shippingLevel: row.shipping_level,
     totalCents: row.total_cents,
+    coveredCents: row.covered_cents ?? 0,
     paymentMethod: row.payment_method,
     estimatedDeliveryMin: row.estimated_delivery_min,
     estimatedDeliveryMax: row.estimated_delivery_max,
@@ -287,6 +292,8 @@ export type DraftBookContent = {
   isGift?: boolean;
   /** The shipping speed the customer picked; left as it is when not sent. */
   shippingLevel?: ShippingLevel | null;
+  /** The album the book is made from (checked by the route); its purchase code can pay for it. */
+  projectId?: string | null;
 };
 
 function draftContentColumns(input: DraftBookContent) {
@@ -302,6 +309,7 @@ function draftContentColumns(input: DraftBookContent) {
     billing_address: input.billingAddress ? normalizeShippingAddress(input.billingAddress) : null,
     proof_confirmed_at: input.proofConfirmed ? new Date().toISOString() : null,
     ...(input.shippingLevel ? { shipping_level: input.shippingLevel } : {}),
+    ...(input.projectId !== undefined ? { project_id: input.projectId } : {}),
   };
 }
 
@@ -551,10 +559,30 @@ export async function confirmDraftBookOrder(input: {
   if (files.error) return { data: null, error: files.error };
   if (pricing.error) return { data: null, error: pricing.error };
 
+  // The album's purchase code pays for the book it includes; the customer pays any difference.
+  const coverage = await purchaseCodeBookCoverage({
+    userId: input.userId,
+    projectId: draft.project_id,
+    orderId: input.orderId,
+    pageCount: draft.page_count,
+    shippingAddress,
+  });
+  if (coverage.error) {
+    return {
+      data: null,
+      error: { message: "We couldn't price what your code covers. Please try again in a moment.", code: "QUOTE_UNAVAILABLE" },
+    };
+  }
+  const totalCents = pricing.data!.total_cents as number;
+  const codeColumns = coverage.data
+    ? { purchase_code_id: coverage.data.codeId, covered_cents: Math.min(coverage.data.coveredCents, totalCents) }
+    : { purchase_code_id: null, covered_cents: 0 };
+
   const { error } = await getSupabaseAdmin()
     .from("book_orders")
     .update({
       ...pricing.data,
+      ...codeColumns,
       status: "awaiting_payment",
       interior_pdf_path: files.data!.interiorPdfPath,
       cover_pdf_path: files.data!.coverPdfPath,
@@ -638,6 +666,7 @@ export async function placeBookOrderWithCredits(input: {
     status: BookOrderStatus;
     creditsBalanceCents: number;
     creditsAppliedCents: number;
+    coveredCents: number;
   }>
 > {
   const { data, error } = await getSupabaseAdmin().rpc("place_book_order_with_credits", {
@@ -646,6 +675,17 @@ export async function placeBookOrderWithCredits(input: {
   });
 
   if (error) {
+    if (error.message.includes("purchase code")) {
+      return {
+        data: null,
+        error: {
+          message: error.message.includes("already paid")
+            ? "Your code has already paid for a book. Remove the code's book or contact us."
+            : "Your code can't be used for this order any more. Please review your book again.",
+          code: "PURCHASE_CODE_INVALID",
+        },
+      };
+    }
     const message = error.message.includes("insufficient credits")
       ? "You do not have enough credits to place this order"
       : error.message.includes("order not found")
@@ -668,13 +708,14 @@ export async function placeBookOrderWithCredits(input: {
     status: BookOrderStatus;
     creditsBalanceCents: number;
     creditsAppliedCents: number;
+    coveredCents?: number;
   };
 
   await recordOrderPlacedEvent(input.orderId);
   // Before answering, so the thank-you screen and the confirmation email can show the dates.
   await saveDeliveryEstimate(input.orderId);
 
-  return { data: payload, error: null };
+  return { data: { ...payload, coveredCents: payload.coveredCents ?? 0 }, error: null };
 }
 
 /**

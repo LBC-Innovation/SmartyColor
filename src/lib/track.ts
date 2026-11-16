@@ -88,6 +88,8 @@ export function urlHasSecrets(): boolean {
   if (typeof window === "undefined") return false;
   const query = new URLSearchParams(window.location.search);
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  // A purchase code pays for a book, so its redeem link (or a sign-in page returning to it) is a secret too.
+  if (window.location.pathname.startsWith("/redeem/") || query.get("next")?.startsWith("/redeem/")) return true;
   return SECRET_URL_KEYS.some((k) => query.has(k) || hash.has(k));
 }
 

@@ -461,6 +461,9 @@ export type OrderQuoteData = {
   estimatedDeliveryMax?: string | null;
   /** Every shipping speed on offer for this address, cheapest first (main quote only). */
   shippingChoices?: ShippingChoice[];
+  /** Part of the total the album's purchase code pays (main quote, album with a code only). */
+  coveredCents?: number | null;
+  coverageError?: string | null;
 };
 
 /** The address the customer saved for future orders; null when they haven't saved one. */
@@ -483,6 +486,8 @@ export function fetchOrderQuote(input: {
   shippingLevel?: string;
   withShipping?: boolean;
   shippingAddress?: Partial<ShippingAddress>;
+  /** The album the book is made from, so its purchase code's share is quoted. */
+  projectId?: string | null;
 }): Promise<ApiResult<OrderQuoteData>> {
   return request("/orders/quote", {
     method: "POST",
@@ -507,6 +512,8 @@ export type BookDraftPayload = {
   isGift: boolean;
   /** The shipping speed picked in the order panel. */
   shippingLevel?: ShippingLevel;
+  /** The album the book is made from; its purchase code can pay for the book. */
+  projectId?: string | null;
 };
 
 /** Signed PUT target for the print-ready front cover image of a draft order. */
@@ -557,6 +564,7 @@ export function placeBookOrder(orderId: string): Promise<
     status: string;
     creditsBalanceCents: number;
     creditsAppliedCents: number;
+    coveredCents?: number;
   }>
 > {
   let timeZone: string | undefined;

@@ -5,6 +5,7 @@ import { normalizeCoverDesign } from "@/lib/print/bookCover";
 import { parsePrintPages } from "@/server/printBookService";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import * as orders from "@/server/ordersService";
+import { orderProjectId } from "@/server/orderProject";
 import { normalizeShippingAddress, validateBillingAddress } from "@/lib/orders/shippingAddress";
 import type { ShippingAddress } from "@/lib/orders/types";
 import { attributionFromRequest } from "@/lib/marketing/attribution";
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
     coverDesign?: unknown;
     proofConfirmed?: boolean;
     isGift?: boolean;
+    /** The album the book is made from; its purchase code can pay for the book. */
+    projectId?: string | null;
     shippingLevel?: string;
   };
 
@@ -63,6 +66,7 @@ export async function POST(request: Request) {
     proofConfirmed: body.proofConfirmed === true,
     isGift: body.isGift === true,
     shippingLevel: isShippingLevel(body.shippingLevel) ? body.shippingLevel : null,
+    projectId: await orderProjectId(auth.user.id, body.projectId),
   });
 
   if (result.error?.code === "NOT_FOUND") {

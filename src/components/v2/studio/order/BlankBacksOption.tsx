@@ -20,7 +20,14 @@ export function BlankBacksOption({ order, className }: { order: BookOrder; class
       : "Each picture prints on its own sheet, so markers can't bleed through onto the next one."
     : "Pictures print on both sides of the paper, so markers can bleed through.";
   const money =
-    extra != null && extra > 0 ? (on ? `Turn off to save ${formatCredits(extra)}.` : `Adds ${formatCredits(extra)}.`) : null;
+    // The album's purchase code includes blank or lined backs, so there is nothing to save or add.
+    order.purchaseCode?.bundle.backsIncluded
+      ? "Included with your code."
+      : extra != null && extra > 0
+        ? on
+          ? `Turn off to save ${formatCredits(extra)}.`
+          : `Adds ${formatCredits(extra)}.`
+        : null;
   // The other way may not suit the chosen format: halving or doubling the sheets can cross its limits.
   const formatNote =
     order.formatChosen && !order.isDigital && !order.otherBacksFits

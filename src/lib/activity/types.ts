@@ -27,6 +27,7 @@ export const ACTIVITY_TYPES = {
     { id: "album_created", label: "Album created" },
     { id: "album_deleted", label: "Album deleted" },
     { id: "album_sent", label: "Pages emailed" },
+    { id: "purchase_code_redeemed", label: "Purchase code used" },
   ],
   orders: [
     { id: "book_ordered", label: "Book ordered" },

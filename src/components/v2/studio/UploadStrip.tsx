@@ -18,6 +18,8 @@ type Props = {
   /** Credit for one new page, from the price list; null until it loads. */
   pagePriceCents: number | null;
   balanceCents: number | null;
+  /** Pages the album's purchase code still includes; null when it has no code. */
+  codePagesLeft?: number | null;
   uploading: boolean;
   /** Pages being drawn now plus pages waiting. */
   activeCount: number;
@@ -54,10 +56,22 @@ export function UploadStrip({
   onChoose,
   shortCount,
   onAddCredit,
+  codePagesLeft = null,
 }: Props) {
   const price = pagePriceCents != null ? formatCredits(pagePriceCents) : null;
   const costLine = signedIn
-    ? [price ? `${price} each` : null, balanceCents != null ? `You have ${formatCredits(balanceCents)}` : null]
+    ? [
+        codePagesLeft != null
+          ? codePagesLeft > 0
+            ? `${codePagesLeft} included with your code${price ? `, then ${price} each extra` : ""}`
+            : price
+              ? `Included pages used · ${price} each extra`
+              : null
+          : price
+            ? `${price} each`
+            : null,
+        balanceCents != null ? `You have ${formatCredits(balanceCents)}` : null,
+      ]
         .filter(Boolean)
         .join(" · ")
     : "Free to try";

@@ -137,7 +137,7 @@ async function handleLibraryPhotoForUser(userId: string, photoId: string, target
   }
 
   // Don't spend on the model for a wallet that can't cover it.
-  const quote = await quoteSheetUsage(userId, "portrait", 0);
+  const quote = await quoteSheetUsage(userId, "portrait", 0, record.id);
   timer.mark("quote");
   if (quote.error) return Response.json({ error: quote.error.message }, { status: 500 });
   if (!quote.data.affordable) {
@@ -183,16 +183,17 @@ async function handleLibraryPhotoForUser(userId: string, photoId: string, target
     );
     timer.mark("store");
   } catch (error) {
-    await refundSheetUsage(userId, record.id, "portrait", charge.data.chargedCents);
+    await refundSheetUsage(userId, record.id, "portrait", charge.data.chargedCents, charge.data.purchaseCodeId);
     throw error;
   }
   if (stored.error) {
-    await refundSheetUsage(userId, record.id, "portrait", charge.data.chargedCents);
+    await refundSheetUsage(userId, record.id, "portrait", charge.data.chargedCents, charge.data.purchaseCodeId);
     return Response.json({ error: stored.error.message }, { status: 500 });
   }
   return Response.json({
     photo: stored.data,
     chargedCents: charge.data.chargedCents,
     creditsBalanceCents: charge.data.creditsBalanceCents,
+    coveredByCode: Boolean(charge.data.purchaseCodeId),
   });
 }
