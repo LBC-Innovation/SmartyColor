@@ -3,6 +3,7 @@ import type { ApiResult } from "@/lib/api/types";
 import {
   COST_CADENCES,
   COST_CATEGORIES,
+  DEFAULT_STORAGE_INCLUDED_GB,
   DEFAULT_STORAGE_USD_PER_GB_MONTH,
   type CostLine,
   type FinanceCost,
@@ -132,6 +133,8 @@ type SettingsRow = {
   card_fee_fixed_cents: number;
   /** Added in 0033; absent on older databases. */
   storage_usd_per_gb_month?: string | number | null;
+  /** Added in 0035. */
+  storage_included_gb?: string | number | null;
   opening_cash_cents: string | number | null;
   opening_cash_on: string | null;
   updated_at: string;
@@ -141,6 +144,7 @@ const DEFAULT_SETTINGS: FinanceSettings = {
   cardFeePct: 2.9,
   cardFeeFixedCents: 30,
   storageUsdPerGbMonth: DEFAULT_STORAGE_USD_PER_GB_MONTH,
+  storageIncludedGb: DEFAULT_STORAGE_INCLUDED_GB,
   openingCashCents: null,
   openingCashOn: null,
   updatedAt: null,
@@ -229,6 +233,7 @@ function toSettings(row: SettingsRow | null): FinanceSettings {
     cardFeeFixedCents: row.card_fee_fixed_cents,
     storageUsdPerGbMonth:
       row.storage_usd_per_gb_month == null ? DEFAULT_STORAGE_USD_PER_GB_MONTH : Number(row.storage_usd_per_gb_month),
+    storageIncludedGb: row.storage_included_gb == null ? DEFAULT_STORAGE_INCLUDED_GB : Number(row.storage_included_gb),
     openingCashCents: row.opening_cash_cents == null ? null : Number(row.opening_cash_cents),
     openingCashOn: row.opening_cash_on,
     updatedAt: row.updated_at,
@@ -1064,7 +1069,7 @@ export async function deleteFinanceCost(id: string): Promise<ApiResult<{ id: str
 }
 
 export function parseSettingsInput(body: Record<string, unknown>): Omit<FinanceSettings, "updatedAt"> | { error: string } {
-  const { cardFeePct, cardFeeFixedCents, storageUsdPerGbMonth, openingCashCents, openingCashOn } = body;
+  const { cardFeePct, cardFeeFixedCents, storageUsdPerGbMonth, storageIncludedGb, openingCashCents, openingCashOn } = body;
   if (typeof cardFeePct !== "number" || !Number.isFinite(cardFeePct) || cardFeePct < 0 || cardFeePct > 20) {
     return { error: "Card fee % must be between 0 and 20" };
   }
@@ -1085,6 +1090,15 @@ export function parseSettingsInput(body: Record<string, unknown>): Omit<FinanceS
   ) {
     return { error: "Storage price must be between $0 and $10 per GB-month" };
   }
+  if (
+    storageIncludedGb != null &&
+    (typeof storageIncludedGb !== "number" ||
+      !Number.isFinite(storageIncludedGb) ||
+      storageIncludedGb < 0 ||
+      storageIncludedGb > 100000)
+  ) {
+    return { error: "Included storage must be between 0 and 100,000 GB" };
+  }
   const hasCash = openingCashCents != null && openingCashCents !== "";
   const hasDate = openingCashOn != null && openingCashOn !== "";
   if (hasCash !== hasDate) return { error: "Enter both the cash balance and the date it was on, or neither" };
@@ -1101,6 +1115,8 @@ export function parseSettingsInput(body: Record<string, unknown>): Omit<FinanceS
       typeof storageUsdPerGbMonth === "number"
         ? Math.round(storageUsdPerGbMonth * 1e5) / 1e5
         : DEFAULT_STORAGE_USD_PER_GB_MONTH,
+    storageIncludedGb:
+      typeof storageIncludedGb === "number" ? Math.round(storageIncludedGb * 1000) / 1000 : DEFAULT_STORAGE_INCLUDED_GB,
     openingCashCents: hasCash ? (openingCashCents as number) : null,
     openingCashOn: hasCash ? (openingCashOn as string) : null,
   };
@@ -1110,19 +1126,19 @@ export async function updateFinanceSettings(
   input: Omit<FinanceSettings, "updatedAt">,
   userId: string,
 ): Promise<ApiResult<FinanceSettings>> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("finance_settings")
-    .update({
-      card_fee_pct: input.cardFeePct,
-      card_fee_fixed_cents: input.cardFeeFixedCents,
-      storage_usd_per_gb_month: input.storageUsdPerGbMonth,
-      opening_cash_cents: input.openingCashCents,
-      opening_cash_on: input.openingCashOn,
-      updated_by: userId,
-    })
-    .eq("id", true)
-    .select("*")
-    .single();
+  const base = {
+    card_fee_pct: input.cardFeePct,
+    card_fee_fixed_cents: input.cardFeeFixedCents,
+    storage_usd_per_gb_month: input.storageUsdPerGbMonth,
+    opening_cash_cents: input.openingCashCents,
+    opening_cash_on: input.openingCashOn,
+    updated_by: userId,
+  };
+  const save = (row: Record<string, unknown>) =>
+    getSupabaseAdmin().from("finance_settings").update(row).eq("id", true).select("*").single();
+  let { data, error } = await save({ ...base, storage_included_gb: input.storageIncludedGb });
+  // Before migration 0035 there is no storage_included_gb column: save the rest.
+  if (error && /storage_included_gb/.test(error.message)) ({ data, error } = await save(base));
   if (error) return { data: null, error: { message: error.message } };
   return { data: toSettings(data as SettingsRow), error: null };
 }

@@ -26,6 +26,7 @@ import {
 import type { PdfGrayImage } from "@/lib/print/pdf";
 import { buildPdf, parsePages } from "@/server/digitalBookService";
 import { createSignedUpload, getObjectBytes, libraryPaths, putObject, removeObjects } from "@/server/storage/libraryFiles";
+import { failSignedUpload, startSignedUpload } from "@/server/storage/fileAudit";
 import { makeThumbnail } from "@/server/storage/libraryThumbs";
 
 const deflateAsync = promisify(deflate);
@@ -56,8 +57,16 @@ export function parsePrintPages(input: unknown, bindingId: BookBindingId): ApiRe
 export async function createCoverFrontUpload(userId: string, orderId: string) {
   const cover = printOrderPaths.coverFront(userId, orderId);
   // A new cover is on its way: drop the old one's thumbnail so the order list makes a fresh one.
-  await removeObjects([libraryPaths.thumb(cover)]).catch(() => {});
-  return createSignedUpload(cover);
+  await removeObjects([libraryPaths.thumb(cover)], { actorId: userId, source: "replaced" }).catch(() => {});
+  try {
+    const upload = await createSignedUpload(cover);
+    // No register step follows: the admin report counts it done once the file is in storage.
+    await startSignedUpload({ path: cover, uploadId: orderId, actorId: userId });
+    return upload;
+  } catch (e) {
+    await failSignedUpload({ path: cover, actorId: userId, error: e });
+    throw e;
+  }
 }
 
 /** Never build a page image longer than this, however oddly a sheet is fitted (two page heights at print resolution). */
@@ -227,8 +236,8 @@ export async function buildPrintFiles(input: {
     const interiorPdfPath = printOrderPaths.interiorPdf(input.userId, input.orderId);
     const coverPdfPath = printOrderPaths.coverPdf(input.userId, input.orderId);
     await Promise.all([
-      putObject(interiorPdfPath, interior.data!, "application/pdf"),
-      putObject(coverPdfPath, cover, "application/pdf"),
+      putObject(interiorPdfPath, interior.data!, "application/pdf", { actorId: input.userId, source: "book_order" }),
+      putObject(coverPdfPath, cover, "application/pdf", { actorId: input.userId, source: "book_order" }),
     ]);
     return { data: { interiorPdfPath, coverPdfPath }, error: null };
   } catch (e) {

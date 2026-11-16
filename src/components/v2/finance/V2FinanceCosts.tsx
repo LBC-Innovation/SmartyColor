@@ -382,6 +382,7 @@ export function V2FinanceSettingsForm({
   const [feePct, setFeePct] = useState(String(settings.cardFeePct));
   const [feeFixed, setFeeFixed] = useState((settings.cardFeeFixedCents / 100).toFixed(2));
   const [storageRate, setStorageRate] = useState(String(settings.storageUsdPerGbMonth));
+  const [includedGb, setIncludedGb] = useState(String(settings.storageIncludedGb));
   const [cash, setCash] = useState(settings.openingCashCents == null ? "" : (settings.openingCashCents / 100).toFixed(2));
   const [cashOn, setCashOn] = useState(settings.openingCashOn ?? "");
   const [saving, setSaving] = useState(false);
@@ -392,6 +393,7 @@ export function V2FinanceSettingsForm({
   const fixedCents = parseDollarsToCents(feeFixed);
   const cashCents = cash.trim() === "" ? null : parseDollarsToCents(cash);
   const storageValue = /^\d+(\.\d{1,5})?$/.test(storageRate.trim()) ? Number.parseFloat(storageRate) : null;
+  const includedValue = /^\d+(\.\d{1,3})?$/.test(includedGb.trim()) ? Number.parseFloat(includedGb) : null;
   const valid =
     pctValue != null &&
     pctValue <= 20 &&
@@ -400,17 +402,20 @@ export function V2FinanceSettingsForm({
     fixedCents <= 1000 &&
     storageValue != null &&
     storageValue <= 10 &&
+    includedValue != null &&
+    includedValue <= 100000 &&
     (cash.trim() === "") === (cashOn === "") &&
     (cash.trim() === "" || cashCents != null);
 
   async function save() {
-    if (!valid || pctValue == null || fixedCents == null || storageValue == null) return;
+    if (!valid || pctValue == null || fixedCents == null || storageValue == null || includedValue == null) return;
     setSaving(true);
     setError(null);
     const result = await api.adminUpdateFinanceSettings({
       cardFeePct: pctValue,
       cardFeeFixedCents: fixedCents,
       storageUsdPerGbMonth: storageValue,
+      storageIncludedGb: includedValue,
       openingCashCents: cashCents,
       openingCashOn: cashOn || null,
     });
@@ -432,7 +437,7 @@ export function V2FinanceSettingsForm({
           Card fees are estimated per top-up (Stripe&apos;s standard US rate is 2.9% + $0.30). Enter your bank balance on a
           known day to track cash on hand and runway; every cash flow after that day is added to it. The storage price
           sets what each customer&apos;s photos cost to keep (Supabase charges $0.021 per GB-month past the plan&apos;s
-          included space).
+          included space; set what your plan includes so the Files page can warn before you pass it).
         </>
       }
     >
@@ -467,6 +472,18 @@ export function V2FinanceSettingsForm({
             inputMode="decimal"
             value={storageRate}
             onChange={(e) => setStorageRate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="v2-label" htmlFor="storage-included">
+            Storage included in plan (GB)
+          </label>
+          <input
+            id="storage-included"
+            className="v2-input"
+            inputMode="decimal"
+            value={includedGb}
+            onChange={(e) => setIncludedGb(e.target.value)}
           />
         </div>
         <div>

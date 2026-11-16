@@ -184,7 +184,7 @@ export async function createDigitalBookOrder(input: {
   const path = pdfPath(input.userId, orderId);
   let storedPath: string | null = null;
   try {
-    await putObject(path, built.data!, "application/pdf");
+    await putObject(path, built.data!, "application/pdf", { actorId: input.userId, source: "book_order" });
     storedPath = path;
   } catch (e) {
     // Not fatal: the PDF can always be rebuilt from the saved page list.
@@ -207,7 +207,7 @@ export async function createDigitalBookOrder(input: {
   });
 
   if (error) {
-    if (storedPath) void removeObjects([storedPath]).catch(() => undefined);
+    if (storedPath) void removeObjects([storedPath], { actorId: input.userId, source: "cleanup" }).catch(() => undefined);
     if (error.message.includes("insufficient credits")) {
       return {
         data: null,
