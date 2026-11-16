@@ -10,6 +10,7 @@ import { familyPagesEmail } from "@/server/email/familyPagesEmail";
 import { emailConfigured, sendEmail } from "@/server/email/resend";
 import { normalizeEmail, projectAccess } from "@/server/libraryAccess";
 import { compactGraySheet } from "@/server/printBookService";
+import { referralCodeFor, withShareTags } from "@/server/referralService";
 
 /**
  * "Send pages to family": email an album's coloring pages as one printable PDF to an address
@@ -138,7 +139,9 @@ export async function sendAlbumToFamily(input: {
       senderName: await senderDisplayName(user),
       pageCount: pages.length,
       note,
-      makeYourOwnUrl: `${clientOrigin()}/?utm_source=family_email&utm_medium=email&utm_campaign=send_to_family`,
+      makeYourOwnUrl: withShareTags(`${clientOrigin()}/?utm_source=family_email&utm_medium=email&utm_campaign=send_to_family`, {
+        ref: await referralCodeFor(user.id),
+      }),
       pdf: pdf.data!,
     }),
   );

@@ -1,6 +1,8 @@
 import "server-only";
 import { authenticateBearer } from "@/lib/auth/authenticate";
 import { withVisionGuest, withVisionUser, type VisionGuest } from "@/lib/visionCost/context";
+import { attributionFromRequest } from "@/lib/marketing/attribution";
+import { sourceName } from "@/lib/marketing/channel";
 import { clientIp, limitKeyForIp } from "@/server/guestUsageGuard";
 
 function header(request: Request, name: string): string | null {
@@ -24,7 +26,11 @@ function coordinate(request: Request, name: string, limit: number): number | nul
  * from it. No outside lookup: off Vercel (local dev) the location is simply empty.
  */
 export function visionGuestFromRequest(request: Request): VisionGuest {
+  const touch = attributionFromRequest(request)?.last ?? null;
   return {
+    channel: touch?.channel ?? null,
+    source: touch ? sourceName(touch).slice(0, 80) : null,
+    campaign: touch?.utm_campaign?.slice(0, 120) ?? null,
     ip: limitKeyForIp(clientIp(request)).slice(0, 64),
     country: header(request, "x-vercel-ip-country"),
     region: header(request, "x-vercel-ip-country-region"),

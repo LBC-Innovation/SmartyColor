@@ -14,8 +14,8 @@ import {
 } from "@/lib/track";
 
 /**
- * Loads GA4, Meta Pixel and the Pinterest tag (each only when its id is set), sends a page view
- * on every route change, and records campaign tags from the URL. Nothing loads for visitors who
+ * Loads GA4, Google Ads, Meta Pixel, the TikTok pixel and the Pinterest tag (each only when its
+ * id is set), sends a page view on every route change, and records where the visit came from. Nothing loads for visitors who
  * opted out or send Global Privacy Control, or while the URL holds a sign-in secret.
  */
 export function Analytics() {
@@ -37,11 +37,13 @@ export function Analytics() {
   }, [pathname]);
 
   if (!enabled) return null;
-  const { ga4, meta, pinterest } = TRACKING_IDS;
+  const { ga4, googleAds, meta, pinterest } = TRACKING_IDS;
+  // One gtag.js serves GA4 and Google Ads; the TikTok pixel loads its own script from bootTrackers.
+  const gtagId = ga4 ?? googleAds;
 
   return (
     <>
-      {ga4 ? <Script src={`https://www.googletagmanager.com/gtag/js?id=${ga4}`} strategy="afterInteractive" /> : null}
+      {gtagId ? <Script src={`https://www.googletagmanager.com/gtag/js?id=${gtagId}`} strategy="afterInteractive" /> : null}
       {meta ? <Script src="https://connect.facebook.net/en_US/fbevents.js" strategy="afterInteractive" /> : null}
       {pinterest ? <Script src="https://s.pinimg.com/ct/core.js" strategy="afterInteractive" /> : null}
     </>

@@ -26,6 +26,7 @@ import * as library from "@/lib/library/client";
 import type { PageShare } from "@/lib/library/types";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
+import { track } from "@/lib/track";
 
 /** Who can send this page to someone, and how. */
 export type PageShareAccess =
@@ -224,6 +225,7 @@ function SendPage({ photoId, revisionId }: { photoId: string; revisionId: string
       return;
     }
     setLink(res.data!.share);
+    track("share", { method: "email", content_type: "page" });
     setSentTo(to);
     setEmail("");
     setNote("");
@@ -232,6 +234,7 @@ function SendPage({ photoId, revisionId }: { photoId: string; revisionId: string
   async function copy(url: string) {
     try {
       await navigator.clipboard.writeText(url);
+      track("share", { method: "copy", content_type: "page" });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -242,6 +245,7 @@ function SendPage({ photoId, revisionId }: { photoId: string; revisionId: string
   async function nativeShare(url: string) {
     try {
       await navigator.share({ title: "A coloring page for you", text: SHARE_MESSAGE, url });
+      track("share", { method: "native", content_type: "page" });
     } catch {
       /* dismissed */
     }

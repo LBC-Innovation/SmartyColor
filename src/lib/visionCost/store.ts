@@ -37,6 +37,10 @@ export async function persistUsageEvent(
           geo_postal: guest.postal,
           geo_latitude: guest.latitude,
           geo_longitude: guest.longitude,
+          // Migration 0036: where the guest came from.
+          acq_channel: guest.channel ?? null,
+          acq_source: guest.source ?? null,
+          acq_campaign: guest.campaign ?? null,
         }
       : {};
   const row = {
@@ -57,8 +61,17 @@ export async function persistUsageEvent(
     instance_id: INSTANCE_ID,
   };
   let { error } = await getSupabaseAdmin().from("vision_usage_events").insert({ ...row, ...guestColumns });
+  const missingColumn = () => error && Object.keys(guestColumns).length > 0 && /column|schema cache/i.test(error.message);
+  // Before migration 0036 the acquisition columns don't exist; keep the address, drop the source.
+  if (missingColumn() && "acq_channel" in guestColumns) {
+    const { acq_channel: _c, acq_source: _s, acq_campaign: _m, ...withoutSource } = guestColumns;
+    void _c;
+    void _s;
+    void _m;
+    ({ error } = await getSupabaseAdmin().from("vision_usage_events").insert({ ...row, ...withoutSource }));
+  }
   // Before migration 0033 the guest columns don't exist; keep the cost, drop the address.
-  if (error && Object.keys(guestColumns).length > 0 && /column|schema cache/i.test(error.message)) {
+  if (missingColumn()) {
     ({ error } = await getSupabaseAdmin().from("vision_usage_events").insert(row));
   }
   if (error) console.error(JSON.stringify({ level: "warn", message: "vision usage persist failed", error: error.message }));

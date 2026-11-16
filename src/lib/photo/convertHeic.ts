@@ -6,7 +6,7 @@ function canvasToJpegBlob(
     canvas.toBlob(
       (blob) => {
         if (blob) resolve(blob);
-        else reject(new Error("Could not convert that HEIC photo."));
+        else reject(new Error("We couldn't open that iPhone photo."));
       },
       "image/jpeg",
       quality,
@@ -94,6 +94,6 @@ export async function convertHeicFileToJpegBlob(file: File): Promise<Blob> {
   }
 
   throw new Error(
-    "Could not convert this HEIC in your browser (common with newer iPhone photos).",
+    "We couldn't open this iPhone photo in your browser.",
   );
 }

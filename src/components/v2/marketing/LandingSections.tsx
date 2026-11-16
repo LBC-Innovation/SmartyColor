@@ -69,11 +69,11 @@ export function HolidayToast({ label, raised }: { label: string; raised: boolean
     <aside
       aria-label={HOLIDAY_BLOCK.title}
       className={cn(
-        "cm-toast-in fixed inset-x-3 z-50 mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border-2 border-brand-amber bg-v2-butter py-2.5 pl-3 pr-1.5 text-v2-ink shadow-[0_18px_48px_rgb(36_26_77/0.3)] transition-[bottom] duration-200 motion-reduce:transition-none sm:gap-4 sm:py-3 sm:pl-4",
+        "cm-toast-in fixed inset-x-3 z-50 mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-v2-primary/25 bg-white py-2.5 pl-3 pr-1.5 text-v2-ink shadow-[0_18px_48px_rgb(36_26_77/0.3)] transition-[bottom] duration-200 motion-reduce:transition-none sm:gap-4 sm:py-3 sm:pl-4",
         raised ? "bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:bottom-6" : "bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-6",
       )}
     >
-      <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-coral text-white sm:inline-flex">
+      <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-v2-primary text-white sm:inline-flex">
         <Gift className="h-5 w-5" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
@@ -150,7 +150,7 @@ export function OccasionsSection({
               ) : null}
               <div className="flex flex-1 flex-col p-5">
                 {image ? null : (
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-v2-butter text-v2-ink">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-v2-primary-light text-v2-primary">
                     <Icon className="h-5 w-5" aria-hidden />
                   </span>
                 )}

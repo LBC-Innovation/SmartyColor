@@ -1,14 +1,15 @@
 import "server-only";
 import { createHash, randomInt } from "node:crypto";
-import { readCookieFromHeader } from "@/lib/marketing/attribution";
+import { attributionFromRequest, readCookieFromHeader } from "@/lib/marketing/attribution";
 import { intentFromAttributionCookie } from "@/lib/marketing/copy";
 import { AD_OPT_OUT_COOKIE, centsToValue, trackFormatForProduct } from "@/lib/marketing/events";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 
 /**
- * Server copies of the `purchase` event: Meta Conversions API and the GA4 Measurement Protocol.
- * The browser sends the same event with the order id as its event id, so Meta keeps one.
- * Meta gets only a SHA-256 of the email plus the _fbp/_fbc cookies; GA4 gets only its client id.
+ * Server copies of the `purchase` event: Meta Conversions API, TikTok Events API and the GA4
+ * Measurement Protocol. The browser sends the same event with the order id as its event id, so
+ * Meta and TikTok keep one. Meta and TikTok get only a SHA-256 of the email plus their own
+ * cookies and click ids; GA4 gets only its client id.
  */
 
 const META_API_VERSION = "v21.0";
@@ -73,7 +74,9 @@ export async function trackPurchaseServer(input: {
   const metaToken = process.env.META_CAPI_ACCESS_TOKEN?.trim();
   const ga4Id = envId("NEXT_PUBLIC_GA4_ID");
   const ga4Secret = process.env.GA4_API_SECRET?.trim();
-  if (!(pixelId && metaToken) && !(ga4Id && ga4Secret)) return;
+  const tiktokId = envId("NEXT_PUBLIC_TIKTOK_PIXEL_ID");
+  const tiktokToken = process.env.TIKTOK_EVENTS_ACCESS_TOKEN?.trim();
+  if (!(pixelId && metaToken) && !(ga4Id && ga4Secret) && !(tiktokId && tiktokToken)) return;
 
   const order = await loadOrder(input.orderId);
   if (!order) {
@@ -117,6 +120,44 @@ export async function trackPurchaseServer(input: {
     );
   }
 
+  if (tiktokId && tiktokToken) {
+    const user: Record<string, unknown> = { email: sha256(input.email) };
+    const ttp = readCookieFromHeader(cookies, "_ttp");
+    // The ad click id, from the landing URL kept in cm_attr.
+    const attribution = attributionFromRequest(input.request);
+    const ttclid = attribution?.last.ttclid ?? attribution?.first.ttclid;
+    if (ttp) user.ttp = ttp;
+    if (ttclid) user.ttclid = ttclid;
+    const userAgent = input.request.headers.get("user-agent");
+    if (userAgent) user.user_agent = userAgent.slice(0, 400);
+    const body: Record<string, unknown> = {
+      event_source: "web",
+      event_source_id: tiktokId,
+      data: [
+        {
+          event: "CompletePayment",
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: order.id,
+          user,
+          properties: {
+            value,
+            currency: "USD",
+            content_type: "product",
+            contents: [{ content_id: format, content_name: `${format} book`, quantity: 1 }],
+            order_id: order.id,
+          },
+        },
+      ],
+    };
+    const testCode = process.env.TIKTOK_TEST_EVENT_CODE?.trim();
+    if (testCode) body.test_event_code = testCode;
+    sends.push(
+      post("https://business-api.tiktok.com/open_api/v1.3/event/track/", body, "tiktok", order.id, {
+        "Access-Token": tiktokToken,
+      }),
+    );
+  }
+
   if (ga4Id && ga4Secret) {
     const params: Record<string, unknown> = {
       transaction_id: order.id,
@@ -140,15 +181,26 @@ export async function trackPurchaseServer(input: {
   await Promise.all(sends);
 }
 
-async function post(url: string, body: unknown, vendor: string, orderId: string): Promise<void> {
+async function post(
+  url: string,
+  body: unknown,
+  vendor: string,
+  orderId: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<void> {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) log("warn", "Server purchase event rejected", { vendor, orderId, status: res.status });
+    else if (vendor === "tiktok") {
+      // TikTok answers 200 with a non-zero code for rejected events.
+      const json = (await res.json().catch(() => null)) as { code?: number; message?: string } | null;
+      if (json && json.code !== 0) log("warn", "Server purchase event rejected", { vendor, orderId, code: json.code, error: json.message });
+    }
   } catch (e) {
     log("warn", "Server purchase event failed", { vendor, orderId, error: e instanceof Error ? e.message : String(e) });
   }

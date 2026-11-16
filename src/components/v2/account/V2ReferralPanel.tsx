@@ -5,6 +5,7 @@ import { Check, Copy, Gift, Loader2 } from "lucide-react";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
 import type { ReferralSummary } from "@/lib/credits/types";
+import { track } from "@/lib/track";
 
 /** The account's refer-a-friend link: share it, and both sides get credit on the friend's first order. */
 export function V2ReferralPanel() {
@@ -27,6 +28,7 @@ export function V2ReferralPanel() {
   async function copy(url: string) {
     try {
       await navigator.clipboard.writeText(url);
+      track("share", { method: "copy", content_type: "referral" });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
