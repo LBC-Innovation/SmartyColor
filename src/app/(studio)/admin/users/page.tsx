@@ -1,10 +1,10 @@
 import { V2AdminPermissionGate } from "@/components/v2/auth/V2AdminPermissionGate";
-import { V2AdminUsersStudio } from "@/components/v2/auth/V2AdminUsersStudio";
+import { CustomersStudio } from "@/components/v2/admin/customers/CustomersStudio";
 
 export default function AdminUsersPage() {
   return (
     <V2AdminPermissionGate permission="usermanage:listusers">
-      <V2AdminUsersStudio />
+      <CustomersStudio />
     </V2AdminPermissionGate>
   );
 }

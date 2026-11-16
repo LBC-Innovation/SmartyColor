@@ -746,7 +746,7 @@ function buildInsights(
       tone: "info",
       title: "Add your fixed costs",
       detail:
-        "Operating profit only counts what the app records (AI, Lulu, card fees). Add hosting, subscriptions, marketing and payroll below to see your true bottom line and break-even point.",
+        "Operating profit only counts what the app records (AI, Lulu, card fees). Add hosting, subscriptions, marketing and payroll under Costs & assumptions to see your true bottom line and break-even point.",
     });
   }
 
@@ -786,7 +786,7 @@ function buildInsights(
       tone: "critical",
       title: `Priced below cost: ${losing.map((p) => p.name).join(", ")}`,
       detail:
-        "Even at full list price these lines cost more to serve than they bring in (counting every AI call, including free edits and retries). Raise the cost basis or markup on the Prices page, or cut the free allowance.",
+        "Even at full list price these lines cost more to serve than they bring in (counting every AI call, including free edits and retries). Raise the cost basis or markup on the Pricing & promos page, or cut the free allowance.",
     });
   }
 
@@ -808,7 +808,7 @@ function buildInsights(
         tone: "info",
         title: `${p.name}: ${callsPerSale.toFixed(1)} AI calls per sale`,
         detail:
-          "Each charged sale is paying for extra calls (retries, failures or free uses). The cost basis on the Prices page should reflect cost per sale, not cost per call.",
+          "Each charged sale is paying for extra calls (retries, failures or free uses). The cost basis on the Pricing & promos page should reflect cost per sale, not cost per call.",
       });
     }
   }
@@ -828,7 +828,7 @@ function buildInsights(
     out.push({
       tone: "warning",
       title: `${d.canceledCharged.count} canceled print order${d.canceledCharged.count === 1 ? "" : "s"} still charged`,
-      detail: `${usd(d.canceledCharged.cents)} was taken from wallets for orders that were later canceled. It's left out of sales. These were canceled before refunds were automatic; if these customers should get it back, add it on the Users page.`,
+      detail: `${usd(d.canceledCharged.cents)} was taken from wallets for orders that were later canceled. It's left out of sales. These were canceled before refunds were automatic; if these customers should get it back, add it from their Wallet tab on the Customers page.`,
     });
   }
 

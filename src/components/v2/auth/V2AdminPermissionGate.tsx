@@ -9,20 +9,23 @@ export function V2AdminPermissionGate({
   permission,
   children,
 }: {
-  permission: string;
+  /** One permission, or several of which any one is enough. */
+  permission: string | readonly string[];
   children: ReactNode;
 }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const needed = typeof permission === "string" ? [permission] : permission;
+  const allowed = needed.some((p) => user?.permissions.includes(p) ?? false);
 
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
-    else if (!user.permissions.includes(permission)) {
+    else if (!allowed) {
       router.replace("/");
     }
-  }, [user, loading, permission, router, pathname]);
+  }, [user, loading, allowed, router, pathname]);
 
   if (loading) {
     return (
@@ -32,6 +35,6 @@ export function V2AdminPermissionGate({
     );
   }
   if (!user) return null;
-  if (!user.permissions.includes(permission)) return null;
+  if (!allowed) return null;
   return <>{children}</>;
 }

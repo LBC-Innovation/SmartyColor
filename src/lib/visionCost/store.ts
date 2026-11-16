@@ -74,6 +74,8 @@ export type VisionPersistedSummary = {
   available: boolean;
   periods: { today: VisionPeriodTotals; last7d: VisionPeriodTotals; last30d: VisionPeriodTotals; allTime: VisionPeriodTotals };
   byOperation: Array<{ operation: string; callCount: number; totalCostUsd: number }>;
+  /** The last 30 UTC days, oldest first, zero-filled. */
+  daily: Array<{ date: string; costUsd: number; calls: number; errors: number }>;
   recentEvents: Array<VisionUsageEvent & { userId: string | null; userEmail: string | null; instanceId: string | null }>;
   recentErrors: Array<VisionErrorEvent & { userId: string | null; userEmail: string | null; instanceId: string | null }>;
 };
@@ -93,6 +95,7 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
     available: false,
     periods: { today: emptyTotals(), last7d: emptyTotals(), last30d: emptyTotals(), allTime: emptyTotals() },
     byOperation: [],
+    daily: [],
     recentEvents: [],
     recentErrors: [],
   };
@@ -140,6 +143,26 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
     byOp.set(op, cur);
   }
   for (const r of allRows ?? []) add(periods.allTime, r);
+
+  const dayKey = (iso: string) => iso.slice(0, 10);
+  const todayUtc = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+  const daily = Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(todayUtc - (29 - i) * 86_400_000).toISOString().slice(0, 10),
+    costUsd: 0,
+    calls: 0,
+    errors: 0,
+  }));
+  const dayIndex = new Map(daily.map((d, i) => [d.date, i]));
+  for (const r of events ?? []) {
+    const i = dayIndex.get(dayKey(r.at as string));
+    if (i == null) continue;
+    daily[i].calls += 1;
+    daily[i].costUsd += Number(r.total_cost_usd ?? 0);
+  }
+  for (const x of errors ?? []) {
+    const i = dayIndex.get(dayKey(x.at as string));
+    if (i != null) daily[i].errors += 1;
+  }
 
   for (const x of errors ?? []) {
     const at = new Date(x.at as string).getTime();
@@ -189,6 +212,7 @@ export async function loadPersistedSummary(): Promise<VisionPersistedSummary> {
     byOperation: [...byOp.entries()]
       .map(([operation, v]) => ({ operation, ...v }))
       .sort((a, b) => b.totalCostUsd - a.totalCostUsd),
+    daily,
     recentEvents: recentEventRows.map(toEvent),
     recentErrors: (errors ?? []).map((x) => ({
       id: x.id as string,

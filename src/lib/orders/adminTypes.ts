@@ -25,4 +25,10 @@ export type AdminUserOrderSummary = {
   cancelReason: string | null;
   refundedCents: number | null;
   luluProductionDueAt: string | null;
+  /** The book before shipping and tax, as charged. */
+  subtotalCents: number | null;
+  shippingCents: number | null;
+  taxCents: number | null;
+  /** What Lulu charges us (printing, shipping and tax); null for print-at-home. */
+  luluCostCents: number | null;
 };

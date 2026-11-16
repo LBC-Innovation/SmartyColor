@@ -22,19 +22,45 @@ function serviceKey(): string {
   return key;
 }
 
+/** Orders that earned money: paid and not canceled or refunded. */
+const SPEND_STATUSES = ["paid", "submitting_to_lulu", "submitted_to_lulu", "in_production", "shipped", "delivered"];
+
 export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
   const {
     data: { users },
     error,
-  } = await getSupabaseAuth().auth.admin.listUsers();
+  } = await getSupabaseAuth().auth.admin.listUsers({ perPage: 1000 });
   if (error) {
     return { data: null, error: { message: error.message } };
   }
 
-  const { data: profiles } = await getSupabaseAdmin()
-    .from("profiles")
-    .select("id, display_name, avatar_url, status, credits_balance");
+  const db = getSupabaseAdmin();
+  const [{ data: profiles }, { data: orders }, { data: activity }] = await Promise.all([
+    db.from("profiles").select("id, display_name, avatar_url, status, credits_balance"),
+    db
+      .from("book_orders")
+      .select("user_id, status, total_cents")
+      .not("user_id", "is", null)
+      .is("deleted_at", null)
+      .not("status", "in", "(draft,quoted)"),
+    // Latest activity per account; the table is small, newest first.
+    db.from("account_activity").select("user_id, occurred_at").order("occurred_at", { ascending: false }).limit(5000),
+  ]);
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, p]));
+
+  const orderStats = new Map<string, { count: number; spend: number }>();
+  for (const o of orders ?? []) {
+    const id = o.user_id as string;
+    const cur = orderStats.get(id) ?? { count: 0, spend: 0 };
+    cur.count += 1;
+    if (SPEND_STATUSES.includes(o.status as string)) cur.spend += Number(o.total_cents ?? 0);
+    orderStats.set(id, cur);
+  }
+  const lastActive = new Map<string, string>();
+  for (const a of activity ?? []) {
+    const id = a.user_id as string;
+    if (!lastActive.has(id)) lastActive.set(id, a.occurred_at as string);
+  }
 
   const list = users.map((u) => {
     const profile = profileMap.get(u.id) ?? {};
@@ -44,6 +70,11 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       u.banned_until !== "none" &&
       new Date(u.banned_until) > new Date();
     const status = profileStatus ?? (isBanned ? "suspended" : "active");
+    const stats = orderStats.get(u.id);
+    const activityAt = lastActive.get(u.id) ?? null;
+    const signInAt = u.last_sign_in_at ?? null;
+    const lastActiveAt =
+      activityAt && signInAt ? (activityAt > signInAt ? activityAt : signInAt) : (activityAt ?? signInAt);
     return {
       id: u.id,
       email: u.email,
@@ -56,6 +87,9 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
       creditsBalanceCents:
         (profile as { credits_balance?: number }).credits_balance ?? 0,
       features: storedFeatureAccess(u.app_metadata?.features),
+      ordersCount: stats?.count ?? 0,
+      lifetimeSpendCents: stats?.spend ?? 0,
+      lastActiveAt,
     };
   });
 

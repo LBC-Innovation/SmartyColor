@@ -1,10 +1,6 @@
-import { V2AdminPermissionGate } from "@/components/v2/auth/V2AdminPermissionGate";
-import { V2PromoCreditsStudio } from "@/components/v2/auth/V2PromoCreditsStudio";
+import { redirect } from "next/navigation";
 
+/** Promo credits now live on the pricing page. */
 export default function AdminPromoCreditsPage() {
-  return (
-    <V2AdminPermissionGate permission="usermanage:adjustcredits">
-      <V2PromoCreditsStudio />
-    </V2AdminPermissionGate>
-  );
+  redirect("/admin/pricing#promotions");
 }

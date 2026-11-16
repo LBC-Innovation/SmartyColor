@@ -1,11 +1,10 @@
 import { V2AdminPermissionGate } from "@/components/v2/auth/V2AdminPermissionGate";
-import { V2PricingStudio } from "@/components/v2/auth/V2PricingStudio";
-import { MANAGE_PRICES_PERMISSION } from "@/lib/api/types";
+import { PricingStudio } from "@/components/v2/admin/pricing/PricingStudio";
 
 export default function AdminPricingPage() {
   return (
-    <V2AdminPermissionGate permission={MANAGE_PRICES_PERMISSION}>
-      <V2PricingStudio />
+    <V2AdminPermissionGate permission={["pricing:manage", "usermanage:adjustcredits"]}>
+      <PricingStudio />
     </V2AdminPermissionGate>
   );
 }
