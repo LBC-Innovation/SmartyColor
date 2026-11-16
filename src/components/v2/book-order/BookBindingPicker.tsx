@@ -1,9 +1,10 @@
 "use client";
 
 import { useId, useRef, type KeyboardEvent } from "react";
-import { Check, Download, Loader2, Printer } from "lucide-react";
+import { Check, Download, Loader2 } from "lucide-react";
 import { formatCredits } from "@/lib/credits/money";
 import {
+  BINDING_PHOTOS,
   BOOK_BINDINGS,
   DIGITAL_FORMAT,
   getBookFormat,
@@ -91,6 +92,30 @@ const CARDS: Card[] = [
   }),
 ];
 
+/**
+ * A photo of the binding (decorative: the title names it), or a download tile for the PDF, so
+ * every row lines up.
+ */
+function FormatThumb({ id, className }: { id: BookFormatId; className?: string }) {
+  const photo = id === "digital" ? null : BINDING_PHOTOS[id];
+  return (
+    <span
+      className={cn("block shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-v2-bg-subtle", className)}
+      style={{ aspectRatio: "16 / 9" }}
+      aria-hidden
+    >
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photo.src} alt="" width={photo.width} height={photo.height} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center bg-v2-primary-light text-v2-primary">
+          <Download className="h-5 w-5" />
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** Why a format can't be picked, and what would unlock it. Shown on the card. */
 function unfitReason(id: BookFormatId, fit: BookFormatFit, count: number): string {
   if (fit.tooMany) return `Holds up to ${getBookFormat(id).maxPages} pages, you have ${count}`;
@@ -159,7 +184,6 @@ export function BookBindingPicker({
         const fit = bookFormatFit(contentPageCount, getBookFormat(card.id));
         const unavailable = filtering && !fit.fits;
         const selected = value === card.id && !unavailable;
-        const Icon = card.digital ? Download : Printer;
         const price = card.digital || unavailable ? undefined : prices[card.id as BookBindingId];
         const priced = price?.bookCents != null && !price.overCapacity;
         const pricing = Boolean(price?.loading) && !price?.overCapacity;
@@ -221,10 +245,10 @@ export function BookBindingPicker({
               >
                 {selected ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
               </span>
+              <FormatThumb id={card.id} className={cn("w-20 sm:w-24", unavailable && "opacity-50 grayscale")} />
               <span className={cn("min-w-0 flex-1", unavailable && "opacity-60")}>
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <Icon className="h-4 w-4 shrink-0 self-center text-v2-primary" aria-hidden />
                     <span id={`${idBase}-${card.id}-title`} className="truncate text-base font-bold text-v2-ink">
                       {card.title}
                     </span>
@@ -279,8 +303,8 @@ export function BookBindingPicker({
           >
             <span
               className={cn(
-                "absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full border-2",
-                selected ? "border-v2-primary bg-v2-primary text-white" : "border-gray-300",
+                "absolute right-6 top-6 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-sm sm:right-7 sm:top-7",
+                selected ? "border-v2-primary bg-v2-primary text-white" : "border-gray-300 bg-white",
                 unavailable && "opacity-50",
               )}
               aria-hidden
@@ -289,15 +313,15 @@ export function BookBindingPicker({
             </span>
 
             <div className={cn(unavailable && "opacity-50 grayscale")}>
-              <span className="flex items-center gap-2">
-                <Icon className="h-5 w-5 text-v2-primary" aria-hidden />
+              <FormatThumb id={card.id} className="mb-3 w-full" />
+              <span className="flex min-h-5 items-center gap-2">
                 {card.id === recommendedId && !unavailable && fitCount > 1 ? (
                   <span className="rounded-full bg-v2-primary-light px-2 py-0.5 text-[11px] font-semibold text-v2-link">
                     Best fit
                   </span>
                 ) : null}
               </span>
-              <p id={`${idBase}-${card.id}-title`} className="mt-2 pr-8 text-lg font-bold text-v2-ink">
+              <p id={`${idBase}-${card.id}-title`} className="mt-1 text-lg font-bold text-v2-ink">
                 {card.title}
               </p>
               <p className="mt-1 text-sm text-v2-muted">{card.blurb}</p>

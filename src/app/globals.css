@@ -178,3 +178,24 @@ html.standalone.pwa-splash-done #pwa-splash {
     border-radius: 0;
   }
 }
+
+@keyframes v2-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.v2-toast-in {
+  animation: v2-toast-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-toast-in {
+    animation: none;
+  }
+}

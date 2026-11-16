@@ -388,6 +388,8 @@ export function ColorfulMemoriesApp() {
   });
   /** Building the book: the order card beside the gallery (desktop) or the sheet (phones). */
   const [bookOpen, setBookOpen] = useState(false);
+  /** The book toast was closed; it stays closed until the page reloads. */
+  const [bookPromoHidden, setBookPromoHidden] = useState(false);
   const [openRow, setOpenRow] = useState<OrderRow | null>("format");
   const [confirm, setConfirm] = useState<{ step: ConfirmStep; autoPlace: boolean } | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -772,15 +774,6 @@ export function ColorfulMemoriesApp() {
                 </div>
               ) : null}
 
-              {hasBookPage && !bookCardOpen && !deletion.active ? (
-                <BookPromoCard
-                  pageCount={order.contentCount}
-                  pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
-                  progress={bookProgress}
-                  onStart={openBook}
-                />
-              ) : null}
-
               {bookCardOpen && photos.length >= 2 && !deletion.active ? (
                 <p className="flex items-center gap-2 rounded-xl bg-v2-primary-light/70 px-3 py-2 text-sm text-v2-navy">
                   <BookOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
@@ -868,6 +861,16 @@ export function ColorfulMemoriesApp() {
           ) : null}
         </div>
       </div>
+
+      {hasBookPage && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden ? (
+        <BookPromoCard
+          pageCount={order.contentCount}
+          pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
+          progress={bookProgress}
+          onStart={openBook}
+          onDismiss={() => setBookPromoHidden(true)}
+        />
+      ) : null}
 
       {deletion.active ? (
         <div
