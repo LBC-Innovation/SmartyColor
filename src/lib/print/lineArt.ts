@@ -1,7 +1,18 @@
 import sharp from "sharp";
+import { SHEET_PRINT_LONG_EDGE_PX } from "@/lib/print/pageLayout";
 
-/** Long edge (px) the finished sheet is resampled to when the model returns less. */
-const SHEET_LONG_EDGE = 2048;
+/**
+ * Long edge (px) the finished sheet is resampled to when the model returns less: a US Letter
+ * page at 300 PPI (3500 px on a 3:4 sheet). The image models draw at about 2K, so this is
+ * where a sheet is upscaled to print resolution.
+ */
+const SHEET_LONG_EDGE = SHEET_PRINT_LONG_EDGE_PX;
+/**
+ * The pixel tunings below were set on 2048 px sheets; this keeps them the same size
+ * relative to the page now that sheets are larger.
+ */
+const TUNED_AT_LONG_EDGE = 2048;
+const PX = SHEET_LONG_EDGE / TUNED_AT_LONG_EDGE;
 /** Gray level where a stroke edge sits; keeps stroke width neutral. */
 const NEUTRAL_MIDPOINT = 128;
 /** Half-width of the soft edge ramp — gives anti-aliased, vector-like edges. */
@@ -13,18 +24,18 @@ const WIDTH_TOLERANCE = 0.08;
  * lines feel deeper and richer. Edits instead match the sheet being edited,
  * which already carries this weight.
  */
-const INK_BOOST_PX = 0.6;
+const INK_BOOST_PX = 0.6 * PX;
 /** Most a stroke edge is moved (px per side, at print size) to match weight. */
-const MAX_EDGE_SHIFT = 3;
+const MAX_EDGE_SHIFT = 3 * PX;
 /**
  * Gaussian smoothing (px, at print size) before ink is re-rendered. Image models draw lines with
  * small wobbles, pixel steps and sketchy texture; blurring then re-inking at the 50% midpoint
  * irons those into smooth, even curves like a hand-inked coloring book, without moving a
  * straight edge or changing stroke width.
  */
-const LINE_SMOOTH_SIGMA = 0.9;
+const LINE_SMOOTH_SIGMA = 0.9 * PX;
 /**
- * Ink islands smaller than this (px² at a 2048 px long edge) are stray specks: stubble and
+ * Ink islands smaller than this (px² at a 2048 px long edge, scaled with page area) are stray specks: stubble and
  * stipple dots, flecks of hatching. Real details (pupils, buttons) are larger.
  */
 const SPECK_MAX_AREA = 28;
@@ -528,7 +539,7 @@ export async function toPhotoLineArtPng(
     removeMajorSolidInkFills(binary, width, height),
     width,
     height,
-    Math.round((options.speckMaxArea ?? SPECK_MAX_AREA) * ((width * height) / (2048 * 2048))),
+    Math.round((options.speckMaxArea ?? SPECK_MAX_AREA) * ((width * height) / (TUNED_AT_LONG_EDGE * TUNED_AT_LONG_EDGE))),
   );
   const removed = new Uint8Array(smooth.length);
   let anyRemoved = false;
@@ -539,7 +550,7 @@ export async function toPhotoLineArtPng(
     }
   }
   if (anyRemoved) {
-    const grown = dilateMask(removed, width, height, 2);
+    const grown = dilateMask(removed, width, height, Math.round(2 * PX));
     for (let i = 0; i < grown.length; i++) if (grown[i]) smooth[i] = 255;
   }
 

@@ -202,6 +202,23 @@ export const BOOK_PRINT_PPI = 300;
 export const BOOK_MIN_SHEET_PPI = 150;
 
 /**
+ * Every sheet is drawn for one page: US Letter (8.5×11″). Its artwork area inside the
+ * 0.5″ margin is 7.5×10″, exactly 3:4, so sheets are generated at 3:4 (or 4:3 turned on its
+ * side) and the image models' 3:4 canvas is the page's true shape.
+ */
+export const SHEET_ASPECT = { portrait: "3:4", landscape: "4:3" } as const;
+
+/**
+ * Pixels on the short and long side of a finished sheet. A 3:4 sheet this size still has
+ * 300 PPI when it is enlarged to fill an edge-to-edge page with bleed (8.75″ wide), and
+ * about 350 PPI on a framed page, so it meets Lulu's 300 PPI either way.
+ */
+export const SHEET_PRINT_SHORT_EDGE_PX = Math.round(
+  (BOOK_TRIM_WIDTH_IN + BOOK_BLEED_IN * 2) * BOOK_PRINT_PPI,
+);
+export const SHEET_PRINT_LONG_EDGE_PX = Math.round((SHEET_PRINT_SHORT_EDGE_PX * 4) / 3);
+
+/**
  * Pixels per printed inch a sheet of this size has once it is laid out on a
  * book page. Edge-to-edge pages enlarge the sheet more than framed ones, and a
  * sheet whose shape doesn't match the page is enlarged most of all.

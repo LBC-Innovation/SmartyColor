@@ -18,9 +18,9 @@ export type ImageRequest = {
   /** Canvas to draw on: orientation and aspect ratio of the output. */
   layout: PhotoLayout;
   /**
-   * What the image is for. Coloring sheets (lineArt) are resampled to 2048 px
-   * by the line-art step, so they need fewer pixels than a photo that is
-   * printed as-is. Vendors that support exact sizes use this to pick one.
+   * What the image is for. Coloring sheets (lineArt) are upscaled to print size
+   * (US Letter at 300 PPI) by the line-art step, so they need fewer pixels from
+   * the model than a photo that is printed as-is. Vendors that support exact sizes use this to pick one.
    */
   purpose: ImagePurpose;
   /**

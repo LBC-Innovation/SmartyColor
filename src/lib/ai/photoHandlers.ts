@@ -9,6 +9,8 @@ import {
   displayedSize,
   inferPhotoLayout,
   layoutRatio,
+  letterCanvas,
+  letterCanvasFor,
   photoLayoutRetryNote,
   sheetOrientationMismatch,
   type PhotoLayout,
@@ -150,6 +152,18 @@ async function isWrongWayRound(
   }
 }
 
+/** True when an image is within 2% of the canvas's aspect ratio. */
+async function hasLetterShape(file: { base64: string }, layout: PhotoLayout): Promise<boolean> {
+  try {
+    const meta = await sharp(Buffer.from(file.base64, "base64")).metadata();
+    if (!meta.width || !meta.height) return true;
+    const size = displayedSize(meta.width, meta.height, meta.orientation);
+    return Math.abs(size.width / size.height / layoutRatio(layout) - 1) <= 0.02;
+  } catch {
+    return true;
+  }
+}
+
 async function drawFromReferences(
   operation: VisionCostOperation,
   prompt: string,
@@ -160,7 +174,8 @@ async function drawFromReferences(
   /** Sheet being edited; the result is matched to its stroke weight. */
   weightReferenceBase64?: string,
 ): Promise<GeneratedSheet> {
-  const layout = await layoutForPhotoBytes(photoBytes, printPrefs, hint);
+  // Whatever the photo's shape, the sheet is drawn on a US Letter canvas (3:4 or 4:3).
+  const layout = letterCanvasFor(await layoutForPhotoBytes(photoBytes, printPrefs, hint));
   const images = createImageGenerator();
   const request = { operation, prompt, references, layout, purpose: "lineArt" as const };
 
@@ -174,34 +189,12 @@ async function drawFromReferences(
     } catch {
       /* keep the first image; it is fitted below */
     }
-    if (await isWrongWayRound(file, layout)) {
-      file = await fitToLayout(file, layout);
-    }
+  }
+  if (await isWrongWayRound(file, layout) || !(await hasLetterShape(file, layout))) {
+    file = await fitToLayout(file, layout);
   }
 
   return toSheet(file, printPrefs.showTitle, weightReferenceBase64);
-}
-
-/** Landscape canvas for a portrait photo: 4:3, the same page turned on its side. */
-function landscapeLayoutFor(source: PhotoLayout): PhotoLayout {
-  const longEdge = Math.max(source.width, source.height);
-  return {
-    orientation: "landscape",
-    aspectRatio: "4:3",
-    width: longEdge,
-    height: Math.round(longEdge * 0.75),
-  };
-}
-
-/** Portrait canvas for a landscape photo: 3:4 sits best on a printed page. */
-function portraitLayoutFor(source: PhotoLayout): PhotoLayout {
-  const longEdge = Math.max(source.width, source.height);
-  return {
-    orientation: "portrait",
-    aspectRatio: "3:4",
-    width: Math.round(longEdge * 0.75),
-    height: longEdge,
-  };
 }
 
 export function createPhotoHandlers(): Pick<
@@ -217,7 +210,8 @@ export function createPhotoHandlers(): Pick<
       if (source.orientation !== from) {
         throw new Error(alreadyOrientedMessage(want));
       }
-      const target = want === "portrait" ? portraitLayoutFor(source) : landscapeLayoutFor(source);
+      // The reframed photo takes the printed page's shape: 3:4 portrait or 4:3 landscape.
+      const target = letterCanvas(want);
       const images = createImageGenerator();
       const request = {
         operation: "photoToPortrait" as const,
@@ -250,8 +244,10 @@ export function createPhotoHandlers(): Pick<
         }
       }
 
+      // Upscale to the letter page at 300 PPI (and trim any sliver off 3:4) so it prints sharp.
       const { data, info } = await sharp(Buffer.from(file.base64, "base64"))
         .rotate()
+        .resize(target.width, target.height, { fit: "cover", kernel: "lanczos3" })
         .jpeg({ quality: 92, mozjpeg: true })
         .toBuffer({ resolveWithObject: true });
       return {

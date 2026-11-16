@@ -1,4 +1,10 @@
-import { photoLayoutPromptBlock, type PhotoLayout } from "@/lib/photo/orientation";
+import {
+  letterCanvas,
+  letterCanvasFor,
+  photoLayoutPromptBlock,
+  printPagePromptBlock,
+  type PhotoLayout,
+} from "@/lib/photo/orientation";
 import { describePrintPrefsForAI, type PrintPrefs } from "@/lib/print/settings";
 import type { RefineRequest } from "@/lib/session/types";
 
@@ -104,7 +110,9 @@ export function buildGeneratePrompt(input: {
     ? `Name line: include a blank line for a name near the bottom.`
     : `Name line: draw NO name line or "Name: ___".`;
 
-  return `OUTPUT FORMAT (non-negotiable):
+  return `${printPagePromptBlock(letterCanvas(prefs.orientation))}
+
+OUTPUT FORMAT (non-negotiable):
 This must be a blank coloring-book page: pure black (#000000) outlines only on a pure white (#FFFFFF) background.
 ZERO color. ZERO gray fill. ZERO shading. ZERO gradients. ZERO tinted ink.
 Every interior of every shape stays empty white so a child can color it in with crayons.
@@ -133,7 +141,7 @@ Style:
 - Match the requested character and scene as closely as a kid would expect: same silhouette, costume shapes, gear, pose, and setting. Avoid only official logos, brand wordmarks, and exact trademarked emblems. Do NOT swap in an unrelated character.
 - No violence, weapons-as-harm, scary gore, or adult content
 
-Final check: no color fills; page chrome matches Printer Settings exactly (especially title/border off when told not to draw them).`;
+Final check: no color fills; the canvas is the US Letter page shape, filled edge to edge; page chrome matches Printer Settings exactly (especially title/border off when told not to draw them).`;
 }
 
 function coloringSheetOutputRules(printPrefs: PrintPrefs, title: string) {
@@ -185,28 +193,39 @@ Hair (common mistake: frizzy, strand-by-strand hair — never do this):
 - NO individual strands, NO flyaway hairs, NO fuzzy, frizzy, spiky, or jagged hair edges, NO scribbled hair texture. Most of the hair area stays EMPTY WHITE for coloring.
 - Eyebrows: one soft smooth shape each — not many little hair strokes.
 - Beards, mustaches, and stubble: ONE smooth closed outline shape, left white inside (at most one soft inner line) — never stubble dots, stipple, short tick marks, or strand texture.
+- A mustache is a single smooth, closed shape like a soft rounded band above the lip — its edge is one clean line, never fringed, and its inside is completely EMPTY WHITE with no hair strokes.
 - Bangs and fringe: a smooth, softly curved lower edge — not a row of pointed or spiky tips.
 
 Clothing patterns (common mistake: dense, scratchy plaid or gingham — never do this):
 - Plaid, gingham, checks, and stripes: a FEW evenly spaced, clean straight lines (about 4 to 8 across a shirt front), making boxes or bands big enough for a child to color. Lines follow the fabric's folds smoothly and stop cleanly at seams.
 - NO dense grids, NO doubled or broken pattern lines, NO tiny checks, NO hatching to suggest a weave.
 - Small prints (polka dots, flowers): a modest number of clean, open shapes with white insides — never tiny solid dots.
+- Plain fabric stays plain: a solid or heathered (speckled, marled) shirt gets only its outline, seams, and a few folds — no dots, prints, or texture. Draw a pattern ONLY where the photo clearly shows one.
+- When there is a pattern, keep its REAL motif: dots stay small round open circles, stripes stay stripes, checks stay checks, flowers stay flowers. Never swap in a different motif (hearts, stars, animals).
+- Keep garment details as they are: do not add pockets, logos, buttons, or trims the photo doesn't show; a printed logo is a simple outline shape in the same place.
 - Clothing folds: only a few main fold lines, not every wrinkle.
 
 Faces and eyes (common mistake: dramatic, oversized, heavily lined eyes — never do this):
 - Keep every face true to the photo and easy to recognize, with natural, relaxed features. Do not exaggerate, beautify, glamorize, or stylize.
-- Eyes: keep the photo's real eye size and shape — never enlarge them. A simple eye outline, a round iris, a small solid pupil dot with a little white highlight, and at most one thin lid line above.
+- Eyes (only where the eyes are actually visible in the photo — see Eyewear below): keep the photo's real eye size and shape — never enlarge them. A simple eye outline, a round iris, a small solid pupil dot with a little white highlight, and at most one thin lid line above.
 - NO eyeliner, NO thick or long eyelashes, NO individual lashes, NO dark or filled irises, NO anime, cartoon, doll, or makeup look.
 - Nose: one or two short soft lines (nostrils and one side) — not a heavy full outline.
 - Mouth: a simple, clean lip outline. Teeth as one smooth shape with only a few light divisions.
 - Clean skin: NO wrinkles, pores, freckles, under-eye bags, cheek creases, or shading marks. A smile line only where it is strongly visible in the photo.
 - Hands and fingers: clean, simple outlines.
 
+Eyewear (common mistake: turning sunglasses into clear reading glasses — never do this):
+- Look closely at each person's eyes in the photo and draw exactly what they wear: no glasses, clear eyeglasses, or sunglasses (dark or tinted lenses that hide the eyes). Never add, remove, or swap eyewear.
+- Match the real frame shape and weight: aviator (teardrop lenses, thin metal frame, double bridge), round, cat-eye, oval, rectangular, oversized, or wraparound sport; thin wire versus thick plastic rims.
+- Sunglasses: when the lenses hide the eyes, draw NO eyes, irises, pupils, or eyelids behind them. Each lens is one clean closed outline left EMPTY WHITE for coloring, with at most one or two short diagonal glare lines inside. Do not fill the lenses black.
+- Clear eyeglasses: draw the frame outline and the eyes visible through the lenses, by the eye rules above.
+- Glasses pushed up on the head, hooked on a shirt, or held in a hand: draw them there, in their real shape.
+
 Fills (required):
 - Every large area inside a shape must stay EMPTY WHITE for coloring — never fill clothing, sky, skin, hair, or backgrounds with solid black.
 - NEVER use solid black fills anywhere on the page — not for shadows, shirts, hair masses, or compression blocks. Outlines only; all interiors white.
 - If a region would become a solid black shape, leave it white instead.
-- Dark photo areas (night sky, dark hair, black face masks, dark clothing) must still be EMPTY WHITE on the coloring page — trace only the outer edges, never paint those areas solid black.`;
+- Dark photo areas (night sky, dark hair, sunglasses lenses, black face masks, dark clothing) must still be EMPTY WHITE on the coloring page — trace only the outer edges, never paint those areas solid black.`;
 }
 
 export function buildPhotoColoringPrompt(
@@ -214,14 +233,16 @@ export function buildPhotoColoringPrompt(
   layout: PhotoLayout,
 ) {
   const title = printPrefs.showTitle ? "My photo coloring page" : "Coloring sheet";
-  const prefs = { ...printPrefs, orientation: layout.orientation };
+  const canvas = letterCanvasFor(layout);
+  const prefs = { ...printPrefs, orientation: canvas.orientation };
 
-  return `You are turning a REAL photograph into a printable coloring sheet.
-
-${photoLayoutPromptBlock(layout)}
+  return `You are turning a REAL photograph into a printable coloring sheet for an 8.5 × 11 in page.
+Goal: a faithful coloring-sheet rendering of exactly what you see in this photo — the same people, faces, hair, clothing, poses, and setting — drawn by the line-art rules below.
 
 Faithfulness (most important):
 - Match the photo's subjects, composition, poses, proportions, and layout as closely as a coloring page allows.
+- Every person must be recognizable as themselves: their real face shape, hairstyle, and clothing from the photo.
+- Accessories (glasses, sunglasses, hats, jewelry, watches, bags) appear exactly as in the photo — same type and shape, nothing added or left out.
 - Do NOT invent new characters, objects, backgrounds, or story elements that are not in the photo.
 - Do NOT cartoonify into a different scene. Stay true to what is actually visible.
 - Preserve relative sizes and positions of people, pets, objects, and scenery from the photo.
@@ -229,7 +250,11 @@ Faithfulness (most important):
 
 ${photoLineArtStyleRules()}
 
+${photoLayoutPromptBlock(layout, canvas)}
+
 ${coloringSheetOutputRules(prefs, title)}
+
+Final check: faithful to the photo (nobody added, missing, or restyled); hair, faces, eyes, and clothing drawn as the line-art rules say; plain clothing stays plain and real prints keep their motif (dots stay dots); facial hair is one smooth, empty shape; eyewear matches the photo (sunglasses stay sunglasses with no eyes drawn behind them); outlines only with white interiors; canvas is the ${canvas.aspectRatio} page shape, filled edge to edge.
 
 Draw the photo as empty line art a kid can color.`;
 }
@@ -240,12 +265,13 @@ export function buildPhotoCorrectionPrompt(
   layout: PhotoLayout,
 ) {
   const title = printPrefs.showTitle ? "My photo coloring page" : "Coloring sheet";
-  const prefs = { ...printPrefs, orientation: layout.orientation };
+  const canvas = letterCanvasFor(layout);
+  const prefs = { ...printPrefs, orientation: canvas.orientation };
   const list = corrections.map((line, i) => `${i + 1}. ${line}`).join("\n");
 
   return `You are editing an existing photo-based coloring sheet.
 
-${photoLayoutPromptBlock(layout)}
+${photoLayoutPromptBlock(layout, canvas, "edit")}
 
 You receive:
 1) The CURRENT coloring sheet — the page to edit, and the base for your output.
@@ -289,6 +315,8 @@ export function buildPhotoPortraitPrompt(source: PhotoLayout, target: PhotoLayou
     : `- Extend the scene naturally to the left and right of the subjects (more of the room, yard, street, or landscape) so it reads as the same place and the same moment.
 - You may trim empty sky, ceiling, or ground at the very top and bottom, but never cut off a person's head or feet or a key object.`;
   return `You are reframing a REAL photograph from ${from.toLowerCase()} to ${toPortrait ? "portrait" : "landscape"}. The result must still be the same photograph — a photo, not a drawing.
+
+${printPagePromptBlock(target, "photo")}
 
 CANVAS (mandatory):
 - The reference photo is ${from}, about ${source.aspectRatio}.
