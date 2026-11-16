@@ -25,6 +25,7 @@ import {
   signedReadUrls,
 } from "@/server/storage/libraryFiles";
 import { scheduleThumbnails } from "@/server/storage/libraryThumbs";
+import { copyPhoto, revisionsByPhoto } from "@/server/photoCopy";
 import { quoted, recordActivity } from "@/server/activityService";
 import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } from "@/server/libraryAccess";
 import { mirrorImageBytes } from "@/lib/photo/mirrorImageServer";
@@ -606,6 +607,71 @@ export async function registerPhoto(
   const hydrated = await hydratePhotos([data], { userId, role: access.role });
   if (hydrated.error) return hydrated;
   return { data: hydrated.data![0], error: null };
+}
+
+/** Where "Add this photo to" puts the copy: an album the caller can add to, or a new one. */
+export type PhotoCopyDestination = { projectId: string } | { newAlbumName: string };
+
+/**
+ * Copy a photo (with every version and coloring page) into another album. The original stays put.
+ * The destination is one the caller owns or contributes to, or a new album of their own.
+ */
+export async function copyPhotoToAlbum(
+  userId: string,
+  photoId: string,
+  destination: PhotoCopyDestination,
+): Promise<ApiResult<{ project: LibraryProject; photoId: string }>> {
+  const found = await photoContext(userId, photoId);
+  if (found.error) return found;
+  const source = found.data!.row;
+
+  let target: { project: Row; ownerId: string; role: LibraryProjectRole; created: boolean };
+  if ("projectId" in destination) {
+    if (destination.projectId === source.project_id) return err("This photo is already in that album.", "INVALID");
+    const access = await accessFor(userId, destination.projectId);
+    if (access.error) return access;
+    const a = access.data!;
+    target = { project: a.project, ownerId: a.ownerId, role: a.role, created: false };
+  } else {
+    const created = await createProject(userId, destination.newAlbumName);
+    if (created.error) return created;
+    const { data: row, error } = await db().from("library_projects").select("*").eq("id", created.data!.id).single();
+    if (error) return err(error.message);
+    target = { project: row, ownerId: userId, role: "owner", created: true };
+  }
+  const projectId = target.project.id as string;
+
+  try {
+    const { data: last } = await db()
+      .from("library_photos")
+      .select("position")
+      .eq("project_id", projectId)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const position = ((last?.position as number | undefined) ?? -1) + 1;
+    const revisions = (await revisionsByPhoto([photoId])).get(photoId) ?? [];
+    const newPhotoId = await copyPhoto(source, revisions, {
+      projectId,
+      ownerId: target.ownerId,
+      position,
+      uploadedBy: userId,
+    });
+    const { count } = await db()
+      .from("library_photos")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId);
+    const project = projectFromRow(target.project, count ?? position + 1, {
+      role: target.role,
+      ownerName: null,
+    });
+    return { data: { project, photoId: newPhotoId }, error: null };
+  } catch (e) {
+    console.error(JSON.stringify({ level: "error", message: "library: photo copy failed", photoId, projectId, error: String(e) }));
+    // Don't leave an empty album behind when the photo never made it in.
+    if (target.created) await deleteProject(userId, projectId).catch(() => undefined);
+    return err("Couldn't add the photo to that album. Try again.");
+  }
 }
 
 /**

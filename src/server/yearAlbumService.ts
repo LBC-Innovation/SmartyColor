@@ -3,7 +3,8 @@ import type { ApiResult } from "@/lib/api/types";
 import type { LibraryProject, YearPhoto } from "@/lib/library/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { createProject } from "@/server/libraryService";
-import { copyObject, libraryPaths, signedReadUrls } from "@/server/storage/libraryFiles";
+import { libraryPaths, signedReadUrls } from "@/server/storage/libraryFiles";
+import { copyPhoto, revisionsByPhoto } from "@/server/photoCopy";
 
 /**
  * "Make a book of this year": list the photos in the caller's own albums uploaded this calendar
@@ -106,62 +107,6 @@ async function forEachLimited<T>(items: T[], limit: number, fn: (item: T, index:
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-/** Copy one photo, every version of it and its coloring pages into the new album. */
-async function copyPhoto(userId: string, projectId: string, photo: Row, revisions: Row[], position: number) {
-  const newPhotoId = crypto.randomUUID();
-  const mime = photo.mime_type as string;
-  const originalPath = libraryPaths.original(userId, projectId, newPhotoId, mime);
-  await copyObject(photo.storage_path as string, originalPath);
-
-  const revIds = new Map(revisions.map((r) => [r.id as string, crypto.randomUUID()]));
-  const revCopies = await Promise.all(
-    revisions.map(async (r) => {
-      const newId = revIds.get(r.id as string)!;
-      const path = libraryPaths.sheet(userId, projectId, newPhotoId, newId, r.mime_type as string);
-      await copyObject(r.storage_path as string, path);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, photo_id, user_id, storage_path, source_revision_id, ...rest } = r;
-      return {
-        ...rest,
-        id: newId,
-        photo_id: newPhotoId,
-        user_id: userId,
-        storage_path: path,
-        source_revision_id: source_revision_id ? revIds.get(source_revision_id as string) ?? null : null,
-      };
-    }),
-  );
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { id, project_id, user_id, storage_path, active_revision_id, created_at, updated_at, ...rest } = photo;
-  const { error } = await db()
-    .from("library_photos")
-    .insert({
-      ...rest,
-      id: newPhotoId,
-      project_id: projectId,
-      user_id: userId,
-      storage_path: originalPath,
-      position,
-      // Kept so this copy still counts as uploaded in the year it was taken into the app.
-      created_at,
-    });
-  if (error) throw new Error(error.message);
-
-  if (revCopies.length > 0) {
-    const { error: revError } = await db().from("library_sheet_revisions").insert(revCopies);
-    if (revError) throw new Error(revError.message);
-  }
-  const activeId = active_revision_id ? revIds.get(active_revision_id as string) : undefined;
-  if (activeId) {
-    const { error: activeError } = await db()
-      .from("library_photos")
-      .update({ active_revision_id: activeId })
-      .eq("id", newPhotoId);
-    if (activeError) throw new Error(activeError.message);
-  }
-}
-
 export async function createProjectFromPhotos(
   userId: string,
   name: string,
@@ -181,17 +126,11 @@ export async function createProjectFromPhotos(
   const byId = new Map(photos.map((p) => [p.id as string, p]));
   const ordered = ids.map((id) => byId.get(id)).filter((p): p is Row => Boolean(p));
 
-  const { data: revisions, error: revError } = await db()
-    .from("library_sheet_revisions")
-    .select("*")
-    .in("photo_id", ordered.map((p) => p.id as string))
-    .order("created_at", { ascending: true });
-  if (revError) return err(revError.message);
-  const revsByPhoto = new Map<string, Row[]>();
-  for (const r of revisions ?? []) {
-    const list = revsByPhoto.get(r.photo_id as string) ?? [];
-    list.push(r);
-    revsByPhoto.set(r.photo_id as string, list);
+  let revsByPhoto: Map<string, Row[]>;
+  try {
+    revsByPhoto = await revisionsByPhoto(ordered.map((p) => p.id as string));
+  } catch (e) {
+    return err(e instanceof Error ? e.message : "Could not read coloring pages");
   }
 
   const created = await createProject(userId, name);
@@ -201,7 +140,12 @@ export async function createProjectFromPhotos(
   let copied = 0;
   await forEachLimited(ordered, COPY_CONCURRENCY, async (photo, index) => {
     try {
-      await copyPhoto(userId, project.id, photo, revsByPhoto.get(photo.id as string) ?? [], index);
+      await copyPhoto(photo, revsByPhoto.get(photo.id as string) ?? [], {
+        projectId: project.id,
+        ownerId: userId,
+        position: index,
+        keepCreatedAt: true,
+      });
       copied++;
     } catch (e) {
       // One unreadable photo shouldn't sink the album; it's simply left out.

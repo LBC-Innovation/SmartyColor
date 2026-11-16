@@ -39,6 +39,8 @@ import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { BEST_PHOTOS, INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
 import { authedFetch } from "@/lib/api/client";
+import { copyPhotoToAlbum } from "@/lib/library/client";
+import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { GuestLimitScope } from "@/lib/guestLimit";
 import { formatCredits } from "@/lib/credits/money";
 import { freeEditsPerSheet, sheetUsageCostCents } from "@/lib/credits/pricing";
@@ -151,6 +153,7 @@ export function ColorfulMemoriesApp() {
     renameActiveProject,
     switchProject,
     refreshActiveProject,
+    upsertProject,
     photos,
     photosRef,
     pendingUploads,
@@ -964,6 +967,24 @@ export function ColorfulMemoriesApp() {
             closeEditor();
             deletePhoto(editorPhoto.id);
           }}
+          addToAlbum={
+            cloud && editorPhoto.remote
+              ? {
+                  albums: projects,
+                  currentAlbumId: activeProjectId,
+                  onAdd: async (destination) => {
+                    const res = await copyPhotoToAlbum(editorPhoto.remote!.photoId, destination);
+                    if (res.error) throw new Error(res.error.message);
+                    const meta = projectMetaFromLibrary(res.data!.project);
+                    upsertProject(meta);
+                    toast.success({
+                      title: "Photo added",
+                      message: `A copy is now in ${meta.name || "your new album"}${"newAlbumName" in destination ? ", your new album" : ""}.`,
+                    });
+                  },
+                }
+              : undefined
+          }
           onUndo={
             undo && undo.photoId === editorPhoto.id
               ? () => {
