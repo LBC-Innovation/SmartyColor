@@ -43,7 +43,8 @@ function PageStack({ pictures }: { pictures: string[] }) {
           .reverse()
           .map((src, i, all) => (
             <span
-              key={src}
+              // Its slot in the stack: the sources are full data URLs and can repeat.
+              key={all.length - i}
               className={cn(
                 "absolute inset-0 overflow-hidden rounded-md border border-gray-200 bg-white shadow-md transition-transform duration-300",
                 tilt[3 - all.length + i],

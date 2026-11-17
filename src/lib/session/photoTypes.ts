@@ -11,6 +11,11 @@ export type PhotoColoringGenerateRequest = {
   photoDataUrl: string;
   printPrefs: PrintPrefs;
   image?: PhotoImageSizeHint;
+  /**
+   * The page's shape when it should differ from the photo's: the page is drawn straight onto that
+   * canvas, recomposing the scene, with no reframed photo made first.
+   */
+  pageOrientation?: ReframeTarget;
 };
 
 /** Sent back when a photo that is already upright is offered for a portrait version. */
@@ -26,6 +31,11 @@ export const LANDSCAPE_VERSION_TITLE = "Landscape photo";
 
 /** Which way a photo is reframed to. */
 export type ReframeTarget = "portrait" | "landscape";
+
+/** Reads a page shape from a request body; anything else is no shape. */
+export function parseReframeTarget(value: unknown): ReframeTarget | undefined {
+  return value === "portrait" || value === "landscape" ? value : undefined;
+}
 
 export function reframeVersionTitle(target: ReframeTarget): string {
   return target === "landscape" ? LANDSCAPE_VERSION_TITLE : PORTRAIT_VERSION_TITLE;
@@ -57,4 +67,6 @@ export type PhotoColoringCorrectRequest = {
   sheetDataUrl: string;
   corrections: string[];
   printPrefs: PrintPrefs;
+  /** The shape of the page being edited, when it differs from the photo's (see the generate request). */
+  pageOrientation?: ReframeTarget;
 };

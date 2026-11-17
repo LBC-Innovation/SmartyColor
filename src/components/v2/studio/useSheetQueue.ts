@@ -17,6 +17,9 @@ export type BatchSummary = {
 
 type Job = { photoId: string; options?: GenerateOptions };
 
+/** A photo's job as the queue sees it: running or waiting, what it was asked for, and how many wait ahead of it. */
+export type QueueJob = { status: QueueStatus; options?: GenerateOptions; ahead: number };
+
 type Options = {
   run: (photoId: string, options?: GenerateOptions) => Promise<GenerateOutcome>;
   /** Once per batch, when the last job of it settles. */
@@ -44,6 +47,8 @@ export function useSheetQueue({ run, onBatchEnd }: Options) {
     stopped: null,
   });
   const [statuses, setStatuses] = useState<Record<string, QueueStatus>>({});
+  const [jobs, setJobs] = useState<Record<string, QueueJob>>({});
+  const runningOptionsRef = useRef<Map<string, GenerateOptions | undefined>>(new Map());
   const [failures, setFailures] = useState<Record<string, string>>({});
   const [progress, setProgress] = useState({ done: 0, total: 0 });
 
@@ -51,9 +56,17 @@ export function useSheetQueue({ run, onBatchEnd }: Options) {
   const engine = useMemo(() => {
     function sync() {
       const next: Record<string, QueueStatus> = {};
-      for (const job of pendingRef.current) next[job.photoId] = "queued";
-      for (const id of runningRef.current) next[id] = "running";
+      const nextJobs: Record<string, QueueJob> = {};
+      pendingRef.current.forEach((job, index) => {
+        next[job.photoId] = "queued";
+        nextJobs[job.photoId] = { status: "queued", options: job.options, ahead: index };
+      });
+      for (const id of runningRef.current) {
+        next[id] = "running";
+        nextJobs[id] = { status: "running", options: runningOptionsRef.current.get(id), ahead: 0 };
+      }
       setStatuses(next);
+      setJobs(nextJobs);
       const b = batchRef.current;
       setProgress({ done: b.ready + b.failed, total: b.total });
     }
@@ -68,6 +81,7 @@ export function useSheetQueue({ run, onBatchEnd }: Options) {
 
     function settle(job: Job, outcome: GenerateOutcome) {
       runningRef.current.delete(job.photoId);
+      runningOptionsRef.current.delete(job.photoId);
       const b = batchRef.current;
       if (outcome.kind === "success") {
         b.ready += 1;
@@ -91,6 +105,7 @@ export function useSheetQueue({ run, onBatchEnd }: Options) {
       while (runningRef.current.size < PAGE_QUEUE_CONCURRENCY && pendingRef.current.length > 0) {
         const job = pendingRef.current.shift()!;
         runningRef.current.add(job.photoId);
+        runningOptionsRef.current.set(job.photoId, job.options);
         void runRef
           .current(job.photoId, job.options)
           .catch((err: unknown): GenerateOutcome => ({
@@ -168,10 +183,13 @@ export function useSheetQueue({ run, onBatchEnd }: Options) {
   }, [running, queued]);
 
   const status = useCallback((photoId: string): QueueStatus | undefined => statuses[photoId], [statuses]);
+  const job = useCallback((photoId: string): QueueJob | undefined => jobs[photoId], [jobs]);
+  /** Photos with a page being drawn or waiting. */
+  const liveIds = useMemo(() => Object.keys(statuses), [statuses]);
 
   return useMemo(
-    () => ({ enqueue, cancel, status, isLive, running, queued, failures, markFailed, clearFailure, progress }),
-    [enqueue, cancel, status, isLive, running, queued, failures, markFailed, clearFailure, progress],
+    () => ({ enqueue, cancel, status, job, isLive, liveIds, running, queued, failures, markFailed, clearFailure, progress }),
+    [enqueue, cancel, status, job, isLive, liveIds, running, queued, failures, markFailed, clearFailure, progress],
   );
 }
 

@@ -35,6 +35,8 @@ import { activePageVersion, pageSourceVersion, pageVersions } from "@/components
 import { cn } from "@/lib/cn";
 import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import type { CardState } from "@/components/v2/studio/GalleryCard";
+import type { QueueStatus } from "@/components/v2/studio/useSheetQueue";
+import type { ReframeTarget } from "@/lib/session/photoTypes";
 import {
   normalizeV2SheetRevisions,
   type V2PhotoEntry,
@@ -72,6 +74,11 @@ type Props = {
   pdfBusy: "print" | "download" | null;
   /** Turn the page to the other shape: what the button says and what it costs. */
   shape: { label: string; costLabel: string | null } | null;
+  /**
+   * The page's job in the drawing queue: waiting for a free spot or being drawn, how many wait
+   * ahead of it, and the shape it is turning the page to (null for a redraw in the same shape).
+   */
+  job: { status: QueueStatus; ahead: number; reshapeTo: ReframeTarget | null } | null;
   onChangeShape: () => void;
   onToggleLeftOut: () => void;
   onDelete: () => void;
@@ -213,7 +220,18 @@ export function PageEditorModal(props: Props) {
   const shownSrc = view === "page" && pageVersion ? pageVersion.sheet.imageDataUrl : photoSrc;
   const fixDisabled = busy || !hasPage;
   const ShapeIcon = props.shape?.label.includes("landscape") ? RectangleHorizontal : RectangleVertical;
-  const shapeRow = props.shape ? (
+  const job = props.job;
+  const reshaping = job?.reshapeTo ?? null;
+  const aheadText = job && job.ahead > 0 ? `${job.ahead} ${job.ahead === 1 ? "page" : "pages"} ahead of it` : null;
+  const shapeRow = reshaping ? (
+    <ActionRow
+      icon={job!.status === "running" ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <Clock />}
+      label={`Making it ${reshaping}`}
+      detail={job!.status === "running" ? "Drawing…" : "In line"}
+      disabled
+      onClick={props.onChangeShape}
+    />
+  ) : props.shape ? (
     <ActionRow
       icon={<ShapeIcon />}
       label={props.shape.label}
@@ -376,14 +394,41 @@ export function PageEditorModal(props: Props) {
               )}
               {photo.correcting ? <V2WorkingOverlay variant="edit" label="Applying your change to the coloring page." /> : null}
               {state === "drawing" && hasPage && !photo.correcting ? (
-                <V2WorkingOverlay variant="edit" label="Drawing a new version of this page." />
+                reshaping ? (
+                  <V2WorkingOverlay
+                    variant="portrait"
+                    captions="reshape"
+                    label={`Drawing a ${reshaping} version of this page.`}
+                  />
+                ) : (
+                  <V2WorkingOverlay variant="edit" label="Drawing a new version of this page." />
+                )
+              ) : null}
+              {state === "queued" && hasPage ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/70 p-4 backdrop-blur-[2px]">
+                  <div
+                    role="status"
+                    className="flex max-w-xs flex-col items-center gap-1.5 rounded-2xl bg-white px-5 py-4 text-center shadow-lg shadow-v2-navy/10"
+                  >
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-v2-primary-light text-v2-primary">
+                      <Clock className="h-5 w-5" aria-hidden />
+                    </span>
+                    <p className="text-base font-semibold text-v2-ink">Waiting in line</p>
+                    <p className="text-sm text-v2-muted">
+                      {reshaping
+                        ? `Your ${reshaping} page starts as soon as a spot opens.`
+                        : "Your new version starts as soon as a spot opens."}
+                      {aheadText ? ` ${aheadText.charAt(0).toUpperCase()}${aheadText.slice(1)}.` : null}
+                    </p>
+                  </div>
+                </div>
               ) : null}
               {!hasPage && state !== "drawing" ? (
                 <div className="absolute inset-x-3 bottom-3 flex flex-col items-center gap-2 rounded-2xl bg-white/95 p-3 text-center shadow-lg">
                   {state === "queued" ? (
-                    <p className="flex items-center gap-2 text-sm font-semibold text-v2-muted">
+                    <p role="status" className="flex items-center gap-2 text-sm font-semibold text-v2-muted">
                       <Clock className="h-4 w-4" aria-hidden />
-                      Waiting for its turn…
+                      Waiting in line{aheadText ? ` · ${aheadText}` : "…"}
                     </p>
                   ) : (
                     <>
@@ -463,7 +508,7 @@ export function PageEditorModal(props: Props) {
                     onClick={props.onEditWithNote}
                   />
                   <ActionRow
-                    icon={state === "drawing" ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <RefreshCw />}
+                    icon={state === "drawing" && !reshaping ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <RefreshCw />}
                     label="Draw it again"
                     detail={makeCostLabel}
                     disabled={busy || state === "queued"}

@@ -27,6 +27,7 @@ import {
   type PhotoColoringGenerateRequest,
   type PhotoImageSizeHint,
   type PhotoPortraitRequest,
+  type ReframeTarget,
 } from "@/lib/session/photoTypes";
 import type { GeneratedSheet } from "@/lib/session/types";
 import type { VisionCostOperation } from "@/lib/visionCost/types";
@@ -164,18 +165,23 @@ async function hasLetterShape(file: { base64: string }, layout: PhotoLayout): Pr
   }
 }
 
+/**
+ * The US Letter canvas (3:4 or 4:3) a sheet is drawn on: the page's own shape when it was turned
+ * the other way, else the photo's.
+ */
+function pageCanvas(photoLayout: PhotoLayout, pageOrientation?: ReframeTarget): PhotoLayout {
+  return pageOrientation ? letterCanvas(pageOrientation) : letterCanvasFor(photoLayout);
+}
+
 async function drawFromReferences(
   operation: VisionCostOperation,
   prompt: string,
   references: ImageReference[],
-  photoBytes: Buffer,
-  printPrefs: PrintPrefs,
-  hint?: PhotoImageSizeHint,
+  layout: PhotoLayout,
+  showTitle: boolean,
   /** Sheet being edited; the result is matched to its stroke weight. */
   weightReferenceBase64?: string,
 ): Promise<GeneratedSheet> {
-  // Whatever the photo's shape, the sheet is drawn on a US Letter canvas (3:4 or 4:3).
-  const layout = letterCanvasFor(await layoutForPhotoBytes(photoBytes, printPrefs, hint));
   const images = createImageGenerator();
   const request = { operation, prompt, references, layout, purpose: "lineArt" as const };
 
@@ -194,7 +200,7 @@ async function drawFromReferences(
     file = await fitToLayout(file, layout);
   }
 
-  return toSheet(file, printPrefs.showTitle, weightReferenceBase64);
+  return toSheet(file, showTitle, weightReferenceBase64);
 }
 
 export function createPhotoHandlers(): Pick<
@@ -261,7 +267,9 @@ export function createPhotoHandlers(): Pick<
     async photoToColoring(input: PhotoColoringGenerateRequest) {
       const photo = await photoForModel(parsePhotoDataUrl(input.photoDataUrl));
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
-      const prompt = buildPhotoColoringPrompt(input.printPrefs, layout);
+      const canvas = pageCanvas(layout, input.pageOrientation);
+      const prompt = buildPhotoColoringPrompt(input.printPrefs, layout, canvas);
+      const reshaped = canvas.orientation !== layout.orientation;
 
       return drawFromReferences(
         "photoToColoring",
@@ -270,13 +278,13 @@ export function createPhotoHandlers(): Pick<
           {
             base64: photo.base64,
             mediaType: photo.mediaType,
-            caption:
-              "REFERENCE PHOTOGRAPH — trace the FULL frame faithfully (all people, full width). Outlines only: never fill regions with solid black. Do not zoom, crop, or add background scribbles.",
+            caption: reshaped
+              ? `REFERENCE PHOTOGRAPH — draw every person and key object in it faithfully, recomposed for a ${canvas.orientation} page as the canvas rules say. Outlines only: never fill regions with solid black. Do not add people, objects, or background scribbles.`
+              : "REFERENCE PHOTOGRAPH — trace the FULL frame faithfully (all people, full width). Outlines only: never fill regions with solid black. Do not zoom, crop, or add background scribbles.",
           },
         ],
-        photo.bytes,
-        input.printPrefs,
-        input.image,
+        canvas,
+        input.printPrefs.showTitle,
       );
     },
 
@@ -285,10 +293,12 @@ export function createPhotoHandlers(): Pick<
       const sheet = parsePhotoDataUrl(input.sheetDataUrl);
       const sheetInput = await sheetForModel(sheet);
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
+      const canvas = pageCanvas(layout, input.pageOrientation);
       const prompt = buildPhotoCorrectionPrompt(
         input.printPrefs,
         input.corrections,
         layout,
+        canvas,
       );
 
       // The current sheet goes first: it is the page being edited, and the image models hold the
@@ -311,9 +321,8 @@ export function createPhotoHandlers(): Pick<
               "ORIGINAL PHOTOGRAPH — reference only, for the look of details a request asks about. Do not redraw the page from it or undo differences between it and the current sheet.",
           },
         ],
-        photo.bytes,
-        input.printPrefs,
-        input.image,
+        canvas,
+        input.printPrefs.showTitle,
         sheet.base64,
       );
     },

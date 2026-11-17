@@ -161,12 +161,17 @@ export function photoLayoutPromptBlock(
   const sameShape = source.aspectRatio === canvas.aspectRatio;
   const wider = layoutRatio(source) > layoutRatio(canvas);
   const extra = wider ? "above and below" : "to the left and right";
+  // A page turned to the other shape than its photo (a landscape photo on a portrait page, or the
+  // reverse) is recomposed in the one drawing, rather than reframing the photo first.
+  const reshape = mode === "trace" && source.orientation !== canvas.orientation && source.aspectRatio !== "1:1";
   const fit =
     mode === "edit"
       ? `- If the CURRENT sheet is not this shape, keep its drawing exactly as it is and fill the extra space ${extra} with plain white, or only continue a line that already runs off its edge (a floor, horizon, or wall). Do not redraw, rescale unevenly, or rearrange the drawing.`
-      : sameShape
-        ? `- The photo already has the page's shape: keep its framing exactly.`
-        : `- The photo is ${wider ? "wider" : "narrower"} than the page. Fit the WHOLE photo onto the page — every person and key object, nothing cropped, nothing stretched or squashed. In the extra space ${extra}, only continue what is already visible at the photo's edges (sky, wall, floor, grass) with a few long, simple lines, or leave it plain white. Never invent people, objects, or scenery to fill it.`;
+      : reshape
+        ? reshapeRules(canvas.orientation === "portrait")
+        : sameShape
+          ? `- The photo already has the page's shape: keep its framing exactly.`
+          : `- The photo is ${wider ? "wider" : "narrower"} than the page. Fit the WHOLE photo onto the page — every person and key object, nothing cropped, nothing stretched or squashed. In the extra space ${extra}, only continue what is already visible at the photo's edges (sky, wall, floor, grass) with a few long, simple lines, or leave it plain white. Never invent people, objects, or scenery to fill it.`;
   const lines = [
     printPagePromptBlock(canvas, mode === "edit" ? "edit" : "lineArt"),
     "",
@@ -176,9 +181,31 @@ export function photoLayoutPromptBlock(
   ];
   if (mode === "trace") {
     lines.push(
-      `- Draw the COMPLETE shot — every person and major object, with the same left-to-right composition, headroom, and ground space. Do NOT zoom in or reframe on one face.`,
+      reshape
+        ? `- Draw EVERY person and major object from the photo, in the same left-to-right order. Do NOT zoom in or reframe on one face.`
+        : `- Draw the COMPLETE shot — every person and major object, with the same left-to-right composition, headroom, and ground space. Do NOT zoom in or reframe on one face.`,
       `- Leave open sky/ground areas mostly empty white — no random lines, hatching, or texture.`,
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * Recomposing a photo onto a page of the other shape, as line art: the same moment as if it had
+ * been photographed that way round, not the photo shrunk onto the page with empty bands.
+ */
+function reshapeRules(toPortrait: boolean): string {
+  return toPortrait
+    ? [
+        `- RECOMPOSE for a portrait page: draw the same moment as if it had been photographed in portrait. This is not a shrunken copy of the landscape photo with empty bands above and below.`,
+        `- The people and key objects fill most of the page's width, at their real proportions — never stretched, squashed, or distorted.`,
+        `- You may leave out empty background at the far left and right of the photo, but never cut off a person, a pet, a key object, or any part of one (heads, hands, feet stay on the page).`,
+        `- Above and below the subjects, only continue what the photo already shows there (sky, ceiling, wall, floor, ground, grass) with a few long, simple outline lines. Never invent people, animals, objects, buildings, or scenery to fill the space.`,
+      ].join("\n")
+    : [
+        `- RECOMPOSE for a landscape page: draw the same moment as if it had been photographed in landscape. This is not a shrunken copy of the portrait photo with empty bands at the sides.`,
+        `- The people and key objects fill most of the page's height, at their real proportions — never stretched, squashed, or distorted.`,
+        `- You may leave out empty sky, ceiling, or ground at the very top and bottom of the photo, but never cut off a person, a pet, a key object, or any part of one (heads, hands, feet stay on the page).`,
+        `- To the left and right of the subjects, only continue what the photo already shows there (the room, yard, street, wall, ground) with a few long, simple outline lines. Never invent people, animals, objects, buildings, or scenery to fill the space.`,
+      ].join("\n");
 }

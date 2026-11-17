@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/cn";
-import { useLoadingCaption } from "@/components/v2/useLoadingCaption";
+import { useLoadingCaption, type LoadingCaptionSet } from "@/components/v2/useLoadingCaption";
 
 const SCRIBBLE = "M10 52 C 22 20, 34 20, 40 46 S 58 70, 66 40 S 86 12, 94 38 S 108 60, 112 30";
 
@@ -10,6 +10,8 @@ type V2WorkingOverlayProps = {
   variant: "edit" | "portrait";
   /** Read once by screen readers. */
   label: string;
+  /** The rotating lines; the variant's own set unless given. */
+  captions?: LoadingCaptionSet;
   className?: string;
 };
 
@@ -17,8 +19,8 @@ type V2WorkingOverlayProps = {
  * Covers an image while the studio works on it, with a small looping drawing
  * and rotating captions instead of a spinner and a clock.
  */
-export function V2WorkingOverlay({ variant, label, className }: V2WorkingOverlayProps) {
-  const { caption, key } = useLoadingCaption(variant);
+export function V2WorkingOverlay({ variant, label, captions, className }: V2WorkingOverlayProps) {
+  const { caption, key } = useLoadingCaption(captions ?? variant);
 
   return (
     <div

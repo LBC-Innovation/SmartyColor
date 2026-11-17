@@ -19,7 +19,6 @@ type Props = {
   autoPortrait: boolean;
   onAutoPortraitChange: (on: boolean) => void;
   pagePriceCents: number | null;
-  portraitPriceCents: number | null;
   /** Pages the album's purchase code still includes; null when it has no code. */
   codePagesLeft?: number | null;
   onUpload: (files: File[]) => void;
@@ -85,7 +84,6 @@ export function AddPhotosModal({
   autoPortrait,
   onAutoPortraitChange,
   pagePriceCents,
-  portraitPriceCents,
   onUpload,
   onClose,
   codePagesLeft = null,
@@ -142,11 +140,6 @@ export function AddPhotosModal({
       : pagePriceCents != null
         ? `${formatCredits(pagePriceCents)} per page${codePagesLeft != null ? " extra" : ""}`
         : "Uses credit"
-    : "Free to try";
-  const portraitCost = signedIn
-    ? portraitPriceCents != null
-      ? `+ ${formatCredits(portraitPriceCents)} per photo`
-      : null
     : "Free to try";
 
   return (
@@ -275,11 +268,11 @@ export function AddPhotosModal({
             />
             <SwitchRow
               label="Convert landscape to portrait"
-              hint="Wide photos are extended to fill a tall page"
-              cost={portraitCost}
+              hint="Wide photos are drawn to fill a tall page"
+              cost={null}
               on={autoPortrait}
               onChange={onAutoPortraitChange}
-              info="Portrait photos work better in a printed book: book pages are tall, so wide photos print small with big empty bands. Converting fills the page."
+              info="Portrait photos work better in a printed book: book pages are tall, so wide photos print small with big empty bands. Converting draws each wide photo's page to fill the tall page."
             />
           </div>
         </section>

@@ -24,7 +24,9 @@ import { INSUFFICIENT_CREDITS_CODE, type SheetUsageKind } from "@/lib/credits/pr
 import {
   PHOTO_MAX_CORRECTIONS,
   PHOTO_MAX_CORRECTION_CHARS,
+  parseReframeTarget,
   type PhotoImageSizeHint,
+  type ReframeTarget,
 } from "@/lib/session/photoTypes";
 import { withVisionRequest } from "@/server/visionAttribution";
 
@@ -39,6 +41,7 @@ type Body =
       photoDataUrl: string;
       printPrefs?: PrintPrefs;
       image?: PhotoImageSizeHint;
+      pageOrientation?: ReframeTarget;
     }
   | {
       mode: "correct";
@@ -47,10 +50,12 @@ type Body =
       corrections: string[];
       printPrefs?: PrintPrefs;
       image?: PhotoImageSizeHint;
+      pageOrientation?: ReframeTarget;
     }
   /* Cloud library (signed-in): bytes are read from storage and the result is stored as a revision. */
   /* sourceRevisionId: draw from a portrait version of the photo instead of the upload. */
-  | { mode: "generate-library"; photoId: string; sourceRevisionId?: string }
+  /* pageOrientation: draw the upload straight onto a page of that shape (no reframed photo). */
+  | { mode: "generate-library"; photoId: string; sourceRevisionId?: string; pageOrientation?: ReframeTarget }
   | { mode: "correct-library"; photoId: string; revisionId: string; corrections: string[] };
 
 function mergePrintPrefs(raw?: PrintPrefs): PrintPrefs {
@@ -111,6 +116,7 @@ async function handlePost(request: Request) {
           photoDataUrl: photo.dataUrl,
           printPrefs,
           image,
+          pageOrientation: parseReframeTarget(body.pageOrientation),
         });
         return Response.json({ sheet });
       } catch (error) {
@@ -175,6 +181,7 @@ async function handlePost(request: Request) {
           corrections,
           printPrefs,
           image,
+          pageOrientation: parseReframeTarget(body.pageOrientation),
         });
         return Response.json({ sheet });
       } catch (error) {
@@ -277,6 +284,14 @@ async function handleLibraryModeForUser(
     body.mode === "generate-library" ? body.sourceRevisionId : current!.data!.sourceRevisionId;
   let source: { dataUrl: string; printPrefs: PrintPrefs; image?: PhotoImageSizeHint };
   let meta: RevisionMeta | undefined;
+  // A page drawn straight from the upload in the other shape: drawn, edited and stored in that shape.
+  const pageOrientation =
+    body.mode === "generate-library"
+      ? parseReframeTarget(body.pageOrientation)
+      : parseReframeTarget(current!.data!.orientation);
+  if (body.mode === "generate-library" && body.pageOrientation !== undefined && !pageOrientation) {
+    return Response.json({ error: "pageOrientation must be portrait or landscape." }, { status: 400 });
+  }
   if (sourceRevisionId) {
     const version = await revisionDataUrlById(userId, sourceRevisionId);
     timer.mark("loadSourceVersion");
@@ -295,7 +310,10 @@ async function handleLibraryModeForUser(
       printPrefs,
       image: record.width && record.height ? { width: record.width, height: record.height } : undefined,
     };
+    if (pageOrientation) meta = { orientation: pageOrientation };
   }
+  // A reframed photo already has its page's shape; only a page of the upload is turned.
+  const sheetOrientation = sourceRevisionId ? undefined : pageOrientation;
 
   const sheet = current
     ? await ai.correctPhotoColoring({
@@ -304,11 +322,13 @@ async function handleLibraryModeForUser(
         corrections,
         printPrefs: source.printPrefs,
         image: source.image,
+        pageOrientation: sheetOrientation,
       })
     : await ai.photoToColoring({
         photoDataUrl: source.dataUrl,
         printPrefs: source.printPrefs,
         image: source.image,
+        pageOrientation: sheetOrientation,
       });
 
   timer.mark("model");
