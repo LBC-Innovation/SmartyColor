@@ -180,8 +180,8 @@ export const BEST_PHOTOS = {
 
 export const WHY_FAMILIES: WhyBlock = {
   eyebrow: "Why it's different",
-  title: "It's them on the page",
-  body: "A store-bought coloring book gets a few scribbles and a spot on the shelf. A page with your own kids, your own dog and your own backyard gets colored slowly, shown to everyone, and kept.",
+  title: "Color your own memories",
+  body: "Most coloring books are full of pictures that mean nothing to you. These are yours: last summer's hike, the kids at the beach, your parents on their wedding day. They're the kind of pages you take your time with, and keep.",
   points: [
     { icon: "message", title: "Change anything by typing", body: "“Give him a shave.” “Take out the stroller.” It draws the page again." },
     { icon: "truck", title: "A real book on real paper", body: "Stapled, spiral or paperback. Printed in the US and mailed wherever you like." },
@@ -197,7 +197,7 @@ export const WHY_FAMILIES: WhyBlock = {
   useCasesTitle: "People make them for",
   useCases: [
     "Grandparents who love to color",
-    "Quiet time at home",
+    "A quiet evening to yourself",
     "Birthday parties",
     "Holiday visits",
     "Road trips",
