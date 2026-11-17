@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import type { BookOrder } from "@/components/v2/studio/order/useBookOrder";
@@ -9,17 +9,21 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 /**
  * The book being built, as one card beside the gallery (desktop): the cover and title on top,
  * the steps in a scrolling middle, and the buy button pinned at the bottom. Closing it keeps the
- * book; the gallery's book card picks it back up.
+ * book; the gallery's book card picks it back up. It is docked to the window's bottom edge: it
+ * rises from there when opened and sinks back when closed.
  */
 export function BookOrderCard({
   order,
   onClose,
   footer,
+  leaving = false,
   children,
 }: {
   order: BookOrder;
   onClose: () => void;
   footer?: ReactNode;
+  /** True while it sinks back down after closing. */
+  leaving?: boolean;
   children: ReactNode;
 }) {
   const printed = !order.isDigital && order.formatChosen;
@@ -33,8 +37,10 @@ export function BookOrderCard({
   return (
     <section
       aria-label="Your book"
-      // Docked: fills down to the window's bottom edge, so only the top corners round.
-      className="cm-card-in flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-3xl rounded-b-none border border-b-0 border-gray-200 bg-white shadow-[0_-8px_32px_-12px_rgb(30_27_75/0.25)]"
+      aria-hidden={leaving || undefined}
+      // Only the top corners round. The shadow stays within the 16px above the card, where the
+      // studio's frame would otherwise clip it.
+      className={`${leaving ? "cm-dock-sink" : "cm-dock-rise"} flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-3xl rounded-b-none border border-b-0 border-gray-200 bg-white shadow-[0_0_20px_-6px_rgb(30_27_75/0.22)]`}
     >
       <header className="flex shrink-0 items-center gap-3 border-b border-gray-100 bg-gradient-to-br from-v2-primary-light/70 to-white px-5 py-4">
         <div className="w-11 shrink-0 overflow-hidden rounded-sm shadow-md ring-1 ring-black/5">
@@ -71,4 +77,23 @@ export function BookOrderCard({
       {footer ? <div className="shrink-0 border-t border-gray-100 bg-white px-5 py-4">{footer}</div> : null}
     </section>
   );
+}
+
+/** How long the card takes to sink back down; matches `.cm-dock-sink`. */
+const SINK_MS = 360;
+
+/**
+ * Keeps the book card on screen for a moment after it closes, so it can sink back down instead
+ * of vanishing. `children` gets `leaving`, true while it sinks.
+ */
+export function DockedBookPresence({ open, children }: { open: boolean; children: (leaving: boolean) => ReactNode }) {
+  const [shown, setShown] = useState(open);
+  // Opening shows it right away (during render, so the gallery and the card move together).
+  if (open && !shown) setShown(true);
+  useEffect(() => {
+    if (open || !shown) return;
+    const timer = setTimeout(() => setShown(false), SINK_MS);
+    return () => clearTimeout(timer);
+  }, [open, shown]);
+  return shown ? children(!open) : null;
 }

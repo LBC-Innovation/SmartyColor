@@ -32,7 +32,7 @@ import { GallerySkeletonCard, type CardState } from "@/components/v2/studio/Gall
 import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
 import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
-import { BookOrderCard } from "@/components/v2/studio/order/BookOrderCard";
+import { BookOrderCard, DockedBookPresence } from "@/components/v2/studio/order/BookOrderCard";
 import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, formatSummary, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
 import { BookPromoCard, type BookProgress } from "@/components/v2/studio/order/BookPromoCard";
 import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
@@ -802,12 +802,13 @@ export function ColorfulMemoriesApp() {
           {liveMessage}
         </p>
 
-        <div className="flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
-          {/* Gallery: full width on phones, 60% on desktop */}
+        <div className="relative flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
+          {/* Gallery: full width on phones, 60% on desktop while the book is open. The width eases
+              as the book rises or sinks, and the cards glide to their new spots (StudioGallery). */}
           <main
             ref={galleryRef}
             aria-label="Studio"
-            className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 ${
+            className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 lg:transition-[width] lg:duration-500 lg:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
               bookCardOpen ? "lg:w-[58%] xl:w-[60%]" : "lg:w-full"
             } ${
               deletion.active
@@ -967,14 +968,21 @@ export function ColorfulMemoriesApp() {
             ) : null}
           </main>
 
-          {/* The book being built: a card beside the gallery on desktop, only once they start it */}
-          {bookCardOpen ? (
-            <aside className="hidden min-h-0 lg:flex lg:w-[42%] lg:flex-col lg:pt-4 lg:pr-4 xl:w-[40%] xl:pr-6" aria-label="Your book">
-              <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton}>
-                {panel}
-              </BookOrderCard>
-            </aside>
-          ) : null}
+          {/* The book being built: a card docked to the bottom edge beside the gallery on desktop,
+              only once they start it. Positioned over the gallery's freed-up space, so the gallery
+              can ease its width instead of being squeezed. */}
+          <DockedBookPresence open={bookCardOpen}>
+            {(leaving) => (
+              <aside
+                className="hidden lg:absolute lg:inset-y-0 lg:right-0 lg:z-30 lg:flex lg:w-[42%] lg:flex-col lg:pt-4 lg:pr-4 xl:w-[40%] xl:pr-6"
+                aria-label="Your book"
+              >
+                <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton} leaving={leaving}>
+                  {panel}
+                </BookOrderCard>
+              </aside>
+            )}
+          </DockedBookPresence>
         </div>
       </div>
 

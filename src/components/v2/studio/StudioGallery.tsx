@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type HTMLAttributes } from "react";
+import { useRef, useState, type HTMLAttributes } from "react";
+import { useGridGlide } from "@/components/v2/studio/useGridGlide";
 import {
   DndContext,
   DragOverlay,
@@ -113,6 +114,8 @@ export function StudioGallery({
   showReorderHint = true,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  useGridGlide(gridRef);
   const [hintSeen, setHintSeen] = useState(readHintSeen);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -212,6 +215,7 @@ export function StudioGallery({
       ) : null}
       <SortableContext items={photos.map((p) => p.id)} strategy={rectSortingStrategy}>
         <div
+          ref={gridRef}
           className={cn(
             "grid gap-3 lg:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]",
             // One page so far: a single big centered column below lg, so the first page is easy to see.
