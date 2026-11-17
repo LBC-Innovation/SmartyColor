@@ -287,7 +287,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     primaryCta: PRIMARY_CTA,
     trustBullets: ["No account to start", "First page in about a minute", "Your photos stay private"],
     hero: FAMILY_BALCONY,
-    heroPhoto: "living-room-floor",
+    heroPhoto: "new-sibling",
     sections: { ...CONSUMER_SECTIONS, occasions: true },
     why: WHY_FAMILIES,
     ideas: HOME_IDEAS,
@@ -555,7 +555,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     trustBullets: ["Try a free page first", "Printed in the US", "Larger orders quoted individually"],
     // TODO(owner): swap in a photographer-session or event photo and its coloring page, with written consent.
     hero: FAMILY_BALCONY,
-    heroPhoto: "birthday-table",
+    heroPhoto: "holiday-party",
     sections: { ...ALL_SECTIONS_OFF, howItWorks: true, partnerContact: true, bestPhotos: true },
     why: {
       eyebrow: "The idea",
@@ -722,7 +722,7 @@ export const OCCASIONS = {
     {
       intent: "partners",
       icon: "briefcase",
-      image: "birthday-table",
+      image: "holiday-party",
       title: "Photographers and businesses",
       body: "Photographers, schools and event planners: give families a coloring book of their day.",
       /** This card goes to its page instead of starting a free page. */
@@ -813,7 +813,16 @@ export type ProductPhoto = {
  */
 export const PRODUCT_PHOTOS: ProductPhoto[] = [];
 
-export type LifestyleId = "kitchen-table" | "living-room-floor" | "fridge" | "birthday-table" | "dog-coloring" | "mail-day" | "evening-counter";
+export type LifestyleId =
+  | "new-sibling"
+  | "holiday-party"
+  | "kitchen-table"
+  | "living-room-floor"
+  | "fridge"
+  | "birthday-table"
+  | "dog-coloring"
+  | "mail-day"
+  | "evening-counter";
 
 export type LifestylePhoto = {
   src: string;
@@ -834,6 +843,24 @@ export type LifestylePhoto = {
  * node scripts/prepare-lifestyle-images.mjs, then set `ready`, `width` and `height` here.
  */
 export const LIFESTYLE_PHOTOS: Record<LifestyleId, LifestylePhoto> = {
+  "new-sibling": {
+    src: "/marketing/lifestyle/new-sibling.webp",
+    alt: "A mom holding her newborn on the couch while her toddler colors a page of herself hugging the baby",
+    caption: "Meet the new baby",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
+  "holiday-party": {
+    src: "/marketing/lifestyle/holiday-party.webp",
+    alt: "Four friends at a holiday party laughing and holding up colored-in pages of their trips together and their dog",
+    caption: "Holiday night in",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
+  },
   "kitchen-table": {
     src: "/marketing/lifestyle/kitchen-table.webp",
     alt: "A grandmother and her granddaughter laughing over a coloring page of the two of them",
@@ -907,7 +934,7 @@ export const PHOTO_BAND = {
   eyebrow: "Who's coloring",
   title: "Kids, grandparents and everyone in between",
   body: "A rainy Saturday on the living room floor. Grandma's kitchen table. The end of a long party table. The best ones end up on the fridge.",
-  ids: ["kitchen-table", "living-room-floor", "fridge", "birthday-table", "dog-coloring"] as LifestyleId[],
+  ids: ["new-sibling", "kitchen-table", "living-room-floor", "fridge", "birthday-table", "dog-coloring"] as LifestyleId[],
 };
 
 /** One phone snapshot in the "What people are making" gallery. */
