@@ -51,6 +51,7 @@ import {
 } from "@/components/v2/marketing/LandingSections";
 import { BeforeAfter, ICONS, LifestyleImage, PrintedBook, SectionHeading } from "@/components/v2/marketing/landingParts";
 import { CompareSlider } from "@/components/v2/marketing/CompareSlider";
+import { MadeGallery } from "@/components/v2/marketing/MadeGallery";
 import { cn } from "@/lib/cn";
 
 export type LandingNumbers = NumbersInput;
@@ -242,6 +243,9 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
         {/* ------------------------------------------- how it works, book */}
         {sections.howItWorks && !sections.partnerContact ? <HowItWorks pair={page.hero} coverTitle={page.coverTitle} /> : null}
         {home && sections.finishedBook ? <FinishedBookSection values={values} coverTitle={page.coverTitle} /> : null}
+
+        {/* Proof right after the explanation: real pages, out in the world. */}
+        {sections.madeGallery ? <MadeGallery /> : null}
 
         {/* -------------------------------------------------- why, ideas */}
         <WhySection why={page.why} showBestPhotos={sections.bestPhotos} />

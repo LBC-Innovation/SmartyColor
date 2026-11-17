@@ -106,6 +106,8 @@ export type LandingSections = {
   partnerContact: boolean;
   /** Photos that come out best. */
   bestPhotos: boolean;
+  /** "What people are making": the swipeable gallery of phone snapshots (MADE_PHOTOS). */
+  madeGallery: boolean;
 };
 
 export type LandingPageCopy = {
@@ -251,6 +253,7 @@ const ALL_SECTIONS_OFF: LandingSections = {
   giftTiming: false,
   partnerContact: false,
   bestPhotos: false,
+  madeGallery: false,
 };
 
 const CONSUMER_SECTIONS: LandingSections = {
@@ -261,6 +264,7 @@ const CONSUMER_SECTIONS: LandingSections = {
   reassurance: true,
   priceLine: true,
   bestPhotos: true,
+  madeGallery: true,
 };
 
 export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
@@ -894,6 +898,57 @@ export const PHOTO_BAND = {
   title: "Kids, grandparents and everyone in between",
   body: "A rainy Saturday on the living room floor. Grandma's kitchen table. The end of a long party table. The best ones end up on the fridge.",
   ids: ["kitchen-table", "living-room-floor", "fridge", "birthday-table", "dog-coloring"] as LifestyleId[],
+};
+
+/** One phone snapshot in the "What people are making" gallery. */
+export type MadePhoto = {
+  /** Built by scripts/prepare-made-images.mjs: <src> plus -400 and -800 siblings. */
+  src: string;
+  alt: string;
+  /** Short line on the card, about the moment. No names, quotes or places unless the sender agreed to them. */
+  caption: string;
+  width: number;
+  height: number;
+};
+
+/**
+ * "What people are making": phone photos of finished pages out in the world. Newest first; the
+ * gallery slides once there are more than fit. To add one: get the sender's permission to show it,
+ * run node scripts/prepare-made-images.mjs <photo> <id>, then add the entry here.
+ */
+export const MADE_PHOTOS: MadePhoto[] = [
+  {
+    src: "/marketing/made/road-trip.webp",
+    alt: "Two kids in car seats coloring pages of their family at the beach; the girl holds hers up and laughs",
+    caption: "Kept them busy the whole drive to the beach",
+    width: 1024,
+    height: 1536,
+  },
+  {
+    src: "/marketing/made/picnic-dock.webp",
+    alt: "A mom, grandpa and two kids at a picnic table, each holding a colored copy of the same family photo on a dock",
+    caption: "Printed one for everybody at the family picnic",
+    width: 1024,
+    height: 1536,
+  },
+  {
+    src: "/marketing/made/wedding-page.webp",
+    alt: "An older woman coloring the flowers on a page made from her wedding photo while her daughter watches",
+    caption: "Mom coloring her own wedding picture",
+    width: 1024,
+    height: 1536,
+  },
+];
+
+export const MADE_GALLERY = {
+  eyebrow: "From families like yours",
+  title: "What people are making",
+  body: "Car rides, family picnics, a visit with Grandma. Here are a few we love.",
+  prev: "Previous photos",
+  next: "More photos",
+  shareLead: "Made something?",
+  shareLink: "Send us a photo",
+  shareSubject: "A photo of our coloring pages",
 };
 
 /** The real before/after, shown big. The switcher lists every real pair on the page. */
