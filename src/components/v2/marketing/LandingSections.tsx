@@ -68,6 +68,7 @@ export function HolidayToast({ label, raised }: { label: string; raised: boolean
   return (
     <aside
       aria-label={HOLIDAY_BLOCK.title}
+      data-fab-avoid
       className={cn(
         "cm-toast-in fixed inset-x-3 z-50 mx-auto flex max-w-3xl items-center gap-3 rounded-2xl border border-v2-primary/25 bg-white py-2.5 pl-3 pr-1.5 text-v2-ink shadow-[0_18px_48px_rgb(36_26_77/0.3)] transition-[bottom] duration-200 motion-reduce:transition-none sm:gap-4 sm:py-3 sm:pl-4",
         raised ? "bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:bottom-6" : "bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-6",
