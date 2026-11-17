@@ -19,7 +19,6 @@ export const PERMISSION_META = [
   { key: "finance:view", name: "View financials", description: "Can open the financials dashboard: cash flow, profit and loss, and margins by product" },
   { key: "finance:manage", name: "Manage financials", description: "Can enter fixed and operating costs, card fees and the opening cash balance on the financials dashboard" },
   { key: "costs:viewai", name: "View AI costs", description: "Can see what AI calls cost us on the AI costs page" },
-  { key: "usermanage:selfmanage", name: "Full self-management", description: "Can manage their own profile, email, password and account (not their own permissions)" },
 ] as const;
 
 export type Permission = (typeof PERMISSION_META)[number]["key"];

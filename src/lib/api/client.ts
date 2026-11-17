@@ -360,8 +360,8 @@ export function adminUpdateUser(
   });
 }
 
-export function adminUpdateUserEmail(id: string, email: string): Promise<ApiResult<{ email: string }>> {
-  return request<{ email: string }>(`/admin/users/${id}/email`, {
+export function adminUpdateUserEmail(id: string, email: string): Promise<ApiResult<{ email: string; pending?: boolean }>> {
+  return request<{ email: string; pending?: boolean }>(`/admin/users/${id}/email`, {
     method: "PATCH",
     body: JSON.stringify({ email }),
   });
