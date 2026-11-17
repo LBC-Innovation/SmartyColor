@@ -1116,24 +1116,31 @@
   }
 }
 
-/* ---- Studio: the book card slides in beside the gallery ---- */
-@keyframes cm-card-in {
+/* ---- Studio: the book panel rises from the bottom edge beside the gallery, and sinks back
+   when closed. The gallery's width eases at the same pace (see ColorfulMemoriesApp). ---- */
+@keyframes cm-dock-rise {
   from {
-    transform: translateX(16px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
+    transform: translateY(100%);
   }
 }
 
-.cm-card-in {
-  animation: cm-card-in 240ms ease-out;
+@keyframes cm-dock-sink {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.cm-dock-rise {
+  animation: cm-dock-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cm-dock-sink {
+  animation: cm-dock-sink 360ms cubic-bezier(0.55, 0, 0.75, 0.3) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cm-card-in {
+  .cm-dock-rise,
+  .cm-dock-sink {
     animation: none;
   }
 }

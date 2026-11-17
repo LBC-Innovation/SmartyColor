@@ -36,6 +36,8 @@ export type GalleryCardProps = {
   leftOut: boolean;
   failureMessage?: string;
   selectMode: boolean;
+  /** The book panel is open: shows the check that keeps the page in the book or leaves it out. */
+  bookMode?: boolean;
   selected: boolean;
   onOpen: (view: "page" | "photo") => void;
   onMake: () => void;
@@ -194,6 +196,7 @@ export function GalleryCard({
   leftOut,
   failureMessage,
   selectMode,
+  bookMode = false,
   selected,
   onOpen,
   onMake,
@@ -234,6 +237,8 @@ export function GalleryCard({
         className={cn(
           "relative overflow-hidden rounded-2xl border bg-v2-bg-subtle shadow-sm transition",
           selected ? "border-v2-primary ring-2 ring-v2-primary/30" : "border-gray-200",
+          // Left out of the book: washed out and gray behind a dashed edge, so it reads as set aside.
+          leftOut && !selected && "border-dashed border-gray-300 opacity-55 grayscale shadow-none",
           isOverlay && "scale-[1.04] border-v2-primary shadow-xl shadow-v2-primary/25",
         )}
       >
@@ -273,7 +278,6 @@ export function GalleryCard({
             type="button"
             className={cn(
               "absolute bottom-2 right-2 aspect-[3/4] w-[52%] overflow-hidden rounded-lg border-2 border-white bg-white shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
-              leftOut && "opacity-50",
             )}
             aria-label={`Open the coloring page for ${label}`}
             onClick={() => (selectMode ? onToggleSelect() : onOpen("page"))}
@@ -369,6 +373,31 @@ export function GalleryCard({
         </span>
       ) : (
         <>
+          {bookMode && (hasPage || leftOut) ? (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={!leftOut}
+              className={cn(
+                "absolute top-0 z-10 flex h-11 w-11 items-center justify-center",
+                hasPage ? "right-[5.5rem]" : "right-11",
+              )}
+              aria-label={`Include ${label} in the book`}
+              title={leftOut ? "Left out of the book. Click to put it back." : "In the book. Click to leave it out."}
+              onClick={onToggleLeftOut}
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <span
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full border-2 shadow-sm transition-colors",
+                  leftOut ? "border-gray-400 bg-white/90 text-transparent hover:text-gray-300" : "border-v2-primary bg-v2-primary text-white",
+                )}
+              >
+                <Check className="h-4 w-4" strokeWidth={3} aria-hidden />
+              </span>
+            </button>
+          ) : null}
           {hasPage ? (
             <button
               type="button"

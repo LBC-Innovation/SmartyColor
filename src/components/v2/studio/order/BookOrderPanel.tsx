@@ -264,7 +264,11 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
       <div className="flex flex-col items-center gap-2 py-8 text-center">
         <BookOpen className="h-8 w-8 text-v2-primary" aria-hidden />
         <p className="text-sm font-semibold text-v2-ink">Your book appears here.</p>
-        <p className="text-sm text-v2-muted">Add photos to start.</p>
+        <p className="text-sm text-v2-muted">
+          {leftOut > 0
+            ? `${leftOut === 1 ? "Your page is" : `All ${leftOut} pages are`} left out. Check a page in your album to put it back.`
+            : "Add photos to start."}
+        </p>
       </div>
     );
   }

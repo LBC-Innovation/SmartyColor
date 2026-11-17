@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { BookOpen, Download, FolderInput, Loader2, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Check, Download, FolderInput, Loader2, Minus, Pencil, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
+import { cn } from "@/lib/cn";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
 import { PagePrintShareModal } from "@/components/v2/studio/PagePrintShareModal";
@@ -32,7 +33,7 @@ import { GallerySkeletonCard, type CardState } from "@/components/v2/studio/Gall
 import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
 import { useSheetQueue, type BatchSummary } from "@/components/v2/studio/useSheetQueue";
-import { BookOrderCard } from "@/components/v2/studio/order/BookOrderCard";
+import { BookOrderCard, DockedBookPresence } from "@/components/v2/studio/order/BookOrderCard";
 import { BookOrderPanel, ConfirmButton, bookSteps, confirmBlocker, formatSummary, type OrderRow } from "@/components/v2/studio/order/BookOrderPanel";
 import { BookPromoCard, type BookProgress } from "@/components/v2/studio/order/BookPromoCard";
 import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
@@ -552,6 +553,9 @@ export function ColorfulMemoriesApp() {
   const withoutPageIds = photos
     .filter((p) => !p.printPrefs.book?.leftOut && cardState(p) === "none")
     .map((p) => p.id);
+  // Pages the book panel's checks can include or leave out: finished pages, and ones already left out.
+  const bookChoices = photos.filter((p) => p.printPrefs.book?.leftOut === true || cardState(p) === "ready");
+  const bookChoicesIn = bookChoices.filter((p) => p.printPrefs.book?.leftOut !== true).length;
   const failedCount = photos.filter((p) => cardState(p) === "failed").length;
   const uploading = pendingUploads.length > 0;
   const activeCount = queue.running + queue.queued;
@@ -621,7 +625,8 @@ export function ColorfulMemoriesApp() {
           summary: order.formatChosen ? formatSummary(order) : null,
         }
       : null;
-  const bookCardOpen = desktop && bookOpen && hasBookPage;
+  // Stays open when every page is left out, so the checks on the cards can put one back.
+  const bookCardOpen = desktop && bookOpen && (hasBookPage || book.leftOut > 0);
   // Phones: once a book is under way, the book bar replaces the tab bar (the header menu has the tabs).
   const showBookBar = !desktop && hasBookPage && !editor && bookProgress != null;
   // Turning the page to the other shape: free when that page exists, a page when the photo
@@ -802,12 +807,13 @@ export function ColorfulMemoriesApp() {
           {liveMessage}
         </p>
 
-        <div className="flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
-          {/* Gallery: full width on phones, 60% on desktop */}
+        <div className="relative flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
+          {/* Gallery: full width on phones, 60% on desktop while the book is open. The width eases
+              as the book rises or sinks, and the cards glide to their new spots (StudioGallery). */}
           <main
             ref={galleryRef}
             aria-label="Studio"
-            className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 ${
+            className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 lg:transition-[width] lg:duration-500 lg:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
               bookCardOpen ? "lg:w-[58%] xl:w-[60%]" : "lg:w-full"
             } ${
               deletion.active
@@ -891,14 +897,47 @@ export function ColorfulMemoriesApp() {
               ) : null}
 
               {bookCardOpen && photos.length >= 2 && !deletion.active ? (
-                <p className="flex items-center gap-2 rounded-xl bg-v2-primary-light/70 px-3 py-2 text-sm text-v2-navy">
-                  <BookOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
-                  <span>
-                    <span className="font-semibold">Pages print in this order.</span>{" "}
-                    <span className="pointer-coarse:hidden">Drag to move one,</span>
-                    <span className="hidden pointer-coarse:inline">Press and hold to move one,</span> or use its ⋮ menu to leave it out.
-                  </span>
-                </p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-v2-primary-light/70 px-3 py-2 text-sm text-v2-navy">
+                  <p className="flex min-w-0 flex-1 basis-72 items-start gap-2">
+                    <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
+                    <span>
+                      <span className="font-semibold">Your book prints pages in this order.</span>{" "}
+                      <span className="pointer-coarse:hidden">Drag a page to move it.</span>
+                      <span className="hidden pointer-coarse:inline">Press and hold a page to move it.</span>{" "}
+                      Tap the circle on a page to include it (checked) or leave it out (empty).
+                    </span>
+                  </p>
+                  {bookChoices.length >= 2 ? (
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={bookChoicesIn === bookChoices.length ? true : bookChoicesIn === 0 ? false : "mixed"}
+                      onClick={() => {
+                        const include = bookChoicesIn < bookChoices.length;
+                        for (const photo of bookChoices) gen.setBookPrefs(photo.id, { leftOut: !include });
+                      }}
+                      className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-white/80 py-1 pl-1.5 pr-3 font-semibold text-v2-navy shadow-sm transition hover:bg-white"
+                    >
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors",
+                          bookChoicesIn === 0 ? "border-gray-400 bg-white" : "border-v2-primary bg-v2-primary text-white",
+                        )}
+                        aria-hidden
+                      >
+                        {bookChoicesIn === bookChoices.length ? (
+                          <Check className="h-4 w-4" strokeWidth={3} />
+                        ) : bookChoicesIn > 0 ? (
+                          <Minus className="h-4 w-4" strokeWidth={3} />
+                        ) : null}
+                      </span>
+                      {bookChoicesIn === bookChoices.length ? "Leave all out" : "Include all"}
+                      <span className="font-normal tabular-nums text-v2-muted">
+                        {bookChoicesIn} of {bookChoices.length} in book
+                      </span>
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
 
               {albumLoading ? (
@@ -955,6 +994,7 @@ export function ColorfulMemoriesApp() {
                   onPrint={(id) => setOutput({ id, mode: "all" })}
                   onReorder={replacePhotos}
                   showReorderHint={!bookCardOpen}
+                  bookMode={bookCardOpen}
                 />
               )}
 
@@ -967,14 +1007,21 @@ export function ColorfulMemoriesApp() {
             ) : null}
           </main>
 
-          {/* The book being built: a card beside the gallery on desktop, only once they start it */}
-          {bookCardOpen ? (
-            <aside className="hidden min-h-0 lg:flex lg:w-[42%] lg:flex-col lg:py-4 lg:pr-4 xl:w-[40%] xl:pr-6" aria-label="Your book">
-              <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton}>
-                {panel}
-              </BookOrderCard>
-            </aside>
-          ) : null}
+          {/* The book being built: a card docked to the bottom edge beside the gallery on desktop,
+              only once they start it. Positioned over the gallery's freed-up space, so the gallery
+              can ease its width instead of being squeezed. */}
+          <DockedBookPresence open={bookCardOpen}>
+            {(leaving) => (
+              <aside
+                className="hidden lg:absolute lg:inset-y-0 lg:right-0 lg:z-30 lg:flex lg:w-[42%] lg:flex-col lg:pt-4 lg:pr-4 xl:w-[40%] xl:pr-6"
+                aria-label="Your book"
+              >
+                <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton} leaving={leaving}>
+                  {panel}
+                </BookOrderCard>
+              </aside>
+            )}
+          </DockedBookPresence>
         </div>
       </div>
 
