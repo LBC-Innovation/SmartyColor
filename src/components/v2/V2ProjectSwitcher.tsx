@@ -127,7 +127,7 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
         title={activeProject?.name}
         className="v2-hit inline-flex min-h-11 w-full min-w-0 items-center gap-2 rounded-full border border-gray-200 bg-white py-1 pl-1.5 pr-3 text-left shadow-sm transition hover:border-v2-primary/40 hover:bg-v2-bg-subtle disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:min-h-0"
       >
-        <AlbumThumb name={activeProject?.name ?? ""} url={activeProject ? coverFor(activeProject) : null} size="sm" />
+        <AlbumThumb name={activeProject?.name ?? ""} url={activeProject ? coverFor(activeProject) : null} size="sm" circle />
         {sharedWithMe ? (
           <Users className="h-4 w-4 shrink-0 text-v2-primary" aria-label="Shared with you" />
         ) : null}
