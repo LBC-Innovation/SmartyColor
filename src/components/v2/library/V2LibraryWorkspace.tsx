@@ -222,7 +222,7 @@ export function V2LibraryWorkspace({
                   <button
                     type="button"
                     onClick={openPicker}
-                    className="v2-btn-primary v2-breathe min-h-11 w-full"
+                    className="v2-btn-primary v2-radiate min-h-11 w-full"
                   >
                     {uploading ? (
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

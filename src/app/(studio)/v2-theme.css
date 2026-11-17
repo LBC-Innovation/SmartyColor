@@ -849,36 +849,34 @@
   outline-offset: 2px;
 }
 
-/* Empty library: the primary upload button gently breathes to invite the first tap. */
-@keyframes v2-breathe {
-  0%,
+/* Empty library: the primary upload button sends out a soft ring, like a ripple, to invite the
+   first tap. The button itself stays still; only the ring grows and fades. */
+@keyframes v2-radiate {
+  0% {
+    box-shadow:
+      0 6px 16px -4px rgb(116 70 240 / 0.35),
+      0 0 0 0 rgb(116 70 240 / 0.4);
+  }
+  70%,
   100% {
-    transform: scale(1);
     box-shadow:
-      0 4px 12px rgb(116 70 240 / 0.25),
-      0 0 0 0 rgb(116 70 240 / 0.45);
-  }
-  50% {
-    transform: scale(1.1);
-    box-shadow:
-      0 14px 30px rgb(116 70 240 / 0.4),
-      0 0 0 10px rgb(116 70 240 / 0);
+      0 6px 16px -4px rgb(116 70 240 / 0.35),
+      0 0 0 16px rgb(116 70 240 / 0);
   }
 }
 
-.v2-breathe {
-  animation: v2-breathe 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  will-change: transform, box-shadow;
+.v2-radiate {
+  animation: v2-radiate 2.4s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
 }
 
-.v2-breathe:hover,
-.v2-breathe:focus-visible,
-.v2-breathe:disabled {
-  animation-play-state: paused;
+.v2-radiate:hover,
+.v2-radiate:focus-visible,
+.v2-radiate:disabled {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .v2-breathe {
+  .v2-radiate {
     animation: none;
   }
 }
@@ -1442,4 +1440,9 @@ body:has(.v2-shell) {
   .v2-shell input.v2-album-name-input {
     font-size: 2.25rem;
   }
+}
+
+/* The name field shows focus with its own underline, so no box outline around it. */
+.v2-shell input.v2-album-name-input:focus-visible {
+  outline: none;
 }
