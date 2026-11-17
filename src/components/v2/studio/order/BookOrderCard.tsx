@@ -33,7 +33,8 @@ export function BookOrderCard({
   return (
     <section
       aria-label="Your book"
-      className="cm-card-in flex max-h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_12px_40px_-12px_rgb(30_27_75/0.25)]"
+      // Docked: fills down to the window's bottom edge, so only the top corners round.
+      className="cm-card-in flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-3xl rounded-b-none border border-b-0 border-gray-200 bg-white shadow-[0_-8px_32px_-12px_rgb(30_27_75/0.25)]"
     >
       <header className="flex shrink-0 items-center gap-3 border-b border-gray-100 bg-gradient-to-br from-v2-primary-light/70 to-white px-5 py-4">
         <div className="w-11 shrink-0 overflow-hidden rounded-sm shadow-md ring-1 ring-black/5">

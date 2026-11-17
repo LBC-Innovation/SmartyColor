@@ -969,7 +969,7 @@ export function ColorfulMemoriesApp() {
 
           {/* The book being built: a card beside the gallery on desktop, only once they start it */}
           {bookCardOpen ? (
-            <aside className="hidden min-h-0 lg:flex lg:w-[42%] lg:flex-col lg:py-4 lg:pr-4 xl:w-[40%] xl:pr-6" aria-label="Your book">
+            <aside className="hidden min-h-0 lg:flex lg:w-[42%] lg:flex-col lg:pt-4 lg:pr-4 xl:w-[40%] xl:pr-6" aria-label="Your book">
               <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton}>
                 {panel}
               </BookOrderCard>

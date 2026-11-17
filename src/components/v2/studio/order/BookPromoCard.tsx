@@ -62,8 +62,8 @@ function PageStack({ pictures }: { pictures: string[] }) {
 }
 
 /**
- * The way into a printed book, as a card docked to the bottom right edge (on top of the tab bar on
- * phones) that slides up 2.5 seconds after it mounts.
+ * The way into a printed book, as a toast that slides into the lower right corner (above the tab
+ * bar on phones) 2.5 seconds after it mounts.
  * Making pages and printing them at home stays in the gallery; this is the one, deliberate step
  * into building a book, and once a book is under way it shows how far along it is.
  */
@@ -84,8 +84,7 @@ export function BookPromoCard({ pageCount, pictures, progress, onStart, onDismis
     <section
       aria-label={progress ? "Your book in progress" : "Make a book"}
       className={cn(
-        // Docked: the bottom edge sits flush on the tab bar (phones) or the window's bottom edge, so only the top corners round.
-        "v2-toast-in group fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-t-2xl rounded-b-none border border-b-0 border-v2-primary/20 bg-gradient-to-br from-v2-primary-light via-white to-white px-5 py-5 shadow-[0_-8px_24px_rgb(10_16_26/0.12)] sm:px-6 lg:right-8 lg:bottom-0 xl:right-10",
+        "v2-toast-in group fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] z-30 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-v2-primary/20 bg-gradient-to-br from-v2-primary-light via-white to-white px-5 py-5 shadow-xl sm:px-6 shadow-slate-900/15 lg:right-8 lg:bottom-6 xl:right-10",
         className,
       )}
     >
