@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Images, Loader2 } from "lucide-react";
+import { Download, FileText, Images, Loader2 } from "lucide-react";
 import { activePageVersion } from "@/components/v2/studio/order/galleryBookPages";
 import {
   fetchOriginal,
@@ -137,9 +137,9 @@ export function DownloadSelectedDialog({ photos, albumName, makePagePdf, onClose
     <V2Modal
       onClose={() => (progress ? cancel() : onClose())}
       maxWidthClass="max-w-md"
-      title={<h2 className="v2-brand-title text-xl text-v2-ink">Download {photos.length} {photos.length === 1 ? "photo" : "photos"}</h2>}
+      icon={<Download />} title={`Download ${photos.length} ${photos.length === 1 ? "photo" : "photos"}`}
     >
-      <div className="space-y-3 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
+      <div className="space-y-3 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-7">
         {progress ? (
           <div className="space-y-4 py-2" role="status" aria-live="polite">
             <p className="flex items-center gap-2 text-sm font-semibold text-v2-ink">

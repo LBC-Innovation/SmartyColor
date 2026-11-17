@@ -37,14 +37,9 @@ export function V2PrintSheetModal({
       onClose={onClose}
       maxWidthClass="max-w-3xl"
       fill
-      title={
-        <div>
-          <h2 className="text-lg font-semibold text-v2-ink">Print this page</h2>
-          <p className="mt-0.5 text-sm text-v2-muted">
-            {paperLabel}, {printPrefs.orientation}
-          </p>
-        </div>
-      }
+      icon={<Printer />}
+      title="Print this page"
+      description={`${paperLabel}, ${printPrefs.orientation}`}
     >
       <div className="flex min-h-0 flex-1 bg-v2-bg-subtle p-4 sm:p-6">
         {/* A size container, so the sheet of paper keeps its shape at any window size. */}

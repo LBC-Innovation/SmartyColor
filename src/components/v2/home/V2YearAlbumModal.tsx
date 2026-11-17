@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ImageOff, Loader2, Sparkles } from "lucide-react";
+import { CalendarHeart, Check, ImageOff, Loader2, Sparkles } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { cn } from "@/lib/cn";
@@ -73,14 +73,11 @@ export function V2YearAlbumModal({ year, albumName, onClose, onCreated }: Props)
     <V2Modal
       onClose={() => !creating && onClose()}
       maxWidthClass="max-w-2xl"
-      title={
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">New album</p>
-          <h2 className="truncate text-lg font-semibold text-v2-ink">{albumName}</h2>
-        </div>
-      }
+      icon={<CalendarHeart />}
+      eyebrow="New album"
+      title={albumName}
     >
-      <div className="space-y-4 p-5 sm:p-6">
+      <div className="space-y-4 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         {loadError ? (
           <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
             {loadError}

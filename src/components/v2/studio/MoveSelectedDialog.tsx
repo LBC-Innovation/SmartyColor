@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Loader2, Plus } from "lucide-react";
+import { Check, FolderInput, Loader2, Plus } from "lucide-react";
 import { AlbumThumb } from "@/components/v2/albums/AlbumSwitcherPanel";
 import { runPool } from "@/components/v2/studio/bulkDownload";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
@@ -39,9 +39,9 @@ function GuestMoveDialog({ onClose }: { onClose: () => void }) {
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-md"
-      title={<h2 className="v2-brand-title text-xl text-v2-ink">Move to album</h2>}
+      icon={<FolderInput />} title="Move to album"
     >
-      <div className="space-y-4 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
+      <div className="space-y-4 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-7">
         <p className="text-sm leading-relaxed text-v2-muted">
           Moving photos between albums needs a free account. Your pages come with you.
         </p>
@@ -152,7 +152,7 @@ function MoveDialog({ photos, onClose, onDone }: Props) {
     <V2Modal
       onClose={() => !busy && onClose()}
       maxWidthClass="max-w-md"
-      title={<h2 className="v2-brand-title text-xl text-v2-ink">{keep ? "Copy" : "Move"} {plural(photos.length)} to</h2>}
+      icon={<FolderInput />} title={`${keep ? "Copy" : "Move"} ${plural(photos.length)} to`}
     >
       <div className="px-3 pt-2 sm:px-4">
         {notUploaded > 0 ? (

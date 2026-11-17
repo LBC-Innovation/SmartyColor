@@ -103,31 +103,31 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
 
   return (
     <V2Modal onClose={onClose} maxWidthClass="max-w-lg" ariaLabel="How it works">
-      <div className="relative px-5 pb-5 pt-5 sm:px-7 sm:pb-6 sm:pt-6">
+      <div className="v2-modal-head relative px-5 pb-5 pt-5 sm:px-7 sm:pb-7 sm:pt-6">
         <button
           type="button"
           onClick={onClose}
           className="absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-v2-muted transition hover:bg-v2-bg-subtle hover:text-v2-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
           aria-label="Close guide"
         >
-          <X className="h-5 w-5" aria-hidden />
+          <X className="h-6 w-6" aria-hidden />
         </button>
 
         <div className="flex items-center gap-3">
           {index === 0 ? (
-            <V2BrandMark size={40} />
+            <V2BrandMark size={48} />
           ) : (
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-v2-primary-light text-v2-primary">
-              <Icon className="h-5 w-5" aria-hidden />
+            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-violet to-brand-blue text-white shadow-lg shadow-brand-violet/30">
+              <Icon className="h-6 w-6" aria-hidden />
             </span>
           )}
-          <p className="text-xs font-semibold uppercase tracking-wider text-v2-muted tabular-nums">
+          <p className="text-sm font-bold uppercase tracking-wider text-v2-primary tabular-nums">
             Step {index + 1} of {STEPS.length}
           </p>
         </div>
 
-        <h2 className="v2-brand-title mt-4 pr-8 text-2xl text-v2-ink">{step.title}</h2>
-        <div className="mt-3 text-sm leading-relaxed text-v2-navy sm:text-[15px]">{step.body}</div>
+        <h2 className="v2-brand-title mt-4 pr-8 text-[1.75rem] leading-tight text-v2-ink">{step.title}</h2>
+        <div className="mt-3 text-base leading-relaxed text-v2-navy">{step.body}</div>
         {step.visual ? <div className="mt-4">{step.visual}</div> : null}
 
         <div className="mt-6 flex items-center justify-between gap-3 border-t border-gray-100 pt-4">
@@ -136,8 +136,8 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
               <li
                 key={s.title}
                 className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  i === index ? "w-5 bg-v2-primary" : "w-1.5 bg-gray-300",
+                  "h-2 rounded-full transition-all",
+                  i === index ? "v2-modal-strip w-7" : "w-2 bg-gray-300",
                 )}
                 aria-current={i === index ? "step" : undefined}
               />
@@ -148,7 +148,7 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 onClick={() => setIndex((i) => i - 1)}
-                className="inline-flex h-11 items-center gap-1 rounded-full px-3 text-sm font-semibold text-v2-navy hover:bg-v2-bg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+                className="inline-flex h-12 items-center gap-1 rounded-full px-4 text-base font-semibold text-v2-navy hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
               >
                 <ChevronLeft className="h-4 w-4" aria-hidden />
                 Back
@@ -157,7 +157,7 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-11 items-center rounded-full px-3 text-sm font-semibold text-v2-muted hover:bg-v2-bg-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+                className="inline-flex h-12 items-center rounded-full px-4 text-base font-semibold text-v2-muted hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
               >
                 Skip
               </button>
@@ -165,7 +165,7 @@ function WelcomeGuideModal({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={() => (last ? onClose() : setIndex((i) => i + 1))}
-              className="v2-btn-primary h-11 px-5"
+              className="v2-btn-primary"
             >
               {last ? "Start creating" : "Next"}
               {last ? null : <ArrowRight className="h-4 w-4" aria-hidden />}

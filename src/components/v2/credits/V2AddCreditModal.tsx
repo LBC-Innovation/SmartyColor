@@ -1,5 +1,6 @@
 "use client";
 
+import { Wallet } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2AddCreditForm } from "@/components/v2/credits/V2AddCreditForm";
 import { useAuth } from "@/context/AuthContext";
@@ -24,10 +25,11 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfal
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-md"
-      title={
-        <div>
-          <h2 className="text-lg font-semibold text-v2-ink">Add credit</h2>
-          <p className="mt-0.5 text-sm text-v2-muted">
+      icon={<Wallet />}
+      tone="success"
+      title="Add credit"
+      description={
+        <>
             {shortfallCents && shortfallCents > 0
               ? `${balance > 0 ? `Your credit covers ${formatCredits(balance)}. ` : ""}Add ${formatCredits(shortfallCents)} for ${shortfallFor}, or add more for later.`
               : (
@@ -36,11 +38,10 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfal
                   <span className="font-semibold tabular-nums text-v2-success-text">{formatCredits(balance)}</span>
                 </>
               )}
-          </p>
-        </div>
+        </>
       }
     >
-      <div className="px-5 py-4 sm:px-6 sm:py-5">
+      <div className="px-5 pb-6 pt-1 sm:px-7">
         <V2AddCreditForm returnPath={returnPath} suggestedCents={shortfallCents} />
       </div>
     </V2Modal>

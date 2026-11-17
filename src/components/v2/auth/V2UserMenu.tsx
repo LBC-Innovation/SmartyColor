@@ -3,19 +3,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ChevronDown,
-  CircleHelp,
-  CircleUser,
-  KeyRound,
-  Loader2,
-  LogOut,
-  Package,
-  ReceiptText,
-  Shield,
-  User,
-  UserPen,
-} from "lucide-react";
+import { ChevronDown, CircleHelp, CircleUser, KeyRound, Loader2, LogOut, Package, ReceiptText, Shield, User, UserPen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import * as api from "@/lib/api/client";
@@ -390,16 +378,11 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-md"
-      title={
-        <div>
-          <h2 className="v2-brand-title text-xl text-v2-ink">Edit profile</h2>
-          <p className="mt-1 text-sm text-v2-muted">
-            Update how your name and email appear.
-          </p>
-        </div>
-      }
+      icon={<UserPen />}
+      title="Edit profile"
+      description="Update how your name and email appear."
     >
-      <form onSubmit={onSubmit} className="space-y-5 px-5 py-4 sm:px-6 sm:py-5">
+      <form onSubmit={onSubmit} className="space-y-5 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         <div>
           <label className="v2-label" htmlFor="profile-name">
             Display name
@@ -485,18 +468,11 @@ export function ChangePasswordModal({ onClose }: { onClose: () => void }) {
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-md"
-      title={
-        <div>
-          <h2 className="v2-brand-title text-xl text-v2-ink">
-            Change password
-          </h2>
-          <p className="mt-1 text-sm text-v2-muted">
-            Choose a new password for your account.
-          </p>
-        </div>
-      }
+      icon={<KeyRound />}
+      title="Change password"
+      description="Choose a new password for your account."
     >
-      <form onSubmit={onSubmit} className="space-y-5 px-5 py-4 sm:px-6 sm:py-5">
+      <form onSubmit={onSubmit} className="space-y-5 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         <div>
           <label className="v2-label" htmlFor="pw-new">
             New password

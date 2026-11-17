@@ -131,7 +131,7 @@ export function V2SheetEditChat({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/55 lg:items-center lg:p-6"
+      className="v2-modal fixed inset-0 z-50 flex items-stretch justify-center bg-v2-plum/50 backdrop-blur-sm lg:items-center lg:p-6"
       style={keyboardBox}
       role="dialog"
       aria-labelledby="v2-sheet-edit-title"
@@ -141,12 +141,12 @@ export function V2SheetEditChat({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="flex h-full w-full flex-col overflow-hidden bg-white focus:outline-none lg:h-[min(92dvh,880px)] lg:max-w-6xl lg:flex-row lg:rounded-2xl lg:border lg:border-gray-200 lg:shadow-2xl lg:shadow-slate-900/20"
+        className="flex h-full w-full flex-col overflow-hidden bg-white focus:outline-none lg:h-[min(92dvh,880px)] lg:max-w-6xl lg:flex-row lg:rounded-[1.75rem] lg:shadow-[0_32px_80px_-16px_rgb(36_26_77/0.45)] lg:ring-1 lg:ring-v2-primary/10"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Header: phones only here; desktop puts the title at the top of the chat column. */}
         <header className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
-          <h2 id="v2-sheet-edit-title" className="min-w-0 flex-1 truncate pl-1 text-base font-semibold text-v2-ink">
+          <h2 id="v2-sheet-edit-title" className="v2-brand-title min-w-0 flex-1 truncate pl-1 text-xl text-v2-ink">
             Edit coloring page
           </h2>
           <button

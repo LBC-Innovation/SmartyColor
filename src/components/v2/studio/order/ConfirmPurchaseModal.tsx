@@ -284,13 +284,14 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
   const progress = step === "proof" ? (items.length - unseen) / Math.max(1, items.length) : 1;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-stretch justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label="Review and order">
-      <button type="button" tabIndex={-1} className="absolute inset-0 hidden bg-v2-ink/40 lg:block" aria-label="Close" onClick={closeIfIdle} />
+    <div className="v2-modal fixed inset-0 z-[55] flex items-stretch justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label="Review and order">
+      <button type="button" tabIndex={-1} className="v2-modal-backdrop absolute inset-0 hidden bg-v2-plum/50 backdrop-blur-sm lg:block" aria-label="Close" onClick={closeIfIdle} />
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="cm-sheet-up relative flex h-full w-full flex-col overflow-hidden bg-v2-surface focus:outline-none lg:h-[min(900px,calc(100dvh-3rem))] lg:max-w-5xl lg:rounded-2xl lg:border lg:border-gray-200 lg:shadow-2xl"
+        className="cm-sheet-up relative flex h-full w-full flex-col overflow-hidden bg-v2-surface focus:outline-none lg:h-[min(900px,calc(100dvh-3rem))] lg:max-w-5xl lg:rounded-[1.75rem] lg:shadow-[0_32px_80px_-16px_rgb(36_26_77/0.45)] lg:ring-1 lg:ring-v2-primary/10"
       >
+        <div className="v2-modal-strip h-1.5 w-full shrink-0 lg:block" aria-hidden />
         {placed ? <Confetti /> : null}
         <header className="relative shrink-0 border-b border-gray-100 pt-[env(safe-area-inset-top)]">
           <div className="flex min-h-12 items-center gap-2 px-2">
@@ -301,7 +302,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
             ) : (
               <span className="w-11" />
             )}
-            <p className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-v2-ink" aria-live="polite">
+            <p className="v2-brand-title min-w-0 flex-1 truncate text-center text-lg text-v2-ink" aria-live="polite">
               {header}
             </p>
             {step === "overview" && !placed ? (
@@ -314,7 +315,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
           </div>
           {!placed && step === "proof" ? (
             <div className="h-1 w-full bg-gray-100" aria-hidden>
-              <div className="h-full bg-v2-primary transition-[width]" style={{ width: `${Math.round(progress * 100)}%` }} />
+              <div className="v2-modal-strip h-full transition-[width]" style={{ width: `${Math.round(progress * 100)}%` }} />
             </div>
           ) : null}
         </header>

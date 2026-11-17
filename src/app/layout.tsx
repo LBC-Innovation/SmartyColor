@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Comic_Neue, Fredoka, Luckiest_Guy } from "next/font/google";
+import { Comic_Neue, DM_Sans, Fredoka, Luckiest_Guy } from "next/font/google";
 import { Analytics } from "@/components/marketing/Analytics";
 import {
   PwaShellScript,
@@ -12,6 +12,13 @@ import "./globals.css";
 const fredoka = Fredoka({
   subsets: ["latin"],
   variable: "--font-fredoka",
+});
+
+// The studio's body face. Declared here, not in the studio layout, so dialogs and menus portaled
+// into <body> (outside .v2-shell) can still read the variable.
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-dm-sans",
 });
 
 const comic = Comic_Neue({
@@ -122,7 +129,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fredoka.variable} ${comic.variable} ${luckiest.variable} h-full antialiased`}
+      className={`${fredoka.variable} ${dmSans.variable} ${comic.variable} ${luckiest.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
