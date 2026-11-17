@@ -6,13 +6,12 @@ export function requirePermission(user: AuthUser, permission: Permission): boole
   return user.permissions.includes(permission);
 }
 
-/** The permission, or the account acting on itself with full self-management. */
-export function requirePermissionOrSelfManage(
-  user: AuthUser,
-  targetId: string,
-  permission: Permission,
-): boolean {
-  const isSelf = user.id === targetId;
-  const hasSelfManage = user.permissions.includes("usermanage:selfmanage");
-  return user.permissions.includes(permission) || (isSelf && hasSelfManage);
+/**
+ * The permission, or the account acting on itself. Every signed-in account manages its own
+ * profile, email, password and account without holding a permission, so self-service never
+ * makes someone look like staff. Use this only for actions that are safe to take on yourself:
+ * never for permissions, suspension or marking an email verified.
+ */
+export function requirePermissionOrSelf(user: AuthUser, targetId: string, permission: Permission): boolean {
+  return user.permissions.includes(permission) || user.id === targetId;
 }

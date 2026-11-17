@@ -305,7 +305,6 @@ const PERMISSION_GROUPS: Array<{ title: string; keys: Permission[] }> = [
       "usermanage:updatepassword",
       "usermanage:deleteusers",
       "usermanage:editpermissions",
-      "usermanage:selfmanage",
     ],
   },
   { title: "Orders", keys: ["usermanage:manageorders"] },

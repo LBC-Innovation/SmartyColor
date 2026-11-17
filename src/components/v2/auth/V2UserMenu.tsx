@@ -359,22 +359,31 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
       }
     }
     const nextEmail = email.trim();
-    if (nextEmail && nextEmail !== me.email) {
+    let pendingEmail: string | null = null;
+    if (nextEmail && nextEmail.toLowerCase() !== me.email.toLowerCase()) {
       const res = await api.adminUpdateUserEmail(me.id, nextEmail);
       if (api.isError(res)) {
         setError(res.error.message);
         setSaving(false);
         return;
       }
+      if (res.data.pending) pendingEmail = res.data.email;
     }
 
     await refreshUser();
     setSaving(false);
     onClose();
-    toast.success({
-      title: "Profile updated",
-      message: "Your changes have been saved.",
-    });
+    toast.success(
+      pendingEmail
+        ? {
+            title: "Confirm your new email",
+            message: `We sent a link to ${pendingEmail}. Your email changes once you click it.`,
+          }
+        : {
+            title: "Profile updated",
+            message: "Your changes have been saved.",
+          },
+    );
   }
 
   return (

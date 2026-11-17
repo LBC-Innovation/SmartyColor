@@ -243,6 +243,44 @@ export async function updateUserEmail(
   return { data: { email: normalized }, error: null };
 }
 
+/**
+ * A signed-in account changing its own verified email. Runs as the user (their access token), so
+ * Supabase sends a confirmation link to the new address and only switches it once that's clicked.
+ */
+export async function requestOwnEmailChange(
+  accessToken: string,
+  email: string,
+  currentEmail: string,
+): Promise<ApiResult<{ email: string; pending: boolean }>> {
+  const normalized = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    return { data: null, error: { message: "A valid email is required" } };
+  }
+  if (normalized === currentEmail.toLowerCase()) {
+    return { data: { email: normalized, pending: false }, error: null };
+  }
+
+  const redirectTo = `${clientOrigin()}/account?email_changed=1`;
+  const res = await fetch(`${supabaseUrl()}/auth/v1/user?redirect_to=${encodeURIComponent(redirectTo)}`, {
+    method: "PUT",
+    headers: {
+      apikey: serviceKey(),
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email: normalized }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { msg?: string; message?: string; error_description?: string };
+    const message = body.msg || body.message || body.error_description || "Couldn't change your email";
+    log("warn", "Self email change failed", { status: res.status, error: message });
+    return { data: null, error: { message } };
+  }
+
+  log("info", "Self email change requested", { email: normalized });
+  return { data: { email: normalized, pending: true }, error: null };
+}
+
 export async function resendVerification(
   id: string,
   adminId: string,
