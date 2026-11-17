@@ -14,7 +14,7 @@ type Props = {
   /** Select mode is on: the Select button turns into a filled Cancel that leaves it. */
   selecting?: boolean;
   onCancelSelect?: () => void;
-  /** Opens the Arrange sheet; the button shows only with 3+ pages. */
+  /** Opens the Arrange sheet; the button shows once there are 2+ pages. */
   onArrange?: () => void;
   /** The way into the book, always in reach while scrolling; null while the book is on screen. */
   book?: { label: string; inProgress: boolean; onOpen: () => void } | null;
@@ -77,14 +77,13 @@ export function StudioHeader({
           <span className="hidden sm:inline">Select photos</span>
         </button>
       ) : null}
-      {onArrange && photoCount >= 3 && !selecting ? (
+      {onArrange && photoCount >= 2 && !selecting ? (
         <button
           type="button"
           onClick={onArrange}
-          disabled={selectDisabled}
           aria-label="Arrange pages"
           title="Arrange pages"
-          className={cn(btn, "max-sm:px-0 disabled:cursor-not-allowed disabled:opacity-50")}
+          className={cn(btn, "max-sm:px-0")}
         >
           <LayoutGrid className="h-4 w-4" aria-hidden />
           <span className="hidden sm:inline">Arrange</span>

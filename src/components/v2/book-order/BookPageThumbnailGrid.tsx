@@ -393,7 +393,7 @@ export function BookPageThumbnailGrid({
           <Plus className="h-4 w-4" aria-hidden />
           Insert lined page
         </button>
-        {movable.length >= 3 ? (
+        {movable.length >= 2 ? (
           <button type="button" className="v2-btn-outline h-10 px-3" onClick={() => setSession({ mode: "browse" })}>
             <LayoutGrid className="h-4 w-4" aria-hidden />
             Arrange pages

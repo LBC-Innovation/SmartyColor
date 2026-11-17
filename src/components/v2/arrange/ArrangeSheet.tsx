@@ -671,8 +671,13 @@ function Sheet<T>({
             Cancel
           </button>
         ) : session.mode === "browse" ? (
-          <button type="button" className="v2-btn-primary min-h-11 shrink-0 px-5" onClick={() => leave(null)}>
-            Done
+          <button
+            type="button"
+            className="v2-btn-primary inline-flex min-h-11 shrink-0 items-center gap-1.5 px-5"
+            onClick={() => leave(null)}
+          >
+            <X className="h-4 w-4" aria-hidden />
+            Close
           </button>
         ) : null}
       </header>
@@ -736,7 +741,6 @@ function Sheet<T>({
                       className={cn(
                         "relative h-full w-full overflow-hidden border border-gray-200 bg-white shadow-sm transition-[box-shadow,transform] duration-150",
                         small ? "rounded-md" : "rounded-lg",
-                        interactive && "pointer-fine:hover:-translate-y-px pointer-fine:hover:shadow-md",
                         raised && "shadow-xl ring-2 ring-v2-primary",
                         flashId === id && "cm-arrange-flash",
                         isMuted?.(item) && "opacity-45",
