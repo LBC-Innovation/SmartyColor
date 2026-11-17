@@ -192,7 +192,8 @@ export const WHY_FAMILIES: WhyBlock = {
     },
   ],
   example: BOYS_CATFISH,
-  photo: "fridge",
+  // Not "fridge": the home page's photo strip already shows that one just above.
+  photo: "evening-counter",
   useCasesTitle: "People make them for",
   useCases: [
     "Grandparents who love to color",
@@ -812,7 +813,7 @@ export type ProductPhoto = {
  */
 export const PRODUCT_PHOTOS: ProductPhoto[] = [];
 
-export type LifestyleId = "kitchen-table" | "living-room-floor" | "fridge" | "birthday-table" | "dog-coloring" | "mail-day";
+export type LifestyleId = "kitchen-table" | "living-room-floor" | "fridge" | "birthday-table" | "dog-coloring" | "mail-day" | "evening-counter";
 
 export type LifestylePhoto = {
   src: string;
@@ -886,6 +887,15 @@ export const LIFESTYLE_PHOTOS: Record<LifestyleId, LifestylePhoto> = {
     height: 1024,
     srcSetWidths: [400, 800],
     ready: false,
+  },
+  "evening-counter": {
+    src: "/marketing/lifestyle/evening-counter.webp",
+    alt: "A woman at the kitchen counter in the evening, coloring a page of her family on a mountain hike, with a cup of tea beside her",
+    caption: "After the kids are in bed",
+    width: 1536,
+    height: 1024,
+    srcSetWidths: [400, 800],
+    ready: true,
   },
 };
 
