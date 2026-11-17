@@ -210,20 +210,6 @@ html.standalone.pwa-splash-done #pwa-splash {
   }
 }
 
-@keyframes cm-arrange-breathe {
-  0%,
-  100% {
-    scale: 1;
-  }
-  50% {
-    scale: 1.04;
-  }
-}
-
-.cm-arrange-breathe {
-  animation: cm-arrange-breathe 1.2s ease-in-out infinite;
-}
-
 @keyframes cm-arrange-flash {
   from {
     box-shadow: 0 0 0 4px rgb(116 70 240 / 0.7);
@@ -257,7 +243,6 @@ html.standalone.pwa-splash-done #pwa-splash {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cm-arrange-breathe,
   .cm-arrange-flash {
     animation: none;
   }

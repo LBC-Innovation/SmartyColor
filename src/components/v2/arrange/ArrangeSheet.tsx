@@ -140,6 +140,8 @@ function Sheet<T>({
     return () => {
       ts.forEach((t) => window.clearTimeout(t));
       cancelAnimationFrame(raf.current);
+      // Reset, or a remount (Strict Mode) would think a frame is still pending and never place again.
+      raf.current = 0;
     };
   }, []);
 
@@ -185,37 +187,109 @@ function Sheet<T>({
   );
 
   /* ---- Loupe ---- */
-  const vw = typeof window === "undefined" ? 390 : window.innerWidth;
-  const loupeW = Math.round(clamp(vw * 0.26, 104, 176));
+  // A little bigger than a tile, so it reads as "lifted" yet still sits inside the space the
+  // neighbouring tiles open for it.
+  const loupeW = Math.round(clamp(layout.tileW * 1.3, 96, 168));
   const loupeH = loupeW / aspect;
   const pointerDragId = drag?.input === "pointer" ? drag.id : null;
-  const pointerType = drag?.pointerType ?? "mouse";
+
+  /**
+   * While a page is held, tiles that would sit under it slide out of its way, so the held page is
+   * always centered in its own space. Runs per frame on the DOM (CSS `translate`, separate from the
+   * `transform` React sets for the grid position), measured from the page itself, not its cell.
+   */
+  const makeRoom = useCallback(
+    (clear = false) => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      const L = live.current.layout;
+      const r = grid.getBoundingClientRect();
+      // Where the held page is, in grid coordinates (it may be pinned at a screen edge).
+      const box = loupeRef.current?.getBoundingClientRect();
+      const px = (box ? box.left + box.width / 2 : ptr.current.x) - r.left;
+      const py = (box ? box.top + box.height / 2 : ptr.current.y) - r.top;
+      const hx = (loupeW + L.tileW) / 2 + 8;
+      const hy = (loupeH + L.tileH) / 2 + 8;
+      // A pushed tile carries its neighbour along the same row or column (less the gap between
+      // them), so tiles move together instead of piling onto each other.
+      const capX = L.tileW * 0.6;
+      const capY = L.tileH * 0.6;
+      const cells = new Map<number, { el: HTMLElement; dx: number; dy: number }>();
+      for (const el of tileEls.current.values()) {
+        if (clear || el.dataset.held) {
+          el.style.translate = "";
+          continue;
+        }
+        const vx = Number(el.dataset.cx) - px;
+        const vy = Number(el.dataset.cy) - py;
+        let dx = 0;
+        let dy = 0;
+        if (Math.abs(vx) < hx && Math.abs(vy) < hy) {
+          // Overlapping: slide out along whichever axis needs the shorter move.
+          const needX = hx - Math.abs(vx);
+          const needY = hy - Math.abs(vy);
+          if (needX / hx <= needY / hy) dx = Math.sign(vx || 1) * Math.min(needX, capX);
+          else dy = Math.sign(vy || 1) * Math.min(needY, capY);
+        }
+        cells.set(Number(el.dataset.i), { el, dx, dy });
+      }
+      if (!clear) {
+        const keep = L.gap * 0.5;
+        const carry = (start: number, step: number, axis: "dx" | "dy", sameLine: (i: number) => boolean) => {
+          let push = cells.get(start)![axis];
+          for (let i = start + step; sameLine(i); i += step) {
+            const next = cells.get(i);
+            if (!next) break;
+            const need = Math.abs(push) - (L.gap - keep);
+            if (need <= 0) break;
+            push = Math.sign(push) * Math.max(Math.abs(next[axis]), need);
+            next[axis] = push;
+          }
+        };
+        const firsts = [...cells.entries()].filter(([, c]) => c.dx || c.dy);
+        for (const [i, c] of firsts) {
+          const row = Math.floor(i / L.cols);
+          if (c.dx) carry(i, Math.sign(c.dx), "dx", (j) => j >= 0 && Math.floor(j / L.cols) === row);
+          if (c.dy) carry(i, Math.sign(c.dy) * L.cols, "dy", (j) => j >= 0 && j < L.cols * L.rows);
+        }
+        for (const { el, dx, dy } of cells.values()) {
+          el.style.translate = dx || dy ? `${dx.toFixed(1)}px ${dy.toFixed(1)}px` : "";
+        }
+      }
+    },
+    [loupeW, loupeH],
+  );
 
   const loupeBox = useCallback(
     (rotate: string) => {
       const m = 8;
       const { x, y } = ptr.current;
-      const touch = pointerType !== "mouse";
-      // Touch: centered above the finger, so the finger never hides it. Mouse: beside the cursor
-      // (flipping left near the right edge), so the hole under the cursor stays in view.
-      const mouseLeft = x + 18 + loupeW + m > window.innerWidth ? x - 18 - loupeW : x + 18;
-      const left = clamp(touch ? x - loupeW / 2 : mouseLeft, m, window.innerWidth - loupeW - m);
+      // Centered on the pointer, like picking the page up: the slot under the pointer is then the
+      // slot under the page, and the neighbours open space around it.
+      const left = clamp(x - loupeW / 2, m, window.innerWidth - loupeW - m);
       // The badge overlaps the loupe's top edge, so keep a little more room above it.
-      const top = clamp(touch ? y - 28 - loupeH : y - loupeH * 0.25, m + 12, window.innerHeight - loupeH - m);
+      const top = clamp(y - loupeH / 2, m + 12, window.innerHeight - loupeH - m);
       return `translate3d(${left}px, ${top}px, 0) rotate(${rotate})`;
     },
-    [loupeW, loupeH, pointerType],
+    [loupeW, loupeH],
   );
 
   const placeLoupe = useCallback(() => {
     raf.current = 0;
     const el = loupeRef.current;
     if (el) el.style.transform = loupeBox(reduced ? "0deg" : "-2.5deg");
-  }, [loupeBox, reduced]);
+    if (live.current.drag?.phase === "active") makeRoom();
+  }, [loupeBox, makeRoom, reduced]);
 
   const schedulePlace = useCallback(() => {
     if (!raf.current) raf.current = requestAnimationFrame(placeLoupe);
   }, [placeLoupe]);
+
+  // After the grid reflows for a new slot, the tiles' home spots moved: make room again from there.
+  const heldTarget = drag?.input === "pointer" && drag.phase === "active" ? drag.target : -1;
+  useLayoutEffect(() => {
+    if (heldTarget >= 0) schedulePlace();
+  }, [heldTarget, layout, schedulePlace]);
 
   // The loupe grows out of the card it was lifted from.
   useLayoutEffect(() => {
@@ -257,6 +331,7 @@ function Sheet<T>({
             : `${Noun} ${from + 1} stays at position ${from + 1}.`,
       );
       setDrag({ ...d, target, phase: "settling" });
+      makeRoom(true);
       setOverCancel(false);
       overCancelRef.current = false;
 
@@ -287,7 +362,7 @@ function Sheet<T>({
         done();
       }
     },
-    [Noun, later, leave, loupeH, loupeW, reduced],
+    [Noun, later, leave, loupeH, loupeW, makeRoom, reduced],
   );
 
   /* ---- Pointer tracking while a drag is live ---- */
@@ -546,7 +621,7 @@ function Sheet<T>({
   const dragging = !!drag && drag.phase === "active" && drag.input === "pointer";
   const touchLocked = !layout.overflows || dragging;
   const activeItem = drag ? items[activeIndexById] : undefined;
-  const tileTransition = reduced ? "none" : `transform 200ms ${EASE}`;
+  const tileTransition = reduced ? "none" : `transform 200ms ${EASE}, translate 160ms ${EASE}`;
   const from = drag ? drag.from + 1 : 0;
   const to = drag ? drag.target + 1 : 0;
 
@@ -633,6 +708,10 @@ function Sheet<T>({
                       else tileEls.current.delete(id);
                     }}
                     role="option"
+                    data-i={displayIndex(id, i)}
+                    data-cx={pos.x + layout.tileW / 2}
+                    data-cy={pos.y + layout.tileH / 2}
+                    data-held={hidden ? "1" : undefined}
                     aria-selected={raised}
                     aria-label={`${Noun} ${(isActive ? drag.target : i) + 1}${locked ? ", fixed" : ""}`}
                     tabIndex={session.mode === "browse" && i === focusIdx ? 0 : -1}
@@ -680,30 +759,6 @@ function Sheet<T>({
               })
             : null}
 
-          {ready && drag?.input === "pointer" ? (
-            <div
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute left-0 top-0",
-                drag.phase === "active" && "cm-arrange-breathe",
-              )}
-              style={{
-                width: layout.tileW,
-                height: layout.tileH,
-                transform: `translate3d(${tilePosition(drag.target, layout).x}px, ${tilePosition(drag.target, layout).y}px, 0)`,
-                transition: tileTransition,
-              }}
-            >
-              <div
-                className={cn(
-                  "flex h-full w-full items-center justify-center border-2 border-dashed border-v2-primary bg-v2-primary-light/70",
-                  layout.tileW < 64 ? "rounded-md" : "rounded-lg",
-                )}
-              >
-                <span className="text-sm font-bold tabular-nums text-v2-primary">{drag.target + 1}</span>
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
 
