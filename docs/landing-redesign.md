@@ -88,6 +88,11 @@ its `ready` is `true`.
 These are illustrative scenes, not customers. Don't caption them as reviews or real orders. The
 "See the finished book" gallery (`PRODUCT_PHOTOS`) is still for **real** photos of printed books.
 
+> **Superseded (Nov 17):** these six round-1 prompts were rewritten with what round 3 learned
+> (real bindings, page direction, less polish). The rewritten versions are in the prompt builder
+> (`scripts/photo-prompts/index.html`, group "Original scenes, improved") and summarised in §6.
+> Same ids, so new images replace the current files.
+
 ### Shared style block (paste at the end of every prompt)
 
 > Photorealistic candid lifestyle photograph, shot on a full-frame camera with a 50mm lens at
@@ -463,6 +468,22 @@ own book and shape.
 | `anniversary-50th`: the family's book of the grandparents' photos, cover in view | granddaughter | paperback | 3:2 |
 | `graduation`: Grandma's book of the graduate's childhood photos | the graduate | paperback | 2:3 |
 | `pet-gotcha-day`: a rescue dog's adoption anniversary | his teenage owner | stapled | 2:3 |
+
+### Round-1 scenes, rewritten
+
+The six §4 scenes are in the builder under **Original scenes, improved**. They keep their ids, so
+regenerated images replace the files in `public/marketing/lifestyle/` with no code change. Each now
+has a real binding, a camera position (so the page direction is stated), the lifestyle-shoot or
+phone look, and a selfie version.
+
+| Scene | Look | Book | Camera | What changed |
+| --- | --- | --- | --- | --- |
+| `kitchen-table` | shoot | spiral | side | the girl colors a spiral book folded flat and turned toward her; selfie taken by Grandma |
+| `living-room-floor` | phone | printed at home | side | pages flat under each kid's elbows, turned toward them; a parent on the couch takes it |
+| `fridge` | phone | printed at home | over the shoulder | the page hangs upright on the fridge; the calendar has no readable writing |
+| `birthday-table` | shoot | printed at home | facing | pages flat and turned toward each kid; the birthday girl lifts hers to show a friend, not the camera |
+| `dog-coloring` | shoot | stapled | facing | she lifts the booklet off the floor to compare it with the dog, so it reads upright |
+| `mail-day` | phone | spiral | side | the cover is our real default (photo grid, tint, short white title), not a line drawing; plain brown mailer with no logos |
 
 ### 6.5 Getting a real-looking result
 
