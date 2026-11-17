@@ -807,13 +807,33 @@ export function ColorfulMemoriesApp() {
           {liveMessage}
         </p>
 
+        {/* The album toolbar spans the full width and stays put: it sits above the gallery and the
+            book card, so it doesn't shrink or slide when the book opens. */}
+        <div className="sticky top-0 z-20 bg-v2-bg/95 px-4 pb-2 pt-2 backdrop-blur lg:px-6">
+          <StudioHeader
+            pageCount={order.contentCount}
+            photoCount={photos.length}
+            uploading={uploading}
+            onAddPhotos={() => setAddPhotos({ files: [] })}
+            onSelectPhotos={deletion.enter}
+            selectDisabled={activeCount > 0}
+            selecting={deletion.active}
+            onCancelSelect={deletion.exit}
+            book={
+              hasBookPage && !bookCardOpen && !deletion.active
+                ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
+                : null
+            }
+          />
+        </div>
+
         <div className="relative flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
-          {/* Gallery: full width on phones, 60% on desktop while the book is open. The width eases
-              as the book rises or sinks, and the cards glide to their new spots (StudioGallery). */}
+          {/* Gallery: full width on phones, the right 60% on desktop while the book is open. The width
+              eases as the book rises or sinks, and the cards glide to their new spots (StudioGallery). */}
           <main
             ref={galleryRef}
             aria-label="Studio"
-            className={`relative w-full min-w-0 px-4 lg:overflow-y-auto lg:px-6 lg:pb-8 lg:transition-[width] lg:duration-500 lg:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+            className={`relative w-full min-w-0 px-4 lg:ml-auto lg:overflow-y-auto lg:px-6 lg:pb-8 lg:transition-[width] lg:duration-500 lg:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
               bookCardOpen ? "lg:w-[58%] xl:w-[60%]" : "lg:w-full"
             } ${
               deletion.active
@@ -826,24 +846,6 @@ export function ColorfulMemoriesApp() {
             onDragLeave={() => setDropping(false)}
             onDrop={onDrop}
           >
-            <div className="sticky top-0 z-20 -mx-4 bg-v2-bg/95 px-4 pb-2 pt-2 backdrop-blur lg:-mx-6 lg:px-6">
-              <StudioHeader
-                pageCount={order.contentCount}
-                photoCount={photos.length}
-                uploading={uploading}
-                onAddPhotos={() => setAddPhotos({ files: [] })}
-                onSelectPhotos={deletion.enter}
-                selectDisabled={activeCount > 0}
-                selecting={deletion.active}
-                onCancelSelect={deletion.exit}
-                book={
-                  hasBookPage && !bookCardOpen && !deletion.active
-                    ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
-                    : null
-                }
-              />
-            </div>
-
             <div className="space-y-3">
               {code && !deletion.active ? (
                 <AlbumCodeBanner
@@ -1007,13 +1009,13 @@ export function ColorfulMemoriesApp() {
             ) : null}
           </main>
 
-          {/* The book being built: a card docked to the bottom edge beside the gallery on desktop,
+          {/* The book being built: a card docked to the bottom edge left of the gallery on desktop,
               only once they start it. Positioned over the gallery's freed-up space, so the gallery
               can ease its width instead of being squeezed. */}
           <DockedBookPresence open={bookCardOpen}>
             {(leaving) => (
               <aside
-                className="hidden lg:absolute lg:inset-y-0 lg:right-0 lg:z-30 lg:flex lg:w-[42%] lg:flex-col lg:pt-4 lg:pr-4 xl:w-[40%] xl:pr-6"
+                className="hidden lg:absolute lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-[42%] lg:flex-col lg:pt-4 lg:pl-4 xl:w-[40%] xl:pl-6"
                 aria-label="Your book"
               >
                 <BookOrderCard order={order} onClose={() => setBookOpen(false)} footer={buyButton} leaving={leaving}>
@@ -1040,8 +1042,8 @@ export function ColorfulMemoriesApp() {
         <div
           role="region"
           aria-label="Selected photos"
-          className={`fixed inset-x-0 bottom-0 z-50 bg-v2-primary px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_-8px_24px_rgb(10_16_26/0.18)] sm:pt-3 lg:left-0 ${
-            bookCardOpen ? "lg:right-[42%] xl:right-[40%]" : ""
+          className={`fixed inset-x-0 bottom-0 z-50 bg-v2-primary px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_-8px_24px_rgb(10_16_26/0.18)] sm:pt-3 lg:right-0 ${
+            bookCardOpen ? "lg:left-[42%] xl:left-[40%]" : ""
           }`}
         >
           <div className="mx-auto flex max-w-2xl flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
