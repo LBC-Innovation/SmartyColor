@@ -3,7 +3,7 @@
 import { STORY_MODE_PUBLIC } from "@/lib/auth/features";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArrowRight, Check, Gift } from "lucide-react";
 import {
   FAQ,
@@ -34,6 +34,7 @@ import { track, trackCta } from "@/lib/track";
 import { HolidayBanner } from "@/components/v2/marketing/HolidayBanner";
 import { MarketingFooter } from "@/components/v2/marketing/MarketingFooter";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
+import { ScrollToTopButton } from "@/components/v2/marketing/ScrollToTopButton";
 import {
   CopyEmail,
   FinishedBookSection,
@@ -96,10 +97,23 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   };
   const inquire = (location: "hero" | "final") => track("partner_inquiry", { location });
 
+  // A plain #how jump is instant, so it reads as the page flashing rather than moving down. Glide
+  // there instead; scrollIntoView moves whichever box scrolls (the window, or this container on
+  // desktop) and honours the section's scroll-mt so the header doesn't cover the heading.
+  const scrollToHow = (e: MouseEvent<HTMLAnchorElement>) => {
+    const target = document.getElementById("how");
+    if (!target) return;
+    e.preventDefault();
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    history.replaceState(null, "", "#how");
+  };
+
   // The phone's sticky button shows only once the hero's own button has scrolled out of view, so the
   // same button is never on screen twice. The page scrolls inside this container, not the window;
   // an IntersectionObserver with the default root still sees a target clipped by a scrolling parent.
   const heroCtaRef = useRef<HTMLDivElement>(null);
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
   const [heroCtaVisible, setHeroCtaVisible] = useState(true);
   useEffect(() => {
     const el = heroCtaRef.current;
@@ -113,7 +127,7 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   // A strip of the hero band's light top color across the top, under the header, so the translucent white bar
   // picks up a faint tint where it starts. bg-local keeps it with the content when this box scrolls.
   return (
-    <div className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream bg-[linear-gradient(var(--color-v2-butter),var(--color-v2-butter))] bg-[length:100%_12rem] bg-no-repeat bg-local text-v2-ink">
+    <div ref={scrollBoxRef} className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream bg-[linear-gradient(var(--color-v2-butter),var(--color-v2-butter))] bg-[length:100%_12rem] bg-no-repeat bg-local text-v2-ink">
       {showBanner && holiday ? <HolidayBanner label={holiday.label} /> : null}
       <V2MarketingHeader intent={intent} wide tinted />
 
@@ -184,6 +198,7 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                     </button>
                     <a
                       href="#how"
+                      onClick={scrollToHow}
                       className="inline-flex min-h-11 items-center justify-center px-2 text-center text-base font-bold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                     >
                       {HERO_SECONDARY_CTA}
@@ -390,8 +405,11 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
 
       {home && holiday ? <HolidayToast label={holiday.label} raised={!heroCtaVisible} /> : null}
 
+      <ScrollToTopButton containerRef={scrollBoxRef} focusId="hero-title" />
+
       {/* Phone-only sticky CTA */}
       <div
+        data-fab-avoid
         aria-hidden={heroCtaVisible}
         inert={heroCtaVisible}
         className={cn(

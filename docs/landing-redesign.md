@@ -172,3 +172,243 @@ columns. What changed:
 - Content columns widened from `max-w-6xl` to `max-w-7xl`, and the landing header now spans the
   screen.
 - Removed: the decorative stars and doodles, and the price tag on the book mock.
+
+## 6. Round 3 photos: the use cases, with the real books (Nov 17)
+
+New scenes for the "Not just for kids" use cases (grandparents, the kids' table at a wedding, road
+trips, reunions, new siblings, memory care, grown-ups). Same workflow as §4: save as
+`public/marketing/lifestyle/<id>.png`, run `node scripts/prepare-lifestyle-images.mjs`, then add a
+slot for the id in `LIFESTYLE_PHOTOS` (and the `LifestyleId` type). Still illustrative scenes, not
+customers: never caption them as reviews or real orders.
+
+**Build each prompt from four parts, in this order:**
+
+1. the **scene** (§6.4)
+2. its **look**: the lifestyle-shoot block or the phone-snapshot block (§6.1), as the scene says
+3. the **book block** for the binding the scene names (§6.2), plus the page-orientation rule
+4. the **avoid list** (§6.3)
+
+### 6.1 The two looks
+
+Both looks share this paragraph. Paste it right after the look block.
+
+> **Real people.** Everyone looks like a real person, not a model: matte unretouched skin with
+> visible pores, uneven tone, faint redness around noses and knuckles, fine lines and age spots on
+> the adults, freckles, an uneven home haircut, a missing tooth on a kid. No shine or glow on
+> foreheads, cheeks or noses. Hair has flyaways. Clothes are worn and a little wrinkled. The room
+> is lived-in, with a few specific bits of everyday clutter. Expressions are mid-moment and
+> nobody is posing for the camera. Hands are anatomically correct with five fingers and natural,
+> short nails.
+
+**Lifestyle-shoot look** (a semi-professional photographer following a real family):
+
+> Editorial lifestyle photograph from a natural-light family photo session, shot on a full-frame
+> camera with a 35mm lens at f/2.8, ISO 400. Light comes from a real window or doorway, shaped
+> softly, with real shadows left in. Rich, natural colour with depth: warm highlights, clean
+> whites, deep but open shadows, healthy contrast, skin tones true and warm. Colour graded like a
+> modern lifestyle photographer's film-inspired edit (Kodak Portra feel), never flat or washed
+> out, and never oversaturated. Composed with care but not posed: the photographer caught a real
+> moment from a natural angle, with a little foreground in the frame for depth.
+
+**Phone-snapshot look** (a family member grabbing the moment to remember it):
+
+> Candid photo taken on a recent iPhone's main camera by a family member who wanted to remember
+> the moment. Bright, clear, true-to-life colour with the crisp, punchy look of a modern phone
+> photo: good contrast, vivid but real colour, everything fairly sharp front to back with only
+> light background softness. Framed quickly from where they were standing or sitting: horizon a
+> degree or two off, subjects a bit off centre, someone or something partly cut off at the edge,
+> a little motion blur on a moving hand. Natural light as it was, a window or sky slightly bright.
+
+### 6.2 The books, as Lulu prints them
+
+Every printed book we sell is US Letter (8.5 × 11 in) portrait, black-and-white interior on 60#
+uncoated white paper, with a matte full-colour cover (Lulu package codes
+`0850X1100.BW.STD.{PB|SS|CO}.060UW444.MXX`). Blank backs are on by default, so each coloring
+page sits on its own sheet. The binding pictures on the site (`public/marketing/binding-*.webp`)
+show a violet matte cover, bright white page edges and, for spiral, a black plastic coil.
+
+**Page-orientation rule (paste with every book block):**
+
+> The coloring page always faces the person coloring it: the top of the drawing points away from
+> them and the bottom of the drawing is nearest their body, exactly as you'd hold a page to
+> color it. Do not turn the book or page to face the camera. The camera sees the drawing from the
+> colorist's side or from over their shoulder, so it reads upright or at a slight angle in the
+> photo. Only a person deliberately holding a page up to show someone may turn it outward.
+
+**Interior (paste with every book block):**
+
+> The pages are bright white uncoated paper, smooth and matte, not glossy. Each coloring page is
+> clean black-and-white line art traced from a real photo, with realistic proportions, bold even
+> outlines and no shading, set inside a plain half-inch white margin, with no page numbers or
+> text. When the book is open, the coloring page is on the right and the facing left page is
+> blank white. Parts of the open page are colored in with waxy crayon or colored pencil, with
+> visible strokes and a few marks outside the lines.
+
+**Stapled booklet** (saddle stitch, up to 48 pages):
+
+> The book is a thin stapled booklet, US Letter size, about as thick as a school workbook. It is
+> folded along its left edge with two silver staples in the fold. The cover is matte, full-colour
+> card. Open on the table, it lies almost flat, the pages bowing gently near the fold.
+
+**Paperback** (perfect bound, 32 pages and up):
+
+> The book is a US Letter-size paperback, about a quarter inch thick, with a square glued spine,
+> a matte full-colour cover and bright white page edges, like a bookstore paperback. A glued
+> paperback doesn't lie flat on its own: the pages curve up toward the spine, and the person
+> holds it open with their other hand flat on the left page, or has folded the cover back a
+> little.
+
+**Spiral-bound** (coil, lies flat):
+
+> The book is a US Letter-size spiral-bound book with a black plastic coil running down the left
+> long edge through small round punched holes. It is folded all the way back on itself, so only
+> the one page being colored faces up, and it lies completely flat. The matte full-colour cover
+> is folded round behind.
+
+**Cover (when it's in view):**
+
+> The front cover is a grid of the family's own colour photos under a soft dark tint, with a
+> short title in big, white, rounded letters across the middle.
+
+Keep the title to two or three words ("The Parkers", "Nana's Book") or leave the cover out of
+view: image models often garble longer text.
+
+**Print at home:** some scenes use loose pages instead of a book:
+
+> Loose US Letter printer-paper pages, slightly curled, printed at home on an inkjet printer,
+> the line art a little less crisp than a printed book.
+
+### 6.3 Avoid list (paste last)
+
+> Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect
+> teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh
+> balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching
+> outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No coloring page turned
+> to face the camera while someone is coloring it. No watermarks, logos, brand names or captions,
+> and no text anywhere except the short cover title.
+
+### 6.4 Scenes
+
+#### `grandma-armchair`: Grandma colors her own family (3:2). Lifestyle shoot, paperback
+
+> A grandmother in her mid 70s with short white hair, reading glasses low on her nose and a
+> soft rose cardigan with the sleeves pushed up sits in a well-worn armchair by a big window. A
+> wooden lap tray rests on her knees with the paperback coloring book open on it. She holds the
+> left page flat with her palm while she colors the right-hand page, a line drawing of her three
+> grandkids sitting on a lake dock in life jackets, about a third colored in. She is concentrating,
+> lips pressed together, coloring a life jacket orange with a short, worn-down crayon. Her phone
+> leans against a mug of tea on the side table, showing the original colour photo. A crocheted
+> throw, a TV remote and a small dish of crayons on the side table. Late-afternoon window light
+> falling across her and the page. Shot from just behind and beside her shoulder at seated
+> height, so the page reads upright in the photo and her face is in three-quarter profile.
+
+#### `grandmas-together`: two friends compare books (3:2). Lifestyle shoot, paperback
+
+> Two grandmothers in their early 70s, friends, sit side by side at a dining table with a
+> patterned oilcloth tablecloth. Each has her own paperback coloring book open in front of her,
+> turned toward herself. One, with dyed auburn hair showing grey roots, lifts her book up off the
+> table and tilts it toward her friend to show the page she just finished (a line drawing of her
+> grandson in a baseball uniform, colored in red and blue), laughing. The other, with curly grey
+> hair and a fleece vest, leans in to look, a crayon still in her hand over her own book (a line
+> drawing of her granddaughter at a ballet recital, half colored in pink). Crayons in a coffee
+> can, a plate of store-bought cookies, reading glasses, a phone face-up. A cozy, slightly
+> cluttered kitchen behind them. Soft window light plus a warm pendant lamp overhead. Shot from
+> the end of the table at table height, the edge of a third chair soft in the foreground.
+
+#### `wedding-kids-table`: quiet at the reception (3:2). Phone snapshot, stapled booklet
+
+> A guest's phone photo at an evening wedding reception. Four kids aged 4 to 9 sit at a round
+> kids' table with a white tablecloth that has a juice spill and crumbs on it. Their wedding
+> clothes have clearly been worn all day: a flower girl with a crooked flower crown and a grass
+> stain on her hem, a ring bearer with his shirt untucked and clip-on bow tie hanging loose, an
+> older girl with her shoes kicked off under the chair. Each has a stapled coloring booklet open
+> flat in front of them, turned toward themselves. The pages are line drawings of the bride and
+> groom's engagement photos: the couple laughing on a wooden pier, the couple under a big oak
+> tree. The ring bearer is coloring the groom's tie with his tongue poking out; the youngest has
+> crayon on her fingers. One closed booklet lies on the table showing its cover. Name cards, a
+> mason jar of crayons, a half-finished plate of chicken nuggets. String lights, guests talking
+> and the dance floor behind them. Warm string-light glow mixed with blue dusk from tall windows.
+> Taken by a guest standing behind the kids' chairs, looking down over their shoulders.
+
+#### `road-trip`: coloring on the way to vacation (3:2). Phone snapshot, spiral-bound
+
+> Taken on a phone by a parent turning around from the front passenger seat. The back seat of a
+> family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl
+> in a car seat each have a spiral-bound coloring book folded back on itself on a lap tray, the
+> page facing them. The pages are line drawings of the family on last summer's beach trip. The
+> boy is coloring, head down, hair sticking up on one side. The girl lifts her book and turns it
+> toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a
+> cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in
+> the cargo area. Bright sky, green fields and a guardrail streak past the side windows with
+> motion blur; sun patches and window reflections across the kids. The front seat headrest cuts
+> into the bottom corner of the frame.
+
+#### `family-reunion`: everyone at the picnic table (3:2). Phone snapshot, print at home
+
+> A phone photo at a summer family reunion in a park pavilion. A long picnic table with a
+> plastic gingham tablecloth taped down at the corners. Three generations crowd one end: a
+> grandfather in a baseball cap, two cousins about 7 and 10, an aunt in her 40s with sunglasses
+> pushed up on her head. Each has a loose home-printed coloring page in front of them, turned
+> toward themselves: line drawings of an old family photo of everyone at the same lake years ago.
+> The aunt leans across and points at one figure on her cousin's page, explaining who it is.
+> Paper plates, a cooler, a bottle of sunscreen, a stack of extra printed pages held down by a
+> rock. Dappled midday light through the pavilion roof, some faces in shade, the grass outside
+> bright green. Relatives by the grill in the background. Taken by someone standing at the end of
+> the table, slightly above.
+
+#### `big-sibling`: the new big sister (2:3 portrait). Phone snapshot, stapled booklet
+
+> Taken on a phone by Dad, standing in the living room. A 4-year-old girl in pajama pants and a
+> mismatched T-shirt kneels at the coffee table with a stapled coloring booklet open flat in front
+> of her, turned toward herself. She is coloring a page that is a line drawing of herself holding
+> her baby brother, pressing hard with a purple crayon. Behind her on the couch, her mom, in her
+> early 30s with hair in a messy clip and a burp cloth over her shoulder, holds the sleeping
+> newborn and looks down at the page over her daughter's head, tired but smiling. Baby wipes, a
+> water bottle, a basket of unfolded laundry, crayons spread across the table. Soft daylight from
+> a window. Shot from behind the girl and a little above, so the page reads upright.
+
+#### `memory-care-visit`: coloring together on a visit (3:2). Lifestyle shoot, spiral-bound
+
+> A bright, homey room in an assisted-living residence, with a quilt on the bed and framed family
+> photos on the dresser. A woman in her late 80s with thin white hair and a soft blue knit sweater
+> sits at a small table by the window, a spiral-bound coloring book folded back flat in front of
+> her and turned toward her. Her daughter, in her late 50s with reading glasses on a chain, sits at
+> her elbow on the same side, so they both look at the page the right way up. The page is a line
+> drawing of the mother's own wedding photo from the 1960s. The mother colors the bouquet slowly
+> with a chunky crayon, calm and focused; the daughter watches her, chin on her hand, smiling a
+> little. A cup of water with a straw, a cardigan over the chair back. Soft midday daylight. Calm
+> and warm, not sad and not clinical: no medical equipment in view. Shot from across the room at
+> seated height, slightly to the side.
+
+#### `grown-up-evening`: coloring for yourself (3:2). Lifestyle shoot, paperback
+
+> Evening in a small apartment kitchen. A woman in her mid 30s in a hoodie and leggings, hair in a
+> low ponytail with a few strands loose, sits at the counter with one foot up on the stool rung,
+> a paperback coloring book open in front of her and turned toward her, her left hand holding the
+> pages open. She is coloring a page that is a line drawing of her and her partner on a mountain
+> hike, using colored pencils, with pencil marks on the side of her hand, half smiling to herself.
+> A mug of tea, an open bag of chips, her phone face-down. Warm under-cabinet light pooling on the
+> counter, the rest of the room in soft shadow, a dish rack and a plant behind her. Shot from
+> beside and slightly behind her at counter height, a fruit bowl soft at the bottom edge of the
+> frame.
+
+### 6.5 Getting a real-looking result
+
+- **Make 3 or 4 per scene and pick the one that looks most like a real moment.**
+- **Check the page orientation first.** If the colorist's page faces the camera, regenerate and
+  add: "she is coloring it, so the page is turned toward her and away from the camera".
+- **Check the binding:** two staples in the fold for stapled, a square glued spine for
+  paperback, a black coil for spiral. If the model draws a spiral on a paperback, repeat "square
+  glued spine, no coil, no rings".
+- **Colour too flat:** add "rich colour and contrast like a professional lifestyle photo, true
+  blacks, warm highlights". **Colour too slick:** add "natural, not oversaturated, no HDR".
+- **Shiny or waxy skin:** add "matte unretouched skin, visible pores".
+- **Model-looking kids:** add "ordinary kids, not child models".
+- **Cartoon coloring page:** add "the coloring page looks like a traced outline of a photo,
+  realistic proportions".
+- **Garbled cover text:** shorten the title or keep the cover out of frame.
+- **Hands:** check every hand; regenerate rather than retouch.
+- **Second pass (optional):** upload the pick and ask to "keep everything the same, remove any
+  shine on skin and fix the colour to look like a real photo, not AI".
+- **Keep families varied** across the set, and don't give `grandma-armchair` the same look as the
+  `kitchen-table` grandmother.

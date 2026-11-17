@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Photo Prompt Builder</title>
+<!--
+  Internal tool: builds the lifestyle-photo prompts from docs/landing-redesign.md §6 for pasting
+  into ChatGPT. Not part of the app or its build. Open this file in a browser; nothing to install.
+  When you change a block here, change the doc too (and the other way round).
+-->
+<style>
+  :root {
+    --bg: #f7f5f0; --panel: #ffffff; --ink: #1d1b26; --muted: #6b6878; --line: #e3dfd6;
+    --accent: #6a3fe0; --accent-ink: #ffffff; --soft: #f1ecff; --ok: #1f7a4d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15141b; --panel: #1f1d27; --ink: #ece9f5; --muted: #a29fb2; --line: #34313f;
+      --accent: #9a7bff; --accent-ink: #15141b; --soft: #2a2540; --ok: #5fd39a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 20px 24px 8px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 20px; padding: 16px 24px 32px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px 24px; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  fieldset { border: 0; margin: 0 0 18px; padding: 0; }
+  legend { font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+  select, textarea, input[type=text] { width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  textarea { resize: vertical; }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg label { cursor: pointer; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span { display: inline-block; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; }
+  .seg input:checked + span { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .checks label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: 14px; cursor: pointer; }
+  .checks input { margin-top: 3px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .default-note { font-size: 12px; color: var(--accent); margin-left: 6px; font-weight: 600; }
+  .out { position: sticky; top: 16px; }
+  .out-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; }
+  .out-head h2 { margin: 0; font-size: 16px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 999px; padding: 9px 18px; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink); }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+  #output { width: 100%; min-height: 60vh; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; background: var(--bg); }
+  .copied { color: var(--ok); font-size: 13px; font-weight: 700; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Photo Prompt Builder</h1>
+  <p>Pick a scene and options, then copy the finished prompt into ChatGPT. Source: docs/landing-redesign.md §6.</p>
+</header>
+
+<main>
+  <section class="panel" aria-label="Options">
+    <fieldset>
+      <legend>Scene</legend>
+      <select id="scene"></select>
+      <p class="hint">Picking a scene sets its usual look, book and shape. You can change any of them.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Scene description</legend>
+      <textarea id="sceneText" rows="9"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button type="button" class="ghost" id="resetScene">Reset to the saved text</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Look <span class="default-note" id="lookDefault"></span></legend>
+      <div class="seg" id="look"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Book <span class="default-note" id="bookDefault"></span></legend>
+      <div class="seg" id="book"></div>
+      <div class="checks" style="margin-top:8px">
+        <label><input type="checkbox" id="cover" /> The cover is in view (adds the cover description)</label>
+      </div>
+      <div id="titleWrap" style="margin-top:6px">
+        <input type="text" id="coverTitle" placeholder="Cover title, 2–3 words (e.g. The Parkers)" maxlength="30" />
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Shape <span class="default-note" id="shapeDefault"></span></legend>
+      <div class="seg" id="shape"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Fixes for a retry</legend>
+      <div class="checks" id="fixes"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Extra notes</legend>
+      <textarea id="notes" rows="3" placeholder="Anything else to add, e.g. the family is Black, the kid has curly red hair…"></textarea>
+    </fieldset>
+
+    <button type="button" class="ghost" id="resetAll">Reset everything</button>
+  </section>
+
+  <section class="panel out" aria-label="Finished prompt">
+    <div class="out-head">
+      <h2>Finished prompt</h2>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="meta" id="count"></span>
+        <span class="copied" id="copied" hidden>Copied</span>
+        <button type="button" id="copy">Copy prompt</button>
+      </div>
+    </div>
+    <textarea id="output" readonly aria-label="Finished prompt"></textarea>
+    <p class="hint">Second pass: <button type="button" class="ghost" id="copySecond" style="padding:4px 12px;font-size:12px">Copy the touch-up prompt</button> to paste with the image you picked.</p>
+  </section>
+</main>
+
+<script>
+/* ------------------------------------------------------------------ text blocks (doc §6) */
+
+const REAL_PEOPLE = "Everyone looks like a real person, not a model: matte unretouched skin with visible pores, uneven tone, faint redness around noses and knuckles, fine lines and age spots on the adults, freckles, an uneven home haircut, a missing tooth on a kid. No shine or glow on foreheads, cheeks or noses. Hair has flyaways. Clothes are worn and a little wrinkled. The room is lived-in, with a few specific bits of everyday clutter. Expressions are mid-moment and nobody is posing for the camera. Hands are anatomically correct with five fingers and natural, short nails.";
+
+const LOOKS = {
+  shoot: {
+    label: "Lifestyle shoot",
+    text: "Editorial lifestyle photograph from a natural-light family photo session, shot on a full-frame camera with a 35mm lens at f/2.8, ISO 400. Light comes from a real window or doorway, shaped softly, with real shadows left in. Rich, natural colour with depth: warm highlights, clean whites, deep but open shadows, healthy contrast, skin tones true and warm. Colour graded like a modern lifestyle photographer's film-inspired edit (Kodak Portra feel), never flat or washed out, and never oversaturated. Composed with care but not posed: the photographer caught a real moment from a natural angle, with a little foreground in the frame for depth.",
+  },
+  phone: {
+    label: "Phone snapshot",
+    text: "Candid photo taken on a recent iPhone's main camera by a family member who wanted to remember the moment. Bright, clear, true-to-life colour with the crisp, punchy look of a modern phone photo: good contrast, vivid but real colour, everything fairly sharp front to back with only light background softness. Framed quickly from where they were standing or sitting: horizon a degree or two off, subjects a bit off centre, someone or something partly cut off at the edge, a little motion blur on a moving hand. Natural light as it was, a window or sky slightly bright.",
+  },
+};
+
+const ORIENTATION = "The coloring page always faces the person coloring it: the top of the drawing points away from them and the bottom of the drawing is nearest their body, exactly as you'd hold a page to color it. Do not turn the book or page to face the camera. The camera sees the drawing from the colorist's side or from over their shoulder, so it reads upright or at a slight angle in the photo. Only a person deliberately holding a page up to show someone may turn it outward.";
+
+const INTERIOR = "The pages are bright white uncoated paper, smooth and matte, not glossy. Each coloring page is clean black-and-white line art traced from a real photo, with realistic proportions, bold even outlines and no shading, set inside a plain half-inch white margin, with no page numbers or text. When the book is open, the coloring page is on the right and the facing left page is blank white. Parts of the open page are colored in with waxy crayon or colored pencil, with visible strokes and a few marks outside the lines.";
+
+const LOOSE_LINE_ART = "Each coloring page is clean black-and-white line art traced from a real photo, with realistic proportions, bold even outlines and no shading, with no text. Parts of it are colored in with waxy crayon or colored pencil, with visible strokes and a few marks outside the lines.";
+
+const BOOKS = {
+  stapled: {
+    label: "Stapled booklet",
+    text: "The book is a thin stapled booklet, US Letter size, about as thick as a school workbook. It is folded along its left edge with two silver staples in the fold. The cover is matte, full-colour card. Open on the table, it lies almost flat, the pages bowing gently near the fold.",
+    bound: true,
+  },
+  paperback: {
+    label: "Paperback",
+    text: "The book is a US Letter-size paperback, about a quarter inch thick, with a square glued spine, a matte full-colour cover and bright white page edges, like a bookstore paperback. A glued paperback doesn't lie flat on its own: the pages curve up toward the spine, and the person holds it open with their other hand flat on the left page, or has folded the cover back a little.",
+    bound: true,
+  },
+  spiral: {
+    label: "Spiral-bound",
+    text: "The book is a US Letter-size spiral-bound book with a black plastic coil running down the left long edge through small round punched holes. It is folded all the way back on itself, so only the one page being colored faces up, and it lies completely flat. The matte full-colour cover is folded round behind.",
+    bound: true,
+  },
+  home: {
+    label: "Printed at home",
+    text: "The coloring pages are loose US Letter printer-paper pages, slightly curled, printed at home on an inkjet printer, the line art a little less crisp than a printed book.",
+    bound: false,
+  },
+};
+
+const coverText = (title) =>
+  `The front cover is a grid of the family's own colour photos under a soft dark tint, with a short title in big, white, rounded letters across the middle${title ? ` that reads "${title}"` : ""}.`;
+
+const AVOID = "Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No coloring page turned to face the camera while someone is coloring it.";
+const avoidText = (cover) =>
+  `${AVOID} No watermarks, logos, brand names or captions, and no text anywhere${cover ? " except the short cover title" : ""}.`;
+
+const SHAPES = {
+  "3:2": { label: "Landscape 3:2", line: "landscape, 3:2" },
+  "2:3": { label: "Portrait 2:3", line: "portrait, 2:3" },
+  "1:1": { label: "Square 1:1", line: "square, 1:1" },
+};
+
+const FIXES = [
+  { id: "facing", label: "Page was facing the camera", text: "Whoever is coloring has the page turned toward themselves and away from the camera." },
+  { id: "spine", label: "Wrong binding drawn", text: "Draw the binding exactly as described: for a paperback, a square glued spine with no coil and no rings; for a stapled booklet, only two staples in the fold; for spiral, a black plastic coil." },
+  { id: "flat", label: "Colour too flat", text: "Rich colour and contrast like a professional lifestyle photo, true blacks, warm highlights." },
+  { id: "slick", label: "Colour too slick", text: "Natural colour, not oversaturated, no HDR." },
+  { id: "skin", label: "Shiny or waxy skin", text: "Matte unretouched skin with visible pores, the kind of skin you see in an unfiltered photo." },
+  { id: "models", label: "People look like models", text: "Ordinary people and ordinary kids, not models: everyday faces and bodies, nothing glamorous." },
+  { id: "posing", label: "Everyone is posing", text: "Nobody knows the photo is being taken." },
+  { id: "cartoon", label: "Coloring page is a cartoon", text: "The coloring page looks like a traced outline of a photo, with realistic proportions, not a cartoon." },
+  { id: "tidy", label: "Room too tidy", text: "The room is visibly lived-in, with more everyday clutter." },
+];
+
+const SECOND_PASS = "Keep the people, scene and composition exactly the same. Remove any shine or glow on skin, keep the skin matte with visible pores, and fix the colour so it looks like a real photograph, not AI: rich but natural, with real contrast. Make sure the coloring page faces the person coloring it.";
+
+/* ------------------------------------------------------------------ scenes (doc §6.4) */
+
+const SCENES = [
+  { id: "grandma-armchair", name: "Grandma colors her own family", look: "shoot", book: "paperback", shape: "3:2",
+    text: "A grandmother in her mid 70s with short white hair, reading glasses low on her nose and a soft rose cardigan with the sleeves pushed up sits in a well-worn armchair by a big window. A wooden lap tray rests on her knees with the paperback coloring book open on it. She holds the left page flat with her palm while she colors the right-hand page, a line drawing of her three grandkids sitting on a lake dock in life jackets, about a third colored in. She is concentrating, lips pressed together, coloring a life jacket orange with a short, worn-down crayon. Her phone leans against a mug of tea on the side table, showing the original colour photo. A crocheted throw, a TV remote and a small dish of crayons on the side table. Late-afternoon window light falling across her and the page. Shot from just behind and beside her shoulder at seated height, so the page reads upright in the photo and her face is in three-quarter profile." },
+  { id: "grandmas-together", name: "Two grandmas compare books", look: "shoot", book: "paperback", shape: "3:2",
+    text: "Two grandmothers in their early 70s, friends, sit side by side at a dining table with a patterned oilcloth tablecloth. Each has her own paperback coloring book open in front of her, turned toward herself. One, with dyed auburn hair showing grey roots, lifts her book up off the table and tilts it toward her friend to show the page she just finished (a line drawing of her grandson in a baseball uniform, colored in red and blue), laughing. The other, with curly grey hair and a fleece vest, leans in to look, a crayon still in her hand over her own book (a line drawing of her granddaughter at a ballet recital, half colored in pink). Crayons in a coffee can, a plate of store-bought cookies, reading glasses, a phone face-up. A cozy, slightly cluttered kitchen behind them. Soft window light plus a warm pendant lamp overhead. Shot from the end of the table at table height, the edge of a third chair soft in the foreground." },
+  { id: "wedding-kids-table", name: "Kids' table at a wedding", look: "phone", book: "stapled", shape: "3:2", cover: true,
+    text: "A guest's phone photo at an evening wedding reception. Four kids aged 4 to 9 sit at a round kids' table with a white tablecloth that has a juice spill and crumbs on it. Their wedding clothes have clearly been worn all day: a flower girl with a crooked flower crown and a grass stain on her hem, a ring bearer with his shirt untucked and clip-on bow tie hanging loose, an older girl with her shoes kicked off under the chair. Each has a stapled coloring booklet open flat in front of them, turned toward themselves. The pages are line drawings of the bride and groom's engagement photos: the couple laughing on a wooden pier, the couple under a big oak tree. The ring bearer is coloring the groom's tie with his tongue poking out; the youngest has crayon on her fingers. One closed booklet lies on the table showing its cover. Name cards, a mason jar of crayons, a half-finished plate of chicken nuggets. String lights, guests talking and the dance floor behind them. Warm string-light glow mixed with blue dusk from tall windows. Taken by a guest standing behind the kids' chairs, looking down over their shoulders." },
+  { id: "road-trip", name: "Road trip to vacation", look: "phone", book: "spiral", shape: "3:2",
+    text: "Taken on a phone by a parent turning around from the front passenger seat. The back seat of a family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl in a car seat each have a spiral-bound coloring book folded back on itself on a lap tray, the page facing them. The pages are line drawings of the family on last summer's beach trip. The boy is coloring, head down, hair sticking up on one side. The girl lifts her book and turns it toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in the cargo area. Bright sky, green fields and a guardrail streak past the side windows with motion blur; sun patches and window reflections across the kids. The front seat headrest cuts into the bottom corner of the frame." },
+  { id: "family-reunion", name: "Family reunion picnic table", look: "phone", book: "home", shape: "3:2",
+    text: "A phone photo at a summer family reunion in a park pavilion. A long picnic table with a plastic gingham tablecloth taped down at the corners. Three generations crowd one end: a grandfather in a baseball cap, two cousins about 7 and 10, an aunt in her 40s with sunglasses pushed up on her head. Each has a loose home-printed coloring page in front of them, turned toward themselves: line drawings of an old family photo of everyone at the same lake years ago. The aunt leans across and points at one figure on her cousin's page, explaining who it is. Paper plates, a cooler, a bottle of sunscreen, a stack of extra printed pages held down by a rock. Dappled midday light through the pavilion roof, some faces in shade, the grass outside bright green. Relatives by the grill in the background. Taken by someone standing at the end of the table, slightly above." },
+  { id: "big-sibling", name: "The new big sister", look: "phone", book: "stapled", shape: "2:3",
+    text: "Taken on a phone by Dad, standing in the living room. A 4-year-old girl in pajama pants and a mismatched T-shirt kneels at the coffee table with a stapled coloring booklet open flat in front of her, turned toward herself. She is coloring a page that is a line drawing of herself holding her baby brother, pressing hard with a purple crayon. Behind her on the couch, her mom, in her early 30s with hair in a messy clip and a burp cloth over her shoulder, holds the sleeping newborn and looks down at the page over her daughter's head, tired but smiling. Baby wipes, a water bottle, a basket of unfolded laundry, crayons spread across the table. Soft daylight from a window. Shot from behind the girl and a little above, so the page reads upright." },
+  { id: "memory-care-visit", name: "Memory-care visit", look: "shoot", book: "spiral", shape: "3:2",
+    text: "A bright, homey room in an assisted-living residence, with a quilt on the bed and framed family photos on the dresser. A woman in her late 80s with thin white hair and a soft blue knit sweater sits at a small table by the window, a spiral-bound coloring book folded back flat in front of her and turned toward her. Her daughter, in her late 50s with reading glasses on a chain, sits at her elbow on the same side, so they both look at the page the right way up. The page is a line drawing of the mother's own wedding photo from the 1960s. The mother colors the bouquet slowly with a chunky crayon, calm and focused; the daughter watches her, chin on her hand, smiling a little. A cup of water with a straw, a cardigan over the chair back. Soft midday daylight. Calm and warm, not sad and not clinical: no medical equipment in view. Shot from across the room at seated height, slightly to the side." },
+  { id: "grown-up-evening", name: "Grown-up coloring for herself", look: "shoot", book: "paperback", shape: "3:2",
+    text: "Evening in a small apartment kitchen. A woman in her mid 30s in a hoodie and leggings, hair in a low ponytail with a few strands loose, sits at the counter with one foot up on the stool rung, a paperback coloring book open in front of her and turned toward her, her left hand holding the pages open. She is coloring a page that is a line drawing of her and her partner on a mountain hike, using colored pencils, with pencil marks on the side of her hand, half smiling to herself. A mug of tea, an open bag of chips, her phone face-down. Warm under-cabinet light pooling on the counter, the rest of the room in soft shadow, a dish rack and a plant behind her. Shot from beside and slightly behind her at counter height, a fruit bowl soft at the bottom edge of the frame." },
+  { id: "custom", name: "Custom scene (write your own)", look: "shoot", book: "stapled", shape: "3:2",
+    text: "" },
+];
+
+/* ------------------------------------------------------------------ state */
+
+const STORE_KEY = "photo-prompt-builder:v1";
+const $ = (id) => document.getElementById(id);
+
+function sceneById(id) { return SCENES.find((s) => s.id === id) || SCENES[0]; }
+
+function defaultsFor(scene) {
+  return { scene: scene.id, sceneText: scene.text, look: scene.look, book: scene.book, shape: scene.shape,
+    cover: !!scene.cover, coverTitle: "", fixes: [], notes: "" };
+}
+
+let state = load();
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (saved && SCENES.some((s) => s.id === saved.scene)) return { ...defaultsFor(sceneById(saved.scene)), ...saved };
+  } catch { /* storage blocked or bad data: start fresh */ }
+  return defaultsFor(SCENES[0]);
+}
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* ignore */ } }
+
+/* ------------------------------------------------------------------ build */
+
+function buildPrompt(s) {
+  const look = LOOKS[s.look];
+  const book = BOOKS[s.book];
+  const parts = [];
+  const lookWord = s.look === "phone" ? "a candid phone photo" : "a photograph";
+  parts.push(`Create ${lookWord} (${SHAPES[s.shape].line}). It must look like a real photo of real people, not AI-generated.`);
+  parts.push(`SCENE\n${(s.sceneText || "").trim() || "[Describe the scene here.]"}`);
+  parts.push(`PHOTO STYLE\n${look.text}\n\n${REAL_PEOPLE}`);
+  const bookParts = [book.text, ORIENTATION, book.bound ? INTERIOR : LOOSE_LINE_ART];
+  if (s.cover && book.bound) bookParts.push(coverText((s.coverTitle || "").trim()));
+  parts.push(`THE COLORING ${book.bound ? "BOOK" : "PAGES"}\n${bookParts.join("\n\n")}`);
+  const fixes = FIXES.filter((f) => s.fixes.includes(f.id)).map((f) => f.text);
+  const notes = (s.notes || "").trim();
+  if (fixes.length || notes) parts.push(`ALSO\n${[...fixes, notes].filter(Boolean).join(" ")}`);
+  parts.push(avoidText(s.cover && book.bound));
+  return parts.join("\n\n");
+}
+
+/* ------------------------------------------------------------------ UI */
+
+function seg(containerId, name, options, current) {
+  const el = $(containerId);
+  el.innerHTML = "";
+  for (const [value, opt] of Object.entries(options)) {
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="radio" name="${name}" value="${value}"><span></span>`;
+    label.querySelector("span").textContent = opt.label;
+    const input = label.querySelector("input");
+    input.checked = value === current;
+    input.addEventListener("change", () => { state[name] = value; render(); });
+    el.appendChild(label);
+  }
+}
+
+function render() {
+  const scene = sceneById(state.scene);
+  $("scene").value = state.scene;
+  if ($("sceneText").value !== state.sceneText) $("sceneText").value = state.sceneText;
+  seg("look", "look", LOOKS, state.look);
+  seg("book", "book", BOOKS, state.book);
+  seg("shape", "shape", SHAPES, state.shape);
+  $("lookDefault").textContent = state.look !== scene.look ? `scene default: ${LOOKS[scene.look].label}` : "";
+  $("bookDefault").textContent = state.book !== scene.book ? `scene default: ${BOOKS[scene.book].label}` : "";
+  $("shapeDefault").textContent = state.shape !== scene.shape ? `scene default: ${SHAPES[scene.shape].label}` : "";
+  const bound = BOOKS[state.book].bound;
+  $("cover").checked = state.cover;
+  $("cover").disabled = !bound;
+  $("titleWrap").hidden = !(state.cover && bound);
+  if ($("coverTitle").value !== state.coverTitle) $("coverTitle").value = state.coverTitle;
+  for (const box of document.querySelectorAll("#fixes input")) box.checked = state.fixes.includes(box.value);
+  if ($("notes").value !== state.notes) $("notes").value = state.notes;
+  const out = buildPrompt(state);
+  $("output").value = out;
+  $("count").textContent = `${out.split(/\s+/).filter(Boolean).length} words`;
+  save();
+}
+
+function init() {
+  for (const s of SCENES) {
+    const o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = s.id === "custom" ? s.name : `${s.name} — ${s.id}`;
+    $("scene").appendChild(o);
+  }
+  for (const f of FIXES) {
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="checkbox" value="${f.id}"><span></span>`;
+    label.querySelector("span").textContent = f.label;
+    label.querySelector("input").addEventListener("change", (e) => {
+      state.fixes = e.target.checked ? [...state.fixes, f.id] : state.fixes.filter((x) => x !== f.id);
+      render();
+    });
+    $("fixes").appendChild(label);
+  }
+  $("scene").addEventListener("change", (e) => { state = { ...defaultsFor(sceneById(e.target.value)), notes: state.notes }; render(); });
+  $("sceneText").addEventListener("input", (e) => { state.sceneText = e.target.value; render(); });
+  $("resetScene").addEventListener("click", () => { state.sceneText = sceneById(state.scene).text; render(); });
+  $("cover").addEventListener("change", (e) => { state.cover = e.target.checked; render(); });
+  $("coverTitle").addEventListener("input", (e) => { state.coverTitle = e.target.value; render(); });
+  $("notes").addEventListener("input", (e) => { state.notes = e.target.value; render(); });
+  $("resetAll").addEventListener("click", () => { state = defaultsFor(SCENES[0]); render(); });
+  $("copy").addEventListener("click", () => copy($("output").value));
+  $("copySecond").addEventListener("click", () => copy(SECOND_PASS));
+  render();
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { $("output").select(); document.execCommand("copy"); }
+  const tag = $("copied");
+  tag.hidden = false;
+  clearTimeout(copy.t);
+  copy.t = setTimeout(() => { tag.hidden = true; }, 1500);
+}
+
+init();
+</script>
+</body>
+</html>
