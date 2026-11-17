@@ -107,6 +107,16 @@ export function HolidayToast({ label, raised }: { label: string; raised: boolean
   );
 }
 
+/**
+ * The occasion cards' image width for srcset. The row holds 2 to 4 cards on a desktop, so the hint
+ * follows the column count; a fixed small width made the browser stretch the 400px file in a
+ * two-card row. The row is capped at max-w-7xl (1280px).
+ */
+function occasionImageSizes(count: number): string {
+  const cols = count >= 4 ? 4 : count === 3 ? 3 : 2;
+  return `(min-width: 1280px) ${Math.round(1280 / cols)}px, (min-width: 1024px) ${Math.round(100 / cols)}vw, (min-width: 640px) 50vw, 100vw`;
+}
+
 /** Cards that link each occasion's landing page. The current page and pages that are not ready are left out. */
 export function OccasionsSection({
   current,
@@ -147,7 +157,7 @@ export function OccasionsSection({
               className="flex min-w-0 flex-col overflow-hidden rounded-3xl border border-v2-ink/10 bg-white shadow-[0_10px_30px_rgb(36_26_77/0.07)]"
             >
               {image ? (
-                <LifestyleImage id={image} sizes="(min-width: 1024px) 280px, (min-width: 640px) 45vw, 92vw" className="aspect-[3/2] w-full" />
+                <LifestyleImage id={image} sizes={occasionImageSizes(cards.length)} className="aspect-[3/2] w-full" />
               ) : null}
               <div className="flex flex-1 flex-col p-5">
                 {image ? null : (
