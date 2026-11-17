@@ -444,6 +444,26 @@ the shot, and the person coloring holds their page up to the phone. Turning it o
 
 Turning it off puts the scene's own text, look, camera position and shape back.
 
+### Selfie ideas (in the prompt builder)
+
+The builder's scene list has a **Selfie ideas** group: scenes written only as selfies, to show
+the different moments people make pages for. Selfie mode is always on for these, and each has its
+own book and shape.
+
+| Scene | Taken by | Book | Shape |
+| --- | --- | --- | --- |
+| `bridal-shower`: booklets of the couple's engagement photos as the shower activity | maid of honor | stapled | 3:2 |
+| `baby-shower`: guests colored the maternity-photo booklet | mom-to-be | stapled | 2:3 |
+| `christmas-stocking`: a booklet pulled from a stocking on Christmas morning | Dad | stapled | 2:3 |
+| `christmas-party`: friends' "color your favorite memory" game | the host | printed at home | 3:2 |
+| `thanksgiving-kids-table`: Grandma's spiral books of old family photos | teenage cousin | spiral | 3:2 |
+| `birthday-party`: the coloring table at a 6th birthday | the birthday girl's mom | printed at home | 3:2 |
+| `class-party`: pages from the class's field day photo | the teacher | printed at home | 3:2 |
+| `team-season-end`: the coach's end-of-season gift booklets | the coach | stapled | 3:2 |
+| `anniversary-50th`: the family's book of the grandparents' photos, cover in view | granddaughter | paperback | 3:2 |
+| `graduation`: Grandma's book of the graduate's childhood photos | the graduate | paperback | 2:3 |
+| `pet-gotcha-day`: a rescue dog's adoption anniversary | his teenage owner | stapled | 2:3 |
+
 ### 6.5 Getting a real-looking result
 
 - **Make 3 or 4 per scene and pick the one that looks most like a real moment.**
