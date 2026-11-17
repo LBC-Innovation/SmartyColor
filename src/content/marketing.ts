@@ -1082,10 +1082,8 @@ export const STUDIO_EMPTY = {
 
 /** The landing inside a brand-new, empty album: name it, then add its first photos. */
 export const NEW_ALBUM = {
-  eyebrow: "New album",
   namePlaceholder: "Name your album",
   nameLabel: "Album name",
-  nameHint: "Something like “Summer at the lake” or “Grandma's 80th”. It goes on the cover if you make a book.",
   nameSaved: "Saved",
   rename: "Rename",
   /** Tapping one names the album at once. "{year}" is this year. */
@@ -1093,16 +1091,13 @@ export const NEW_ALBUM = {
   dropTitle: "Add your first photos",
   dropTitleNamed: "Add photos to {name}",
   button: "Choose photos",
-  dragHint: "or drop them right here",
+  /** Pointer devices only: touch screens can't drag files in. */
+  dragHint: "Or drop them here",
+  /** "{size}" is the per-photo upload limit. */
+  sizeLimit: "up to {size} each",
   exampleCaption: "Your photo, as a page to color",
   exampleTime: "About a minute",
-  stepsTitle: "How it works",
-  steps: [
-    { title: "Add photos", body: "From your phone or computer. Add one or a whole trip's worth." },
-    { title: "We draw each page", body: "About a minute each. Change anything by typing." },
-    { title: "Print or make a book", body: "Print pages at home, or order a bound book by mail." },
-  ],
-  guide: "See the full guide",
+  guide: "How it works",
 };
 
 /** Name of a brand-new first album for visitors who arrived from a landing page. */
