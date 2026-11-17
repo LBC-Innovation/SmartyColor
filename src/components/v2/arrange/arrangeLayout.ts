@@ -53,7 +53,9 @@ export function fitGrid({ count, width, height, aspect, minTile = 44, maxTile = 
       tileW = Math.min(maxTile, (width - gap * (cols - 1)) / cols);
     }
     if (tileW < minTile) continue;
-    if (rows * (tileW / aspect) + gap * (rows - 1) <= height && (!best || tileW > best.tileW)) {
+    // `>=` so that when several column counts reach the same (capped) tile size, the widest wins:
+    // tiles fill a row first and only wrap once the row is full, instead of stacking in a column.
+    if (rows * (tileW / aspect) + gap * (rows - 1) <= height && (!best || tileW >= best.tileW)) {
       best = { cols, tileW };
     }
   }
