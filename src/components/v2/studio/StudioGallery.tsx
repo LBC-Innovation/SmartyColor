@@ -4,13 +4,9 @@ import { useRef, useState, type HTMLAttributes } from "react";
 import { useGridGlide } from "@/components/v2/studio/useGridGlide";
 import {
   DndContext,
-  DragOverlay,
   KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
   closestCenter,
   type DragEndEvent,
-  type DragStartEvent,
   type Announcements,
   useSensor,
   useSensors,
@@ -28,11 +24,16 @@ import { cn } from "@/lib/cn";
 import {
   GalleryCard,
   GallerySkeletonCard,
+  GalleryThumb,
   type CardState,
   type GalleryCardProps,
   type MoveTarget,
 } from "@/components/v2/studio/GalleryCard";
 import type { V2PhotoEntry } from "@/lib/v2/studioTypes";
+import { ArrangeSheet, type ArrangeSession } from "@/components/v2/arrange/ArrangeSheet";
+import { useArrangeLift, type ArrangeLiftInfo } from "@/components/v2/arrange/useArrangeLift";
+
+const BROWSE: ArrangeSession = { mode: "browse" };
 
 const HINT_KEY = "cm_reorder_hint_seen";
 
@@ -57,6 +58,9 @@ type Props = {
   showReorderHint?: boolean;
   /** The book panel is open: each finished page gets a check to keep it in or leave it out. */
   bookMode?: boolean;
+  /** The toolbar's Arrange button opened the sheet (no page picked up yet). */
+  arrangeOpen?: boolean;
+  onArrangeClose?: () => void;
 };
 
 type ShareProps = Omit<
@@ -64,20 +68,21 @@ type ShareProps = Omit<
   "dragListeners" | "keyboardHandle" | "lifted" | "isOverlay" | "style" | "nodeRef"
 >;
 
-function SortableCard(props: ShareProps) {
+function SortableCard({ onLift, ...props }: ShareProps & { onLift: (info: ArrangeLiftInfo) => void }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: props.photo.id,
   });
-  // Pointer and touch start a drag from anywhere on the card; the keyboard uses its own handle,
-  // so the card itself is not one big focusable "button" wrapped around other buttons.
-  const { onKeyDown, ...pointerListeners } = (listeners ?? {}) as Record<string, (e: unknown) => void>;
+  // A press-and-hold or drag on the card opens the Arrange sheet; dnd-kit only handles the keyboard,
+  // through its own handle, so the card itself is not one big focusable "button" wrapped around other buttons.
+  const { onKeyDown } = (listeners ?? {}) as Record<string, (e: unknown) => void>;
+  const lift = useArrangeLift({ id: props.photo.id, onLift });
   return (
     <GalleryCard
       {...props}
       nodeRef={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       lifted={isDragging}
-      dragListeners={pointerListeners as HTMLAttributes<HTMLElement>}
+      dragListeners={lift as HTMLAttributes<HTMLElement>}
       keyboardHandle={{
         ...(attributes as unknown as HTMLAttributes<HTMLButtonElement>),
         onKeyDown: onKeyDown as HTMLAttributes<HTMLButtonElement>["onKeyDown"],
@@ -97,7 +102,7 @@ function readHintSeen(): boolean {
 
 /**
  * The album as a grid of cards. The gallery order is the book order: long-press (phones) or drag
- * (desktop) to move a card, or use the card's ⋮ menu.
+ * (desktop) a card to open the Arrange sheet, or use the card's ⋮ menu or the keyboard.
  */
 export function StudioGallery({
   photos,
@@ -115,17 +120,16 @@ export function StudioGallery({
   onReorder,
   showReorderHint = true,
   bookMode = false,
+  arrangeOpen = false,
+  onArrangeClose,
 }: Props) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [lift, setLift] = useState<ArrangeSession | null>(null);
+  const cardEls = useRef(new Map<string, HTMLElement>());
   const gridRef = useRef<HTMLDivElement>(null);
   useGridGlide(gridRef);
   const [hintSeen, setHintSeen] = useState(readHintSeen);
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    // Long-press to lift, so a normal scroll never starts a drag.
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // Pointer reordering lives in the Arrange sheet; here only the keyboard drags.
+  const sensors = useSensors(useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   function dismissHint() {
     setHintSeen(true);
@@ -146,14 +150,36 @@ export function StudioGallery({
     onDragCancel: ({ active }) => `Moving photo ${position(active.id)} was cancelled.`,
   };
 
-  function onDragStart(e: DragStartEvent) {
-    setActiveId(String(e.active.id));
-    navigator.vibrate?.(10);
+  function onLift(info: ArrangeLiftInfo) {
     if (!hintSeen) dismissHint();
+    setLift({
+      mode: "drag",
+      activeId: info.id,
+      pointerId: info.pointerId,
+      pointerType: info.pointerType,
+      x: info.x,
+      y: info.y,
+      originRect: info.originRect,
+    });
+  }
+
+  function onSheetClose(movedId: string | null) {
+    setLift(null);
+    onArrangeClose?.();
+    const el = movedId ? cardEls.current.get(movedId) : null;
+    if (!el) return;
+    // Wait a beat so the sheet has unmounted and page scroll is unlocked again.
+    window.setTimeout(() => {
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
+      el.classList.remove("cm-just-moved");
+      void el.offsetWidth;
+      el.classList.add("cm-just-moved");
+      window.setTimeout(() => el.classList.remove("cm-just-moved"), 1100);
+    }, 60);
   }
 
   function onDragEnd(e: DragEndEvent) {
-    setActiveId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const from = photos.findIndex((p) => p.id === active.id);
@@ -170,8 +196,6 @@ export function StudioGallery({
     if (to < 0 || to >= photos.length || to === from) return;
     onReorder(arrayMove(photos, from, to));
   }
-
-  const activePhoto = activeId ? photos.find((p) => p.id === activeId) : null;
 
   function shared(photo: V2PhotoEntry, index: number): ShareProps {
     return {
@@ -199,14 +223,12 @@ export function StudioGallery({
       collisionDetection={closestCenter}
       accessibility={{ announcements }}
       autoScroll
-      onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setActiveId(null)}
     >
       {showReorderHint && !hintSeen && photos.length >= 2 && !selectMode ? (
         <p className="mb-3 inline-flex max-w-full items-center gap-1 rounded-full bg-v2-primary-light py-1 pl-3 pr-1 text-xs font-semibold text-v2-navy">
-          <span className="pointer-coarse:inline hidden">Press and hold a photo to change the order</span>
-          <span className="pointer-coarse:hidden">Drag photos to change the order</span>
+          <span className="pointer-coarse:inline hidden">Press and hold a page to rearrange</span>
+          <span className="pointer-coarse:hidden">Drag a page to rearrange</span>
           <button
             type="button"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-white/70"
@@ -231,8 +253,19 @@ export function StudioGallery({
           role="list"
         >
           {photos.map((photo, index) => (
-            <div key={photo.id} role="listitem">
-              {selectMode ? <GalleryCard {...shared(photo, index)} /> : <SortableCard {...shared(photo, index)} />}
+            <div
+              key={photo.id}
+              role="listitem"
+              ref={(el) => {
+                if (el) cardEls.current.set(photo.id, el);
+                else cardEls.current.delete(photo.id);
+              }}
+            >
+              {selectMode ? (
+                <GalleryCard {...shared(photo, index)} />
+              ) : (
+                <SortableCard {...shared(photo, index)} onLift={onLift} />
+              )}
             </div>
           ))}
           {Array.from({ length: pendingUploads }, (_, i) => (
@@ -242,11 +275,17 @@ export function StudioGallery({
           ))}
         </div>
       </SortableContext>
-      <DragOverlay>
-        {activePhoto ? (
-          <GalleryCard {...shared(activePhoto, photos.findIndex((p) => p.id === activePhoto.id))} isOverlay />
-        ) : null}
-      </DragOverlay>
+      <ArrangeSheet
+        items={photos}
+        getId={(p) => p.id}
+        renderThumb={(p) => <GalleryThumb photo={p} preferPage={cardInfo(p).state === "ready"} />}
+        aspect={3 / 4}
+        isMuted={(p) => cardInfo(p).leftOut}
+        noun="page"
+        session={selectMode ? null : (lift ?? (arrangeOpen ? BROWSE : null))}
+        onCommit={onReorder}
+        onClose={onSheetClose}
+      />
     </DndContext>
   );
 }
