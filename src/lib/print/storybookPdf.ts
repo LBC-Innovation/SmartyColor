@@ -5,6 +5,7 @@ import {
   pdfDrawOptions,
   placeImageInBox,
 } from "@/lib/print/pageLayout";
+import { splitBase64DataUrl } from "@/lib/photo/dataUrlBlob";
 import type { PrintPrefs } from "@/lib/print/settings";
 import { embedStorybookFonts } from "@/lib/print/fonts/load";
 
@@ -39,10 +40,10 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 async function embedImage(pdf: PDFDocument, imageDataUrl: string) {
-  const match = imageDataUrl.match(/^data:(.+?);base64,(.+)$/);
-  if (!match) throw new Error("Could not read image for PDF.");
-  const bytes = base64ToBytes(match[2]);
-  return match[1].includes("png") ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
+  const parts = splitBase64DataUrl(imageDataUrl);
+  if (!parts) throw new Error("Could not read image for PDF.");
+  const bytes = base64ToBytes(parts.base64);
+  return parts.mime.includes("png") ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
 }
 
 export type StorybookPdfPage = {

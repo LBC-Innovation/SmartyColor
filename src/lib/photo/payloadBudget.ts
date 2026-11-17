@@ -1,3 +1,5 @@
+import { splitBase64DataUrl } from "@/lib/photo/dataUrlBlob";
+
 /**
  * Max size of the original file the user may pick in the browser.
  * HEIC containers are often smaller than the decoded JPEG we generate client-side.
@@ -23,9 +25,9 @@ export const VERCEL_JSON_BODY_BUDGET_BYTES = 4 * 1024 * 1024;
 export const PHOTO_JSON_OVERHEAD_BYTES = 64 * 1024;
 
 export function estimateDataUrlRawBytes(dataUrl: string): number {
-  const match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
-  if (!match) return dataUrl.length;
-  const base64Len = match[1].length;
+  const parts = splitBase64DataUrl(dataUrl);
+  if (!parts) return dataUrl.length;
+  const base64Len = parts.base64.length;
   return Math.floor((base64Len * 3) / 4);
 }
 

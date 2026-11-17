@@ -1,4 +1,5 @@
 import "server-only";
+import { splitBase64DataUrl } from "@/lib/photo/dataUrlBlob";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import type { ApiResult } from "@/lib/api/types";
 import type { GeneratedSheet } from "@/lib/session/types";
@@ -957,10 +958,10 @@ export async function addRevisionFromSheet(
   sheet: GeneratedSheet,
   meta?: RevisionMeta,
 ): Promise<ApiResult<LibraryPhoto>> {
-  const match = sheet.imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return err("Generated page was not an image");
-  const mime = match[1];
-  const bytes = Buffer.from(match[2], "base64");
+  const parts = splitBase64DataUrl(sheet.imageDataUrl);
+  if (!parts) return err("Generated page was not an image");
+  const mime = parts.mime;
+  const bytes = Buffer.from(parts.base64, "base64");
   return addRevisionFromBytes(userId, photo, { bytes, mime, title: sheet.title, ...meta });
 }
 

@@ -1,3 +1,5 @@
+import { splitBase64DataUrl } from "@/lib/photo/dataUrlBlob";
+
 const ALLOWED_MEDIA = new Set([
   "image/jpeg",
   "image/png",
@@ -37,16 +39,16 @@ function resolveMediaType(declared: string, bytes: Buffer): string {
 }
 
 export function parsePhotoDataUrl(dataUrl: string): ParsedPhoto {
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) {
+  const parts = splitBase64DataUrl(dataUrl);
+  if (!parts) {
     throw new Error("That photo didn't come through right. Please try adding it again.");
   }
-  const base64 = match[2];
+  const base64 = parts.base64;
   const bytes = Buffer.from(base64, "base64");
   if (bytes.length === 0) {
     throw new Error("That photo file looks empty.");
   }
-  const mediaType = resolveMediaType(match[1], bytes);
+  const mediaType = resolveMediaType(parts.mime, bytes);
   return { mediaType, base64, bytes };
 }
 

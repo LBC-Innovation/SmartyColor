@@ -30,6 +30,9 @@ import { withVisionRequest } from "@/server/visionAttribution";
 
 export const maxDuration = 120;
 
+const SERVER_FAULT_MESSAGE =
+  "Something broke on our side while working on this page. It isn't your photo or your request, and trying again right away probably won't help. Try again later, or let us know if it keeps happening.";
+
 type Body =
   | {
       mode: "generate";
@@ -182,14 +185,15 @@ async function handlePost(request: Request) {
 
     return Response.json({ error: "Unknown mode." }, { status: 400 });
   } catch (error) {
-    const raw =
-      error instanceof Error ? error.message : "The crayons jammed on that photo.";
+    const raw = error instanceof Error ? error.message : String(error);
     // Friendly cases stay; anything else goes through the public-error filter so provider
     // internals and keys never reach the browser. The full error is logged server-side.
+    // The filter only falls back for our own bugs and provider account problems (quota,
+    // billing, keys): both are on our side, so the message says a retry won't help.
     const message = /invalid json response/i.test(raw)
       ? "The image model had a temporary hiccup. Please try generating again."
-      : toPublicErrorMessage(error, "The crayons jammed on that photo. Please try again.");
-    console.error("[photo-coloring]", raw, error);
+      : toPublicErrorMessage(error, SERVER_FAULT_MESSAGE);
+    console.error("[photo-coloring]", raw, error instanceof Error ? error.stack : error);
     return Response.json({ error: message }, { status: 500 });
   }
 }
