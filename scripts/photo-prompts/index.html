@@ -95,6 +95,12 @@
     </fieldset>
 
     <fieldset>
+      <legend>Camera vs. the person coloring <span class="default-note" id="cameraDefault"></span></legend>
+      <div class="seg" id="camera"></div>
+      <p class="hint" id="cameraHint"></p>
+    </fieldset>
+
+    <fieldset>
       <legend>Shape <span class="default-note" id="shapeDefault"></span></legend>
       <div class="seg" id="shape"></div>
     </fieldset>
@@ -122,7 +128,10 @@
       </div>
     </div>
     <textarea id="output" readonly aria-label="Finished prompt"></textarea>
-    <p class="hint">Second pass: <button type="button" class="ghost" id="copySecond" style="padding:4px 12px;font-size:12px">Copy the touch-up prompt</button> to paste with the image you picked.</p>
+    <p class="hint">Second pass, pasted with the image you picked:
+      <button type="button" class="ghost" id="copySecond" style="padding:4px 12px;font-size:12px">Copy the touch-up prompt</button>
+      <button type="button" class="ghost" id="copyFlip" style="padding:4px 12px;font-size:12px">Copy the "page faces the wrong way" fix</button></p>
+    <p class="hint">If a page still faces the camera, keep the image and use the second fix: editing one book in a good image works more reliably than generating again.</p>
   </section>
 </main>
 
@@ -142,7 +151,30 @@ const LOOKS = {
   },
 };
 
-const ORIENTATION = "The coloring page always faces the person coloring it: the top of the drawing points away from them and the bottom of the drawing is nearest their body, exactly as you'd hold a page to color it. Do not turn the book or page to face the camera. The camera sees the drawing from the colorist's side or from over their shoulder, so it reads upright or at a slight angle in the photo. Only a person deliberately holding a page up to show someone may turn it outward.";
+// Image models want every drawing upright for the viewer. Saying "don't face the camera" isn't
+// enough: the prompt has to say what the page looks like from where the camera is, and that an
+// upside-down drawing is correct.
+const ORIENTATION = "Anyone coloring has their page lying flat and oriented toward themselves, exactly as a person holds a page to color it: the top edge of the drawing is the edge farthest from their body, and the bottom edge of the drawing is against their body. A book being colored is never rotated to show the camera.";
+
+const CAMERAS = {
+  facing: {
+    label: "Facing them",
+    hint: "drawing looks upside down",
+    text: "The camera is in front of the people coloring, facing them. So every page that is being colored appears UPSIDE DOWN in this photo: the people in the drawing have their heads toward the camera (toward the bottom edge of the photo) and their feet toward the person coloring. This is correct and intended. The drawings being colored do not need to be readable in the photo.",
+  },
+  beside: {
+    label: "From the side",
+    hint: "drawing looks sideways",
+    text: "The camera is off to the side of the people coloring. So every page that is being colored appears turned sideways in this photo: the top of the drawing points away from the person coloring, across the frame, not toward the camera. This is correct and intended.",
+  },
+  behind: {
+    label: "Over the shoulder",
+    hint: "drawing looks upright",
+    text: "The camera looks over the shoulder of the people coloring, from behind them. So the page being colored appears upright in the photo, the same way the person coloring sees it.",
+  },
+};
+
+const SHOW_OFF = "Someone who has lifted their page up off the table to show it may turn it toward the camera; only that lifted page appears upright and facing the camera.";
 
 const INTERIOR = "The pages are bright white uncoated paper, smooth and matte, not glossy. Each coloring page is clean black-and-white line art traced from a real photo, with realistic proportions, bold even outlines and no shading, set inside a plain half-inch white margin, with no page numbers or text. When the book is open, the coloring page is on the right and the facing left page is blank white. Parts of the open page are colored in with waxy crayon or colored pencil, with visible strokes and a few marks outside the lines.";
 
@@ -174,7 +206,7 @@ const BOOKS = {
 const coverText = (title) =>
   `The front cover is a grid of the family's own colour photos under a soft dark tint, with a short title in big, white, rounded letters across the middle${title ? ` that reads "${title}"` : ""}.`;
 
-const AVOID = "Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No coloring page turned to face the camera while someone is coloring it.";
+const AVOID = "Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No drawing turned upright toward the camera in a book that is lying on a tray or table being colored.";
 const avoidText = (cover) =>
   `${AVOID} No watermarks, logos, brand names or captions, and no text anywhere${cover ? " except the short cover title" : ""}.`;
 
@@ -185,7 +217,7 @@ const SHAPES = {
 };
 
 const FIXES = [
-  { id: "facing", label: "Page was facing the camera", text: "Whoever is coloring has the page turned toward themselves and away from the camera." },
+  { id: "facing", label: "Page was facing the camera", text: "Most important: look at every book lying on a tray or table. Its drawing points toward the person coloring it, never toward the camera. Rotate it 180 degrees in your mind before drawing it: if the camera faces that person, the drawing in their book must look upside down in the photo." },
   { id: "spine", label: "Wrong binding drawn", text: "Draw the binding exactly as described: for a paperback, a square glued spine with no coil and no rings; for a stapled booklet, only two staples in the fold; for spiral, a black plastic coil." },
   { id: "flat", label: "Colour too flat", text: "Rich colour and contrast like a professional lifestyle photo, true blacks, warm highlights." },
   { id: "slick", label: "Colour too slick", text: "Natural colour, not oversaturated, no HDR." },
@@ -198,38 +230,41 @@ const FIXES = [
 
 const SECOND_PASS = "Keep the people, scene and composition exactly the same. Remove any shine or glow on skin, keep the skin matte with visible pores, and fix the colour so it looks like a real photograph, not AI: rich but natural, with real contrast. Make sure the coloring page faces the person coloring it.";
 
+// Editing a good image is more reliable than regenerating it when only the page direction is wrong.
+const FLIP_PASS = "Edit this image. Change only one thing: the coloring book that is lying on the tray or table in front of the child who is coloring is turned the wrong way. Rotate that book 180 degrees where it lies, so the drawing faces the child coloring it (top of the drawing away from them, bottom against their body). From the camera, that drawing should now look upside down. Their hand and crayon stay on the page. Keep everything else exactly the same: the people, faces, the page someone is holding up, the colours, the lighting and the framing.";
+
 /* ------------------------------------------------------------------ scenes (doc §6.4) */
 
 const SCENES = [
-  { id: "grandma-armchair", name: "Grandma colors her own family", look: "shoot", book: "paperback", shape: "3:2",
+  { id: "grandma-armchair", name: "Grandma colors her own family", look: "shoot", book: "paperback", shape: "3:2", camera: "behind",
     text: "A grandmother in her mid 70s with short white hair, reading glasses low on her nose and a soft rose cardigan with the sleeves pushed up sits in a well-worn armchair by a big window. A wooden lap tray rests on her knees with the paperback coloring book open on it. She holds the left page flat with her palm while she colors the right-hand page, a line drawing of her three grandkids sitting on a lake dock in life jackets, about a third colored in. She is concentrating, lips pressed together, coloring a life jacket orange with a short, worn-down crayon. Her phone leans against a mug of tea on the side table, showing the original colour photo. A crocheted throw, a TV remote and a small dish of crayons on the side table. Late-afternoon window light falling across her and the page. Shot from just behind and beside her shoulder at seated height, so the page reads upright in the photo and her face is in three-quarter profile." },
-  { id: "grandmas-together", name: "Two grandmas compare books", look: "shoot", book: "paperback", shape: "3:2",
+  { id: "grandmas-together", name: "Two grandmas compare books", look: "shoot", book: "paperback", shape: "3:2", camera: "beside",
     text: "Two grandmothers in their early 70s, friends, sit side by side at a dining table with a patterned oilcloth tablecloth. Each has her own paperback coloring book open in front of her, turned toward herself. One, with dyed auburn hair showing grey roots, lifts her book up off the table and tilts it toward her friend to show the page she just finished (a line drawing of her grandson in a baseball uniform, colored in red and blue), laughing. The other, with curly grey hair and a fleece vest, leans in to look, a crayon still in her hand over her own book (a line drawing of her granddaughter at a ballet recital, half colored in pink). Crayons in a coffee can, a plate of store-bought cookies, reading glasses, a phone face-up. A cozy, slightly cluttered kitchen behind them. Soft window light plus a warm pendant lamp overhead. Shot from the end of the table at table height, the edge of a third chair soft in the foreground." },
-  { id: "wedding-kids-table", name: "Kids' table at a wedding", look: "phone", book: "stapled", shape: "3:2", cover: true,
+  { id: "wedding-kids-table", name: "Kids' table at a wedding", look: "phone", book: "stapled", shape: "3:2", camera: "behind", cover: true,
     text: "A guest's phone photo at an evening wedding reception. Four kids aged 4 to 9 sit at a round kids' table with a white tablecloth that has a juice spill and crumbs on it. Their wedding clothes have clearly been worn all day: a flower girl with a crooked flower crown and a grass stain on her hem, a ring bearer with his shirt untucked and clip-on bow tie hanging loose, an older girl with her shoes kicked off under the chair. Each has a stapled coloring booklet open flat in front of them, turned toward themselves. The pages are line drawings of the bride and groom's engagement photos: the couple laughing on a wooden pier, the couple under a big oak tree. The ring bearer is coloring the groom's tie with his tongue poking out; the youngest has crayon on her fingers. One closed booklet lies on the table showing its cover. Name cards, a mason jar of crayons, a half-finished plate of chicken nuggets. String lights, guests talking and the dance floor behind them. Warm string-light glow mixed with blue dusk from tall windows. Taken by a guest standing behind the kids' chairs, looking down over their shoulders." },
-  { id: "road-trip", name: "Road trip to vacation", look: "phone", book: "spiral", shape: "3:2",
-    text: "Taken on a phone by a parent turning around from the front passenger seat. The back seat of a family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl in a car seat each have a spiral-bound coloring book folded back on itself on a lap tray, the page facing them. The pages are line drawings of the family on last summer's beach trip. The boy is coloring, head down, hair sticking up on one side. The girl lifts her book and turns it toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in the cargo area. Bright sky, green fields and a guardrail streak past the side windows with motion blur; sun patches and window reflections across the kids. The front seat headrest cuts into the bottom corner of the frame." },
-  { id: "family-reunion", name: "Family reunion picnic table", look: "phone", book: "home", shape: "3:2",
+  { id: "road-trip", name: "Road trip to vacation", look: "phone", book: "spiral", shape: "3:2", camera: "facing",
+    text: "Taken on a phone by a parent turning around from the front passenger seat. The back seat of a family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl in a car seat each have a spiral-bound coloring book folded back on itself, lying flat on their own lap tray. The pages are line drawings of the family on last summer's beach trip. The boy is coloring, head down, hair sticking up on one side. His book is oriented toward him, the way he reads it, so from the front seat his drawing looks upside down: the beach umbrella and the family's heads are at the end of the page nearest the camera, and the sand and the sandcastle are at the end nearest his tummy. The girl lifts her book and turns it toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in the cargo area. Bright sky, green fields and a guardrail streak past the side windows with motion blur; sun patches and window reflections across the kids. The front seat headrest cuts into the bottom corner of the frame." },
+  { id: "family-reunion", name: "Family reunion picnic table", look: "phone", book: "home", shape: "3:2", camera: "beside",
     text: "A phone photo at a summer family reunion in a park pavilion. A long picnic table with a plastic gingham tablecloth taped down at the corners. Three generations crowd one end: a grandfather in a baseball cap, two cousins about 7 and 10, an aunt in her 40s with sunglasses pushed up on her head. Each has a loose home-printed coloring page in front of them, turned toward themselves: line drawings of an old family photo of everyone at the same lake years ago. The aunt leans across and points at one figure on her cousin's page, explaining who it is. Paper plates, a cooler, a bottle of sunscreen, a stack of extra printed pages held down by a rock. Dappled midday light through the pavilion roof, some faces in shade, the grass outside bright green. Relatives by the grill in the background. Taken by someone standing at the end of the table, slightly above." },
-  { id: "big-sibling", name: "The new big sister", look: "phone", book: "stapled", shape: "2:3",
+  { id: "big-sibling", name: "The new big sister", look: "phone", book: "stapled", shape: "2:3", camera: "behind",
     text: "Taken on a phone by Dad, standing in the living room. A 4-year-old girl in pajama pants and a mismatched T-shirt kneels at the coffee table with a stapled coloring booklet open flat in front of her, turned toward herself. She is coloring a page that is a line drawing of herself holding her baby brother, pressing hard with a purple crayon. Behind her on the couch, her mom, in her early 30s with hair in a messy clip and a burp cloth over her shoulder, holds the sleeping newborn and looks down at the page over her daughter's head, tired but smiling. Baby wipes, a water bottle, a basket of unfolded laundry, crayons spread across the table. Soft daylight from a window. Shot from behind the girl and a little above, so the page reads upright." },
-  { id: "memory-care-visit", name: "Memory-care visit", look: "shoot", book: "spiral", shape: "3:2",
+  { id: "memory-care-visit", name: "Memory-care visit", look: "shoot", book: "spiral", shape: "3:2", camera: "facing",
     text: "A bright, homey room in an assisted-living residence, with a quilt on the bed and framed family photos on the dresser. A woman in her late 80s with thin white hair and a soft blue knit sweater sits at a small table by the window, a spiral-bound coloring book folded back flat in front of her and turned toward her. Her daughter, in her late 50s with reading glasses on a chain, sits at her elbow on the same side, so they both look at the page the right way up. The page is a line drawing of the mother's own wedding photo from the 1960s. The mother colors the bouquet slowly with a chunky crayon, calm and focused; the daughter watches her, chin on her hand, smiling a little. A cup of water with a straw, a cardigan over the chair back. Soft midday daylight. Calm and warm, not sad and not clinical: no medical equipment in view. Shot from across the room at seated height, slightly to the side." },
-  { id: "grown-up-evening", name: "Grown-up coloring for herself", look: "shoot", book: "paperback", shape: "3:2",
+  { id: "grown-up-evening", name: "Grown-up coloring for herself", look: "shoot", book: "paperback", shape: "3:2", camera: "beside",
     text: "Evening in a small apartment kitchen. A woman in her mid 30s in a hoodie and leggings, hair in a low ponytail with a few strands loose, sits at the counter with one foot up on the stool rung, a paperback coloring book open in front of her and turned toward her, her left hand holding the pages open. She is coloring a page that is a line drawing of her and her partner on a mountain hike, using colored pencils, with pencil marks on the side of her hand, half smiling to herself. A mug of tea, an open bag of chips, her phone face-down. Warm under-cabinet light pooling on the counter, the rest of the room in soft shadow, a dish rack and a plant behind her. Shot from beside and slightly behind her at counter height, a fruit bowl soft at the bottom edge of the frame." },
-  { id: "custom", name: "Custom scene (write your own)", look: "shoot", book: "stapled", shape: "3:2",
+  { id: "custom", name: "Custom scene (write your own)", look: "shoot", book: "stapled", shape: "3:2", camera: "behind",
     text: "" },
 ];
 
 /* ------------------------------------------------------------------ state */
 
-const STORE_KEY = "photo-prompt-builder:v1";
+const STORE_KEY = "photo-prompt-builder:v2";
 const $ = (id) => document.getElementById(id);
 
 function sceneById(id) { return SCENES.find((s) => s.id === id) || SCENES[0]; }
 
 function defaultsFor(scene) {
-  return { scene: scene.id, sceneText: scene.text, look: scene.look, book: scene.book, shape: scene.shape,
+  return { scene: scene.id, sceneText: scene.text, look: scene.look, book: scene.book, shape: scene.shape, camera: scene.camera,
     cover: !!scene.cover, coverTitle: "", fixes: [], notes: "" };
 }
 
@@ -254,7 +289,7 @@ function buildPrompt(s) {
   parts.push(`Create ${lookWord} (${SHAPES[s.shape].line}). It must look like a real photo of real people, not AI-generated.`);
   parts.push(`SCENE\n${(s.sceneText || "").trim() || "[Describe the scene here.]"}`);
   parts.push(`PHOTO STYLE\n${look.text}\n\n${REAL_PEOPLE}`);
-  const bookParts = [book.text, ORIENTATION, book.bound ? INTERIOR : LOOSE_LINE_ART];
+  const bookParts = [book.text, `${ORIENTATION} ${CAMERAS[s.camera].text} ${SHOW_OFF}`, book.bound ? INTERIOR : LOOSE_LINE_ART];
   if (s.cover && book.bound) bookParts.push(coverText((s.coverTitle || "").trim()));
   parts.push(`THE COLORING ${book.bound ? "BOOK" : "PAGES"}\n${bookParts.join("\n\n")}`);
   const fixes = FIXES.filter((f) => s.fixes.includes(f.id)).map((f) => f.text);
@@ -287,6 +322,9 @@ function render() {
   seg("look", "look", LOOKS, state.look);
   seg("book", "book", BOOKS, state.book);
   seg("shape", "shape", SHAPES, state.shape);
+  seg("camera", "camera", CAMERAS, state.camera);
+  $("cameraDefault").textContent = state.camera !== scene.camera ? `scene default: ${CAMERAS[scene.camera].label}` : "";
+  $("cameraHint").textContent = `From here the page being colored should look ${CAMERAS[state.camera].hint.replace("drawing looks ", "")}. The prompt says so, because image models turn drawings toward the camera unless told otherwise.`;
   $("lookDefault").textContent = state.look !== scene.look ? `scene default: ${LOOKS[scene.look].label}` : "";
   $("bookDefault").textContent = state.book !== scene.book ? `scene default: ${BOOKS[scene.book].label}` : "";
   $("shapeDefault").textContent = state.shape !== scene.shape ? `scene default: ${SHAPES[scene.shape].label}` : "";
@@ -329,6 +367,7 @@ function init() {
   $("resetAll").addEventListener("click", () => { state = defaultsFor(SCENES[0]); render(); });
   $("copy").addEventListener("click", () => copy($("output").value));
   $("copySecond").addEventListener("click", () => copy(SECOND_PASS));
+  $("copyFlip").addEventListener("click", () => copy(FLIP_PASS));
   render();
 }
 

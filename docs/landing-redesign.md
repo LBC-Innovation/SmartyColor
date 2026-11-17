@@ -227,13 +227,43 @@ uncoated white paper, with a matte full-colour cover (Lulu package codes
 page sits on its own sheet. The binding pictures on the site (`public/marketing/binding-*.webp`)
 show a violet matte cover, bright white page edges and, for spiral, a black plastic coil.
 
-**Page-orientation rule (paste with every book block):**
+**Page-orientation rule (paste with every book block):** the rule, then the camera sentence that
+matches where the camera is, then the show-off sentence. Image models turn drawings upright for the
+viewer unless told otherwise, so the prompt has to say what the page looks like *from the camera*
+and that an upside-down drawing is correct. (Round 3's first rule said the drawing "reads upright
+in the photo", which pushed the model to turn pages toward the camera whenever it faced the kids.)
 
-> The coloring page always faces the person coloring it: the top of the drawing points away from
-> them and the bottom of the drawing is nearest their body, exactly as you'd hold a page to
-> color it. Do not turn the book or page to face the camera. The camera sees the drawing from the
-> colorist's side or from over their shoulder, so it reads upright or at a slight angle in the
-> photo. Only a person deliberately holding a page up to show someone may turn it outward.
+> Anyone coloring has their page lying flat and oriented toward themselves, exactly as a person
+> holds a page to color it: the top edge of the drawing is the edge farthest from their body, and
+> the bottom edge of the drawing is against their body. A book being colored is never rotated to
+> show the camera.
+
+Camera facing the colorist (across a table, from the front seat):
+
+> The camera is in front of the people coloring, facing them. So every page that is being colored
+> appears UPSIDE DOWN in this photo: the people in the drawing have their heads toward the camera
+> (toward the bottom edge of the photo) and their feet toward the person coloring. This is correct
+> and intended. The drawings being colored do not need to be readable in the photo.
+
+Camera to the side:
+
+> The camera is off to the side of the people coloring. So every page that is being colored
+> appears turned sideways in this photo: the top of the drawing points away from the person
+> coloring, across the frame, not toward the camera. This is correct and intended.
+
+Camera over the shoulder:
+
+> The camera looks over the shoulder of the people coloring, from behind them. So the page being
+> colored appears upright in the photo, the same way the person coloring sees it.
+
+Then:
+
+> Someone who has lifted their page up off the table to show it may turn it toward the camera;
+> only that lifted page appears upright and facing the camera.
+
+Camera position per scene: over the shoulder for `grandma-armchair`, `wedding-kids-table` and
+`big-sibling`; from the side for `grandmas-together`, `family-reunion` and `grown-up-evening`;
+facing for `road-trip` and `memory-care-visit`.
 
 **Interior (paste with every book block):**
 
@@ -283,8 +313,8 @@ view: image models often garble longer text.
 > Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect
 > teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh
 > balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching
-> outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No coloring page turned
-> to face the camera while someone is coloring it. No watermarks, logos, brand names or captions,
+> outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No drawing turned
+> upright toward the camera in a book that is lying on a tray or table being colored. No watermarks, logos, brand names or captions,
 > and no text anywhere except the short cover title.
 
 ### 6.4 Scenes
@@ -334,9 +364,12 @@ view: image models often garble longer text.
 
 > Taken on a phone by a parent turning around from the front passenger seat. The back seat of a
 > family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl
-> in a car seat each have a spiral-bound coloring book folded back on itself on a lap tray, the
-> page facing them. The pages are line drawings of the family on last summer's beach trip. The
-> boy is coloring, head down, hair sticking up on one side. The girl lifts her book and turns it
+> in a car seat each have a spiral-bound coloring book folded back on itself, lying flat on their
+> own lap tray. The pages are line drawings of the family on last summer's beach trip. The boy is
+> coloring, head down, hair sticking up on one side. His book is oriented toward him, the way he
+> reads it, so from the front seat his drawing looks upside down: the beach umbrella and the
+> family's heads are at the end of the page nearest the camera, and the sand and the sandcastle
+> are at the end nearest his tummy. The girl lifts her book and turns it
 > toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a
 > cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in
 > the cargo area. Bright sky, green fields and a guardrail streak past the side windows with
@@ -395,8 +428,13 @@ view: image models often garble longer text.
 ### 6.5 Getting a real-looking result
 
 - **Make 3 or 4 per scene and pick the one that looks most like a real moment.**
-- **Check the page orientation first.** If the colorist's page faces the camera, regenerate and
-  add: "she is coloring it, so the page is turned toward her and away from the camera".
+- **Check the page orientation first.** If a page being colored still faces the camera, keep the
+  image and edit it instead of generating again (editing one book in a good image is more
+  reliable): "Edit this image. Change only one thing: the coloring book that is lying on the tray
+  or table in front of the child who is coloring is turned the wrong way. Rotate that book 180
+  degrees where it lies, so the drawing faces the child coloring it (top of the drawing away from
+  them, bottom against their body). From the camera, that drawing should now look upside down.
+  Their hand and crayon stay on the page. Keep everything else exactly the same."
 - **Check the binding:** two staples in the fold for stapled, a square glued spine for
   paperback, a black coil for spiral. If the model draws a spiral on a paperback, repeat "square
   glued spine, no coil, no rings".
