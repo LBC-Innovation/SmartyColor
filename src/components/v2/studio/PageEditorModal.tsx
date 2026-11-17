@@ -12,6 +12,7 @@ import {
   FlipHorizontal2,
   History,
   Loader2,
+  Maximize2,
   MessageSquareText,
   PencilLine,
   Printer,
@@ -20,8 +21,6 @@ import {
   Share2,
   Trash2,
   X,
-  ZoomIn,
-  ZoomOut,
   Download,
   RectangleHorizontal,
   RectangleVertical,
@@ -179,38 +178,31 @@ export function PageEditorModal(props: Props) {
   const hasPage = Boolean(pageVersion);
   const [viewFor, setViewFor] = useState<{ id: string; view: EditorView }>({ id: photo.id, view: initialView });
   const view: EditorView = !hasPage ? "photo" : viewFor.id === photo.id ? viewFor.view : "page";
-  const [zoomed, setZoomed] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const firstPage = revisions.find((r) => r.kind !== "photo");
-
-  // A new page on show starts unzoomed.
-  const [zoomFor, setZoomFor] = useState(photo.id);
-  if (zoomFor !== photo.id) {
-    setZoomFor(photo.id);
-    setZoomed(false);
-  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (fullScreen || (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       if (e.key === "ArrowLeft" && onPrev) onPrev();
       if (e.key === "ArrowRight" && onNext) onNext();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onPrev, onNext]);
+  }, [onPrev, onNext, fullScreen]);
 
-  // Horizontal swipe on the picture moves between pages; off while zoomed in.
+  // Horizontal swipe on the picture moves between pages.
   const swipeRef = useRef<{ x: number; y: number; id: number } | null>(null);
   function onPointerDown(e: ReactPointerEvent) {
-    if (zoomed || e.pointerType === "mouse") return;
+    if (e.pointerType === "mouse") return;
     swipeRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
   }
   function onPointerUp(e: ReactPointerEvent) {
     const start = swipeRef.current;
     swipeRef.current = null;
-    if (!start || start.id !== e.pointerId || zoomed) return;
+    if (!start || start.id !== e.pointerId) return;
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
     if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
@@ -353,28 +345,25 @@ export function PageEditorModal(props: Props) {
                 <button
                   type="button"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-v2-navy"
-                  aria-label={zoomed ? "Zoom out" : "Zoom in"}
-                  aria-pressed={zoomed}
-                  onClick={() => setZoomed((z) => !z)}
+                  aria-label="Full screen"
+                  title="Full screen"
+                  onClick={() => setFullScreen(true)}
                 >
-                  {zoomed ? <ZoomOut className="h-4 w-4" aria-hidden /> : <ZoomIn className="h-4 w-4" aria-hidden />}
+                  <Maximize2 className="h-4 w-4" aria-hidden />
                 </button>
               </div>
             ) : null}
             <div
-              className={cn(
-                "relative min-h-0 flex-1 overflow-hidden rounded-xl bg-v2-bg-subtle",
-                zoomed ? "overflow-auto touch-pan-x touch-pan-y" : "touch-pan-y",
-              )}
+              className="relative min-h-0 flex-1 touch-pan-y overflow-hidden rounded-xl bg-v2-bg-subtle"
               onPointerDown={onPointerDown}
               onPointerUp={onPointerUp}
               onPointerCancel={() => (swipeRef.current = null)}
-              onDoubleClick={() => hasPage && setZoomed((z) => !z)}
+              onDoubleClick={() => hasPage && setFullScreen(true)}
             >
               {state === "drawing" && !hasPage ? (
                 <V2SheetGeneratingPlaceholder imageSrc={photoSrc} imageAlt="Your photo being drawn" className="absolute inset-0 h-full w-full" />
               ) : (
-                <div className={cn("flex h-full w-full items-center justify-center", zoomed && "h-[200%] w-[200%]")}>
+                <div className="flex h-full w-full items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     key={shownSrc.slice(-48)}
@@ -505,6 +494,42 @@ export function PageEditorModal(props: Props) {
           </div>
         </div>
       </div>
+      {fullScreen && hasPage ? (
+        <FullScreenImage
+          src={shownSrc}
+          alt={view === "page" ? "Coloring page" : "Your photo"}
+          onClose={() => setFullScreen(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The page or photo alone, filling the screen. X, Esc, a tap anywhere or Back closes it. */
+function FullScreenImage({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalLayer({ panelRef, onClose });
+  useLayerHistory(true, onClose);
+  return (
+    <div
+      ref={panelRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/95 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] focus:outline-none sm:p-6"
+      onClick={onClose}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} draggable={false} className="max-h-full max-w-full select-none rounded-lg bg-white object-contain" />
+      <button
+        type="button"
+        className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+        aria-label="Exit full screen"
+        onClick={onClose}
+      >
+        <X className="h-5 w-5" aria-hidden />
+      </button>
     </div>
   );
 }
