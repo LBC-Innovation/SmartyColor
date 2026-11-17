@@ -67,13 +67,18 @@ export function AlbumThumb({
   url,
   size = "md",
   shared = false,
+  circle = false,
 }: {
   name: string;
   url?: string | null;
   size?: "sm" | "md";
   shared?: boolean;
+  /** Fully round, to sit inside a pill-shaped control. */
+  circle?: boolean;
 }) {
-  const box = size === "sm" ? "h-6 w-6 rounded-md text-xs" : "h-10 w-10 rounded-lg text-base";
+  const dims = size === "sm" ? "h-6 w-6 text-xs" : "h-10 w-10 text-base";
+  const corners = circle ? "rounded-full" : size === "sm" ? "rounded-md" : "rounded-lg";
+  const box = `${dims} ${corners}`;
   const initial = name.trim().charAt(0).toUpperCase();
   return (
     <span
