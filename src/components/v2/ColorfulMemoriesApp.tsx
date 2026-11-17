@@ -628,8 +628,9 @@ export function ColorfulMemoriesApp() {
       : null;
   // Stays open when every page is left out, so the checks on the cards can put one back.
   const bookCardOpen = desktop && bookOpen && (hasBookPage || book.leftOut > 0);
-  // Phones: once a book is under way, the book bar replaces the tab bar (the header menu has the tabs).
-  const showBookBar = !desktop && hasBookPage && !editor && bookProgress != null;
+  // Phones: the album toolbar has no room for the book button, so a book bar replaces the tab bar
+  // (the header menu has the tabs) once there's a finished page to book, or a book under way.
+  const showBookBar = !desktop && !editor && (bookProgress != null ? hasBookPage : order.contentCount > 0);
   // Turning the page to the other shape: free when that page exists, a page when the photo
   // already has that shape, otherwise reframing the photo and then a page.
   const editorShapePlan = editorPhoto && !editorPhoto.generating ? shapePlan(editorPhoto) : null;
@@ -822,7 +823,7 @@ export function ColorfulMemoriesApp() {
             onCancelSelect={deletion.exit}
             onArrange={() => setArrangeOpen(true)}
             book={
-              hasBookPage && !bookCardOpen && !deletion.active
+              hasBookPage && !bookCardOpen && !deletion.active && !showBookBar
                 ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
                 : null
             }
@@ -1115,14 +1116,25 @@ export function ColorfulMemoriesApp() {
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 text-sm">
               <span className="block truncate font-semibold text-v2-ink">
-                Your book · {bookProgress?.summary ?? `${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
+                {bookProgress ? "Your book" : "Your pages"} ·{" "}
+                {bookProgress?.summary ?? `${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
               </span>
               <span className="block truncate text-xs text-v2-muted">
-                {bookPriceLabel ?? (bookProgress ? `${bookProgress.done} of ${bookProgress.total} steps done` : null)}
+                {bookPriceLabel ??
+                  (bookProgress
+                    ? `${bookProgress.done} of ${bookProgress.total} steps done`
+                    : "Printed, bound and mailed to you")}
               </span>
             </p>
-            <button type="button" className="v2-btn-primary min-h-11 shrink-0 px-5 text-sm" onClick={openBook}>
-              Continue
+            <button type="button" className="v2-btn-primary min-h-11 shrink-0 gap-1.5 px-5 text-sm" onClick={openBook}>
+              {bookProgress ? (
+                "Continue"
+              ) : (
+                <>
+                  <BookOpen className="h-4 w-4" aria-hidden />
+                  Make a book
+                </>
+              )}
             </button>
           </div>
         </div>
