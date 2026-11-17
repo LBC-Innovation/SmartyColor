@@ -26,6 +26,7 @@ import {
   type PageFit,
   type PageRotation,
 } from "@/lib/print/pageLayout";
+import { splitBase64DataUrl } from "@/lib/photo/dataUrlBlob";
 import type { PrintPrefs } from "@/lib/print/settings";
 import { embedNoteFont } from "@/lib/print/fonts/load";
 
@@ -66,15 +67,15 @@ function embedGrayImage(pdf: PDFDocument, gray: PdfGrayImage): EmbeddedImage {
 
 async function embedSheetImage(pdf: PDFDocument, source: PdfSheetImage): Promise<EmbeddedImage> {
   if (typeof source !== "string") return embedGrayImage(pdf, source);
-  const match = source.match(/^data:(.+);base64,(.+)$/);
-  if (source.startsWith("data:image/svg+xml") && !match) {
+  const parts = splitBase64DataUrl(source);
+  if (source.startsWith("data:image/svg+xml") && !parts) {
     throw new Error("Print this page in the browser for sample drawings.");
   }
-  if (!match) {
+  if (!parts) {
     throw new Error("Could not read the drawing.");
   }
-  const bytes = Buffer.from(match[2], "base64");
-  return match[1].includes("png") ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
+  const bytes = Buffer.from(parts.base64, "base64");
+  return parts.mime.includes("png") ? pdf.embedPng(bytes) : pdf.embedJpg(bytes);
 }
 
 /** `page.drawImage` for any embedded image, including ones pdf-lib didn't embed itself. */
