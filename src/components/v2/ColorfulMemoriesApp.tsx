@@ -621,7 +621,8 @@ export function ColorfulMemoriesApp() {
           summary: order.formatChosen ? formatSummary(order) : null,
         }
       : null;
-  const bookCardOpen = desktop && bookOpen && hasBookPage;
+  // Stays open when every page is left out, so the checks on the cards can put one back.
+  const bookCardOpen = desktop && bookOpen && (hasBookPage || book.leftOut > 0);
   // Phones: once a book is under way, the book bar replaces the tab bar (the header menu has the tabs).
   const showBookBar = !desktop && hasBookPage && !editor && bookProgress != null;
   // Turning the page to the other shape: free when that page exists, a page when the photo
@@ -956,6 +957,7 @@ export function ColorfulMemoriesApp() {
                   onPrint={(id) => setOutput({ id, mode: "all" })}
                   onReorder={replacePhotos}
                   showReorderHint={!bookCardOpen}
+                  bookMode={bookCardOpen}
                 />
               )}
 

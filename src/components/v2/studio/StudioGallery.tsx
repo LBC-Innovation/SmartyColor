@@ -55,6 +55,8 @@ type Props = {
   onReorder: (next: V2PhotoEntry[]) => void;
   /** False when something else already explains reordering (the book's own tip). */
   showReorderHint?: boolean;
+  /** The book panel is open: each finished page gets a check to keep it in or leave it out. */
+  bookMode?: boolean;
 };
 
 type ShareProps = Omit<
@@ -112,6 +114,7 @@ export function StudioGallery({
   onPrint,
   onReorder,
   showReorderHint = true,
+  bookMode = false,
 }: Props) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -177,6 +180,7 @@ export function StudioGallery({
       count: photos.length,
       ...cardInfo(photo),
       selectMode,
+      bookMode,
       selected: selectedIds.has(photo.id),
       onToggleSelect: () => onToggleSelect(photo.id),
       onOpen: (view) => onOpen(photo.id, view),
