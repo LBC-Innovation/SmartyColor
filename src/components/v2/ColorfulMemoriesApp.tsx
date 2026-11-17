@@ -521,6 +521,7 @@ export function ColorfulMemoriesApp() {
 
   // ---- deleting and selecting -----------------------------------------------------------
   const deletion = useV2LibraryDeletion();
+  const [arrangeOpen, setArrangeOpen] = useState(false);
   const [bulk, setBulk] = useState<"move" | "download" | null>(null);
   const selectedPhotos = photos.filter((p) => deletion.selectedIds.has(p.id));
 
@@ -819,6 +820,7 @@ export function ColorfulMemoriesApp() {
             selectDisabled={activeCount > 0}
             selecting={deletion.active}
             onCancelSelect={deletion.exit}
+            onArrange={() => setArrangeOpen(true)}
             book={
               hasBookPage && !bookCardOpen && !deletion.active
                 ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
@@ -997,6 +999,8 @@ export function ColorfulMemoriesApp() {
                   onReorder={replacePhotos}
                   showReorderHint={!bookCardOpen}
                   bookMode={bookCardOpen}
+                  arrangeOpen={arrangeOpen}
+                  onArrangeClose={() => setArrangeOpen(false)}
                 />
               )}
 

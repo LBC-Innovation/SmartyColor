@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, CheckSquare, Loader2, Upload, X } from "lucide-react";
+import { BookOpen, CheckSquare, LayoutGrid, Loader2, Upload, X } from "lucide-react";
 import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { cn } from "@/lib/cn";
 
@@ -14,6 +14,8 @@ type Props = {
   /** Select mode is on: the Select button turns into a filled Cancel that leaves it. */
   selecting?: boolean;
   onCancelSelect?: () => void;
+  /** Opens the Arrange sheet; the button shows once there are 2+ pages. */
+  onArrange?: () => void;
   /** The way into the book, always in reach while scrolling; null while the book is on screen. */
   book?: { label: string; inProgress: boolean; onOpen: () => void } | null;
 };
@@ -28,6 +30,7 @@ export function StudioHeader({
   selectDisabled,
   selecting = false,
   onCancelSelect,
+  onArrange,
   book,
 }: Props) {
   const btn = "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 px-3 text-sm min-[360px]:px-4 v2-btn-outline";
@@ -72,6 +75,18 @@ export function StudioHeader({
         >
           <CheckSquare className="h-4 w-4" aria-hidden />
           <span className="hidden sm:inline">Select photos</span>
+        </button>
+      ) : null}
+      {onArrange && photoCount >= 2 && !selecting ? (
+        <button
+          type="button"
+          onClick={onArrange}
+          aria-label="Arrange pages"
+          title="Arrange pages"
+          className={cn(btn, "max-sm:px-0")}
+        >
+          <LayoutGrid className="h-4 w-4" aria-hidden />
+          <span className="hidden sm:inline">Arrange</span>
         </button>
       ) : null}
       {book ? (

@@ -1,15 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   DndContext,
-  DragOverlay,
   KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
   closestCenter,
   type DragEndEvent,
-  type DragStartEvent,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -26,6 +22,7 @@ import {
   ChevronRight,
   FlipHorizontal2,
   GripVertical,
+  LayoutGrid,
   Loader2,
   Plus,
   RectangleVertical,
@@ -43,6 +40,8 @@ import { BookNotePageArt } from "@/components/v2/book-order/BookNotePageArt";
 import { BookPageImageFill } from "@/components/v2/book-order/BookPageImageFill";
 import { effectiveOrientation } from "@/lib/print/bookPagePlan";
 import { cn } from "@/lib/cn";
+import { ArrangeSheet, type ArrangeSession } from "@/components/v2/arrange/ArrangeSheet";
+import { useArrangeLift, type ArrangeLiftInfo } from "@/components/v2/arrange/useArrangeLift";
 
 type Props = {
   binding: BookBindingSpec;
@@ -72,12 +71,27 @@ type TileProps = {
   firstIndex?: number;
   onRemove?: () => void;
   onMove: (delta: -1 | 1) => void;
+  onLift: (info: ArrangeLiftInfo) => void;
 };
 
-function DragHandle({ index, listeners, attributes }: {
+/** Pointer lifts from the whole tile or from its grip; the grip also keeps dnd-kit's keyboard reordering. */
+function useTileLift(id: string, onLift: (info: ArrangeLiftInfo) => void) {
+  const rootEl = useRef<HTMLElement | null>(null);
+  const tile = useArrangeLift({ id, onLift });
+  const handle = useArrangeLift({ id, onLift, fromHandle: true, getOriginEl: () => rootEl.current });
+  const setRootEl = (el: HTMLElement | null) => {
+    rootEl.current = el;
+  };
+  return { setRootEl, tile, handle };
+}
+
+const TILE_LIFT = "select-none [-webkit-touch-callout:none]";
+
+function DragHandle({ index, listeners, attributes, lift }: {
   index: number;
   listeners: ReturnType<typeof useSortable>["listeners"];
   attributes: ReturnType<typeof useSortable>["attributes"];
+  lift: ReturnType<typeof useArrangeLift>;
 }) {
   return (
     <button
@@ -85,6 +99,11 @@ function DragHandle({ index, listeners, attributes }: {
       className="absolute right-1 top-1 inline-flex h-9 w-9 cursor-grab touch-none items-center justify-center rounded-lg bg-white/85 text-v2-muted shadow-sm backdrop-blur active:cursor-grabbing"
       {...attributes}
       {...listeners}
+      onPointerDown={(e) => {
+        // The grip starts the lift itself; keep the tile's own handler out of it.
+        e.stopPropagation();
+        lift.onPointerDown(e);
+      }}
       aria-label={`Drag page ${index + 1}`}
     >
       <GripVertical className="h-4 w-4" aria-hidden />
@@ -107,7 +126,7 @@ function TileFooter({
   onMove,
   onRemove,
   middle,
-}: TileProps & { middle?: React.ReactNode }) {
+}: Omit<TileProps, "onLift"> & { middle?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between border-t border-gray-100 px-1 py-0.5">
       <button
@@ -162,22 +181,30 @@ function SortablePhotoTile({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id,
   });
+  const { onLift, ...footer } = tile;
+  const lift = useTileLift(page.id, onLift);
   // Landscape sheets are turned to portrait automatically; only those can be flipped.
   const landscape = effectiveOrientation(page) !== binding.requiredOrientation;
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        lift.setRootEl(el);
+      }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm",
+        TILE_LIFT,
         isDragging && "opacity-40",
       )}
+      onContextMenu={(e) => e.preventDefault()}
+      {...lift.tile}
     >
       <div className="relative aspect-[8.5/11] w-full bg-v2-bg-subtle">
         <BookPageImageFill page={page} binding={binding} />
         <PageNumber index={tile.index} />
-        <DragHandle index={tile.index} listeners={listeners} attributes={attributes} />
+        <DragHandle index={tile.index} listeners={listeners} attributes={attributes} lift={lift.handle} />
         {landscape && onMakePortrait && !busyLabel ? (
           <button
             type="button"
@@ -200,7 +227,7 @@ function SortablePhotoTile({
         {busyLabel ? <BusyOverlay label={busyLabel} /> : null}
       </div>
       <TileFooter
-        {...tile}
+        {...footer}
         onRemove={tile.onRemove}
         middle={
           landscape ? (
@@ -269,30 +296,38 @@ function SortableBlankTile({ page, ...tile }: TileProps & { page: BookWizardBlan
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id,
   });
+  const { onLift, ...footer } = tile;
+  const lift = useTileLift(page.id, onLift);
   const lined = page.variant === "lined";
   const caption = lined ? "Lined page" : page.auto ? "Blank (added to fill the book)" : "Blank page";
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        lift.setRootEl(el);
+      }}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm",
+        TILE_LIFT,
         page.auto ? "border-dashed border-gray-300" : "border-gray-200",
         isDragging && "opacity-40",
       )}
+      onContextMenu={(e) => e.preventDefault()}
+      {...lift.tile}
     >
       <div className="relative aspect-[8.5/11] w-full bg-white">
         <BlankArt page={page} />
         <PageNumber index={tile.index} />
-        <DragHandle index={tile.index} listeners={listeners} attributes={attributes} />
+        <DragHandle index={tile.index} listeners={listeners} attributes={attributes} lift={lift.handle} />
         {lined || page.auto ? (
           <span className="absolute inset-x-1.5 bottom-1.5 rounded-md bg-slate-700/80 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white">
             {caption}
           </span>
         ) : null}
       </div>
-      <TileFooter {...tile} />
+      <TileFooter {...footer} />
     </div>
   );
 }
@@ -309,19 +344,27 @@ export function BookPageThumbnailGrid({
   busy,
   portraitHint,
 }: Props) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [session, setSession] = useState<ArrangeSession | null>(null);
   // A gift note is fixed as page 1; everything after it can be reordered.
   const note = pages[0]?.kind === "note" ? pages[0] : null;
   const offset = note ? 1 : 0;
   const movable = note ? pages.slice(1) : pages;
   const sortableIds = movable.map((p) => p.id);
 
-  // Touch waits briefly so the grid still scrolls; mouse starts after a small move.
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // Pointer reordering lives in the Arrange sheet; here only the grip's keyboard drags.
+  const sensors = useSensors(useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+
+  function onLift(info: ArrangeLiftInfo) {
+    setSession({
+      mode: "drag",
+      activeId: info.id,
+      pointerId: info.pointerId,
+      pointerType: info.pointerType,
+      x: info.x,
+      y: info.y,
+      originRect: info.originRect,
+    });
+  }
 
   function movePage(id: string, delta: -1 | 1) {
     const from = movable.findIndex((p) => p.id === id);
@@ -331,7 +374,6 @@ export function BookPageThumbnailGrid({
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = movable.findIndex((p) => p.id === active.id);
@@ -339,8 +381,6 @@ export function BookPageThumbnailGrid({
     if (oldIndex < 0 || newIndex < 0) return;
     onReorder(arrayMove(movable, oldIndex, newIndex));
   }
-
-  const activePage = movable.find((p) => p.id === activeId);
 
   return (
     <div className="space-y-3">
@@ -353,11 +393,16 @@ export function BookPageThumbnailGrid({
           <Plus className="h-4 w-4" aria-hidden />
           Insert lined page
         </button>
+        {movable.length >= 2 ? (
+          <button type="button" className="v2-btn-outline h-10 px-3" onClick={() => setSession({ mode: "browse" })}>
+            <LayoutGrid className="h-4 w-4" aria-hidden />
+            Arrange pages
+          </button>
+        ) : null}
       </div>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
@@ -369,6 +414,7 @@ export function BookPageThumbnailGrid({
                 count: pages.length,
                 firstIndex: offset,
                 onMove: (delta: -1 | 1) => movePage(page.id, delta),
+                onLift,
               };
               if (page.kind === "note") return null;
               if (page.kind === "photo") {
@@ -398,18 +444,29 @@ export function BookPageThumbnailGrid({
             })}
           </div>
         </SortableContext>
-        <DragOverlay>
-          {activePage ? (
-            <div className="aspect-[8.5/11] w-36 overflow-hidden rounded-xl border-2 border-v2-primary bg-white shadow-lg">
-              {activePage.kind === "photo" ? (
-                <BookPageImageFill page={activePage} binding={binding} />
-              ) : activePage.kind === "blank" ? (
-                <BlankArt page={activePage} />
-              ) : null}
-            </div>
-          ) : null}
-        </DragOverlay>
       </DndContext>
+      <ArrangeSheet
+        items={pages}
+        getId={(p) => p.id}
+        renderThumb={(p) => (
+          <div className="relative h-full w-full bg-white">
+            {p.kind === "photo" ? (
+              <BookPageImageFill page={p} binding={binding} />
+            ) : p.kind === "blank" ? (
+              <BlankArt page={p} />
+            ) : (
+              <BookNotePageArt text={p.text} />
+            )}
+          </div>
+        )}
+        aspect={8.5 / 11}
+        lockedLeading={note ? 1 : 0}
+        noun="page"
+        session={session}
+        // The gift note never moves, so only the pages after it go back to the caller.
+        onCommit={(next) => onReorder(next.filter((p) => p.kind !== "note"))}
+        onClose={() => setSession(null)}
+      />
     </div>
   );
 }

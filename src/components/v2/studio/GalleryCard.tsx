@@ -245,6 +245,7 @@ export function GalleryCard({
         {/* The photo: opens the editor */}
         <button
           type="button"
+          data-lift-ok
           className="relative block aspect-[3/4] w-full focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-v2-primary"
           aria-label={selectMode ? `${selected ? "Unselect" : "Select"} ${label}` : `Open ${label}`}
           aria-pressed={selectMode ? selected : undefined}
@@ -276,6 +277,7 @@ export function GalleryCard({
         {state === "ready" ? (
           <button
             type="button"
+            data-lift-ok
             className={cn(
               "absolute bottom-2 right-2 aspect-[3/4] w-[52%] overflow-hidden rounded-lg border-2 border-white bg-white shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
             )}
@@ -438,6 +440,28 @@ export function GalleryCard({
         <p className="mt-1 h-4" aria-hidden />
       )}
     </div>
+  );
+}
+
+/** The photo, or its finished coloring page, filling its (relative) parent. Used by the Arrange sheet. */
+export function GalleryThumb({ photo, preferPage }: { photo: V2PhotoEntry; preferPage: boolean }) {
+  const source = pageSourceVersion(photo);
+  const page = activePageVersion(photo);
+  const photoThumb = useThumbUrl(source?.sheet.imageDataUrl ?? photo.previewUrl, source ? source.sheet.thumbUrl : photo.thumbUrl);
+  const sheetThumb = useThumbUrl(page?.sheet.imageDataUrl, page?.sheet.thumbUrl);
+  const showPage = preferPage && sheetThumb;
+  const src = showPage ? sheetThumb : photoThumb;
+  if (!src) return <span className="absolute inset-0 bg-v2-bg-subtle" />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      decoding="async"
+      className="pointer-events-none absolute inset-0 h-full w-full bg-white object-cover"
+      style={showPage ? undefined : { objectPosition: photoThumbObjectPosition(photo) === "top" ? "center top" : "center center" }}
+    />
   );
 }
 
