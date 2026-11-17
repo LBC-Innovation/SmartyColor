@@ -56,12 +56,13 @@ export default async function SharedPage({ params }: Props) {
           <img src="/brand/wordmark.svg" alt="Colorful Memories" width={220} height={27} className="h-6 w-auto" />
         </Link>
 
-        <div className="w-full rounded-2xl border border-gray-200 bg-white p-3 shadow-sm print:border-0 print:p-0 print:shadow-none sm:p-5">
+        {/* print-sheet: the global print stylesheet hides everything else and fits this to the page. */}
+        <div className="print-sheet w-full rounded-2xl border border-gray-200 bg-white p-3 shadow-sm sm:p-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`/p/${token}/image`}
             alt="Coloring page"
-            className="mx-auto h-auto max-h-[75dvh] w-full object-contain print:max-h-none"
+            className="mx-auto h-auto max-h-[75dvh] w-full object-contain"
           />
         </div>
 
