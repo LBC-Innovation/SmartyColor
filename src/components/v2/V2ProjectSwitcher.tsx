@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Loader2, Users } from "lucide-react";
+import { ChevronDown, Loader2, LogOut, Users } from "lucide-react";
 import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { AlbumSwitcherPanel, AlbumThumb } from "@/components/v2/albums/AlbumSwitcherPanel";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
 import { V2ShareAlbumModal } from "@/components/v2/V2ShareAlbumModal";
 import { V2SendToFamilyModal } from "@/components/v2/share/V2SendToFamilyModal";
-import { V2Modal } from "@/components/v2/ui/V2Modal";
+import { V2Modal, V2ModalActions } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import * as library from "@/lib/library/client";
 import { cn } from "@/lib/cn";
@@ -181,6 +181,7 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
         <V2DeleteProjectConfirmModal
           projectName={deleteTarget.name}
           photoCount={deleteTarget.photoCount}
+          sharedCount={deleteTarget.sharedCount}
           busy={busy}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => void confirmDeleteProject()}
@@ -205,34 +206,38 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
       ) : null}
 
       {leaveTarget ? (
-        <V2Modal onClose={() => !busy && setLeaveTarget(null)} maxWidthClass="max-w-md" ariaLabel="Leave album">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-v2-ink">Leave “{leaveTarget.name}”?</h2>
-            <p className="mt-2 text-sm leading-relaxed text-v2-muted">
+        <V2Modal
+          onClose={() => !busy && setLeaveTarget(null)}
+          maxWidthClass="max-w-lg"
+          tone="danger"
+          icon={<LogOut />}
+          title={`Leave “${leaveTarget.name}”?`}
+          description={
+            <>
               The album will disappear from your list. Photos you added stay in it for
-              {leaveTarget.ownerName ? ` ${leaveTarget.ownerName}` : " its owner"}, who can invite you again
-              later.
-            </p>
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setLeaveTarget(null)}
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Stay in album
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void confirmLeaveAlbum()}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                Leave album
-              </button>
-            </div>
-          </div>
+              {leaveTarget.ownerName ? ` ${leaveTarget.ownerName}` : " its owner"}, who can invite you again later.
+            </>
+          }
+        >
+          <V2ModalActions>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setLeaveTarget(null)}
+              className="v2-modal-btn v2-modal-btn--secondary"
+            >
+              Stay in album
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void confirmLeaveAlbum()}
+              className="v2-modal-btn v2-modal-btn--danger"
+            >
+              {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
+              Leave album
+            </button>
+          </V2ModalActions>
         </V2Modal>
       ) : null}
     </div>

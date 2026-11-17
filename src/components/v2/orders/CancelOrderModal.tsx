@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { V2Modal } from "@/components/v2/ui/V2Modal";
+import { Clock, Loader2, Mail, PackageX, Printer, Wallet } from "lucide-react";
+import { V2Modal, V2ModalActions, V2ModalBody } from "@/components/v2/ui/V2Modal";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
 import {
@@ -62,53 +62,60 @@ export function CancelOrderModal({
   }
 
   return (
-    <V2Modal onClose={() => !busy && onClose()} maxWidthClass="max-w-md" ariaLabel="Cancel order">
-      <div className="p-6">
-        <div className="flex gap-4">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-            <AlertTriangle className="h-5 w-5" aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold text-v2-ink">Cancel “{bookName}”?</h2>
-            {admin && customerLabel ? (
-              <p className="mt-1 text-xs text-v2-muted">Customer: {customerLabel}</p>
-            ) : null}
-            <p className="mt-2 text-sm leading-relaxed text-v2-muted">Here&apos;s what happens:</p>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-relaxed text-v2-muted">
-              <li>We stop the print job, so the book won&apos;t be printed or shipped.</li>
-              <li>
-                {amount
-                  ? `${amount} goes back to ${admin ? "the customer's" : "your"} Colorful Memories wallet right away.`
-                  : `Anything ${admin ? "the customer" : "you"} paid goes back to the wallet right away.`}
-              </li>
-              <li>
-                {admin ? "The customer gets" : "You'll get"} an email confirming the cancellation. The book
-                project stays in {admin ? "their" : "your"} account to order again later.
-              </li>
-            </ul>
-            {deadline && closed ? (
-              <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-relaxed text-v2-ink">
-                The cancel window closed at {formatCancelDeadline(deadline)}, when your book went into
-                production. It can no longer be canceled.
-              </p>
-            ) : deadline ? (
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-900">
-                Orders can be canceled until production starts, around {formatCancelDeadline(deadline)}
-                {remainingMs != null && !expired ? (
-                  <>
-                    {" "}
-                    (<span className="font-semibold tabular-nums">{formatCountdown(remainingMs)}</span> left)
-                  </>
-                ) : null}
-                .
-              </p>
-            ) : null}
-            <p className="mt-2 text-xs text-v2-muted">This can&apos;t be undone.</p>
-          </div>
-        </div>
+    <V2Modal
+      onClose={() => !busy && onClose()}
+      maxWidthClass="max-w-lg"
+      tone="danger"
+      icon={<PackageX />}
+      title={`Cancel “${bookName}”?`}
+      description={admin && customerLabel ? `Customer: ${customerLabel}` : "Here’s what happens:"}
+    >
+      <V2ModalBody className="space-y-4">
+        {admin && customerLabel ? <p className="font-medium text-v2-ink">Here&apos;s what happens:</p> : null}
+        <ul className="space-y-2.5 text-base leading-relaxed text-v2-ink">
+          <li className="flex gap-3">
+            <Printer className="mt-1 h-5 w-5 shrink-0 text-v2-primary" aria-hidden />
+            <span>We stop the print job, so the book won&apos;t be printed or shipped.</span>
+          </li>
+          <li className="flex gap-3">
+            <Wallet className="mt-1 h-5 w-5 shrink-0 text-v2-primary" aria-hidden />
+            <span>
+              {amount
+                ? `${amount} goes back to ${admin ? "the customer's" : "your"} Colorful Memories wallet right away.`
+                : `Anything ${admin ? "the customer" : "you"} paid goes back to the wallet right away.`}
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <Mail className="mt-1 h-5 w-5 shrink-0 text-v2-primary" aria-hidden />
+            <span>
+              {admin ? "The customer gets" : "You'll get"} an email confirming the cancellation. The book project
+              stays in {admin ? "their" : "your"} account to order again later.
+            </span>
+          </li>
+        </ul>
+        {deadline && closed ? (
+          <p className="rounded-2xl bg-v2-bg-subtle px-4 py-3 text-base leading-relaxed text-v2-ink ring-1 ring-gray-200">
+            The cancel window closed at {formatCancelDeadline(deadline)}, when your book went into production. It
+            can no longer be canceled.
+          </p>
+        ) : deadline ? (
+          <p className="flex gap-3 rounded-2xl bg-amber-50 px-4 py-3 text-base leading-relaxed text-amber-950 ring-1 ring-amber-200">
+            <Clock className="mt-1 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+            <span>
+              Orders can be canceled until production starts, around {formatCancelDeadline(deadline)}
+              {remainingMs != null && !expired ? (
+                <>
+                  {" "}
+                  (<span className="font-semibold tabular-nums">{formatCountdown(remainingMs)}</span> left)
+                </>
+              ) : null}
+              .
+            </span>
+          </p>
+        ) : null}
 
-        <div className="mt-5">
-          <label htmlFor={reasonId} className="text-sm font-medium text-v2-ink">
+        <div>
+          <label htmlFor={reasonId} className="text-base font-semibold text-v2-ink">
             {admin ? "Reason for canceling (shared with the customer)" : "Why are you canceling? (optional)"}
           </label>
           <textarea
@@ -119,36 +126,32 @@ export function CancelOrderModal({
             rows={3}
             disabled={busy}
             placeholder={admin ? "e.g. Customer asked to change the address" : "e.g. I want to change a few pages"}
-            className="mt-1.5 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-v2-ink focus:border-v2-primary focus:outline-none focus:ring-2 focus:ring-v2-primary/20 disabled:opacity-60"
+            className="mt-2 w-full rounded-2xl border-2 border-gray-200 px-4 py-3 text-base text-v2-ink transition focus:border-v2-primary focus:outline-none focus:ring-4 focus:ring-v2-primary/15 disabled:opacity-60"
           />
         </div>
 
         {error ? (
-          <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-base text-rose-800">
             {error}
           </p>
         ) : null}
+        <p className="text-sm font-medium text-v2-muted">This can&apos;t be undone.</p>
+      </V2ModalBody>
 
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Keep order
-          </button>
-          <button
-            type="button"
-            disabled={busy || closed || (admin && !reason.trim())}
-            onClick={() => void confirm()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Confirm cancel
-          </button>
-        </div>
-      </div>
+      <V2ModalActions>
+        <button type="button" disabled={busy} onClick={onClose} className="v2-modal-btn v2-modal-btn--secondary">
+          Keep order
+        </button>
+        <button
+          type="button"
+          disabled={busy || closed || (admin && !reason.trim())}
+          onClick={() => void confirm()}
+          className="v2-modal-btn v2-modal-btn--danger"
+        >
+          {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
+          Confirm cancel
+        </button>
+      </V2ModalActions>
     </V2Modal>
   );
 }

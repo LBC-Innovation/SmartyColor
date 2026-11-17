@@ -795,8 +795,8 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
       ) : null}
 
       {designerOpen ? (
-        <V2Modal title={<span className="text-base font-semibold text-v2-ink">Cover</span>} onClose={() => setDesignerOpen(false)} maxWidthClass="max-w-3xl">
-          <div className="p-4 sm:p-6">
+        <V2Modal icon={<Palette />} title="Cover" onClose={() => setDesignerOpen(false)} maxWidthClass="max-w-3xl">
+          <div className="px-4 pb-6 pt-1 sm:px-7">
             <BookCoverDesigner
               design={order.coverDesign}
               onChange={(next) =>

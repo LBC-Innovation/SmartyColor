@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { Trash2 } from "lucide-react";
+import { V2ModalActions } from "@/components/v2/ui/V2Modal";
 
 type V2DeletePagesConfirmModalProps = {
   open: boolean;
@@ -34,55 +34,45 @@ export function V2DeletePagesConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/55 p-4 sm:p-6"
+      className="v2-modal fixed inset-0 z-[60] flex items-end justify-center p-3 sm:items-center sm:p-6"
       role="dialog"
       aria-labelledby="v2-delete-pages-title"
       aria-describedby="v2-delete-pages-desc"
       aria-modal="true"
-      onClick={() => !busy && onCancel()}
     >
-      <div
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl shadow-slate-900/20"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex gap-4">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-            <AlertTriangle className="h-5 w-5" aria-hidden />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close dialog"
+        className="v2-modal-backdrop absolute inset-0 bg-v2-plum/50 backdrop-blur-sm"
+        onClick={() => !busy && onCancel()}
+      />
+      <div className="v2-modal-panel relative max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-[1.75rem] bg-white ring-1 ring-v2-primary/10">
+        <div className="v2-modal-strip v2-modal-strip--danger h-1.5 w-full" aria-hidden />
+        <div className="v2-modal-head flex gap-4 px-5 pb-2 pt-5 sm:px-7 sm:pt-6">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-coral to-brand-pink text-white shadow-lg shadow-brand-pink/30">
+            <Trash2 className="h-6 w-6" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
-            <h2
-              id="v2-delete-pages-title"
-              className="text-lg font-semibold text-v2-ink"
-            >
+            <h2 id="v2-delete-pages-title" className="v2-brand-title text-[1.5rem] leading-tight text-v2-ink">
               Permanently delete {pageCount} {noun}?
             </h2>
-            <p id="v2-delete-pages-desc" className="mt-2 text-sm leading-relaxed text-v2-muted">
+            <p id="v2-delete-pages-desc" className="mt-1.5 text-base leading-relaxed text-v2-muted">
               {pageCount === 1 ? "This photo and its coloring page" : "These photos and their coloring pages"}{" "}
               will be deleted for good. This can&apos;t be undone.
             </p>
           </div>
         </div>
 
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onCancel}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle disabled:cursor-not-allowed disabled:opacity-50"
-          >
+        <V2ModalActions className="pt-5">
+          <button type="button" disabled={busy} onClick={onCancel} className="v2-modal-btn v2-modal-btn--secondary">
             Cancel
           </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onConfirm}
-            className={cn(
-              "inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-          >
-            Delete
+          <button type="button" disabled={busy} onClick={onConfirm} className="v2-modal-btn v2-modal-btn--danger">
+            <Trash2 className="h-5 w-5" aria-hidden />
+            Delete {pageCount === 1 ? "photo" : `${pageCount} photos`}
           </button>
-        </div>
+        </V2ModalActions>
       </div>
     </div>
   );

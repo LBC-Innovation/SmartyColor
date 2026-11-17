@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { BookPrintGuidesToggle } from "@/components/v2/book-order/BookPrintGuidesToggle";
 import { BookPrintPagePreview } from "@/components/v2/book-order/BookPrintPagePreview";
 import type { BookBindingSpec } from "@/lib/print/bookBindings";
@@ -58,7 +58,7 @@ export function BookFlipThroughModal({ pages, binding, onClose }: Props) {
       : `Page ${spread.rightPageNumber} of ${pages.length}`;
 
   return (
-    <V2Modal onClose={onClose} maxWidthClass="max-w-6xl" title={title} fill>
+    <V2Modal onClose={onClose} maxWidthClass="max-w-6xl" icon={<BookOpen />} eyebrow="Flip through" title={title} fill>
       {/* The pages take every bit of height the controls don't need, so the
           whole preview fits the window without scrolling. */}
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2 sm:px-5 sm:pb-4">

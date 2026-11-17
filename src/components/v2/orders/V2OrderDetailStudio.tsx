@@ -4,7 +4,7 @@ import { orderPagesLabel } from "@/lib/orders/blankBacks";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, Pencil, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, MapPin, Pencil, RefreshCw, XCircle } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
@@ -547,9 +547,9 @@ function EditShippingAddressModal({
     <V2Modal
       onClose={() => !saving && onClose()}
       maxWidthClass="max-w-lg"
-      title={<h2 className="text-lg font-semibold text-v2-ink">Shipping address</h2>}
+      icon={<MapPin />} title="Shipping address"
     >
-      <div className="px-5 py-4 sm:px-6 sm:py-5">
+      <div className="px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         <BookShippingAddressForm
           idPrefix="order-ship"
           value={address}

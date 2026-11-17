@@ -90,14 +90,11 @@ export function V2SharePageModal({ photoId, revisionId, sheetSrc, onClose }: Pro
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-md"
-      title={
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">Share page</p>
-          <h2 className="text-lg font-semibold text-v2-ink">Send this coloring page</h2>
-        </div>
-      }
+      icon={<Link2 />}
+      eyebrow="Share page"
+      title="Send this coloring page"
     >
-      <div className="space-y-5 p-5 sm:p-6">
+      <div className="space-y-5 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         <div className="flex gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

@@ -43,16 +43,11 @@ export function V2SendToFamilyModal({ projectId, projectName, onClose }: Props) 
     <V2Modal
       onClose={() => !sending && onClose()}
       maxWidthClass="max-w-lg"
-      title={
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">Send pages to family</p>
-          <h2 className="truncate text-lg font-semibold text-v2-ink" title={projectName}>
-            {projectName}
-          </h2>
-        </div>
-      }
+      icon={<Send />}
+      eyebrow="Send pages to family"
+      title={projectName}
     >
-      <form onSubmit={onSend} className="space-y-4 p-5 sm:p-6">
+      <form onSubmit={onSend} className="space-y-4 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         <p className="text-sm leading-relaxed text-v2-muted">
           We&apos;ll email this album&apos;s coloring pages as one PDF they can print at home. Only the
           coloring pages are sent, never your photos. Up to 40 pages.

@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { DM_Sans } from "next/font/google";
 import { V2RootProviders } from "@/components/v2/V2RootProviders";
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm-sans",
-});
 
 export const metadata: Metadata = {
   title: "Colorful Memories",
@@ -17,7 +11,7 @@ export const metadata: Metadata = {
 export default function V2Layout({ children }: { children: ReactNode }) {
   return (
     <div
-      className={`v2-shell flex min-h-dvh flex-col bg-v2-bg lg:h-dvh lg:overflow-hidden text-v2-ink ${dmSans.variable}`}
+      className="v2-shell flex min-h-dvh flex-col bg-v2-bg lg:h-dvh lg:overflow-hidden text-v2-ink"
     >
       <V2RootProviders>
         <div className="flex flex-1 flex-col lg:min-h-0 lg:overflow-hidden">

@@ -2,21 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import {
-  AlertCircle,
-  Check,
-  Copy,
-  Download,
-  EyeOff,
-  Link2,
-  Loader2,
-  Mail,
-  MessageSquare,
-  Printer,
-  RotateCw,
-  Send,
-  Share2,
-} from "lucide-react";
+import { AlertCircle, Check, Copy, Download, EyeOff, Link2, Loader2, Mail, MessageSquare, Printer, RotateCw, Send, Share2 } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { usePrintablePdf } from "@/components/v2/usePrintablePdf";
@@ -68,9 +54,9 @@ export function PagePrintShareModal({ sheetSrc, makePdf, share, mode = "all", on
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-lg"
-      title={<h2 className="text-lg font-semibold text-v2-ink">{sendOnly ? "Share this page" : "Print or share"}</h2>}
+      icon={<Printer />} title={sendOnly ? "Share this page" : "Print or share"}
     >
-      <div className="space-y-6 p-5 sm:p-6">
+      <div className="space-y-6 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         {sendOnly ? (
           // eslint-disable-next-line @next/next/no-img-element -- data URLs and signed URLs
           <img src={sheetSrc} alt="Coloring page" className="mx-auto h-40 w-auto rounded-lg border border-gray-200 bg-white object-contain p-1 shadow-sm" />

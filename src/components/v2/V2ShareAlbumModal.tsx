@@ -186,16 +186,11 @@ export function V2ShareAlbumModal({ projectId, projectName, onClose, onCountChan
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-lg"
-      title={
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-v2-muted">Share album</p>
-          <h2 className="truncate text-lg font-semibold text-v2-ink" title={projectName}>
-            {projectName}
-          </h2>
-        </div>
-      }
+      icon={<Users />}
+      eyebrow="Share album"
+      title={projectName}
     >
-      <div className="space-y-6 p-5 sm:p-6">
+      <div className="space-y-6 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
         <p className="text-sm leading-relaxed text-v2-muted">
           Invite someone to add their own photos to this album. They&apos;ll see everything in it,
           can make coloring pages, and can arrange their own books. Only you can rename, delete or

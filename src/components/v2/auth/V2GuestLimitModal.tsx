@@ -27,14 +27,16 @@ export function V2GuestLimitModal({
   const title = busy ? GUEST_LIMIT.busyTitle : kind === "edit" ? GUEST_LIMIT.editsTitle : GUEST_LIMIT.pagesTitle;
 
   return (
-    <V2Modal onClose={onClose} maxWidthClass="max-w-sm" title={<h2 className="v2-brand-title text-lg text-v2-ink">{title}</h2>}>
-      <div className="flex flex-col items-center gap-3 px-5 py-5 text-center sm:px-6">
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-v2-primary-light text-v2-primary">
-          <Sparkles className="h-6 w-6" aria-hidden />
-        </span>
-        <p className="text-sm leading-relaxed text-v2-muted">{busy ? GUEST_LIMIT.busyBody : GUEST_LIMIT.body}</p>
+    <V2Modal
+      onClose={onClose}
+      maxWidthClass="max-w-md"
+      icon={<Sparkles />}
+      title={title}
+      description={busy ? GUEST_LIMIT.busyBody : GUEST_LIMIT.body}
+    >
+      <div className="flex flex-col items-stretch gap-2 px-5 pb-6 pt-1 text-center sm:px-7">
         {credit ? (
-          <p className="inline-flex items-center gap-2 rounded-full border border-v2-primary/25 bg-v2-primary-light px-3.5 py-1.5 text-sm font-semibold text-v2-ink">
+          <p className="mb-2 inline-flex items-center justify-center gap-2 self-center rounded-full border border-v2-primary/25 bg-v2-primary-light px-4 py-2 text-base font-semibold text-v2-ink">
             <Gift className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
             {credit}
           </p>
@@ -42,21 +44,21 @@ export function V2GuestLimitModal({
         <Link
           href={withNextParam("/sign-up", STUDIO_PATH)}
           onClick={requestMigrationAfterSignup}
-          className="v2-btn-primary mt-1 min-h-11 w-full text-base"
+          className="v2-modal-btn v2-modal-btn--primary w-full"
         >
           {GUEST_LIMIT.primary}
         </Link>
         <Link
           href={withNextParam("/sign-in", STUDIO_PATH)}
           onClick={requestMigrationAfterSignup}
-          className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-v2-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+          className="inline-flex min-h-11 items-center justify-center px-3 text-base font-semibold text-v2-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
         >
           {GUEST_GATES.book.secondary}
         </Link>
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex min-h-11 items-center justify-center px-3 text-sm font-semibold text-v2-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+          className="inline-flex min-h-11 items-center justify-center px-3 text-base font-semibold text-v2-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
         >
           {GUEST_LIMIT.dismiss}
         </button>

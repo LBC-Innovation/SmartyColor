@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { ImageIcon, Info, Plus, Upload, X } from "lucide-react";
+import { ImageIcon, ImagePlus, Info, Plus, Upload, X } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { STUDIO_EMPTY } from "@/content/marketing";
 import { cn } from "@/lib/cn";
@@ -153,7 +153,7 @@ export function AddPhotosModal({
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-lg"
-      title={<h2 className="v2-brand-title text-xl text-v2-ink">Add photos</h2>}
+      icon={<ImagePlus />} title="Add photos"
     >
       <input
         ref={inputRef}
@@ -169,7 +169,7 @@ export function AddPhotosModal({
         }}
       />
       <div
-        className="relative space-y-5 px-5 pb-4 pt-4 sm:px-6"
+        className="relative space-y-5 px-5 pb-6 pt-1 sm:px-7"
         onDragEnter={onDragEnter}
         onDragLeave={onDragLeave}
         onDragOver={onDragOver}

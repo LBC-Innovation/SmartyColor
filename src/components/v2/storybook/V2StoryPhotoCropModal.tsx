@@ -91,32 +91,33 @@ export function V2StoryPhotoCropModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+      className="v2-modal fixed inset-0 z-50 flex items-center justify-center bg-v2-plum/50 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="story-crop-title"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+        className="v2-modal-panel flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-[1.75rem] bg-white ring-1 ring-v2-primary/10"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3">
-          <h2 id="story-crop-title" className="text-sm font-semibold text-v2-ink">
+        <div className="v2-modal-strip h-1.5 w-full shrink-0" aria-hidden />
+        <header className="v2-modal-head flex shrink-0 items-center justify-between px-5 pb-2 pt-5 sm:px-7">
+          <h2 id="story-crop-title" className="v2-brand-title text-[1.5rem] leading-tight text-v2-ink">
             Crop for print
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="v2-hit rounded-full p-1.5 text-v2-muted hover:bg-v2-bg-subtle"
+            className="v2-hit -mr-2 rounded-full p-2 text-v2-muted transition hover:bg-v2-primary-light hover:text-v2-primary"
             aria-label="Close"
           >
-            <X className="h-4 w-4" />
+            <X className="h-6 w-6" />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-          <p className="mb-3 text-xs text-v2-muted">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-7">
+          <p className="mb-4 text-base leading-relaxed text-v2-muted">
             Drag the frame to reframe landscape or portrait shots for your story pages.
           </p>
           <div
@@ -157,10 +158,10 @@ export function V2StoryPhotoCropModal({
           </div>
         </div>
 
-        <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-100 px-4 py-3">
+        <footer className="flex shrink-0 flex-wrap justify-end gap-3 px-5 pb-5 pt-2 sm:px-7 sm:pb-7">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-v2-muted hover:bg-v2-bg-subtle"
+            className="v2-modal-btn v2-modal-btn--secondary"
             onClick={() => setCrop(DEFAULT_CROP)}
           >
             <RotateCcw className="h-4 w-4" />
@@ -168,14 +169,14 @@ export function V2StoryPhotoCropModal({
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-v2-muted hover:bg-v2-bg-subtle"
+            className="v2-modal-btn v2-modal-btn--secondary"
             onClick={() => onSave(null)}
           >
             Full photo
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-v2-primary px-4 py-2 text-sm font-semibold text-white hover:bg-v2-primary/90"
+            className="v2-modal-btn v2-modal-btn--primary"
             onClick={() => onSave(crop)}
           >
             <Check className="h-4 w-4" />

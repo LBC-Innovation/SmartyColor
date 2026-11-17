@@ -1190,3 +1190,161 @@
     opacity: 1;
   }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Dialogs. V2Modal (and the menus/sheets) portal into <body>, outside .v2-shell, so they would
+   otherwise fall back to the legacy Comic Neue body face. Give every studio page's body the
+   studio face instead; legacy routes (no .v2-shell) keep theirs.
+   --------------------------------------------------------------------------------------------- */
+body:has(.v2-shell) {
+  font-family: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  color: var(--color-v2-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Inside a dialog the small sizes read a step larger: dialogs are short, read once, and often on
+   a phone held at arm's length. Tailwind's text-* utilities read these variables. */
+.v2-modal {
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.4rem;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.6rem;
+}
+
+/* The five logo colors as a ribbon across the top of every dialog. */
+.v2-modal-strip {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-brand-coral),
+    var(--color-brand-amber),
+    var(--color-brand-pink),
+    var(--color-brand-violet),
+    var(--color-brand-blue)
+  );
+}
+
+.v2-modal-strip--danger {
+  background-image: linear-gradient(90deg, var(--color-brand-coral), var(--color-brand-pink), #e11d48);
+}
+
+.v2-modal-strip--success {
+  background-image: linear-gradient(90deg, #10b981, #14b8a6, var(--color-brand-blue));
+}
+
+.v2-modal-panel {
+  box-shadow:
+    0 2px 6px rgb(36 26 77 / 0.08),
+    0 32px 80px -16px rgb(36 26 77 / 0.45);
+  animation: v2-modal-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* A soft violet wash behind the header so the top of the dialog isn't flat white. */
+.v2-modal-head {
+  background-image: radial-gradient(120% 140% at 0% 0%, var(--color-v2-primary-light) 0%, transparent 60%);
+}
+
+.v2-modal-backdrop {
+  animation: v2-modal-fade 0.24s ease-out both;
+}
+
+@keyframes v2-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes v2-modal-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-modal-panel,
+  .v2-modal-backdrop {
+    animation: none;
+  }
+}
+
+@layer components {
+  /* Dialog buttons: bigger, bolder pills. The shared .v2-btn-primary / .v2-btn-outline grow to
+     match when they sit in a dialog. */
+  .v2-modal-btn,
+  .v2-modal :is(.v2-btn-primary, .v2-btn-outline) {
+    min-height: 3rem;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 9999px;
+  }
+
+  .v2-modal-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .v2-modal-btn:focus-visible {
+    outline: 2px solid var(--color-v2-primary);
+    outline-offset: 2px;
+  }
+
+  .v2-modal-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .v2-modal-btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .v2-modal-btn--primary,
+  .v2-modal .v2-btn-primary {
+    color: #fff;
+    background-image: linear-gradient(135deg, var(--color-v2-primary), var(--color-brand-violet) 55%, #8f6bff);
+    box-shadow: 0 8px 20px -6px rgb(116 70 240 / 0.55);
+  }
+
+  .v2-modal-btn--primary:hover:not(:disabled),
+  .v2-modal .v2-btn-primary:hover:not(:disabled) {
+    background-image: linear-gradient(135deg, var(--color-v2-primary-dark), var(--color-v2-primary));
+    box-shadow: 0 10px 24px -6px rgb(116 70 240 / 0.65);
+  }
+
+  .v2-modal-btn--secondary,
+  .v2-modal .v2-btn-outline {
+    color: var(--color-v2-navy);
+    background-color: var(--color-v2-surface);
+    border: 2px solid rgb(116 70 240 / 0.22);
+  }
+
+  .v2-modal-btn--secondary:hover:not(:disabled),
+  .v2-modal .v2-btn-outline:hover:not(:disabled) {
+    border-color: rgb(116 70 240 / 0.5);
+    background-color: var(--color-v2-primary-light);
+  }
+
+  .v2-modal-btn--danger {
+    color: #fff;
+    background-image: linear-gradient(135deg, #e11d48, var(--color-brand-pink));
+    box-shadow: 0 8px 20px -6px rgb(225 29 72 / 0.55);
+  }
+
+  .v2-modal-btn--danger:hover:not(:disabled) {
+    background-image: linear-gradient(135deg, #be123c, #e11d48);
+  }
+}
