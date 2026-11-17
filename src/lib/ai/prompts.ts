@@ -233,9 +233,10 @@ Fills (required):
 export function buildPhotoColoringPrompt(
   printPrefs: PrintPrefs,
   layout: PhotoLayout,
+  /** The page; a different shape from the photo's when the page is turned the other way. */
+  canvas: PhotoLayout = letterCanvasFor(layout),
 ) {
   const title = printPrefs.showTitle ? "My photo coloring page" : "Coloring sheet";
-  const canvas = letterCanvasFor(layout);
   const prefs = { ...printPrefs, orientation: canvas.orientation };
 
   return `You are turning a REAL photograph into a printable coloring sheet for an 8.5 × 11 in page.
@@ -265,9 +266,9 @@ export function buildPhotoCorrectionPrompt(
   printPrefs: PrintPrefs,
   corrections: string[],
   layout: PhotoLayout,
+  canvas: PhotoLayout = letterCanvasFor(layout),
 ) {
   const title = printPrefs.showTitle ? "My photo coloring page" : "Coloring sheet";
-  const canvas = letterCanvasFor(layout);
   const prefs = { ...printPrefs, orientation: canvas.orientation };
   const list = corrections.map((line, i) => `${i + 1}. ${line}`).join("\n");
 

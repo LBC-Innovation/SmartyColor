@@ -6,14 +6,13 @@ import { normalizeV2SheetRevisions, photoOrientation, type V2PhotoEntry } from "
 /**
  * What turning a page to the other shape takes, cheapest first:
  * - `select`: a page of that shape already exists; just show it (free).
- * - `draw`: a photo of that shape exists (the upload itself, or an earlier reframe); draw a page
- *   from it (one page).
- * - `reframe`: recompose the photo to that shape, then draw a page from it (reframe + one page).
+ * - `draw`: a page in that shape, one generation. `source` is the photo it is drawn from: an
+ *   earlier reframed photo of that shape, or null for the upload. `orientation` is set when the
+ *   upload is the other shape, so the page is recomposed onto the new shape as it is drawn.
  */
 export type ShapePlan =
   | { target: ReframeTarget; kind: "select"; revisionId: string }
-  | { target: ReframeTarget; kind: "draw"; source: SheetVersion | null }
-  | { target: ReframeTarget; kind: "reframe" };
+  | { target: ReframeTarget; kind: "draw"; source: SheetVersion | null; orientation?: ReframeTarget };
 
 /** The shape the page on show was drawn from (or the photo on show, before any page). */
 export function currentShape(photo: V2PhotoEntry): ReframeTarget {
@@ -24,21 +23,16 @@ export function shapePlan(photo: V2PhotoEntry): ShapePlan {
   const target: ReframeTarget = currentShape(photo) === "portrait" ? "landscape" : "portrait";
   const revisions = normalizeV2SheetRevisions(photo);
   const pages = revisions.filter((r) => r.kind !== "photo");
+  const shapeOf = (page: SheetVersion): ReframeTarget =>
+    page.orientation ??
+    revisions.find((r) => r.id === page.sourceRevisionId && r.kind === "photo")?.orientation ??
+    photoOrientation(photo);
 
-  if (photoOrientation(photo) === target) {
-    // The uploaded photo is already that shape: its newest page, or a new one drawn from it.
-    const fromOriginal = [...pages].reverse().find((r) => !r.sourceRevisionId);
-    return fromOriginal
-      ? { target, kind: "select", revisionId: fromOriginal.id }
-      : { target, kind: "draw", source: null };
-  }
+  const existing = [...pages].reverse().find((page) => shapeOf(page) === target);
+  if (existing) return { target, kind: "select", revisionId: existing.id };
 
+  if (photoOrientation(photo) === target) return { target, kind: "draw", source: null };
   const reframed = [...revisions].reverse().find((r) => r.kind === "photo" && r.orientation === target);
-  if (reframed) {
-    const fromReframed = [...pages].reverse().find((r) => r.sourceRevisionId === reframed.id);
-    return fromReframed
-      ? { target, kind: "select", revisionId: fromReframed.id }
-      : { target, kind: "draw", source: reframed };
-  }
-  return { target, kind: "reframe" };
+  if (reframed) return { target, kind: "draw", source: reframed };
+  return { target, kind: "draw", source: null, orientation: target };
 }

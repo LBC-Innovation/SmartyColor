@@ -32,6 +32,14 @@ export const LOADING_CAPTIONS = {
     "Blending the edges…",
     "Straightening the frame…",
   ],
+  reshape: [
+    "Turning the page around…",
+    "Keeping everyone in the picture…",
+    "Finding room for the whole scene…",
+    "Redrawing the outlines to fit…",
+    "Leaving room for your colors…",
+    "Checking the little details…",
+  ],
 } as const;
 
 export type LoadingCaptionSet = keyof typeof LOADING_CAPTIONS;

@@ -16,16 +16,18 @@ import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
 import { useSheetUsageCredits } from "@/components/v2/credits/useSheetUsageCredits";
 import { useV2LibraryDeletion } from "@/components/v2/library/useV2LibraryDeletion";
 import { useV2PhotoIngest } from "@/components/v2/library/useV2PhotoIngest";
-import { useV2PhotoTransforms } from "@/components/v2/library/useV2PhotoTransforms";
 import { V2SavePromptCard } from "@/components/v2/marketing/V2SavePromptCard";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import { PageEditorModal, type EditorView } from "@/components/v2/studio/PageEditorModal";
-import { shapePlan } from "@/components/v2/studio/pageShape";
+import { currentShape, shapePlan } from "@/components/v2/studio/pageShape";
+import { UploadProgressBar } from "@/components/v2/studio/UploadProgressBar";
+import { useUploadProgress } from "@/components/v2/studio/useUploadProgress";
 import { useOnDemandPdf } from "@/components/v2/usePrintablePdf";
 import { StudioGallery } from "@/components/v2/studio/StudioGallery";
 import { AddPhotosModal } from "@/components/v2/studio/AddPhotosModal";
 import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedDialog";
 import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
+import { StudioEmptyAlbum } from "@/components/v2/studio/StudioEmptyAlbum";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
 import { PLACEHOLDER_ALBUM_NAME } from "@/components/v2/studio/albumNames";
@@ -63,7 +65,6 @@ const AUTOPAGE_KEY = "cm_autopage";
 /** "on" turns landscape photos portrait as they are added. Off unless chosen: it uses credit. */
 const AUTOPORTRAIT_KEY = "cm_autoportrait";
 /** Photos reframed at the same time while adding a batch. */
-const REFRAME_CONCURRENCY = 3;
 /** Guests: only the first few photos of a batch are drawn by themselves. */
 const GUEST_AUTO_BATCH = 3;
 const INTERRUPTED = "This page was interrupted. Tap to try again.";
@@ -203,7 +204,6 @@ export function ColorfulMemoriesApp() {
     setGuestLimit({ scope, kind });
   }, []);
   const gen = useSheetGeneration({ sheetCredits, locks, onGuestLimit: showGuestLimit });
-  const photoTransforms = useV2PhotoTransforms({ sheetCredits, locks });
 
   function onBatchEnd(summary: BatchSummary) {
     guestLimitShownRef.current = false;
@@ -243,7 +243,6 @@ export function ColorfulMemoriesApp() {
       : "";
 
   const pagePriceCents = signedIn ? sheetUsageCostCents(prices, "generation") : null;
-  const portraitPriceCents = signedIn ? sheetUsageCostCents(prices, "portrait") : null;
   const balanceCents = user?.creditsBalanceCents ?? null;
 
   /** A price beyond the album's purchase code, said as extra so it is never mistaken for included. */
@@ -287,7 +286,22 @@ export function ColorfulMemoriesApp() {
       setAddCreditFor(pagePriceCents != null && balanceCents != null ? Math.max(0, pagePriceCents - balanceCents) : 0);
       return 0;
     }
-    return queue.enqueue(take, options);
+    return enqueuePages(take, options);
+  }
+
+  /**
+   * Queues first pages, with "Make wide photos fill the page" applied: a wide photo's first page is
+   * drawn portrait, recomposed as it is drawn. A redraw or a page from a chosen photo version keeps
+   * the options it was given.
+   */
+  function enqueuePages(ids: string[], options?: GenerateOptions): number {
+    if (options || !optionsRef.current.autoPortrait) return queue.enqueue(ids, options);
+    const wide = ids.filter((id) => {
+      const p = photosRef.current.find((e) => e.id === id);
+      return p != null && photoOrientation(p) === "landscape" && !activePageVersion(p);
+    });
+    const rest = ids.filter((id) => !wide.includes(id));
+    return queue.enqueue(rest) + queue.enqueue(wide, { orientation: "portrait" });
   }
 
   // ---- "Make pages as I add" ---------------------------------------------------------
@@ -302,55 +316,53 @@ export function ColorfulMemoriesApp() {
     setAutoPref(v);
   }
 
-  // ---- "Turn landscape photos portrait" ------------------------------------------------
+  // ---- "Make wide photos fill the page" ----------------------------------------------
+  // Wide photos get portrait pages, drawn that way in the one page generation (enqueuePages).
   const [autoPortrait, setAutoPortraitState] = useState<boolean>(readAutoPortrait);
-  const [reframing, setReframing] = useState(0);
   function setAutoPortrait(on: boolean) {
     writeAutoPortrait(on);
     setAutoPortraitState(on);
   }
 
   /**
-   * Reframes landscape photos to portrait a few at a time, then (when pages are being made) draws
-   * each page from its portrait version. A photo whose reframe fails still gets its page, drawn
-   * from the photo as it is.
+   * Photos that landed in a batch still uploading. Pages only start once the whole batch is in, so
+   * until then their cards wait like queued ones (no "Make page" to click); `page` marks the ones a
+   * page is coming for, which the progress bar counts.
    */
-  async function reframeThenDraw(ids: string[], draw: boolean) {
-    if (ids.length === 0) return;
-    setReframing((n) => n + ids.length);
-    let next = 0;
-    const worker = async () => {
-      while (next < ids.length) {
-        const id = ids[next++];
-        const version = await photoTransforms.reframePhoto(id, "portrait", { quiet: true });
-        setReframing((n) => n - 1);
-        if (!draw) continue;
-        if (version) makePages([id], { source: version, addVersion: true });
-        else makePages([id]);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(REFRAME_CONCURRENCY, ids.length) }, worker));
+  type Awaiting = { id: string; page: boolean };
+  const [awaiting, setAwaitingState] = useState<Awaiting[]>([]);
+  const awaitingRef = useRef<Awaiting[]>([]);
+  /** Waiting photos taken out with the X on their card; their batch leaves them out. */
+  const droppedRef = useRef<Set<string>>(new Set());
+  function setAwaiting(next: Awaiting[]) {
+    awaitingRef.current = next;
+    setAwaitingState(next);
   }
+  function dropAwaiting(id: string) {
+    if (!awaitingRef.current.some((a) => a.id === id)) return;
+    droppedRef.current.add(id);
+    setAwaiting(awaitingRef.current.filter((a) => a.id !== id));
+  }
+  const awaitingIds = awaiting.map((a) => a.id);
+  const awaitingPageIds = awaiting.filter((a) => a.page).map((a) => a.id);
 
   /** What happens to a batch once it's known whether pages are made for it. */
   function startBatch(ids: string[], draw: boolean) {
-    const landscape = optionsRef.current.autoPortrait
-      ? ids.filter((id) => {
-          const p = photosRef.current.find((e) => e.id === id);
-          return p ? photoOrientation(p) === "landscape" : false;
-        })
-      : [];
-    if (!signedIn) {
-      // Guests share one small free allowance per batch between reframes and pages.
-      const reframe = landscape.slice(0, GUEST_AUTO_BATCH);
-      const direct = ids.filter((id) => !reframe.includes(id));
-      if (draw) queue.enqueue(direct.slice(0, Math.max(0, GUEST_AUTO_BATCH - reframe.length)));
-      void reframeThenDraw(reframe, draw);
-      return;
-    }
-    const direct = ids.filter((id) => !landscape.includes(id));
-    if (draw) makePages(direct);
-    void reframeThenDraw(landscape, draw);
+    const dropped = droppedRef.current;
+    // Guests: the first few of each batch are drawn by themselves.
+    const keep = (signedIn ? ids : ids.slice(0, GUEST_AUTO_BATCH)).filter((id) => !dropped.has(id));
+    setAwaiting(awaitingRef.current.filter((a) => !ids.includes(a.id)));
+    for (const id of ids) dropped.delete(id);
+    if (!draw) return;
+    if (!signedIn) enqueuePages(keep);
+    else makePages(keep);
+  }
+
+  /** As each photo of a batch lands: hold its card as waiting until the batch is in. */
+  function onPhotoLanded(entry: V2PhotoEntry, index: number) {
+    const { autoOn, autoPref } = optionsRef.current;
+    const page = autoOn && !(signedIn && autoPref == null) && (signedIn || index < GUEST_AUTO_BATCH);
+    setAwaiting([...awaitingRef.current, { id: entry.id, page }]);
   }
 
   // Uploads finish long after they start; the options in force then are what counts, not the ones
@@ -376,7 +388,7 @@ export function ColorfulMemoriesApp() {
     startBatch(ids, autoOn);
   }
 
-  const ingestFiles = useV2PhotoIngest({ onAdded: onPhotosAdded });
+  const ingestFiles = useV2PhotoIngest({ onAdded: onPhotosAdded, onEach: onPhotoLanded });
   // Everything that adds photos opens this modal; dropped files arrive already staged.
   const [addPhotos, setAddPhotos] = useState<{ files: File[] } | null>(null);
 
@@ -533,7 +545,7 @@ export function ColorfulMemoriesApp() {
   // ---- card states ---------------------------------------------------------------------
   function cardState(photo: V2PhotoEntry): CardState {
     const q = queue.status(photo.id);
-    if (q === "queued") return "queued";
+    if (q === "queued" || (!q && awaitingIds.includes(photo.id))) return "queued";
     if (photo.generating || q === "running") return "drawing";
     if (activePageVersion(photo)) return "ready";
     if (queue.failures[photo.id]) return "failed";
@@ -560,8 +572,13 @@ export function ColorfulMemoriesApp() {
   const failedCount = photos.filter((p) => cardState(p) === "failed").length;
   const uploading = pendingUploads.length > 0;
   const activeCount = queue.running + queue.queued;
-  const showStrip =
-    uploading || activeCount > 0 || reframing > 0 || choiceIds != null || shortCount > 0;
+  const showStrip = choiceIds != null || shortCount > 0;
+  const uploadProgress = useUploadProgress({
+    pendingUploadIds: pendingUploads.map((u) => u.id),
+    livePageIds: [...queue.liveIds, ...awaitingPageIds.filter((id) => !queue.liveIds.includes(id))],
+    runningPageIds: queue.liveIds.filter((id) => queue.status(id) === "running"),
+    expectPages: autoOn && choiceIds == null,
+  });
 
   // ---- desktop: drop files anywhere on the gallery ----------------------------------------
   const [dropping, setDropping] = useState(false);
@@ -631,41 +648,39 @@ export function ColorfulMemoriesApp() {
   // Phones: the album toolbar has no room for the book button, so a book bar replaces the tab bar
   // (the header menu has the tabs) once there's a finished page to book, or a book under way.
   const showBookBar = !desktop && !editor && (bookProgress != null ? hasBookPage : order.contentCount > 0);
-  // Turning the page to the other shape: free when that page exists, a page when the photo
-  // already has that shape, otherwise reframing the photo and then a page.
+  // Turning the page to the other shape: free when that page exists, otherwise one page drawn in
+  // that shape (recomposed straight from the photo, with no reframed photo made first).
   const editorShapePlan = editorPhoto && !editorPhoto.generating ? shapePlan(editorPhoto) : null;
   const editorShape = editorShapePlan
     ? {
         label: editorShapePlan.target === "portrait" ? "Make it portrait" : "Make it landscape",
         costLabel:
-          editorShapePlan.kind === "select"
+          editorShapePlan.kind === "select" || !signedIn
             ? "Free"
-            : !signedIn
-              ? "Free"
-              : editorPhoto &&
-                  (editorShapePlan.kind === "draw"
-                    ? codeCoversAction(code, "generation", editorPhoto)
-                    : codeCoversAction(code, "portrait", editorPhoto))
-                ? "Included"
-                : code
-                  ? extraLabel(
-                      editorShapePlan.kind === "draw"
-                        ? pagePriceCents
-                        : pagePriceCents != null && portraitPriceCents != null
-                          ? pagePriceCents + portraitPriceCents
-                          : null,
-                    )
-              : editorShapePlan.kind === "draw"
-                ? pagePriceCents != null
+            : editorPhoto && codeCoversAction(code, "generation", editorPhoto)
+              ? "Included"
+              : code
+                ? extraLabel(pagePriceCents)
+                : pagePriceCents != null
                   ? formatCredits(pagePriceCents)
-                  : null
-                : pagePriceCents != null && portraitPriceCents != null
-                  ? formatCredits(pagePriceCents + portraitPriceCents)
                   : null,
       }
     : null;
+  // What the page's queued or running job is, so the editor can say so over the page.
+  const editorJob = (() => {
+    if (!editorPhoto) return null;
+    const job = queue.job(editorPhoto.id);
+    if (!job) return null;
+    const options = job.options;
+    const shape = options?.orientation ?? options?.source?.orientation ?? photoOrientation(editorPhoto);
+    return {
+      status: job.status,
+      ahead: job.ahead,
+      reshapeTo: shape !== currentShape(editorPhoto) ? shape : null,
+    };
+  })();
 
-  async function changeShape(photoId: string) {
+  function changeShape(photoId: string) {
     const photo = photosRef.current.find((p) => p.id === photoId);
     if (!photo) return;
     const plan = shapePlan(photo);
@@ -674,12 +689,12 @@ export function ColorfulMemoriesApp() {
       gen.selectRevision(photoId, plan.revisionId);
       return;
     }
-    if (plan.kind === "draw") {
-      makePages([photoId], plan.source ? { source: plan.source, addVersion: true } : { addVersion: true });
-      return;
-    }
-    const version = await photoTransforms.reframePhoto(photoId, plan.target, { quiet: true });
-    if (version) makePages([photoId], { source: version, addVersion: true });
+    makePages(
+      [photoId],
+      plan.source
+        ? { source: plan.source, addVersion: true }
+        : { addVersion: true, ...(plan.orientation ? { orientation: plan.orientation } : {}) },
+    );
   }
 
   const editCost = editorPhoto
@@ -795,7 +810,6 @@ export function ColorfulMemoriesApp() {
             autoPortrait={autoPortrait}
             onAutoPortraitChange={setAutoPortrait}
             pagePriceCents={pagePriceCents}
-            portraitPriceCents={portraitPriceCents}
             codePagesLeft={code ? newPagesCovered(code) : null}
             onClose={() => setAddPhotos(null)}
             onUpload={(files) => {
@@ -861,20 +875,8 @@ export function ColorfulMemoriesApp() {
               ) : null}
               {showStrip ? (
                 <UploadStrip
-                  signedIn={signedIn}
-                  autoOn={autoOn}
-                  onAutoChange={setAuto}
-                  autoPortraitOn={autoPortrait}
-                  onAutoPortraitChange={setAutoPortrait}
-                  portraitPriceCents={portraitPriceCents}
-                  reframingCount={reframing}
                   pagePriceCents={pagePriceCents}
                   balanceCents={signedIn ? balanceCents : null}
-                  codePagesLeft={code ? newPagesCovered(code) : null}
-                  uploading={uploading}
-                  activeCount={activeCount}
-                  queuedCount={queue.queued}
-                  onStopRest={() => queue.cancel()}
                   choiceCount={choiceIds?.length ?? null}
                   onChoose={chooseAuto}
                   shortCount={shortCount}
@@ -882,7 +884,7 @@ export function ColorfulMemoriesApp() {
                 />
               ) : null}
 
-              {withoutPageIds.length >= 2 && activeCount === 0 && !deletion.active ? (
+              {withoutPageIds.length >= 2 && activeCount === 0 && !uploading && !deletion.active ? (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
                   <span className="min-w-0 flex-1 text-v2-ink">
                     {withoutPageIds.length} photos have no page yet
@@ -952,31 +954,17 @@ export function ColorfulMemoriesApp() {
                   ))}
                 </div>
               ) : photos.length + pendingUploads.length === 0 ? (
-                <V2UploadDropzone className="min-h-[18rem]" onFiles={(files) => setAddPhotos({ files: Array.from(files) })}>
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <h2 className="v2-brand-title text-xl text-v2-ink">{STUDIO_EMPTY.title}</h2>
-                    <p className="text-sm text-v2-muted">{STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}</p>
-                    <button type="button" onClick={() => setAddPhotos({ files: [] })} className="v2-btn-primary v2-breathe min-h-11 w-full max-w-xs">
-                      {STUDIO_EMPTY.button}
-                    </button>
-                    <div className="w-full max-w-xs text-left">
-                      <p className="text-xs font-semibold text-v2-navy">{BEST_PHOTOS.title}</p>
-                      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-v2-muted">
-                        {BEST_PHOTOS.items.map((tip) => (
-                          <li key={tip}>{tip}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <p className="text-[11px] text-v2-muted">
-                      {fillCopy(STUDIO_EMPTY.formats, { size: formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES) })}
-                      <span className="hidden pointer-fine:inline"> {STUDIO_EMPTY.dragHint}</span>
-                    </p>
-                    {!cloud ? <p className="text-[11px] text-v2-muted">{STUDIO_EMPTY.guestNote}</p> : null}
-                    <button type="button" onClick={welcomeGuide.open} className="min-h-11 px-3 text-sm font-semibold text-v2-link">
-                      {STUDIO_EMPTY.howItWorks}
-                    </button>
-                  </div>
-                </V2UploadDropzone>
+                <StudioEmptyAlbum
+                  key={activeProjectId ?? "none"}
+                  albumName={activeProject?.name ?? ""}
+                  canRename={activeProject?.role !== "contributor"}
+                  onRename={renameActiveProject}
+                  onChoose={() => setAddPhotos({ files: [] })}
+                  onFiles={(files) => setAddPhotos({ files })}
+                  onHowItWorks={welcomeGuide.open}
+                  line={STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}
+                  guest={!cloud}
+                />
               ) : (
                 <StudioGallery
                   photos={photos}
@@ -990,7 +978,10 @@ export function ColorfulMemoriesApp() {
                     queue.clearFailure(id);
                     makePages([id]);
                   }}
-                  onCancel={(id) => queue.cancel([id])}
+                  onCancel={(id) => {
+                    queue.cancel([id]);
+                    dropAwaiting(id);
+                  }}
                   onToggleLeftOut={(id) => {
                     const p = photosRef.current.find((e) => e.id === id);
                     gen.setBookPrefs(id, { leftOut: !p?.printPrefs.book?.leftOut });
@@ -1012,6 +1003,8 @@ export function ColorfulMemoriesApp() {
                 Drop photos to add them
               </div>
             ) : null}
+            {/* Room below the last row, so the docked progress bar never covers it. */}
+            {uploadProgress ? <div aria-hidden className="h-24" /> : null}
           </main>
 
           {/* The book being built: a card docked to the bottom edge left of the gallery on desktop,
@@ -1033,7 +1026,21 @@ export function ColorfulMemoriesApp() {
       </div>
 
       {/* Only once a coloring page is finished: a page still drawing isn't something to book yet. */}
-      {order.contentCount > 0 && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden ? (
+      {/* Docked at the bottom, in sight wherever the gallery is scrolled. */}
+      {uploadProgress && !deletion.active && !editor ? (
+        <UploadProgressBar
+          progress={uploadProgress}
+          onStopRest={queue.queued > 0 ? () => queue.cancel() : undefined}
+          className={
+            showBookBar
+              ? "bottom-[calc(5rem+env(safe-area-inset-bottom))]"
+              : "bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] lg:bottom-6"
+          }
+        />
+      ) : null}
+
+      {/* Held back while photos are still being added or drawn: the book can wait until they're all in. */}
+      {order.contentCount > 0 && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden && !uploadProgress ? (
         <BookPromoCard
           pageCount={order.contentCount}
           pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
@@ -1166,7 +1173,16 @@ export function ColorfulMemoriesApp() {
             queue.clearFailure(editorPhoto.id);
             makePages([editorPhoto.id], editorSource ? { source: editorSource } : undefined);
           }}
-          onDrawAgain={() => makePages([editorPhoto.id], editorSource ? { source: editorSource, addVersion: true } : { addVersion: true })}
+          onDrawAgain={() => {
+            // A page turned to the other shape than its photo is drawn again in that shape.
+            const shape = activePageVersion(editorPhoto)?.orientation;
+            makePages(
+              [editorPhoto.id],
+              editorSource
+                ? { source: editorSource, addVersion: true }
+                : { addVersion: true, ...(shape && shape !== photoOrientation(editorPhoto) ? { orientation: shape } : {}) },
+            );
+          }}
           onQuickFix={(kind) => void quickFix(kind)}
           onSelectRevision={(revisionId) => {
             setUndo(null);
@@ -1187,7 +1203,8 @@ export function ColorfulMemoriesApp() {
           onShare={() => setOutput({ id: editorPhoto.id, mode: "send" })}
           pdfBusy={pdfOnDemand.busy}
           shape={editorShape}
-          onChangeShape={() => void changeShape(editorPhoto.id)}
+          job={editorJob}
+          onChangeShape={() => changeShape(editorPhoto.id)}
           onToggleLeftOut={() => gen.setBookPrefs(editorPhoto.id, { leftOut: !editorPhoto.printPrefs.book?.leftOut })}
           onDelete={() => {
             closeEditor();

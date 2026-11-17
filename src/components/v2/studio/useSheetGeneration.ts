@@ -12,7 +12,7 @@ import { guestLimitScope, type GuestLimitScope } from "@/lib/guestLimit";
 import type { LibraryPhoto } from "@/lib/library/types";
 import { prepareSheetDataUrlForApi } from "@/lib/photo/compressImageDataUrl";
 import { applyQuickFix, quickFixTitle, type QuickFixKind } from "@/lib/photo/sheetQuickFixes";
-import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
+import { PHOTO_MAX_CORRECTION_CHARS, type ReframeTarget } from "@/lib/session/photoTypes";
 import type { GeneratedSheet, SheetVersion } from "@/lib/session/types";
 import { trackPageGenerated } from "@/lib/track";
 import { entryFromLibraryPhoto, uploadRevisionToLibrary } from "@/lib/v2/cloudLibrary";
@@ -39,6 +39,11 @@ export type GenerateOptions = {
   source?: SheetVersion;
   /** Draw again from the photo even though the photo already has a page. */
   addVersion?: boolean;
+  /**
+   * Draw the uploaded photo straight onto a page of this shape (a landscape photo as a portrait
+   * page, or the reverse): one page, with no reframed photo made first.
+   */
+  orientation?: ReframeTarget;
 };
 
 type Payload = {
@@ -88,6 +93,7 @@ export function useSheetGeneration({
   async function generateForPhoto(photoId: string, options?: GenerateOptions): Promise<GenerateOutcome> {
     const photo = photosRef.current.find((entry) => entry.id === photoId);
     const source = options?.source ?? null;
+    const pageOrientation = source ? undefined : options?.orientation;
     if (!photo || (activePageVersion(photo) && !source && !options?.addVersion)) return { kind: "skipped" };
     if (photo.generating || photo.correcting || !locks.acquire(photoId)) return { kind: "skipped" };
     if (!sheetCredits.canAfford("generation", photo)) {
@@ -108,6 +114,7 @@ export function useSheetGeneration({
                   mode: "generate-library",
                   photoId: photo.remote.photoId,
                   ...(source ? { sourceRevisionId: source.id } : {}),
+                  ...(pageOrientation ? { pageOrientation } : {}),
                 }
               : source
                 ? {
@@ -120,6 +127,7 @@ export function useSheetGeneration({
                     photoDataUrl: photo.photoDataUrl,
                     printPrefs: photoPrintPrefs(photo),
                     image: photo.image,
+                    ...(pageOrientation ? { pageOrientation } : {}),
                   },
           ),
         },
@@ -154,7 +162,11 @@ export function useSheetGeneration({
         const sheet = payload.sheet;
         const revision = newVersion(
           sheet,
-          source ? { orientation: source.orientation ?? "portrait", sourceRevisionId: source.id } : undefined,
+          source
+            ? { orientation: source.orientation ?? "portrait", sourceRevisionId: source.id }
+            : pageOrientation
+              ? { orientation: pageOrientation }
+              : undefined,
         );
         mutatePhotos((prev) =>
           prev.map((entry) =>
@@ -241,6 +253,8 @@ export function useSheetGeneration({
           corrections: [trimmed],
           printPrefs: pagePrintPrefs(photo),
           image: sourceVersion ? undefined : photo.image,
+          // A page turned to the other shape than its photo keeps that shape when edited.
+          ...(!sourceVersion && active.orientation ? { pageOrientation: active.orientation } : {}),
         };
       }
       const response = await authedFetch(

@@ -1348,3 +1348,84 @@ body:has(.v2-shell) {
     background-image: linear-gradient(135deg, #be123c, #e11d48);
   }
 }
+
+/* ---- Upload progress: one bar across the top of the gallery while photos are added ---- */
+@keyframes v2-progress-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes v2-progress-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(116 70 240 / 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(116 70 240 / 0);
+  }
+}
+
+@keyframes v2-progress-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes v2-progress-dock-out {
+  to {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.v2-progress-dock {
+  animation: v2-progress-dock-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Holds at 100% for a beat, then slides away just before it is removed. */
+.v2-progress-dock.v2-progress-card-done {
+  animation: v2-progress-dock-out 360ms ease-in 1200ms forwards;
+}
+
+.v2-progress-icon {
+  animation: v2-progress-pulse 2s ease-in-out infinite;
+}
+
+.v2-progress-fill {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--color-v2-primary-dark), var(--color-v2-primary) 60%, #a58bf7);
+  transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.v2-progress-fill-live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: v2-progress-sheen 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-progress-dock,
+  .v2-progress-icon,
+  .v2-progress-fill-live::after {
+    animation: none;
+  }
+  .v2-progress-dock.v2-progress-card-done {
+    animation: v2-progress-dock-out 1ms linear 1200ms forwards;
+  }
+  .v2-progress-fill {
+    transition: none;
+  }
+}

@@ -19,6 +19,8 @@ import { photoImageMeta, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 type IngestOptions = {
   /** Runs once per batch with every photo that made it into the library. */
   onAdded?: (entries: V2PhotoEntry[]) => void;
+  /** Runs as each photo lands, with its place among the photos of its batch that made it in. */
+  onEach?: (entry: V2PhotoEntry, index: number) => void;
 };
 
 /**
@@ -111,6 +113,7 @@ export function useV2PhotoIngest(options?: IngestOptions) {
 
         // Commit now, so photosRef (and anything reading it in onAdded) already holds this photo.
         flushSync(() => appendPhoto(entry));
+        options?.onEach?.(entry, added.length);
         added.push(entry);
       } catch (err) {
         const detail =
