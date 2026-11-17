@@ -425,6 +425,25 @@ view: image models often garble longer text.
 > beside and slightly behind her at counter height, a fruit bowl soft at the bottom edge of the
 > frame.
 
+### Selfie mode (in the prompt builder)
+
+`scripts/photo-prompts/index.html` has a **selfie mode** toggle: the person taking the photo is in
+the shot, and the person coloring holds their page up to the phone. Turning it on:
+
+- switches the scene text to that scene's selfie version, which names the photographer (for
+  `memory-care-visit`, the daughter takes it cheek to cheek while her mother holds up the spiral
+  book open to her wedding-photo page)
+- replaces the look with a front-camera selfie look (arm reaching out of frame, phone not visible,
+  wide-lens framing, not mirrored) and lets people look at the phone instead of "nobody posing"
+- replaces the camera-position sentence with: the held-up page faces the phone and reads upright
+  and the right way round, while any book still lying flat stays oriented toward its colorist
+- adds how that binding is held up (stapled folded back at the staples, paperback held open with
+  its pages curving, spiral still folded back on its coil, a loose page held by its corners)
+- sets the shape to portrait 2:3, and swaps "everyone smiling at the camera" in the avoid list for
+  "stiff identical posed smiles, a visible phone, a selfie stick, a mirror"
+
+Turning it off puts the scene's own text, look, camera position and shape back.
+
 ### 6.5 Getting a real-looking result
 
 - **Make 3 or 4 per scene and pick the one that looks most like a real moment.**
