@@ -928,6 +928,20 @@ export type MadePhoto = {
  */
 export const MADE_PHOTOS: MadePhoto[] = [
   {
+    src: "/marketing/made/christmas-morning.webp",
+    alt: "A dad and his son in pajamas on Christmas morning, the boy grinning and holding up a colored page of the two of them fishing off a dock",
+    caption: "Christmas morning. He hasn't put it down since",
+    width: 1024,
+    height: 1536,
+  },
+  {
+    src: "/marketing/made/bridal-shower.webp",
+    alt: "Four friends at a garden party taking a selfie, each holding up a colored page made from one of their own photos",
+    caption: "One for each of the girls at the bridal shower",
+    width: 1024,
+    height: 1536,
+  },
+  {
     src: "/marketing/made/road-trip.webp",
     alt: "Two kids in car seats coloring pages of their family at the beach; the girl holds hers up and laughs",
     caption: "Kept them busy the whole drive to the beach",
