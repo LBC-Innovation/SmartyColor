@@ -9,7 +9,6 @@ import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
 import { V2LibraryMigrationBanner } from "@/components/v2/V2LibraryMigrationBanner";
 import { PagePrintShareModal } from "@/components/v2/studio/PagePrintShareModal";
 import { V2SheetEditChat } from "@/components/v2/V2SheetEditChat";
-import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
@@ -27,6 +26,7 @@ import { StudioGallery } from "@/components/v2/studio/StudioGallery";
 import { AddPhotosModal } from "@/components/v2/studio/AddPhotosModal";
 import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedDialog";
 import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
+import { StudioEmptyAlbum } from "@/components/v2/studio/StudioEmptyAlbum";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
 import { PLACEHOLDER_ALBUM_NAME } from "@/components/v2/studio/albumNames";
@@ -41,7 +41,7 @@ import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
 import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
 import { activePageVersion, galleryBook, pagePrintPrefs, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
 import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
-import { BEST_PHOTOS, INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
+import { INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
 import { authedFetch } from "@/lib/api/client";
 import { copyPhotoToAlbum } from "@/lib/library/client";
@@ -49,8 +49,7 @@ import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { GuestLimitScope } from "@/lib/guestLimit";
 import { formatCredits } from "@/lib/credits/money";
 import { freeEditsPerSheet, sheetUsageCostCents } from "@/lib/credits/pricing";
-import { fillCopy, readIntent } from "@/lib/marketing/copy";
-import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
+import { readIntent } from "@/lib/marketing/copy";
 import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import { usePriceList } from "@/lib/pricing/usePriceList";
 import { codeCoversAction, newPagesCovered } from "@/lib/purchaseCodes/types";
@@ -953,31 +952,17 @@ export function ColorfulMemoriesApp() {
                   ))}
                 </div>
               ) : photos.length + pendingUploads.length === 0 ? (
-                <V2UploadDropzone className="min-h-[18rem]" onFiles={(files) => setAddPhotos({ files: Array.from(files) })}>
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <h2 className="v2-brand-title text-xl text-v2-ink">{STUDIO_EMPTY.title}</h2>
-                    <p className="text-sm text-v2-muted">{STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}</p>
-                    <button type="button" onClick={() => setAddPhotos({ files: [] })} className="v2-btn-primary v2-breathe min-h-11 w-full max-w-xs">
-                      {STUDIO_EMPTY.button}
-                    </button>
-                    <div className="w-full max-w-xs text-left">
-                      <p className="text-xs font-semibold text-v2-navy">{BEST_PHOTOS.title}</p>
-                      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-v2-muted">
-                        {BEST_PHOTOS.items.map((tip) => (
-                          <li key={tip}>{tip}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <p className="text-[11px] text-v2-muted">
-                      {fillCopy(STUDIO_EMPTY.formats, { size: formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES) })}
-                      <span className="hidden pointer-fine:inline"> {STUDIO_EMPTY.dragHint}</span>
-                    </p>
-                    {!cloud ? <p className="text-[11px] text-v2-muted">{STUDIO_EMPTY.guestNote}</p> : null}
-                    <button type="button" onClick={welcomeGuide.open} className="min-h-11 px-3 text-sm font-semibold text-v2-link">
-                      {STUDIO_EMPTY.howItWorks}
-                    </button>
-                  </div>
-                </V2UploadDropzone>
+                <StudioEmptyAlbum
+                  key={activeProjectId ?? "none"}
+                  albumName={activeProject?.name ?? ""}
+                  canRename={activeProject?.role !== "contributor"}
+                  onRename={renameActiveProject}
+                  onChoose={() => setAddPhotos({ files: [] })}
+                  onFiles={(files) => setAddPhotos({ files })}
+                  onHowItWorks={welcomeGuide.open}
+                  line={STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}
+                  guest={!cloud}
+                />
               ) : (
                 <StudioGallery
                   photos={photos}
