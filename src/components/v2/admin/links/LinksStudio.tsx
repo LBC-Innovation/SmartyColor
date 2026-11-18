@@ -100,6 +100,7 @@ export function LinksStudio() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [created, setCreated] = useState<MarketingLink | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,6 +143,7 @@ export function LinksStudio() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setCreated(null);
     setSaving(true);
     const r = await api.adminCreateLink({
       slug: effectiveSlug,
@@ -158,6 +160,7 @@ export function LinksStudio() {
       return;
     }
     setLinks((list) => [r.data, ...(list ?? [])]);
+    setCreated(r.data);
     setContent("");
     setSlug("");
     setSlugTouched(false);
@@ -294,14 +297,25 @@ export function LinksStudio() {
             </div>
             <div className="rounded-xl bg-v2-bg-subtle p-3 text-sm">
               <p className="text-v2-muted">
-                Short link: <span className="font-mono text-v2-ink">{origin}/go/{effectiveSlug || "…"}</span> · counted as{" "}
+                Short link to share: <span className="break-all font-mono text-v2-ink">{origin}/go/{effectiveSlug || "…"}</span> · counted as{" "}
                 <span className="font-semibold text-v2-ink">{CHANNEL_LABELS[channel]}</span>
               </p>
-              <p className="mt-1 flex items-center gap-1 break-all font-mono text-xs text-v2-muted">
-                {fullUrl}
-                <CopyButton text={fullUrl} label="Copy the full tagged URL" />
-              </p>
+              <p className="mt-1 text-xs text-v2-muted">Only visits through the short link add to Clicks. Copy it from the list once the link is created.</p>
+              <details className="mt-2 text-xs text-v2-muted">
+                <summary className="cursor-pointer">Where it sends visitors</summary>
+                <p className="mt-1 break-all font-mono">{fullUrl}</p>
+                <p className="mt-1">
+                  Opening this address directly still credits the campaign on the Acquisition page, but it skips the short link, so it isn&apos;t
+                  counted as a click.
+                </p>
+              </details>
             </div>
+            {created ? (
+              <p className="flex flex-wrap items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status">
+                Created. Share <span className="break-all font-mono">{created.url}</span>
+                <CopyButton text={created.url} label={`Copy /go/${created.slug}`} />
+              </p>
+            ) : null}
             {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
             <button type="submit" disabled={saving} className="v2-btn-primary min-h-11">
               {saving ? "Creating…" : "Create link"}
