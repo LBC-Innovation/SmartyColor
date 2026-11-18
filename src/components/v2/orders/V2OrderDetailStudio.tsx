@@ -4,7 +4,7 @@ import { orderPagesLabel } from "@/lib/orders/blankBacks";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, MapPin, Pencil, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, ExternalLink, Loader2, MapPin, Pencil, RefreshCw, Truck, XCircle } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderStatusBadge } from "@/components/v2/orders/V2OrderStatusBadge";
 import { V2OrderTimeline } from "@/components/v2/orders/V2OrderTimeline";
@@ -25,7 +25,15 @@ import type { ShippingAddress } from "@/lib/orders/types";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
-import type { BookOrderDetail } from "@/lib/orders/types";
+import type { BookOrderDetail, BookOrderStatus } from "@/lib/orders/types";
+
+/** Paid and sent to the printer, but not shipped yet, so there's no tracking number to show. */
+const BEING_PRINTED_STATUSES: readonly BookOrderStatus[] = [
+  "paid",
+  "submitting_to_lulu",
+  "submitted_to_lulu",
+  "in_production",
+];
 
 function formatAddress(a: ShippingAddress): string {
   const lines = [
@@ -329,6 +337,27 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                       .
                     </p>
                   ) : null}
+                </section>
+              ) : null}
+
+              {order.fulfillment !== "digital" &&
+              !order.trackingNumber &&
+              order.trackingUrls.length === 0 &&
+              BEING_PRINTED_STATUSES.includes(order.status) ? (
+                <section className="v2-panel mb-4 p-4 sm:p-5">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-v2-muted">
+                    Tracking
+                  </h2>
+                  <p className="mt-2 flex items-center gap-2 text-sm text-v2-muted">
+                    <Truck className="h-4 w-4 shrink-0" aria-hidden />
+                    <span>
+                      Tracking number: <span className="font-mono">Not assigned yet</span>
+                    </span>
+                  </p>
+                  <p className="mt-2 text-sm text-v2-ink">
+                    Your book is still being printed and bound. We&apos;ll add a tracking number here as
+                    soon as it&apos;s ready to ship.
+                  </p>
                 </section>
               ) : null}
 
