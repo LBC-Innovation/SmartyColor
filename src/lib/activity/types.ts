@@ -39,6 +39,7 @@ export const ACTIVITY_TYPES = {
     { id: "credit_granted", label: "Promo credit" },
     { id: "credit_removed", label: "Credit adjustment" },
     { id: "refund", label: "Refund" },
+    { id: "friend_invited", label: "Friend invited" },
   ],
 } as const satisfies Record<ActivityCategory, readonly { id: string; label: string }[]>;
 

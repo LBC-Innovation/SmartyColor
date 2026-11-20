@@ -795,7 +795,8 @@ export function adminGetPromoCredits(): Promise<ApiResult<PromoCreditSettings>> 
 
 export function adminUpdatePromoCredits(input: {
   welcomeCreditDollars?: string;
-  referralCreditDollars?: string;
+  friendCreditDollars?: string;
+  sharerCreditDollars?: string;
 }): Promise<ApiResult<PromoCreditSettings>> {
   return request<PromoCreditSettings>("/admin/promo-credits", {
     method: "PUT",
@@ -805,6 +806,10 @@ export function adminUpdatePromoCredits(input: {
 
 export function fetchReferral(): Promise<ApiResult<ReferralSummary>> {
   return request<ReferralSummary>("/account/referral");
+}
+
+export function emailFriendInvite(email: string, note = ""): Promise<ApiResult<{ sent: true }>> {
+  return request<{ sent: true }>("/account/referral/email", { method: "POST", body: JSON.stringify({ email, note }) });
 }
 
 export function fetchHeardFrom(): Promise<ApiResult<{ answered: boolean }>> {

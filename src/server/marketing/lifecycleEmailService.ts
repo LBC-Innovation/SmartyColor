@@ -11,7 +11,7 @@ import { unsubscribeUrls } from "@/server/marketing/unsubscribe";
  *  - unfinished_book: a book started 1–7 days ago and not ordered since. At most one every 14 days.
  *  - review_request: once per account, 2 days after a book is delivered (10 days after it ships
  *    when no delivery date comes back, 3 days after a digital order). Needs REVIEW_URL.
- *  - referral_credit: tells the referrer their friend's first order earned them credit.
+ *  - referral_credit: tells the sharer their friend's sign-up earned them credit.
  * Each email is claimed in lifecycle_emails before sending, so a rerun never sends twice.
  * Accounts that unsubscribed get neither reminders nor review requests.
  */
@@ -183,7 +183,7 @@ async function referralCredits(summary: Summary, emails: Map<string, string | nu
       "referral_credit",
       uid,
       c.referred_user_id as string,
-      referralCreditEmail({ to, amountCents: c.amount_cents as number, url: `${clientOrigin()}/account?utm_source=lifecycle&utm_medium=email&utm_campaign=referral_credit` }),
+      referralCreditEmail({ to, amountCents: c.amount_cents as number, url: `${clientOrigin()}/share?utm_source=lifecycle&utm_medium=email&utm_campaign=referral_credit` }),
     );
     summary.referral_credit[result]++;
   }

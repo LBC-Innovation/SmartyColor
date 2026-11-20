@@ -75,7 +75,7 @@ const CONSENT_REQUIRED_REGIONS = [
 ];
 
 /** Pages where only a page view is sent: sign-in, sign-up, password reset and account settings. */
-const PAGE_VIEW_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password", "/account", "/auth"];
+const PAGE_VIEW_ONLY_PREFIXES = ["/sign-in", "/sign-up", "/forgot-password", "/reset-password", "/account", "/share", "/auth"];
 
 export function isPageViewOnlyPath(pathname: string): boolean {
   return PAGE_VIEW_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

@@ -6,14 +6,20 @@ function log(level: string, message: string, ctx: Record<string, unknown> = {}) 
   console.log(JSON.stringify({ level, message, ...ctx }));
 }
 
-const COLUMNS = "welcome_credit_cents, referral_credit_cents, updated_at";
+const COLUMNS = "welcome_credit_cents, referral_friend_credit_cents, referral_sharer_credit_cents, updated_at";
 
-type SettingsRow = { welcome_credit_cents: number; referral_credit_cents: number; updated_at: string };
+type SettingsRow = {
+  welcome_credit_cents: number;
+  referral_friend_credit_cents: number;
+  referral_sharer_credit_cents: number;
+  updated_at: string;
+};
 
 function toSettings(row: SettingsRow): PromoCreditSettings {
   return {
     welcomeCreditCents: row.welcome_credit_cents,
-    referralCreditCents: row.referral_credit_cents,
+    friendCreditCents: row.referral_friend_credit_cents,
+    sharerCreditCents: row.referral_sharer_credit_cents,
     updatedAt: row.updated_at,
   };
 }
@@ -36,17 +42,18 @@ function validCents(cents: number | undefined): boolean {
 
 export async function updatePromoCreditSettings(input: {
   welcomeCreditCents?: number;
-  referralCreditCents?: number;
+  friendCreditCents?: number;
+  sharerCreditCents?: number;
   adminId: string;
 }): Promise<ApiResult<PromoCreditSettings>> {
-  const { welcomeCreditCents, referralCreditCents } = input;
-  if (!validCents(welcomeCreditCents) || !validCents(referralCreditCents)) {
+  const { welcomeCreditCents, friendCreditCents, sharerCreditCents } = input;
+  if (!validCents(welcomeCreditCents) || !validCents(friendCreditCents) || !validCents(sharerCreditCents)) {
     return {
       data: null,
       error: { message: `Promo credits must be between $0 and $${MAX_WELCOME_CREDIT_CENTS / 100}` },
     };
   }
-  if (welcomeCreditCents === undefined && referralCreditCents === undefined) {
+  if (welcomeCreditCents === undefined && friendCreditCents === undefined && sharerCreditCents === undefined) {
     return { data: null, error: { message: "Nothing to change" } };
   }
 
@@ -54,7 +61,8 @@ export async function updatePromoCreditSettings(input: {
     .from("promo_settings")
     .update({
       ...(welcomeCreditCents !== undefined ? { welcome_credit_cents: welcomeCreditCents } : {}),
-      ...(referralCreditCents !== undefined ? { referral_credit_cents: referralCreditCents } : {}),
+      ...(friendCreditCents !== undefined ? { referral_friend_credit_cents: friendCreditCents } : {}),
+      ...(sharerCreditCents !== undefined ? { referral_sharer_credit_cents: sharerCreditCents } : {}),
       updated_by: input.adminId,
     })
     .eq("id", true)
@@ -64,6 +72,11 @@ export async function updatePromoCreditSettings(input: {
     return { data: null, error: { message: error?.message ?? "Promo settings not found" } };
   }
 
-  log("info", "Admin updated promo credits", { adminId: input.adminId, welcomeCreditCents, referralCreditCents });
+  log("info", "Admin updated promo credits", {
+    adminId: input.adminId,
+    welcomeCreditCents,
+    friendCreditCents,
+    sharerCreditCents,
+  });
   return { data: toSettings(data), error: null };
 }

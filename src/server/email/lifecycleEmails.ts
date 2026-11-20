@@ -3,7 +3,7 @@ import type { OutgoingEmail } from "@/server/email/resend";
 
 /**
  * Follow-up emails sent by the daily lifecycle job: an unfinished book reminder, a review request
- * after a book arrives, and a thank-you when a friend's first order earns referral credit. The
+ * after a book arrives, and a thank-you when a friend's sign-up earns Share with a friend credit. The
  * first two are marketing and carry an unsubscribe link; the referral note is about the account.
  */
 
@@ -130,12 +130,12 @@ export function referralCreditEmail(input: { to: string; amountCents: number; ur
   const amount = usd(input.amountCents);
   return render({
     to: input.to,
-    subject: `Your friend ordered, and you earned ${amount}`,
-    eyebrow: "Refer a friend",
+    subject: `Your friend joined, and you earned ${amount}`,
+    eyebrow: "Share with a friend",
     heading: `${amount} added to your account`,
     paragraphs: [
-      `Someone you invited just placed their first order, so we've added ${amount} in credit to your account (they got the same).`,
-      "Keep sharing your link, pages and albums: every friend's first order earns you credit again.",
+      `A friend you shared Colorful Memories with just signed up, so we've added ${amount} in credit to your account.`,
+      "Keep sharing your link: every friend who signs up through it earns you credit again.",
     ],
     cta: { label: "Share my link", url: input.url },
     footer: "Sent because your referral credit was added.",

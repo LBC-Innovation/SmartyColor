@@ -28,8 +28,10 @@ export async function PUT(request: Request) {
   const body = (await request.json()) as {
     welcomeCreditCents?: unknown;
     welcomeCreditDollars?: unknown;
-    referralCreditCents?: unknown;
-    referralCreditDollars?: unknown;
+    friendCreditCents?: unknown;
+    friendCreditDollars?: unknown;
+    sharerCreditCents?: unknown;
+    sharerCreditDollars?: unknown;
   };
   const amount = (cents: unknown, dollars: unknown, field: string): number | undefined | Response => {
     if (cents === undefined && dollars === undefined) return undefined;
@@ -38,12 +40,15 @@ export async function PUT(request: Request) {
   };
   const welcome = amount(body.welcomeCreditCents, body.welcomeCreditDollars, "welcomeCreditDollars");
   if (welcome instanceof Response) return welcome;
-  const referral = amount(body.referralCreditCents, body.referralCreditDollars, "referralCreditDollars");
-  if (referral instanceof Response) return referral;
+  const friend = amount(body.friendCreditCents, body.friendCreditDollars, "friendCreditDollars");
+  if (friend instanceof Response) return friend;
+  const sharer = amount(body.sharerCreditCents, body.sharerCreditDollars, "sharerCreditDollars");
+  if (sharer instanceof Response) return sharer;
 
   const result = await promo.updatePromoCreditSettings({
     welcomeCreditCents: welcome,
-    referralCreditCents: referral,
+    friendCreditCents: friend,
+    sharerCreditCents: sharer,
     adminId: auth.user.id,
   });
   return jsonResult(result, result.error ? 400 : 200);

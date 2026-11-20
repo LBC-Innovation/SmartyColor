@@ -16,6 +16,8 @@ export default function robots(): MetadataRoute.Robots {
         "/studio",
         "/home",
         "/account",
+        "/share",
+        "/friend/",
         "/orders",
         "/admin",
         "/api/",
