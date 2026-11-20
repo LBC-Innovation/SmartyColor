@@ -1,87 +1,47 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Gift, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, Gift } from "lucide-react";
 import * as api from "@/lib/api/client";
-import { formatCredits } from "@/lib/credits/money";
 import type { ReferralSummary } from "@/lib/credits/types";
-import { track } from "@/lib/track";
+import { formatUsd } from "@/lib/marketing/copy";
 
-/** The account's refer-a-friend link: share it, and both sides get credit on the friend's first order. */
+/** A pointer from the Account page to Share with a friend, with the current offer. */
 export function V2ReferralPanel() {
   const [summary, setSummary] = useState<ReferralSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void api.fetchReferral().then((res) => {
-      if (cancelled) return;
-      if (api.isError(res)) setError(res.error.message);
-      else setSummary(res.data);
+      if (!cancelled && !api.isError(res)) setSummary(res.data);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  async function copy(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      track("share", { method: "copy", content_type: "referral" });
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* the field is selectable */
-    }
-  }
-
-  // With the credit turned off there is nothing to offer.
-  if (summary && summary.creditCents <= 0 && summary.referredCount === 0) return null;
+  const friend = summary?.friendCreditCents ?? 0;
+  const sharer = summary?.sharerCreditCents ?? 0;
+  const offer =
+    friend > 0 && sharer > 0
+      ? `Give ${formatUsd(friend)}, get ${formatUsd(sharer)} when a friend signs up.`
+      : sharer > 0
+        ? `Get ${formatUsd(sharer)} when a friend signs up.`
+        : friend > 0
+          ? `Give a friend ${formatUsd(friend)} to get started.`
+          : "Show a friend how it works.";
 
   return (
-    <section className="v2-panel p-5 sm:p-6">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-v2-ink">
-        <Gift className="h-5 w-5 text-v2-success-text" aria-hidden />
-        Give {summary ? formatCredits(summary.creditCents) : "credit"}, get{" "}
-        {summary ? formatCredits(summary.creditCents) : "credit"}
-      </h2>
-      {error ? (
-        <p className="mt-3 text-sm text-red-700" role="alert">
-          {error}
-        </p>
-      ) : !summary ? (
-        <p className="mt-3 flex items-center gap-2 text-sm text-v2-muted">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          Loading…
-        </p>
-      ) : (
-        <>
-          <p className="mt-1 text-sm leading-relaxed text-v2-muted">
-            Share your link. When a friend who signs up through it places their first order, you each
-            get {formatCredits(summary.creditCents)} of credit.
-          </p>
-          <div className="mt-4 flex gap-2">
-            <input
-              readOnly
-              value={summary.url}
-              aria-label="Your referral link"
-              className="v2-input min-w-0 flex-1 text-sm"
-              onFocus={(e) => e.currentTarget.select()}
-            />
-            <button type="button" onClick={() => void copy(summary.url)} className="v2-btn-outline shrink-0 px-4 text-sm">
-              {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
-          {summary.referredCount > 0 ? (
-            <p className="mt-3 text-sm text-v2-ink">
-              {summary.referredCount === 1 ? "1 friend has" : `${summary.referredCount} friends have`} ordered
-              so far · you&apos;ve earned {formatCredits(summary.earnedCents)}
-            </p>
-          ) : null}
-        </>
-      )}
-    </section>
+    <Link href="/share" className="v2-panel flex items-center gap-4 p-5 transition hover:bg-v2-bg-subtle sm:p-6">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-v2-primary-light text-v2-primary">
+        <Gift className="h-5 w-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-lg font-semibold text-v2-ink">Share with a friend</span>
+        <span className="block text-sm text-v2-muted">{offer}</span>
+      </span>
+      <ChevronRight className="h-5 w-5 shrink-0 text-v2-muted" aria-hidden />
+    </Link>
   );
 }

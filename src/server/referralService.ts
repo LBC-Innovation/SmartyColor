@@ -2,14 +2,17 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import type { ApiResult } from "@/lib/api/types";
 import { clientOrigin } from "@/lib/auth/clientOrigin";
-import type { ReferralSummary } from "@/lib/credits/types";
+import type { FriendInvite, ReferralSummary } from "@/lib/credits/types";
+import { friendPath, type FriendLinkVia } from "@/lib/marketing/friendLink";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 
 /**
- * Refer-a-friend. Each account has a short code, assigned the first time it asks for its link.
- * The link lands on `/?ref=CODE`; the cm_attr cookie keeps the code through sign-up and onto
- * the order, and the database credits both accounts once when the friend's first order is
- * paid (grant_referral_credit, migration 0026). Nothing here grants credit.
+ * Share with a friend. Each account has a short code, assigned the first time it asks for its
+ * link. The link is a short `/friend/CODE?v=<how it was sent>` (short so the QR code stays easy to
+ * scan); the landing page adds ?ref=CODE and utm_campaign=share_with_a_friend before recording the
+ * visit, the cm_attr cookie keeps those through sign-up onto profiles.attribution, and the database
+ * credits both accounts once the friend's email is confirmed (grant_friend_signup_credit,
+ * migration 0040). Nothing here grants credit.
  */
 
 const err = (message: string, code?: string): ApiResult<never> => ({ data: null, error: { message, ...(code ? { code } : {}) } });
@@ -29,8 +32,47 @@ function newCode(): string {
   return code;
 }
 
-export function referralUrl(code: string): string {
-  return `${clientOrigin()}/?ref=${encodeURIComponent(code)}&utm_source=referral&utm_medium=friend_link`;
+export function referralUrl(code: string, via: FriendLinkVia = "link"): string {
+  return `${clientOrigin()}${friendPath(code, via)}`;
+}
+
+async function displayNameOf(userId: string, fallbackEmail?: string): Promise<string> {
+  const { data } = await db().from("profiles").select("display_name").eq("id", userId).maybeSingle();
+  const name = (data?.display_name as string | null)?.trim();
+  if (name) return name;
+  return fallbackEmail?.split("@")[0] || "A friend";
+}
+
+async function friendAmounts(): Promise<ApiResult<{ friend: number; sharer: number }>> {
+  const { data, error } = await db()
+    .from("promo_settings")
+    .select("referral_friend_credit_cents, referral_sharer_credit_cents")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) return err(error.message);
+  return {
+    data: {
+      friend: (data?.referral_friend_credit_cents as number | undefined) ?? 0,
+      sharer: (data?.referral_sharer_credit_cents as number | undefined) ?? 0,
+    },
+    error: null,
+  };
+}
+
+/** The friend landing page's details for a code; NOT_FOUND for a code nobody has. */
+export async function getFriendInvite(rawCode: string): Promise<ApiResult<FriendInvite>> {
+  const code = rawCode.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,16}$/.test(code)) return err("Unknown link", "NOT_FOUND");
+  const { data, error } = await db().from("profiles").select("id, display_name").eq("referral_code", code).maybeSingle();
+  if (error) return err(error.message);
+  if (!data) return err("Unknown link", "NOT_FOUND");
+  const amounts = await friendAmounts();
+  if (amounts.error) return amounts;
+  const name = (data.display_name as string | null)?.trim();
+  return {
+    data: { code, sharerName: name || "A friend", friendCreditCents: amounts.data!.friend },
+    error: null,
+  };
 }
 
 async function ensureCode(userId: string): Promise<ApiResult<string>> {
@@ -78,15 +120,16 @@ export function withShareTags(url: string, tags: Record<string, string | null | 
   return u.toString();
 }
 
-export async function getReferralSummary(userId: string): Promise<ApiResult<ReferralSummary>> {
-  const code = await ensureCode(userId);
+export async function getReferralSummary(user: { id: string; email: string }): Promise<ApiResult<ReferralSummary>> {
+  const code = await ensureCode(user.id);
   if (code.error) return code;
 
-  const [settings, credits] = await Promise.all([
-    db().from("promo_settings").select("referral_credit_cents").eq("id", true).maybeSingle(),
-    db().from("referral_credits").select("amount_cents").eq("referrer_id", userId),
+  const [amounts, credits, sharerName] = await Promise.all([
+    friendAmounts(),
+    db().from("referral_credits").select("amount_cents").eq("referrer_id", user.id),
+    displayNameOf(user.id, user.email),
   ]);
-  if (settings.error) return err(settings.error.message);
+  if (amounts.error) return amounts;
   if (credits.error) return err(credits.error.message);
 
   const rows = credits.data ?? [];
@@ -94,7 +137,10 @@ export async function getReferralSummary(userId: string): Promise<ApiResult<Refe
     data: {
       code: code.data!,
       url: referralUrl(code.data!),
-      creditCents: (settings.data?.referral_credit_cents as number | undefined) ?? 0,
+      qrUrl: referralUrl(code.data!, "qr"),
+      sharerName,
+      friendCreditCents: amounts.data!.friend,
+      sharerCreditCents: amounts.data!.sharer,
       referredCount: rows.length,
       earnedCents: rows.reduce((sum, r) => sum + ((r.amount_cents as number) ?? 0), 0),
     },

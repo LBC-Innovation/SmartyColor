@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, CircleHelp, CircleUser, KeyRound, Loader2, LogOut, Package, ReceiptText, Shield, User, UserPen } from "lucide-react";
+import { ChevronDown, CircleHelp, CircleUser, Gift, KeyRound, Loader2, LogOut, Package, ReceiptText, Shield, User, UserPen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import * as api from "@/lib/api/client";
@@ -215,6 +215,15 @@ export function V2UserMenu() {
             >
               <Package className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
               My orders
+            </Link>
+            <Link
+              href="/share"
+              role="menuitem"
+              className={ITEM_CLASS}
+              onClick={() => setOpen(false)}
+            >
+              <Gift className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
+              Share with a friend
             </Link>
             <button
               type="button"

@@ -9,7 +9,7 @@ import { formatCredits, parseDollarsToCents } from "@/lib/credits/money";
 import { MAX_WELCOME_CREDIT_CENTS, type PromoCreditSettings } from "@/lib/credits/types";
 import type { FinanceReport } from "@/lib/finance/types";
 
-type PromoField = "welcome" | "referral";
+type PromoField = "welcome" | "friend" | "sharer";
 
 const FIELDS: Array<{ field: PromoField; title: string; description: string; cents: (s: PromoCreditSettings) => number }> = [
   {
@@ -19,11 +19,18 @@ const FIELDS: Array<{ field: PromoField; title: string; description: string; cen
     cents: (s) => s.welcomeCreditCents,
   },
   {
-    field: "referral",
-    title: "Referral credit",
+    field: "friend",
+    title: "Share with a friend: friend",
     description:
-      "Given to both people when a referred friend's first order is paid. A new amount applies to orders paid from now on; $0.00 also hides the referral card.",
-    cents: (s) => s.referralCreditCents,
+      "Given to the new account when it signs up through someone's Share with a friend link or QR code, once its email is confirmed. A new amount applies to sign-ups confirmed from now on.",
+    cents: (s) => s.friendCreditCents,
+  },
+  {
+    field: "sharer",
+    title: "Share with a friend: sharer",
+    description:
+      "Given to the person who shared, each time a friend signs up through their link. A new amount applies to sign-ups confirmed from now on. Set both to $0.00 to stop the offer.",
+    cents: (s) => s.sharerCreditCents,
   },
 ];
 
@@ -34,7 +41,7 @@ function last30Days(): { from: string; to: string } {
   return { from: iso(today - 29 * 86_400_000), to: iso(today) };
 }
 
-/** Welcome and referral credit amounts, plus what promo credit has cost lately. */
+/** Welcome and Share with a friend credit amounts, plus what promo credit has cost lately. */
 export function PromotionsSection({ canEdit, canSeeFinance }: { canEdit: boolean; canSeeFinance: boolean }) {
   const [settings, setSettings] = useState<PromoCreditSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -145,8 +152,13 @@ function PromoRow({
     if (!valid || saving) return;
     setSaving(true);
     setError(null);
+    const dollars = amount.trim();
     const result = await api.adminUpdatePromoCredits(
-      field === "welcome" ? { welcomeCreditDollars: amount.trim() } : { referralCreditDollars: amount.trim() },
+      field === "welcome"
+        ? { welcomeCreditDollars: dollars }
+        : field === "friend"
+          ? { friendCreditDollars: dollars }
+          : { sharerCreditDollars: dollars },
     );
     setSaving(false);
     if (api.isError(result)) {
