@@ -1446,3 +1446,73 @@ body:has(.v2-shell) {
 .v2-shell input.v2-album-name-input:focus-visible {
   outline: none;
 }
+
+/* ---------- Mobile chat to edit: the floating page and its full-screen viewer ---------- */
+
+/* While an edit runs, a soft ring breathes around the page. */
+@keyframes v2-pip-busy {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(116 70 240 / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(116 70 240 / 0);
+  }
+}
+.v2-pip-busy {
+  animation: v2-pip-busy 1.6s ease-in-out infinite;
+}
+
+@keyframes v2-pip-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.v2-pip-pill {
+  animation: v2-pip-pill-in 220ms ease-out both;
+}
+
+/* The viewer grows out of the floating page (transform-origin is set inline) and shrinks back. */
+@keyframes v2-viewer-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes v2-viewer-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+.v2-viewer-in {
+  animation: v2-viewer-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.v2-viewer-out {
+  animation: v2-viewer-out 160ms ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-pip-pill,
+  .v2-viewer-in,
+  .v2-viewer-out {
+    animation: none;
+  }
+  .v2-pip-busy {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(116 70 240 / 0.35);
+  }
+}
