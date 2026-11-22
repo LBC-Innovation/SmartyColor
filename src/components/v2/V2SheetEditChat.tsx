@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Coins, Loader2, Send, Sparkles, X } from "lucide-react";
+import { Coins, Loader2, MessageSquareText, Send, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { V2WorkingOverlay } from "@/components/v2/V2WorkingOverlay";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
+import { EditChatPip, type EditChatPipHandle } from "@/components/v2/edit-chat/EditChatPip";
+import { EditChatPageViewer, type EditChatPreviewMode } from "@/components/v2/edit-chat/EditChatPageViewer";
 import { EDIT_SUGGESTIONS } from "@/content/marketing";
 import { PHOTO_MAX_CORRECTION_CHARS } from "@/lib/session/photoTypes";
 
@@ -20,7 +22,7 @@ export type SheetEditMessage = {
 /** A line under the box about what the next edit costs: free edits left, or that edits are now paid. */
 export type SheetEditCostNotice = { tone: "info" | "cost"; text: string };
 
-type PreviewMode = "sheet" | "original";
+type PreviewMode = EditChatPreviewMode;
 
 type V2SheetEditChatProps = {
   open: boolean;
@@ -64,9 +66,10 @@ function useKeyboardSafeBox(active: boolean): CSSProperties | undefined {
 }
 
 /**
- * Chat to edit a coloring page. Phones get it full screen: the page on top takes whatever room is
- * left, while the conversation and the box below keep theirs, so typing never hides them. Desktop
- * is a dialog with the page on the left and the chat in a column on the right.
+ * Chat to edit a coloring page. Phones get it full screen with the conversation filling everything
+ * between the header and the box, and the page as a small card floating over it (drag it to any
+ * corner, tap it for a full-screen view). Desktop is a dialog with the page on the left and the
+ * chat in a column on the right.
  */
 export function V2SheetEditChat({
   open,
@@ -84,8 +87,32 @@ export function V2SheetEditChat({
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const pipRef = useRef<EditChatPipHandle>(null);
   useModalLayer({ panelRef, onClose, active: open });
   const keyboardBox = useKeyboardSafeBox(open);
+
+  // Phones: the full-screen page viewer, opened from the floating page. Closed again on every open.
+  const [viewer, setViewer] = useState<{ origin: string } | null>(null);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    setViewer(null);
+  }
+
+  // Phones: while typing, the keyboard leaves little room, so the examples step aside.
+  const [typingOnTouch, setTypingOnTouch] = useState(false);
+  const compactComposer = typingOnTouch && !busy && !disabled;
+
+  function openViewer(from: DOMRect) {
+    // Drop the keyboard: the viewer is for looking, not typing.
+    inputRef.current?.blur();
+    const panel = panelRef.current?.getBoundingClientRect();
+    const origin = panel
+      ? `${from.left + from.width / 2 - panel.left}px ${from.top + from.height / 2 - panel.top}px`
+      : "50% 50%";
+    setPreviewMode("sheet");
+    setViewer({ origin });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -141,11 +168,11 @@ export function V2SheetEditChat({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="flex h-full w-full flex-col overflow-hidden bg-white focus:outline-none lg:h-[min(92dvh,880px)] lg:max-w-6xl lg:flex-row lg:rounded-[1.75rem] lg:shadow-[0_32px_80px_-16px_rgb(36_26_77/0.45)] lg:ring-1 lg:ring-v2-primary/10"
+        className="flex h-full w-full flex-col overflow-hidden bg-white max-lg:relative focus:outline-none lg:h-[min(92dvh,880px)] lg:max-w-6xl lg:flex-row lg:rounded-[1.75rem] lg:shadow-[0_32px_80px_-16px_rgb(36_26_77/0.45)] lg:ring-1 lg:ring-v2-primary/10"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Header: phones only here; desktop puts the title at the top of the chat column. */}
-        <header className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
+        <header inert={viewer ? true : undefined} className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
           <h2 id="v2-sheet-edit-title" className="v2-brand-title min-w-0 flex-1 truncate pl-1 text-xl text-v2-ink">
             Edit coloring page
           </h2>
@@ -158,8 +185,8 @@ export function V2SheetEditChat({
           </button>
         </header>
 
-        {/* The page. On phones it takes the room the chat doesn't need, and shrinks when the keyboard is up. */}
-        <div className="relative flex min-h-0 flex-1 basis-0 items-center justify-center bg-v2-bg-subtle p-2 lg:basis-auto lg:p-6">
+        {/* The page, desktop only. Phones show it as the floating card over the conversation instead. */}
+        <div className="relative hidden min-h-0 flex-1 basis-0 items-center justify-center bg-v2-bg-subtle p-2 lg:flex lg:basis-auto lg:p-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={showingSheet ? sheetImageUrl : originalPreviewUrl}
@@ -190,7 +217,7 @@ export function V2SheetEditChat({
         </div>
 
         {/* Chat */}
-        <div className="flex min-h-0 min-w-0 flex-col border-t border-gray-100 lg:w-[380px] lg:shrink-0 lg:border-l lg:border-t-0">
+        <div inert={viewer ? true : undefined} className="flex min-h-0 min-w-0 flex-col border-gray-100 max-lg:relative max-lg:flex-1 lg:w-[380px] lg:shrink-0 lg:border-l">
           <div className="hidden shrink-0 items-start gap-3 border-b border-gray-100 px-5 py-4 lg:flex">
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-semibold text-v2-ink">Edit coloring page</h2>
@@ -211,22 +238,42 @@ export function V2SheetEditChat({
           <div
             ref={listRef}
             aria-live="polite"
-            className={cn(
-              "flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-3 py-3 lg:flex-1 lg:px-4",
-              // Phones: only as tall as the conversation, capped so the page above keeps some room.
-              messages.length === 0 ? "hidden lg:flex" : "max-h-[34dvh] lg:max-h-none",
-            )}
+            className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-3 py-3 lg:px-4"
           >
             {messages.length === 0 ? (
-              <p className="m-auto max-w-[18rem] text-center text-sm leading-relaxed text-v2-muted">
-                Try &ldquo;Add clearer outlines around the dog&apos;s ears&rdquo; or &ldquo;Remove the extra lines in
-                the sky.&rdquo;
-              </p>
+              <>
+                {/* Phones: the chat column's header (with this intro) is desktop only, so say it here. It sits
+                    at the bottom, where the conversation will start, clear of the card in the top corner. */}
+                <div className="mx-auto mt-auto flex max-w-[17rem] flex-col items-center gap-2 pb-2 pt-4 text-center lg:hidden">
+                  <span
+                    aria-hidden
+                    className="mb-1 inline-flex h-11 w-11 items-center justify-center rounded-full bg-v2-primary-light text-v2-primary"
+                  >
+                    <MessageSquareText className="h-5 w-5" />
+                  </span>
+                  <p className="text-base font-semibold text-v2-ink">Tell us what to change</p>
+                  <p className="text-sm leading-relaxed text-v2-muted">
+                    Ask for one change at a time. The rest of the page stays the same.
+                  </p>
+                  <p className="text-sm leading-relaxed text-v2-muted">
+                    Try &ldquo;Make the lines thicker&rdquo; or &ldquo;Remove the people in the background.&rdquo;
+                  </p>
+                </div>
+                <p className="m-auto hidden max-w-[18rem] text-center text-sm leading-relaxed text-v2-muted lg:block">
+                  Try &ldquo;Add clearer outlines around the dog&apos;s ears&rdquo; or &ldquo;Remove the extra lines in
+                  the sky.&rdquo;
+                </p>
+              </>
             ) : (
-              messages.map((message) => (
+              messages.map((message, index) => (
                 <div
                   key={message.id}
-                  className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
+                  className={cn(
+                    "flex",
+                    message.role === "user" ? "justify-end" : "justify-start",
+                    // Phones: the conversation sits at the bottom, by the box, and away from the card.
+                    index === 0 && "max-lg:mt-auto",
+                  )}
                 >
                   <div
                     className={cn(
@@ -251,6 +298,14 @@ export function V2SheetEditChat({
             )}
           </div>
 
+          <EditChatPip
+            ref={pipRef}
+            src={sheetImageUrl}
+            busy={busy}
+            boundsRef={listRef}
+            onOpen={openViewer}
+          />
+
           <form
             className="shrink-0 border-t border-gray-100 bg-v2-bg-subtle px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3"
             onSubmit={(event) => {
@@ -259,7 +314,13 @@ export function V2SheetEditChat({
             }}
           >
             {showSuggestions ? (
-              <p id="v2-sheet-edit-examples" className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-v2-muted">
+              <p
+                id="v2-sheet-edit-examples"
+                className={cn(
+                  "mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wider text-v2-muted",
+                  compactComposer && "max-lg:hidden",
+                )}
+              >
                 Examples
               </p>
             ) : null}
@@ -267,7 +328,10 @@ export function V2SheetEditChat({
               <div
                 role="group"
                 aria-labelledby="v2-sheet-edit-examples"
-                className="-mx-3 mb-2.5 flex gap-2 overflow-x-auto px-3 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden"
+                className={cn(
+                  "-mx-3 mb-2.5 flex gap-2 overflow-x-auto px-3 [scrollbar-width:none] lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden",
+                  compactComposer && "max-lg:hidden",
+                )}
               >
                 {EDIT_SUGGESTIONS.map((text) => (
                   <button
@@ -304,6 +368,8 @@ export function V2SheetEditChat({
                   }
                 }}
                 onChange={(event) => setDraft(event.target.value)}
+                onFocus={() => setTypingOnTouch(window.matchMedia("(pointer: coarse)").matches || keyboardBox !== undefined)}
+                onBlur={() => setTypingOnTouch(false)}
               />
               <button
                 type="submit"
@@ -339,6 +405,19 @@ export function V2SheetEditChat({
             ) : null}
           </form>
         </div>
+
+        {viewer ? (
+          <EditChatPageViewer
+            sheetImageUrl={sheetImageUrl}
+            originalPreviewUrl={originalPreviewUrl}
+            previewMode={previewMode}
+            onPreviewModeChange={setPreviewMode}
+            busy={busy}
+            transformOrigin={viewer.origin}
+            onClose={() => setViewer(null)}
+            onClosed={() => pipRef.current?.focus()}
+          />
+        ) : null}
       </div>
     </div>
   );
