@@ -26,7 +26,7 @@ export type LandingIntent = "default" | "gift" | "birthday" | "pets" | "partners
 export const PRIMARY_CTA = "Try a free coloring page";
 
 /** Where on a marketing page a call to action sits. Sent with the `cta_click` event. */
-export type CtaLocation = "hero" | "hero_signup" | "sticky" | "products" | "final" | "occasion" | "header" | "upsell";
+export type CtaLocation = "hero" | "offer_bar" | "sticky" | "products" | "final" | "occasion" | "header" | "upsell";
 
 export type HeroPair = {
   photoSrc: string;
@@ -644,17 +644,22 @@ export const LANDING_ORDER: LandingIntent[] = ["default", "gift", "birthday", "p
 export const PRICE_LINE = "{price} for a {refPages}-page {refFormat}, standard US shipping included. Plus tax.";
 
 /**
- * The hero's offer card: the book price (when the reference price is known) and a sign-up button
- * carrying the sign-up gift (when it's on). "From" is the reference book (REFERENCE_BOOK in
- * src/server/marketing/marketingNumbers.ts); larger books and other bindings cost more.
+ * The hero's price card, shown when the reference price is known. "From" is the reference book
+ * (REFERENCE_BOOK in src/server/marketing/marketingNumbers.ts); larger books and other bindings cost more.
  */
 export const HERO_PRICE_TAG = {
   label: "Printed coloring books",
   price: "from {price}",
-  detail: "{refPages}-page {refFormat}, US shipping included.",
-  /** The button: short enough for one line on a phone. The label is the screen-reader name. */
-  signUp: "Sign up for {freePages}",
-  signUpLabel: "Sign up free and get {freeSheets}",
+  detail: "{refPages}-page {refFormat}, US shipping included. Spiral and paperback too.",
+};
+
+/**
+ * Slim strip above the landing page header: the sign-up gift. Hidden when the gift is off, on the
+ * partners page, while the Christmas banner shows, and for signed-in visitors. `short` is for phones.
+ */
+export const OFFER_BAR = {
+  text: "Sign up free and get {freeSheets}",
+  short: "Sign up for {freePages}",
 };
 
 /**

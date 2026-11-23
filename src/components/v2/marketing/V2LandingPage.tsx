@@ -34,6 +34,7 @@ import { track, trackCta } from "@/lib/track";
 import { HolidayBanner } from "@/components/v2/marketing/HolidayBanner";
 import { MarketingFooter } from "@/components/v2/marketing/MarketingFooter";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
+import { SignUpOfferBar } from "@/components/v2/marketing/SignUpOfferBar";
 import { ScrollToTopButton } from "@/components/v2/marketing/ScrollToTopButton";
 import {
   CopyEmail,
@@ -76,9 +77,6 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   const tagPrice = fillCopy(HERO_PRICE_TAG.price, values);
   const tagDetail = fillCopy(HERO_PRICE_TAG.detail, values);
   const priceTag = sections.priceLine && tagPrice && tagDetail ? { label: HERO_PRICE_TAG.label, price: tagPrice, detail: tagDetail } : null;
-  // The sign-up gift, as a button in the same card. Not on the partners page, which sells to businesses.
-  const signUpOffer = sections.partnerContact ? null : fillCopy(HERO_PRICE_TAG.signUp, values);
-  const signUpLabel = fillCopy(HERO_PRICE_TAG.signUpLabel, values) ?? undefined;
   const heroPhoto = heroImage(page);
   // Every real photo-and-page pair on this page, once each, for the before/after switcher.
   const examplePairs = [page.hero, page.why.example].filter((p, i, all) => all.findIndex((q) => q.photoSrc === p.photoSrc) === i);
@@ -132,7 +130,11 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   // picks up a faint tint where it starts. bg-local keeps it with the content when this box scrolls.
   return (
     <div ref={scrollBoxRef} className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream bg-[linear-gradient(var(--color-v2-butter),var(--color-v2-butter))] bg-[length:100%_12rem] bg-no-repeat bg-local text-v2-ink">
-      {showBanner && holiday ? <HolidayBanner label={holiday.label} /> : null}
+      {showBanner && holiday ? (
+        <HolidayBanner label={holiday.label} />
+      ) : sections.partnerContact ? null : (
+        <SignUpOfferBar values={values} intent={intent} />
+      )}
       <V2MarketingHeader intent={intent} wide tinted />
 
       <main className="flex-1">
@@ -216,32 +218,15 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                 </div>
               ) : null}
 
-              {priceTag || signUpOffer ? (
-                <div className="mt-5 flex max-w-md flex-col gap-3 rounded-2xl bg-white/10 p-3.5 ring-1 ring-white/20 backdrop-blur">
-                  {priceTag ? (
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold uppercase tracking-wider text-brand-amber">{priceTag.label}</span>
-                      <span className="v2-wordmark mt-1.5 text-2xl text-white">{priceTag.price}</span>
-                      <span className="mt-1 text-sm text-white/80">{priceTag.detail}</span>
-                    </div>
-                  ) : null}
-                  {priceTag && signUpOffer ? <div className="border-t border-white/15" aria-hidden /> : null}
-                  {signUpOffer ? (
-                    <Link
-                      href="/sign-up"
-                      aria-label={signUpLabel}
-                      onClick={() => trackCta("hero_signup", intent)}
-                      className={`inline-flex min-h-11 items-center justify-center gap-2 self-start whitespace-nowrap rounded-full border-2 border-brand-amber px-5 text-sm font-bold text-brand-amber transition hover:bg-brand-amber/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-base${priceTag ? " mt-0.5" : ""}`}
-                    >
-                      <Gift className="h-4 w-4 shrink-0" aria-hidden />
-                      {signUpOffer}
-                      <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
-                    </Link>
-                  ) : null}
+              {priceTag ? (
+                <div className="mt-6 inline-flex max-w-md flex-col rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/20 backdrop-blur">
+                  <span className="text-xs font-bold uppercase tracking-wider text-brand-amber">{priceTag.label}</span>
+                  <span className="v2-wordmark mt-1.5 text-2xl text-white">{priceTag.price}</span>
+                  <span className="mt-1 text-sm text-white/80">{priceTag.detail}</span>
                 </div>
               ) : null}
 
-              <ul className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/85">
+              <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/85">
                 {page.trustBullets.map((t) => (
                   <li key={t} className="inline-flex items-center gap-1.5">
                     <Check className="h-4 w-4 text-brand-amber" strokeWidth={2.5} aria-hidden />
