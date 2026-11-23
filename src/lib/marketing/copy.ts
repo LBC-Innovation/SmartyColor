@@ -9,6 +9,7 @@ export type CopyValues = Partial<
     | "pdfPrice"
     | "pagePrice"
     | "freeSheets"
+    | "freePages"
     | "date"
     | "count"
     | "min"
@@ -67,6 +68,7 @@ export function numberValues(n: NumbersInput | null): CopyValues {
     pdfPrice: n.digitalPriceCents != null ? formatUsd(n.digitalPriceCents) : null,
     pagePrice: n.pagePriceCents != null ? formatUsd(n.pagePriceCents) : null,
     freeSheets: n.welcomeFreeSheets != null ? formatFreeSheets(n.welcomeFreeSheets) : null,
+    freePages: n.welcomeFreeSheets != null ? `${n.welcomeFreeSheets} free ${n.welcomeFreeSheets === 1 ? "page" : "pages"}` : null,
     refPages: String(n.referencePages),
     refFormat: n.referenceFormat,
   };

@@ -7,7 +7,8 @@
  *
  *   {price}     Price of the reference printed book, shipping included (e.g. "$14.37")
  *   {pdfPrice}  Price of the print-at-home PDF of a whole book
- *   {freeSheets} The sign-up gift as free sheets (e.g. "35 free coloring pages"), set on /admin/pricing
+ *   {freeSheets} The sign-up gift as free sheets (e.g. "20 free coloring pages"), set on /admin/pricing
+ *   {freePages}  The same, short (e.g. "20 free pages"), for buttons
  *   {date}      The Christmas order-by date (e.g. "December 7"). Only exists while the owner sets
  *               NEXT_PUBLIC_HOLIDAY_ORDER_BY and the date is still ahead.
  *   {min} {max} {format}  Page limits and name of a binding, read from src/lib/print/bookBindings.ts
@@ -25,7 +26,7 @@ export type LandingIntent = "default" | "gift" | "birthday" | "pets" | "partners
 export const PRIMARY_CTA = "Try a free coloring page";
 
 /** Where on a marketing page a call to action sits. Sent with the `cta_click` event. */
-export type CtaLocation = "hero" | "sticky" | "products" | "final" | "occasion" | "header" | "upsell";
+export type CtaLocation = "hero" | "hero_signup" | "sticky" | "products" | "final" | "occasion" | "header" | "upsell";
 
 export type HeroPair = {
   photoSrc: string;
@@ -643,13 +644,17 @@ export const LANDING_ORDER: LandingIntent[] = ["default", "gift", "birthday", "p
 export const PRICE_LINE = "{price} for a {refPages}-page {refFormat}, standard US shipping included. Plus tax.";
 
 /**
- * The hero's price card, shown when the reference price is known. "From" is the reference book
- * (REFERENCE_BOOK in src/server/marketing/marketingNumbers.ts); larger books and other bindings cost more.
+ * The hero's offer card: the book price (when the reference price is known) and a sign-up button
+ * carrying the sign-up gift (when it's on). "From" is the reference book (REFERENCE_BOOK in
+ * src/server/marketing/marketingNumbers.ts); larger books and other bindings cost more.
  */
 export const HERO_PRICE_TAG = {
   label: "Printed coloring books",
   price: "from {price}",
-  detail: "{refPages}-page {refFormat}, US shipping included. Spiral and paperback too.",
+  detail: "{refPages}-page {refFormat}, US shipping included.",
+  /** The button: short enough for one line on a phone. The label is the screen-reader name. */
+  signUp: "Sign up for {freePages}",
+  signUpLabel: "Sign up free and get {freeSheets}",
 };
 
 /**
@@ -669,9 +674,6 @@ export const HOLIDAY_BLOCK = {
 };
 
 export const HERO_SECONDARY_CTA = "See how it works";
-
-/** Under the hero buttons: the sign-up gift. Hidden when the gift is off. */
-export const HERO_SIGNUP_BADGE = "Sign up free and get {freeSheets}";
 /** The hero's drag-to-compare slider. */
 export const HERO_COMPARE = {
   photo: "Your photo",
