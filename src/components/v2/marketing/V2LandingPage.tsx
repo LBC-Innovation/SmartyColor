@@ -231,7 +231,7 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                       href="/sign-up"
                       aria-label={signUpLabel}
                       onClick={() => trackCta("hero_signup", intent)}
-                      className={`inline-flex min-h-11 items-center justify-center gap-2 self-start whitespace-nowrap rounded-full bg-brand-amber px-5 text-sm font-bold text-v2-plum shadow-md transition hover:brightness-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-base${priceTag ? " mt-0.5" : ""}`}
+                      className={`inline-flex min-h-11 items-center justify-center gap-2 self-start whitespace-nowrap rounded-full border-2 border-brand-amber px-5 text-sm font-bold text-brand-amber transition hover:bg-brand-amber/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-base${priceTag ? " mt-0.5" : ""}`}
                     >
                       <Gift className="h-4 w-4 shrink-0" aria-hidden />
                       {signUpOffer}
