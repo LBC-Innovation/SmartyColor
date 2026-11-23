@@ -10,7 +10,14 @@ export type CreditLedgerEntry = {
 
 /** Promotional credit settings, edited in the admin panel. */
 export type PromoCreditSettings = {
-  /** Gifted once when an account's email is first confirmed; 0 turns the gift off. */
+  /**
+   * Sign-up gift: credit for this many coloring sheets, granted once when an account's email is
+   * first confirmed; 0 turns the gift off.
+   */
+  welcomeFreeSheets: number;
+  /** What one new coloring sheet costs today (ai.sheet_generation); null if unpriced. */
+  sheetPriceCents: number | null;
+  /** What the sign-up gift is worth today: welcomeFreeSheets × sheetPriceCents. */
   welcomeCreditCents: number;
   /** Share with a friend: given to the new account when it signs up through a friend's link; 0 turns it off. */
   friendCreditCents: number;
@@ -45,6 +52,8 @@ export type FriendInvite = {
 };
 
 export const MAX_WELCOME_CREDIT_CENTS = 500_00;
+/** Most free sheets the sign-up gift can be set to (matches the database check). */
+export const MAX_WELCOME_FREE_SHEETS = 1000;
 
 /** Query flag Stripe Checkout returns with: `success` or `canceled`. */
 export const CREDITS_RETURN_PARAM = "credits";

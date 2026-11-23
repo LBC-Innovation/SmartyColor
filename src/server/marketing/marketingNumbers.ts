@@ -48,23 +48,24 @@ export async function getReferencePrice(): Promise<number | null> {
   }
 }
 
-const cachedWelcomeCredit = unstable_cache(
+const cachedWelcomeFreeSheets = unstable_cache(
   async (): Promise<number> => {
     const settings = await getPromoCreditSettings();
     if (settings.error) throw new Error(settings.error.message);
-    return settings.data.welcomeCreditCents;
+    // Free sheets only mean something while a sheet has a price (the gift is sheets × price).
+    return settings.data.welcomeCreditCents > 0 ? settings.data.welcomeFreeSheets : 0;
   },
-  ["marketing-welcome-credit-v1"],
+  ["marketing-welcome-free-sheets-v1"],
   { revalidate: 60 * 60 },
 );
 
-/** The sign-up credit in cents; null when it's off (0) or can't be read. */
-export async function getWelcomeCredit(): Promise<number | null> {
+/** How many free sheets the sign-up gift covers; null when it's off (0) or can't be read. */
+export async function getWelcomeFreeSheets(): Promise<number | null> {
   try {
-    const cents = await cachedWelcomeCredit();
-    return cents > 0 ? cents : null;
+    const sheets = await cachedWelcomeFreeSheets();
+    return sheets > 0 ? sheets : null;
   } catch (e) {
-    log("warn", "Welcome credit unavailable", { error: e instanceof Error ? e.message : String(e) });
+    log("warn", "Welcome free sheets unavailable", { error: e instanceof Error ? e.message : String(e) });
     return null;
   }
 }
@@ -116,15 +117,15 @@ export async function getPagePrice(): Promise<number | null> {
 export type MarketingNumbers = NumbersInput;
 
 export async function getMarketingNumbers(): Promise<MarketingNumbers> {
-  const [referencePriceCents, welcomeCreditCents, digitalPriceCents, pagePriceCents] = await Promise.all([
+  const [referencePriceCents, welcomeFreeSheets, digitalPriceCents, pagePriceCents] = await Promise.all([
     getReferencePrice(),
-    getWelcomeCredit(),
+    getWelcomeFreeSheets(),
     getDigitalBookPrice(),
     getPagePrice(),
   ]);
   return {
     referencePriceCents,
-    welcomeCreditCents,
+    welcomeFreeSheets,
     digitalPriceCents,
     pagePriceCents,
     // The example behind "{price}": the same book REFERENCE_BOOK prices.

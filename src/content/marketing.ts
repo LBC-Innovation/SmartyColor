@@ -7,7 +7,7 @@
  *
  *   {price}     Price of the reference printed book, shipping included (e.g. "$14.37")
  *   {pdfPrice}  Price of the print-at-home PDF of a whole book
- *   {credit}    The sign-up credit (e.g. "$5")
+ *   {freeSheets} The sign-up gift as free sheets (e.g. "35 free coloring pages"), set on /admin/pricing
  *   {date}      The Christmas order-by date (e.g. "December 7"). Only exists while the owner sets
  *               NEXT_PUBLIC_HOLIDAY_ORDER_BY and the date is still ahead.
  *   {min} {max} {format}  Page limits and name of a binding, read from src/lib/print/bookBindings.ts
@@ -1160,7 +1160,7 @@ export const PRODUCTS = {
         "Exact price shown before you pay",
       ],
       cta: PRIMARY_CTA,
-      note: "Sign up and get a {credit} credit toward it.",
+      note: "Sign up and get {freeSheets} to start.",
       featured: true,
       badge: "Best for gifts",
       visual: "book",
@@ -1191,7 +1191,7 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
     {
       id: "cost",
       q: "What does it cost to make pages?",
-      a: "Trying a page without an account is free, up to a daily limit. With an account, each new page uses [[{pagePrice} of ]]credit[[, and your {credit} sign-up credit covers the first ones]]. You see the exact price of a book before you pay.",
+      a: "Trying a page without an account is free, up to a daily limit. With an account, each new page uses [[{pagePrice} of ]]credit[[, and signing up gives you {freeSheets} to start]]. You see the exact price of a book before you pay.",
     },
     {
       id: "photos",
@@ -1263,7 +1263,7 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
 export const FINAL_CTA = {
   title: "Start with one free coloring page",
   body: "Pick a photo from your camera roll. In about a minute you'll have a page ready to print and color.",
-  creditBadge: "Sign up free and get a {credit} credit toward your first book",
+  creditBadge: "Sign up free and get {freeSheets}",
   cta: PRIMARY_CTA,
   points: ["Free to try, no account", "Exact price before you pay", "Printed in the US"],
   signIn: "Already have an account? Sign in",
@@ -1293,7 +1293,7 @@ export const FOOTER: {
 
 /** Inline card under a guest's first coloring page (and again after the third). */
 export const SAVE_PROMPT = {
-  title: "Save this page and get {credit} toward a printed book.",
+  title: "Save this page and get {freeSheets}.",
   /** Used when there is no sign-up credit. */
   titleNoCredit: "Save this page to your free account.",
   body: "A free account keeps your pages safe. You can still print without one.",
@@ -1325,8 +1325,8 @@ export const UPSELL = {
   dismiss: "Dismiss",
 };
 
-/** Shown wherever a guest is asked to make an account. "{credit}" is the sign-up credit. */
-export const ACCOUNT_CREDIT_LINE = "You'll get {credit} toward your first book";
+/** Shown wherever a guest is asked to make an account. "{freeSheets}" is the sign-up gift. */
+export const ACCOUNT_CREDIT_LINE = "You'll get {freeSheets} to start";
 
 /** What a guest sees on pages that need an account. */
 export const GUEST_GATES = {

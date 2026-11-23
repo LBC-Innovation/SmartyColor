@@ -8,7 +8,7 @@ export type CopyValues = Partial<
     | "price"
     | "pdfPrice"
     | "pagePrice"
-    | "credit"
+    | "freeSheets"
     | "date"
     | "count"
     | "min"
@@ -51,7 +51,8 @@ export function fillCopy(template: string, values: CopyValues): string | null {
 /** The marketing numbers the server reads from the real pricing code (null when unknown). */
 export type NumbersInput = {
   referencePriceCents: number | null;
-  welcomeCreditCents: number | null;
+  /** How many free sheets the sign-up gift covers; null when it's off or unknown. */
+  welcomeFreeSheets: number | null;
   digitalPriceCents: number | null;
   pagePriceCents: number | null;
   referencePages: number;
@@ -65,10 +66,15 @@ export function numberValues(n: NumbersInput | null): CopyValues {
     price: n.referencePriceCents != null ? formatUsd(n.referencePriceCents) : null,
     pdfPrice: n.digitalPriceCents != null ? formatUsd(n.digitalPriceCents) : null,
     pagePrice: n.pagePriceCents != null ? formatUsd(n.pagePriceCents) : null,
-    credit: n.welcomeCreditCents != null ? formatUsd(n.welcomeCreditCents) : null,
+    freeSheets: n.welcomeFreeSheets != null ? formatFreeSheets(n.welcomeFreeSheets) : null,
     refPages: String(n.referencePages),
     refFormat: n.referenceFormat,
   };
+}
+
+/** "35 free coloring pages" (or "1 free coloring page"): the sign-up gift as copy says it. */
+export function formatFreeSheets(count: number): string {
+  return `${count} free coloring ${count === 1 ? "page" : "pages"}`;
 }
 
 /** "$5" for whole dollars, "$14.37" otherwise. */

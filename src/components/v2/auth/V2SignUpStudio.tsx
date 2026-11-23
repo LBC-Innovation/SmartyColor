@@ -14,10 +14,10 @@ import { V2PasswordField } from "@/components/v2/auth/V2PasswordField";
 import { ACCOUNT_CREDIT_LINE, SIGN_UP } from "@/content/marketing";
 import { friendlySignUpError, type FriendlySignUpError } from "@/lib/auth/friendlyAuthError";
 import { safeNextPath } from "@/lib/auth/nextPath";
-import { fillCopy, formatUsd } from "@/lib/marketing/copy";
+import { fillCopy, formatFreeSheets } from "@/lib/marketing/copy";
 import { track } from "@/lib/track";
 
-export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: number | null }) {
+export function V2SignUpStudio({ welcomeFreeSheets }: { welcomeFreeSheets: number | null }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteId = searchParams.get("invite");
@@ -30,7 +30,7 @@ export function V2SignUpStudio({ welcomeCreditCents }: { welcomeCreditCents: num
   const [busy, setBusy] = useState(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
   const creditLine =
-    welcomeCreditCents != null ? fillCopy(ACCOUNT_CREDIT_LINE, { credit: formatUsd(welcomeCreditCents) }) : null;
+    welcomeFreeSheets != null ? fillCopy(ACCOUNT_CREDIT_LINE, { freeSheets: formatFreeSheets(welcomeFreeSheets) }) : null;
 
   // Arriving from a share email: say which album this is for and start on the right address.
   useEffect(() => {
