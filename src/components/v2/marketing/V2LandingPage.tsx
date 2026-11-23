@@ -11,7 +11,6 @@ import {
   FINAL_CTA_PHOTOS,
   HERO_PRICE_TAG,
   HERO_SECONDARY_CTA,
-  HERO_SIGNUP_BADGE,
   LIFESTYLE_PHOTOS,
   HOW_IT_WORKS,
   LANDING_PAGES,
@@ -35,6 +34,7 @@ import { track, trackCta } from "@/lib/track";
 import { HolidayBanner } from "@/components/v2/marketing/HolidayBanner";
 import { MarketingFooter } from "@/components/v2/marketing/MarketingFooter";
 import { V2MarketingHeader } from "@/components/v2/marketing/V2MarketingHeader";
+import { SignUpOfferBar } from "@/components/v2/marketing/SignUpOfferBar";
 import { ScrollToTopButton } from "@/components/v2/marketing/ScrollToTopButton";
 import {
   CopyEmail,
@@ -74,7 +74,6 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   const home = intent === "default";
   const EyebrowIcon = ICONS[page.eyebrowIcon];
   const values = landingValues(numbers, holiday?.label ?? null);
-  const heroBadge = fillCopy(HERO_SIGNUP_BADGE, values);
   const tagPrice = fillCopy(HERO_PRICE_TAG.price, values);
   const tagDetail = fillCopy(HERO_PRICE_TAG.detail, values);
   const priceTag = sections.priceLine && tagPrice && tagDetail ? { label: HERO_PRICE_TAG.label, price: tagPrice, detail: tagDetail } : null;
@@ -131,7 +130,11 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   // picks up a faint tint where it starts. bg-local keeps it with the content when this box scrolls.
   return (
     <div ref={scrollBoxRef} className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream bg-[linear-gradient(var(--color-v2-butter),var(--color-v2-butter))] bg-[length:100%_12rem] bg-no-repeat bg-local text-v2-ink">
-      {showBanner && holiday ? <HolidayBanner label={holiday.label} /> : null}
+      {showBanner && holiday ? (
+        <HolidayBanner label={holiday.label} />
+      ) : sections.partnerContact ? null : (
+        <SignUpOfferBar values={values} intent={intent} />
+      )}
       <V2MarketingHeader intent={intent} wide tinted />
 
       <main className="flex-1">
@@ -209,12 +212,6 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                   </>
                 )}
               </div>
-              {!sections.partnerContact && heroBadge ? (
-                <p className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white ring-1 ring-white/20 backdrop-blur sm:rounded-full">
-                  <Gift className="h-4 w-4 shrink-0 text-brand-amber" aria-hidden />
-                  {heroBadge}
-                </p>
-              ) : null}
               {sections.partnerContact ? (
                 <div className="mt-3 inline-flex rounded-2xl bg-white px-3">
                   <CopyEmail onCopy={() => inquire("hero")} />
