@@ -6,7 +6,7 @@ import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { ACCOUNT_CREDIT_LINE, GUEST_GATES, GUEST_LIMIT } from "@/content/marketing";
 import { withNextParam } from "@/lib/auth/nextPath";
 import type { GuestLimitScope } from "@/lib/guestLimit";
-import { fillCopy, formatUsd } from "@/lib/marketing/copy";
+import { fillCopy, formatFreeSheets } from "@/lib/marketing/copy";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
@@ -21,8 +21,8 @@ export function V2GuestLimitModal({
   kind: "page" | "edit";
   onClose: () => void;
 }) {
-  const creditCents = useMarketingNumbers()?.welcomeCreditCents ?? null;
-  const credit = creditCents != null ? fillCopy(ACCOUNT_CREDIT_LINE, { credit: formatUsd(creditCents) }) : null;
+  const freeSheets = useMarketingNumbers()?.welcomeFreeSheets ?? null;
+  const credit = freeSheets != null ? fillCopy(ACCOUNT_CREDIT_LINE, { freeSheets: formatFreeSheets(freeSheets) }) : null;
   const busy = scope === "global";
   const title = busy ? GUEST_LIMIT.busyTitle : kind === "edit" ? GUEST_LIMIT.editsTitle : GUEST_LIMIT.pagesTitle;
 

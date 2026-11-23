@@ -26,8 +26,7 @@ export async function PUT(request: Request) {
   }
 
   const body = (await request.json()) as {
-    welcomeCreditCents?: unknown;
-    welcomeCreditDollars?: unknown;
+    welcomeFreeSheets?: unknown;
     friendCreditCents?: unknown;
     friendCreditDollars?: unknown;
     sharerCreditCents?: unknown;
@@ -38,15 +37,21 @@ export async function PUT(request: Request) {
     const resolved = resolveCreditDeltaCents({ deltaCents: cents, amountDollars: dollars });
     return typeof resolved === "object" ? jsonError(`${field} must be a valid dollar amount`, 400) : resolved;
   };
-  const welcome = amount(body.welcomeCreditCents, body.welcomeCreditDollars, "welcomeCreditDollars");
-  if (welcome instanceof Response) return welcome;
+  let welcomeFreeSheets: number | undefined;
+  if (body.welcomeFreeSheets !== undefined) {
+    const sheets = typeof body.welcomeFreeSheets === "string" ? Number(body.welcomeFreeSheets.trim()) : body.welcomeFreeSheets;
+    if (typeof sheets !== "number" || !Number.isInteger(sheets)) {
+      return jsonError("welcomeFreeSheets must be a whole number", 400);
+    }
+    welcomeFreeSheets = sheets;
+  }
   const friend = amount(body.friendCreditCents, body.friendCreditDollars, "friendCreditDollars");
   if (friend instanceof Response) return friend;
   const sharer = amount(body.sharerCreditCents, body.sharerCreditDollars, "sharerCreditDollars");
   if (sharer instanceof Response) return sharer;
 
   const result = await promo.updatePromoCreditSettings({
-    welcomeCreditCents: welcome,
+    welcomeFreeSheets,
     friendCreditCents: friend,
     sharerCreditCents: sharer,
     adminId: auth.user.id,

@@ -3,14 +3,14 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { Gift } from "lucide-react";
-import { fillCopy, formatUsd } from "@/lib/marketing/copy";
+import { fillCopy, formatFreeSheets, formatUsd } from "@/lib/marketing/copy";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 
 type V2GuestGateProps = {
   icon: LucideIcon;
   title: string;
   body: string;
-  /** Template with "{credit}"; hidden until the sign-up credit is known. */
+  /** Template with "{freeSheets}"; hidden until the sign-up gift is known. */
   creditLine?: string;
   /** Template with "{price}" (the reference book price); hidden until it is known. */
   priceLine?: string;
@@ -36,8 +36,8 @@ export function V2GuestGate({
 }: V2GuestGateProps) {
   const numbers = useMarketingNumbers(Boolean(creditLine || priceLine));
   const credit =
-    creditLine && numbers?.welcomeCreditCents != null
-      ? fillCopy(creditLine, { credit: formatUsd(numbers.welcomeCreditCents) })
+    creditLine && numbers?.welcomeFreeSheets != null
+      ? fillCopy(creditLine, { freeSheets: formatFreeSheets(numbers.welcomeFreeSheets) })
       : null;
   const price =
     priceLine && numbers?.referencePriceCents != null

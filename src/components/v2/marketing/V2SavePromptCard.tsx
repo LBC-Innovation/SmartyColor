@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CloudUpload } from "lucide-react";
 import { SAVE_PROMPT } from "@/content/marketing";
-import { fillCopy, formatUsd } from "@/lib/marketing/copy";
+import { fillCopy, formatFreeSheets } from "@/lib/marketing/copy";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import {
   readSavePromptStage,
@@ -29,14 +29,14 @@ export function V2SavePromptCard({ pageCount, fallback = null }: { pageCount: nu
   }, []);
 
   const due = stage != null && savePromptDue(stage, pageCount);
-  const creditCents = useMarketingNumbers(due)?.welcomeCreditCents ?? null;
+  const freeSheets = useMarketingNumbers(due)?.welcomeFreeSheets ?? null;
 
   // Until the saved stage is read, show nothing, so neither card flashes in and swaps.
   if (stage == null) return null;
   if (!due) return <>{fallback}</>;
 
   const title =
-    (creditCents != null ? fillCopy(SAVE_PROMPT.title, { credit: formatUsd(creditCents) }) : null) ??
+    (freeSheets != null ? fillCopy(SAVE_PROMPT.title, { freeSheets: formatFreeSheets(freeSheets) }) : null) ??
     SAVE_PROMPT.titleNoCredit;
 
   return (

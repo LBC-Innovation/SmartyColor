@@ -794,7 +794,7 @@ export function adminGetPromoCredits(): Promise<ApiResult<PromoCreditSettings>> 
 }
 
 export function adminUpdatePromoCredits(input: {
-  welcomeCreditDollars?: string;
+  welcomeFreeSheets?: number;
   friendCreditDollars?: string;
   sharerCreditDollars?: string;
 }): Promise<ApiResult<PromoCreditSettings>> {
