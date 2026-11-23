@@ -1,6 +1,7 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
 import { resolveCreditDeltaCents } from "@/server/creditsService";
+import { refreshWelcomeFreeSheets } from "@/server/marketing/marketingNumbers";
 import * as promo from "@/server/promoCreditsService";
 
 function canManagePromoCredits(permissions: string[]): boolean {
@@ -56,5 +57,6 @@ export async function PUT(request: Request) {
     sharerCreditCents: sharer,
     adminId: auth.user.id,
   });
+  if (!result.error && welcomeFreeSheets !== undefined) refreshWelcomeFreeSheets();
   return jsonResult(result, result.error ? 400 : 200);
 }

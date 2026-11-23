@@ -11,6 +11,7 @@ import {
   FINAL_CTA_PHOTOS,
   HERO_PRICE_TAG,
   HERO_SECONDARY_CTA,
+  HERO_SIGNUP_BADGE,
   LIFESTYLE_PHOTOS,
   HOW_IT_WORKS,
   LANDING_PAGES,
@@ -73,6 +74,7 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   const home = intent === "default";
   const EyebrowIcon = ICONS[page.eyebrowIcon];
   const values = landingValues(numbers, holiday?.label ?? null);
+  const heroBadge = fillCopy(HERO_SIGNUP_BADGE, values);
   const tagPrice = fillCopy(HERO_PRICE_TAG.price, values);
   const tagDetail = fillCopy(HERO_PRICE_TAG.detail, values);
   const priceTag = sections.priceLine && tagPrice && tagDetail ? { label: HERO_PRICE_TAG.label, price: tagPrice, detail: tagDetail } : null;
@@ -207,6 +209,12 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                   </>
                 )}
               </div>
+              {!sections.partnerContact && heroBadge ? (
+                <p className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white ring-1 ring-white/20 backdrop-blur sm:rounded-full">
+                  <Gift className="h-4 w-4 shrink-0 text-brand-amber" aria-hidden />
+                  {heroBadge}
+                </p>
+              ) : null}
               {sections.partnerContact ? (
                 <div className="mt-3 inline-flex rounded-2xl bg-white px-3">
                   <CopyEmail onCopy={() => inquire("hero")} />

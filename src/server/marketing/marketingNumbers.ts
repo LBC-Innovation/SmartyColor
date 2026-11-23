@@ -1,5 +1,6 @@
 import "server-only";
-import { unstable_cache } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
+import { LANDING_ORDER, LANDING_PAGES } from "@/content/marketing";
 import { BOOK_BINDINGS, type BookBindingId } from "@/lib/print/bookBindings";
 import type { NumbersInput } from "@/lib/marketing/copy";
 import { luluConfigured } from "@/server/lulu/config";
@@ -18,6 +19,9 @@ export const REFERENCE_BOOK: { bindingId: BookBindingId; pageCount: number } = {
 };
 
 const DAY_SECONDS = 24 * 60 * 60;
+
+/** Cache tag on the sign-up gift; the admin save expires it so marketing pages update at once. */
+export const WELCOME_FREE_SHEETS_TAG = "marketing-welcome-free-sheets";
 
 function log(level: string, message: string, ctx: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ level, message, ...ctx }));
@@ -56,8 +60,18 @@ const cachedWelcomeFreeSheets = unstable_cache(
     return settings.data.welcomeCreditCents > 0 ? settings.data.welcomeFreeSheets : 0;
   },
   ["marketing-welcome-free-sheets-v1"],
-  { revalidate: 60 * 60 },
+  { revalidate: 60 * 60, tags: [WELCOME_FREE_SHEETS_TAG] },
 );
+
+/**
+ * After an admin changes the sign-up gift: drop the cached number and the pages that quote it, so
+ * the next visit shows the new one instead of waiting out the hour. Call from a route handler.
+ */
+export function refreshWelcomeFreeSheets(): void {
+  revalidateTag(WELCOME_FREE_SHEETS_TAG, { expire: 0 });
+  for (const intent of LANDING_ORDER) revalidatePath(LANDING_PAGES[intent].path);
+  revalidatePath("/sign-up");
+}
 
 /** How many free sheets the sign-up gift covers; null when it's off (0) or can't be read. */
 export async function getWelcomeFreeSheets(): Promise<number | null> {
