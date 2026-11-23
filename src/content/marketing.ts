@@ -669,6 +669,9 @@ export const HOLIDAY_BLOCK = {
 };
 
 export const HERO_SECONDARY_CTA = "See how it works";
+
+/** Under the hero buttons: the sign-up gift. Hidden when the gift is off. */
+export const HERO_SIGNUP_BADGE = "Sign up free and get {freeSheets}";
 /** The hero's drag-to-compare slider. */
 export const HERO_COMPARE = {
   photo: "Your photo",
