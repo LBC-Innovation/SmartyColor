@@ -37,6 +37,7 @@ import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import type { CardState } from "@/components/v2/studio/GalleryCard";
 import type { QueueStatus } from "@/components/v2/studio/useSheetQueue";
 import type { ReframeTarget } from "@/lib/session/photoTypes";
+import { screenSrc } from "@/lib/v2/cloudLibrary";
 import {
   normalizeV2SheetRevisions,
   type V2PhotoEntry,
@@ -181,7 +182,10 @@ export function PageEditorModal(props: Props) {
   const pageVersion = activePageVersion(photo);
   const pages = pageVersions(photo);
   const source = pageSourceVersion(photo);
-  const photoSrc = source?.sheet.imageDataUrl ?? photo.previewUrl;
+  // Looking only: screen-sized copies unless the full-size file is already on this device.
+  const photoSrc = source
+    ? screenSrc(source.sheet.imageDataUrl, source.sheet.displayUrl)
+    : screenSrc(photo.previewUrl, photo.displayUrl);
   const hasPage = Boolean(pageVersion);
   const [viewFor, setViewFor] = useState<{ id: string; view: EditorView }>({ id: photo.id, view: initialView });
   const view: EditorView = !hasPage ? "photo" : viewFor.id === photo.id ? viewFor.view : "page";
@@ -217,7 +221,8 @@ export function PageEditorModal(props: Props) {
     else onPrev?.();
   }
 
-  const shownSrc = view === "page" && pageVersion ? pageVersion.sheet.imageDataUrl : photoSrc;
+  const shownSrc =
+    view === "page" && pageVersion ? screenSrc(pageVersion.sheet.imageDataUrl, pageVersion.sheet.displayUrl) : photoSrc;
   const fixDisabled = busy || !hasPage;
   const ShapeIcon = props.shape?.label.includes("landscape") ? RectangleHorizontal : RectangleVertical;
   const job = props.job;
