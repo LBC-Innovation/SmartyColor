@@ -219,7 +219,7 @@ function PhotoLibraryRow({
               />
               {photo.generating ? (
                 <V2SheetGeneratingPlaceholder
-                  imageSrc={photo.previewUrl}
+                  imageSrc={photoThumb ?? photo.previewUrl}
                   className="absolute inset-0 rounded-lg"
                   imageFit="contain"
                   compact
@@ -228,7 +228,7 @@ function PhotoLibraryRow({
             </div>
           ) : photo.generating ? (
             <V2SheetGeneratingPlaceholder
-              imageSrc={photo.previewUrl}
+              imageSrc={photoThumb ?? photo.previewUrl}
               className="aspect-[4/3] rounded-lg border border-gray-200"
               imageFit="cover"
               compact

@@ -1,6 +1,10 @@
 import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
-import { LIBRARY_READ_URL_TTL_SECONDS, type SignedUpload } from "@/lib/library/types";
+import {
+  LIBRARY_READ_URL_MIN_LEFT_SECONDS,
+  LIBRARY_READ_URL_TTL_SECONDS,
+  type SignedUpload,
+} from "@/lib/library/types";
 import type { FileEventSource } from "@/lib/files/types";
 import { fileKindForPath, recordFileEvent, type FileAudit } from "@/server/storage/fileAudit";
 
@@ -37,7 +41,26 @@ export const libraryPaths = {
    * too. Made after the fact (see libraryThumbs), so it may not exist yet.
    */
   thumb: (imagePath: string) => `${imagePath}.thumb.webp`,
+  /**
+   * Screen-sized copy (see libraryThumbs), for viewing an image larger than a tile without
+   * downloading the full-size file. Kept next to it like the thumbnail, and also made lazily.
+   */
+  display: (imagePath: string) => `${imagePath}.display.webp`,
 };
+
+/**
+ * Library images never change in place (new bytes always get a new path), so browsers and the CDN
+ * may keep them for a year. Value is in seconds, as Storage expects.
+ */
+export const IMMUTABLE_CACHE_SECONDS = String(60 * 60 * 24 * 365);
+
+/**
+ * Order files (covers, PDFs) are rewritten at the same path, so they keep Storage's default
+ * caching and always get a freshly signed URL.
+ */
+function isImmutablePath(path: string): boolean {
+  return path.split("/")[1] !== "_orders";
+}
 
 /**
  * Every write and removal below is recorded in file_events (see fileAudit). Callers that know who
@@ -81,7 +104,12 @@ export async function putObject(
   audit?: FileAudit,
 ): Promise<void> {
   const started = performance.now();
-  const { error } = await bucket().upload(path, bytes, { contentType: mime, upsert: true });
+  const { error } = await bucket().upload(path, bytes, {
+    contentType: mime,
+    upsert: true,
+    ...(isImmutablePath(path) ? { cacheControl: IMMUTABLE_CACHE_SECONDS } : {}),
+  });
+  forgetSignedUrls([path]);
   await recordFileEvent({
     action: "upload",
     path,
@@ -99,6 +127,7 @@ export async function putObject(
 export async function copyObject(fromPath: string, toPath: string, audit?: FileAudit): Promise<void> {
   const started = performance.now();
   const { error } = await bucket().copy(fromPath, toPath);
+  forgetSignedUrls([toPath]);
   await recordFileEvent({
     action: "upload",
     path: toPath,
@@ -117,17 +146,67 @@ export async function getObjectBytes(path: string): Promise<{ bytes: Buffer; mim
   return { bytes: Buffer.from(await data.arrayBuffer()), mime: data.type || "application/octet-stream" };
 }
 
-/** Batch of short-lived read URLs, in the same order as `paths`. */
+/**
+ * Signed read URLs handed out recently, reused while they still have at least
+ * LIBRARY_READ_URL_MIN_LEFT_SECONDS to run. Each signing makes a new URL, and a new URL is a
+ * fresh download for the browser, so reuse is what lets its HTTP cache work. Per server instance.
+ */
+const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const SIGNED_URL_CACHE_MAX = 5000;
+
+function cachedSignedUrl(path: string, now: number): string | null {
+  const hit = signedUrlCache.get(path);
+  if (!hit) return null;
+  if (hit.expiresAt - now < LIBRARY_READ_URL_MIN_LEFT_SECONDS * 1000) {
+    signedUrlCache.delete(path);
+    return null;
+  }
+  return hit.url;
+}
+
+function rememberSignedUrl(path: string, url: string, expiresAt: number): void {
+  if (signedUrlCache.size >= SIGNED_URL_CACHE_MAX) {
+    // Oldest first: Maps iterate in insertion order.
+    for (const key of signedUrlCache.keys()) {
+      signedUrlCache.delete(key);
+      if (signedUrlCache.size < SIGNED_URL_CACHE_MAX * 0.9) break;
+    }
+  }
+  signedUrlCache.set(path, { url, expiresAt });
+}
+
+/** Forget reused URLs for these paths (their files were removed or replaced). */
+function forgetSignedUrls(paths: string[]): void {
+  for (const p of paths) signedUrlCache.delete(p);
+}
+
+/**
+ * Read URLs for `paths`, keyed by path. Paths with no file are left out. With the default
+ * lifetime, a URL signed recently for the same library image is reused, so repeat loads give the
+ * browser the same URL. A custom `ttlSeconds` (e.g. print files for Lulu) always signs afresh.
+ */
 export async function signedReadUrls(
   paths: string[],
-  ttlSeconds = LIBRARY_READ_URL_TTL_SECONDS,
+  ttlSeconds: number = LIBRARY_READ_URL_TTL_SECONDS,
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (paths.length === 0) return out;
-  const { data, error } = await bucket().createSignedUrls(paths, ttlSeconds);
+  const reusable = (path: string) => ttlSeconds === LIBRARY_READ_URL_TTL_SECONDS && isImmutablePath(path);
+  const now = Date.now();
+  const toSign: string[] = [];
+  for (const path of new Set(paths)) {
+    const hit = reusable(path) ? cachedSignedUrl(path, now) : null;
+    if (hit) out.set(path, hit);
+    else toSign.push(path);
+  }
+  if (toSign.length === 0) return out;
+  const { data, error } = await bucket().createSignedUrls(toSign, ttlSeconds);
   if (error) throw new Error(error.message);
+  const expiresAt = now + ttlSeconds * 1000;
   for (const row of data ?? []) {
-    if (row.signedUrl && row.path) out.set(row.path, row.signedUrl);
+    if (!row.signedUrl || !row.path) continue;
+    out.set(row.path, row.signedUrl);
+    if (reusable(row.path)) rememberSignedUrl(row.path, row.signedUrl, expiresAt);
   }
   return out;
 }
@@ -146,6 +225,7 @@ function commonDir(paths: string[]): string {
 }
 
 async function removeBatch(paths: string[]): Promise<{ files: number; bytes: number }> {
+  forgetSignedUrls(paths);
   const { data, error } = await bucket().remove(paths);
   if (error) throw new Error(error.message);
   const removed = data ?? [];

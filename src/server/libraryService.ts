@@ -25,7 +25,7 @@ import {
   removePrefix,
   signedReadUrls,
 } from "@/server/storage/libraryFiles";
-import { scheduleThumbnails } from "@/server/storage/libraryThumbs";
+import { scheduleImageCopies, scheduleThumbnails, type ImageCopyKind } from "@/server/storage/libraryThumbs";
 import { copyPhoto, revisionsByPhoto } from "@/server/photoCopy";
 import { quoted, recordActivity } from "@/server/activityService";
 import { failSignedUpload, finishSignedUpload, startSignedUpload } from "@/server/storage/fileAudit";
@@ -462,24 +462,34 @@ async function hydratePhotos(rows: Row[], viewer: Viewer): Promise<ApiResult<Lib
     ...rows.map((r) => r.storage_path as string),
     ...(revRows ?? []).map((r) => r.storage_path as string),
   ];
-  // Thumbnails are signed separately and best effort: some may not have been made yet.
-  const thumbsSigning = signedReadUrls(paths.map(libraryPaths.thumb)).catch(() => null);
+  // Resized copies are signed in one call, best effort: some may not have been made yet (signing
+  // leaves out paths with no file), and a failure only means the app falls back to full size.
+  const copiesSigning = signedReadUrls([
+    ...paths.map(libraryPaths.thumb),
+    ...paths.map(libraryPaths.display),
+  ]).catch(() => null);
   let urls: Map<string, string>;
   try {
     urls = await signedReadUrls(paths);
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not sign image URLs");
   }
-  const signedThumbs = await thumbsSigning;
+  const signedCopies = await copiesSigning;
   const thumbs = new Map<string, string>();
-  if (signedThumbs) {
-    const missing: string[] = [];
+  const displays = new Map<string, string>();
+  if (signedCopies) {
+    const missing = new Map<string, ImageCopyKind[]>();
     for (const path of paths) {
-      const url = signedThumbs.get(libraryPaths.thumb(path));
-      if (url) thumbs.set(path, url);
-      else missing.push(path);
+      const thumb = signedCopies.get(libraryPaths.thumb(path));
+      const display = signedCopies.get(libraryPaths.display(path));
+      if (thumb) thumbs.set(path, thumb);
+      if (display) displays.set(path, display);
+      const lacking: ImageCopyKind[] = [];
+      if (!thumb) lacking.push("thumb");
+      if (!display) lacking.push("display");
+      if (lacking.length > 0) missing.set(path, lacking);
     }
-    scheduleThumbnails(missing);
+    scheduleImageCopies(missing);
   }
 
   const revsByPhoto = new Map<string, LibraryRevision[]>();
@@ -487,13 +497,18 @@ async function hydratePhotos(rows: Row[], viewer: Viewer): Promise<ApiResult<Lib
     const pid = r.photo_id as string;
     const list = revsByPhoto.get(pid) ?? [];
     const path = r.storage_path as string;
-    list.push({ ...revisionFromRow(r, urls.get(path) ?? ""), thumbUrl: thumbs.get(path) });
+    list.push({
+      ...revisionFromRow(r, urls.get(path) ?? ""),
+      thumbUrl: thumbs.get(path),
+      displayUrl: displays.get(path),
+    });
     revsByPhoto.set(pid, list);
   }
   return {
     data: rows.map((r) => ({
       ...photoFromRow(r, revsByPhoto.get(r.id as string) ?? [], urls.get(r.storage_path as string) ?? "", viewer),
       thumbUrl: thumbs.get(r.storage_path as string),
+      displayUrl: displays.get(r.storage_path as string),
     })),
     error: null,
   };
@@ -762,7 +777,10 @@ export async function mirrorPhoto(userId: string, photoId: string): Promise<ApiR
 
   try {
     const oldPaths = [original.oldPath, ...[...sheets.values()].map((s) => s.oldPath)];
-    await removeObjects([...oldPaths, ...oldPaths.map(libraryPaths.thumb)], { actorId: userId, source: "replaced" });
+    await removeObjects(
+      [...oldPaths, ...oldPaths.map(libraryPaths.thumb), ...oldPaths.map(libraryPaths.display)],
+      { actorId: userId, source: "replaced" },
+    );
   } catch (e) {
     // Rows already point at the mirrored files; orphans are harmless.
     console.error(JSON.stringify({ level: "warn", message: "library: mirror cleanup failed", photoId, error: String(e) }));

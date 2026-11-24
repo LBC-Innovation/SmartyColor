@@ -67,6 +67,8 @@ export type LibraryRevision = {
   url: string;
   /** Short-lived URL for a small server-resized copy, for tiles. Absent if it couldn't be signed. */
   thumbUrl?: string;
+  /** Short-lived URL for a screen-sized copy, for viewing large. Absent until it has been made. */
+  displayUrl?: string;
 };
 
 export type LibraryPhoto = {
@@ -96,6 +98,8 @@ export type LibraryPhoto = {
   url: string;
   /** Short-lived URL for a small server-resized copy of the original, for tiles. */
   thumbUrl?: string;
+  /** Short-lived URL for a screen-sized copy of the original, for viewing large. */
+  displayUrl?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -136,8 +140,14 @@ export type RegisterPhotoInput = {
 
 export type SignedUpload = { path: string; url: string; token: string };
 
-/** How long read URLs stay valid; the client caches bytes so this can be short. */
-export const LIBRARY_READ_URL_TTL_SECONDS = 60 * 60;
+/**
+ * How long read URLs stay valid. The server reuses a URL until it has less than
+ * LIBRARY_READ_URL_MIN_LEFT_SECONDS left, so every URL it hands out lasts at least that long, and
+ * the studio refreshes the URLs it holds every LIBRARY_READ_URL_REFRESH_MS.
+ */
+export const LIBRARY_READ_URL_TTL_SECONDS = 2 * 60 * 60;
+export const LIBRARY_READ_URL_MIN_LEFT_SECONDS = 75 * 60;
+export const LIBRARY_READ_URL_REFRESH_MS = 30 * 60 * 1000;
 
 /** A live, unlisted link to one coloring page (never the photo or the album). */
 export type PageShare = {

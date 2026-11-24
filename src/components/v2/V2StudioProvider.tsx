@@ -20,14 +20,17 @@ import { useAuth } from "@/context/AuthContext";
 import { hasSessionToken, readSessionHint } from "@/lib/api/client";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
 import * as library from "@/lib/library/client";
-import type { LibraryProject } from "@/lib/library/types";
+import { LIBRARY_READ_URL_REFRESH_MS, type LibraryProject } from "@/lib/library/types";
 import {
   applyResolvedImageUrls,
   entriesFromLibraryPhotosNow,
   evictEntryImages,
+  pendingFullSizeImages,
+  refreshEntryUrls,
   resolveLibraryImages,
   pickPersistedPatch,
   projectMetaFromLibrary,
+  type PendingLibraryImage,
 } from "@/lib/v2/cloudLibrary";
 import {
   defaultNewProjectName,
@@ -319,9 +322,31 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   const imageLoadGenRef = useRef(0);
 
   /**
-   * Show an album as soon as its photo list arrives. Images not yet cached on this device keep
-   * their signed URLs and are swapped for cached copies in the background, selected photo first.
-   * Pass `list` when the caller already fetched the album list, to skip fetching it again.
+   * Download one photo's full-size images in the background and swap them in as they land.
+   * Only the photo being worked on gets this: the others show their screen-sized copies, and
+   * fetch full size only when an edit, print or download needs it.
+   */
+  const fetchFullSize = useCallback((projectId: string, pending: PendingLibraryImage[], first: string | null) => {
+    if (pending.length === 0) return;
+    const gen = imageLoadGenRef.current;
+    void resolveLibraryImages(pending, {
+      first,
+      cancelled: () => imageLoadGenRef.current !== gen || activeProjectIdRef.current !== projectId,
+      onResolved: (urls) => {
+        setPhotos((prev) => {
+          const next = prev.map((entry) => applyResolvedImageUrls(entry, urls));
+          photosRef.current = next;
+          return next;
+        });
+      },
+    });
+  }, []);
+
+  /**
+   * Show an album as soon as its photo list arrives. Images already on this device show at once;
+   * the selected photo's full-size images download in the background, and the rest keep their
+   * signed URLs (screens show their resized copies). Pass `list` when the caller already fetched
+   * the album list, to skip fetching it again.
    */
   const loadCloudProject = useCallback(
     async (projectId: string, meta: V2ProjectMeta[], list?: LibraryProject[]): Promise<void> => {
@@ -365,22 +390,44 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       if (!projectsRes.error) setProjects(projectsRes.data!.map(projectMetaFromLibrary));
       else setProjects(meta);
 
-      const gen = ++imageLoadGenRef.current;
-      if (pending.length === 0) return;
-      void resolveLibraryImages(pending, {
-        first: session.selectedId,
-        cancelled: () => imageLoadGenRef.current !== gen || activeProjectIdRef.current !== projectId,
-        onResolved: (urls) => {
-          setPhotos((prev) => {
-            const next = prev.map((entry) => applyResolvedImageUrls(entry, urls));
-            photosRef.current = next;
-            return next;
-          });
-        },
-      });
+      ++imageLoadGenRef.current;
+      fetchFullSize(
+        projectId,
+        pending.filter((i) => i.photoId === session.selectedId),
+        session.selectedId,
+      );
     },
-    [setters],
+    [setters, fetchFullSize],
   );
+
+  // A newly selected photo is the one being worked on: bring its full-size images down.
+  useEffect(() => {
+    if (mode !== "cloud" || !selectedId || !activeProjectId) return;
+    const entry = photosRef.current.find((p) => p.id === selectedId);
+    if (entry) fetchFullSize(activeProjectId, pendingFullSizeImages(entry), selectedId);
+  }, [mode, selectedId, activeProjectId, fetchFullSize]);
+
+  // Signed URLs last a couple of hours; keep the ones an open album still holds fresh. The server
+  // reuses URLs it signed recently, so a refresh mostly hands back the same ones.
+  useEffect(() => {
+    if (mode !== "cloud" || !activeProjectId) return;
+    const timer = window.setInterval(() => {
+      if (switchingRef.current || activeProjectIdRef.current !== activeProjectId) return;
+      void library.listPhotos(activeProjectId).then((res) => {
+        if (res.error || activeProjectIdRef.current !== activeProjectId) return;
+        const fresh = new Map(res.data!.map((p) => [p.id, p]));
+        setPhotos((prev) => {
+          const next = prev.map((entry) => {
+            const photo = entry.remote ? fresh.get(entry.remote.photoId) : undefined;
+            return photo ? refreshEntryUrls(entry, photo) : entry;
+          });
+          photosRef.current = next;
+          return next;
+        });
+      });
+    }, LIBRARY_READ_URL_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [mode, activeProjectId]);
 
   const notifyAlbumLinkMiss = useCallback(() => {
     const who = userEmailRef.current ? ` with ${userEmailRef.current}` : "";

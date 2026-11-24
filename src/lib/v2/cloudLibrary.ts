@@ -41,6 +41,7 @@ function versionFromRevision(rev: LibraryRevision, urlFor: ImageUrlFor): SheetVe
       imageDataUrl: urlFor(rev.storagePath, rev.url),
       storagePath: rev.storagePath,
       thumbUrl: rev.thumbUrl,
+      displayUrl: rev.displayUrl,
     },
     kind: rev.kind,
     orientation: (rev.orientation as SheetVersion["orientation"] | null) ?? undefined,
@@ -63,6 +64,7 @@ function buildEntry(
     canDelete: p.canDelete,
     previewUrl: urlFor(p.storagePath, p.url),
     thumbUrl: p.thumbUrl,
+    displayUrl: p.displayUrl,
     photoDataUrl: "",
     image:
       p.width && p.height && p.orientation && p.aspectRatio
@@ -179,6 +181,69 @@ export function applyResolvedImageUrls(entry: V2PhotoEntry, urls: Map<string, st
     }
   }
   return changed ? { ...entry, previewUrl, sheet, sheetRevisions } : entry;
+}
+
+const isLocalUrl = (url: string) => url.startsWith("blob:") || url.startsWith("data:");
+
+/**
+ * What to put on screen for an image: the full-size file once it is on this device (free to
+ * show), otherwise its screen-sized copy, so just looking at a photo never downloads the original.
+ * Anything that needs real pixels (edits, prints, downloads) keeps using the full-size URL.
+ */
+export function screenSrc(fullSizeUrl: string, displayUrl?: string): string {
+  if (!displayUrl || !fullSizeUrl || isLocalUrl(fullSizeUrl)) return fullSizeUrl;
+  return displayUrl;
+}
+
+/** Full-size images of a cloud entry that aren't on this device yet (original and every version). */
+export function pendingFullSizeImages(entry: V2PhotoEntry): PendingLibraryImage[] {
+  if (!entry.remote) return [];
+  const out: PendingLibraryImage[] = [];
+  const seen = new Set<string>();
+  const add = (path: string | undefined, url: string) => {
+    if (!path || !url || isLocalUrl(url) || seen.has(path)) return;
+    seen.add(path);
+    out.push({ photoId: entry.id, path, url });
+  };
+  add(entry.remote.storagePath, entry.previewUrl);
+  for (const v of entry.sheetRevisions ?? []) add(v.sheet.storagePath, v.sheet.imageDataUrl);
+  if (entry.sheet) add(entry.sheet.storagePath, entry.sheet.imageDataUrl);
+  return out;
+}
+
+/**
+ * Swap in freshly signed URLs from a new listing of the same photo, so URLs an entry still holds
+ * don't expire while the album stays open. Images already on this device keep their local URL.
+ */
+export function refreshEntryUrls(entry: V2PhotoEntry, fresh: LibraryPhoto): V2PhotoEntry {
+  const revs = new Map(fresh.revisions.map((r) => [r.storagePath, r]));
+  const swapSheet = (sheet: GeneratedSheet): GeneratedSheet => {
+    const rev = sheet.storagePath ? revs.get(sheet.storagePath) : undefined;
+    if (!rev) return sheet;
+    const imageDataUrl = isLocalUrl(sheet.imageDataUrl) || !rev.url ? sheet.imageDataUrl : rev.url;
+    const thumbUrl = rev.thumbUrl ?? sheet.thumbUrl;
+    const displayUrl = rev.displayUrl ?? sheet.displayUrl;
+    if (imageDataUrl === sheet.imageDataUrl && thumbUrl === sheet.thumbUrl && displayUrl === sheet.displayUrl) {
+      return sheet;
+    }
+    return { ...sheet, imageDataUrl, thumbUrl, displayUrl };
+  };
+  const previewUrl =
+    entry.remote?.storagePath === fresh.storagePath && !isLocalUrl(entry.previewUrl) && fresh.url
+      ? fresh.url
+      : entry.previewUrl;
+  const sheetRevisions = entry.sheetRevisions?.map((v) => {
+    const sheet = swapSheet(v.sheet);
+    return sheet === v.sheet ? v : { ...v, sheet };
+  });
+  return {
+    ...entry,
+    previewUrl,
+    thumbUrl: fresh.thumbUrl ?? entry.thumbUrl,
+    displayUrl: fresh.displayUrl ?? entry.displayUrl,
+    sheet: entry.sheet ? swapSheet(entry.sheet) : entry.sheet,
+    sheetRevisions,
+  };
 }
 
 /** Upload a prepared original and register it. Returns the studio entry. */

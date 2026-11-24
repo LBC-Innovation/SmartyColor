@@ -102,11 +102,14 @@ export type V2PhotoEntry = {
   id: string;
   /**
    * Full-size original. Cloud entries hold a cached object URL, or the short-lived signed URL
-   * until the bytes have been cached (see `resolveLibraryImages`).
+   * until the bytes are on this device. Only the selected photo's are downloaded up front (see
+   * `resolveLibraryImages`); the rest download when something needs their pixels.
    */
   previewUrl: string;
   /** Cloud entries: short-lived URL for a small resized copy of the original, for tiles. */
   thumbUrl?: string;
+  /** Cloud entries: short-lived URL for a screen-sized copy of the original (see `screenSrc`). */
+  displayUrl?: string;
   /**
    * Base64 data URL of the original — guests only. Cloud entries keep this
    * empty and are addressed by `remote.photoId`; their bytes live in the

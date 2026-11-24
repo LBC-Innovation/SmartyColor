@@ -21,7 +21,8 @@ export type FileAudit = {
 /** What kind of file a library path holds. Mirrors public.library_file_kind() in SQL. */
 export function fileKindForPath(path: string): FileKind {
   const parts = path.split("/");
-  if (path.endsWith(".thumb.webp")) return "thumbnail";
+  // Display copies are a larger thumbnail: same kind, same lifetime as the image they copy.
+  if (path.endsWith(".thumb.webp") || path.endsWith(".display.webp")) return "thumbnail";
   if (parts[1] === "_orders") {
     if (/\/cover-front\.[a-z]+$/.test(path)) return "cover";
     if (/\/(interior|cover)\.pdf$/.test(path)) return "print_pdf";

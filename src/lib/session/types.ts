@@ -41,6 +41,8 @@ export type GeneratedSheet = {
   storagePath?: string;
   /** Cloud revisions: short-lived URL for a small resized copy, for tiles. */
   thumbUrl?: string;
+  /** Cloud revisions: short-lived URL for a screen-sized copy, for viewing large. */
+  displayUrl?: string;
 };
 
 /** One entry in a photo's version rail. */
