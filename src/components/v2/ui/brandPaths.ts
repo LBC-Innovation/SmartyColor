@@ -1,6 +1,8 @@
 /**
  * Colorful Memories logo geometry, traced from the master artwork.
  * Mirrors public/brand/mark.svg and public/brand/wordmark.svg — keep them in sync.
+ * BRAND_MARK is the flat vector heart, kept for print (the back-cover credit) where
+ * we need pure vector; on screen the mark is the crayon heart (CRAYON_MARK in V2BrandLogo.tsx).
  */
 export const BRAND_MARK = {
   width: 463,

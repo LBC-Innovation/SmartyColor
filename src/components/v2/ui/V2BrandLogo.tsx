@@ -1,16 +1,32 @@
 import { cn } from "@/lib/cn";
-import { BRAND_MARK, BRAND_WORDMARK } from "./brandPaths";
-
-// Horizontal lockup: the wordmark sits right of the mark, optically centered on it.
-const LOCKUP_WIDTH = BRAND_WORDMARK.x + BRAND_WORDMARK.width;
-
-function BrandPaths({ paths }: { paths: readonly { fill: string; d: string }[] }) {
-  return paths.map((path) => <path key={path.d} fill={path.fill} d={path.d} />);
-}
+import { BRAND_WORDMARK } from "./brandPaths";
 
 /**
- * Colorful Memories mark: a heart whose five colored petals close like a camera
- * shutter — a loved photo becoming something you color in.
+ * The crayon heart mark, rendered from design/brand/crayon-heart.svg by
+ * scripts/generate-brand-assets.mjs. Its crayon texture is raster detail, so
+ * the web gets trimmed WebP renders rather than the ~10 MB vector trace.
+ */
+export const CRAYON_MARK = {
+  /** Small render for UI chrome (sharp up to ~80 CSS px at 3x). */
+  small: "/brand/mark-256.webp",
+  /** Large render for splash screens and big placements. */
+  large: "/brand/mark.webp",
+  /** Width / height of the trimmed art. Keep in sync with the generator's output. */
+  aspect: 1.0642,
+} as const;
+
+// Horizontal lockup in wordmark units: the mark is LOCKUP_HEIGHT tall, then a gap,
+// then the wordmark, optically centered on the mark.
+const LOCKUP_HEIGHT = 400;
+const MARK_WIDTH = Math.round(LOCKUP_HEIGHT * CRAYON_MARK.aspect);
+/** Mirrors LOCKUP_GAP in scripts/generate-brand-assets.mjs. */
+const LOCKUP_GAP = 24;
+const WORDMARK_X = MARK_WIDTH + LOCKUP_GAP;
+const LOCKUP_WIDTH = WORDMARK_X + BRAND_WORDMARK.width;
+
+/**
+ * Colorful Memories mark: a crayon-colored heart whose five petals close like a
+ * camera shutter — a loved photo becoming something you color in.
  */
 export function V2BrandMark({
   size = 36,
@@ -20,16 +36,18 @@ export function V2BrandMark({
   className?: string;
 }) {
   return (
-    <svg
+    // eslint-disable-next-line @next/next/no-img-element -- tiny static asset; srcSet covers density
+    <img
+      src={CRAYON_MARK.small}
+      srcSet={`${CRAYON_MARK.small} 256w, ${CRAYON_MARK.large} 768w`}
+      sizes={`${size}px`}
       width={size}
       height={size}
-      viewBox={`0 0 ${BRAND_MARK.width} ${BRAND_MARK.height}`}
-      fillRule="evenodd"
-      className={cn("shrink-0", className)}
+      alt=""
       aria-hidden
-    >
-      <BrandPaths paths={BRAND_MARK.paths} />
-    </svg>
+      decoding="async"
+      className={cn("shrink-0 object-contain", className)}
+    />
   );
 }
 
@@ -44,16 +62,18 @@ export function V2BrandLogo({
   return (
     <svg
       height={size}
-      viewBox={`0 0 ${LOCKUP_WIDTH} ${BRAND_MARK.height}`}
+      viewBox={`0 0 ${LOCKUP_WIDTH} ${LOCKUP_HEIGHT}`}
       fillRule="evenodd"
       className={cn("block h-auto max-w-full shrink-0", className)}
-      style={{ width: (size * LOCKUP_WIDTH) / BRAND_MARK.height }}
+      style={{ width: (size * LOCKUP_WIDTH) / LOCKUP_HEIGHT }}
       role="img"
       aria-label="Colorful Memories"
     >
-      <BrandPaths paths={BRAND_MARK.paths} />
-      <g transform={`translate(${BRAND_WORDMARK.x} ${BRAND_WORDMARK.y})`}>
-        <BrandPaths paths={BRAND_WORDMARK.paths} />
+      <image href={CRAYON_MARK.small} width={MARK_WIDTH} height={LOCKUP_HEIGHT} />
+      <g transform={`translate(${WORDMARK_X} ${BRAND_WORDMARK.y})`}>
+        {BRAND_WORDMARK.paths.map((path) => (
+          <path key={path.d} fill={path.fill} d={path.d} />
+        ))}
       </g>
     </svg>
   );

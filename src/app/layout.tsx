@@ -107,7 +107,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/pwa/icon.svg", type: "image/svg+xml" },
+      { url: "/pwa/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/pwa/icon-192.png", sizes: "192x192", type: "image/png" },
     ],
     apple: [{ url: "/pwa/apple-touch-icon.png", sizes: "180x180" }],
@@ -144,10 +144,10 @@ export default function RootLayout({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="pwa-splash-icon"
-            src="/brand/mark.svg"
+            src="/brand/mark.webp"
             alt=""
-            width={463}
-            height={400}
+            width={768}
+            height={722}
             // Only fetched when the splash is actually shown (installed app).
             loading="lazy"
             decoding="sync"
