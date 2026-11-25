@@ -13,6 +13,7 @@ import { useV2Toast } from "@/components/v2/V2Toast";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { useAlbumRemoval } from "@/components/v2/albums/useAlbumRemoval";
 import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
+import { YEAR_ALBUM_PARAM, YEAR_ALBUM_PARAM_VALUE, writeYearAlbumIntent } from "@/lib/v2/yearAlbumIntent";
 import { activeSeasonalPrompt } from "@/content/seasonalPrompt";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
@@ -218,6 +219,17 @@ export function V2HomeStudio() {
     router.push(albumHref(res.data!.id));
   }
 
+  /** The year album starts like every new album, at "Start with the book"; its photos come after. */
+  function startYearAlbum() {
+    if (!seasonal) return;
+    if (!BOOK_PACKAGES_ENABLED) {
+      setYearAlbumOpen(true);
+      return;
+    }
+    writeYearAlbumIntent({ year: seasonal.year, albumName: seasonal.albumName });
+    router.push(`/studio/new?${YEAR_ALBUM_PARAM}=${YEAR_ALBUM_PARAM_VALUE}`);
+  }
+
   const firstName = user?.displayName?.trim().split(/\s+/)[0];
 
   return (
@@ -338,7 +350,7 @@ export function V2HomeStudio() {
                       <YearAlbumTile
                         year={seasonal.year}
                         albumName={seasonal.albumName}
-                        onStart={() => setYearAlbumOpen(true)}
+                        onStart={startYearAlbum}
                       />
                     </li>
                   ) : null}

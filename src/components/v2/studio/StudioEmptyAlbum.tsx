@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, ImagePlus, MessageSquareText, Palette, Pencil, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CalendarHeart, Check, ImagePlus, MessageSquareText, Palette, Pencil, ShieldCheck, Sparkles } from "lucide-react";
 import { BOOK_PACKAGES, DESIGN_THEMES, NEW_ALBUM, STUDIO_EMPTY } from "@/content/marketing";
 import { fillPackageCopy, packageTokens } from "@/lib/bookPackages/copy";
 import type { AlbumPurchaseCode } from "@/lib/purchaseCodes/types";
@@ -33,6 +33,8 @@ type Props = {
   theme: { value: string | null; canEdit: boolean; onEdit: () => void } | null;
   /** The album holds a book package: what it includes and how many photos are left. */
   pkg?: { code: AlbumPurchaseCode; photosLeft: number } | null;
+  /** The home page's year album: offer that year's photos first. */
+  yearPhotos?: { year: number; onOpen: () => void } | null;
 };
 
 type StepId = "theme" | "name" | "photos";
@@ -62,6 +64,7 @@ export function StudioEmptyAlbum({
   guest,
   theme,
   pkg,
+  yearPhotos,
 }: Props) {
   // ---- Theme ----
   const showTheme = theme != null && (theme.canEdit || theme.value != null);
@@ -302,6 +305,7 @@ export function StudioEmptyAlbum({
               return (
                 <Step key={id} n={n} state={state} last={last} title={NEW_ALBUM.stepPhotos}>
                   <PhotosStep
+                    yearPhotos={yearPhotos ?? null}
                     line={photosLine}
                     onChoose={onChoose}
                     onFiles={onFiles}
@@ -442,10 +446,12 @@ function ThemeAsk({ onAdd, onSkip }: { onAdd: () => void; onSkip: () => void }) 
 
 /** The photo step: a drop area with the picker button. */
 function PhotosStep({
+  yearPhotos,
   line,
   onChoose,
   onFiles,
 }: {
+  yearPhotos: { year: number; onOpen: () => void } | null;
   line: string;
   onChoose: () => void;
   onFiles: (files: File[]) => void;
@@ -468,17 +474,25 @@ function PhotosStep({
         >
           <ImagePlus className="h-6 w-6" />
         </span>
-        <p className="mx-auto mt-3 max-w-xs text-sm text-v2-muted">{line}</p>
+        <p className="mx-auto mt-3 max-w-xs text-sm text-v2-muted">
+          {yearPhotos ? fillPackageCopy(NEW_ALBUM.yearPhotosLine, { year: yearPhotos.year }) : line}
+        </p>
+        {yearPhotos ? (
+          <button type="button" onClick={yearPhotos.onOpen} className="v2-btn-primary v2-radiate mt-5 min-h-12 w-full max-w-xs text-base">
+            <CalendarHeart className="h-5 w-5" aria-hidden />
+            {fillPackageCopy(NEW_ALBUM.yearPhotosButton, { year: yearPhotos.year })}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onChoose}
           className={cn(
-            "mt-5 min-h-12 w-full max-w-xs text-base",
-            "v2-btn-primary v2-radiate",
+            "min-h-12 w-full max-w-xs text-base",
+            yearPhotos ? "v2-btn-outline mt-2.5" : "v2-btn-primary v2-radiate mt-5",
           )}
         >
           <ImagePlus className="h-5 w-5" aria-hidden />
-          {NEW_ALBUM.button}
+          {yearPhotos ? NEW_ALBUM.yearPhotosOther : NEW_ALBUM.button}
         </button>
         <p className="mt-3 text-xs text-v2-muted">
           <span className="hidden pointer-fine:inline">{NEW_ALBUM.dragHint}, </span>

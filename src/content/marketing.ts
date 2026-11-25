@@ -1315,6 +1315,10 @@ export const NEW_ALBUM = {
     { title: "Print or order your book", body: "Print pages at home, or order the finished book. We print it and mail it to you." },
   ],
   guideMore: "See the full guide",
+  // The home page's year album, once the book wizard has made it.
+  yearPhotosLine: "Start with the photos you added in {year}. You can add others too.",
+  yearPhotosButton: "Use my {year} photos",
+  yearPhotosOther: "Choose other photos",
 };
 
 /** Asked when someone leaves a new album without naming it or adding photos. */
@@ -1694,6 +1698,8 @@ export const BOOK_PACKAGES = {
   back: "Back",
   chooseTitle: "Start with the book",
   chooseSubtitle: "Pick a book, pay once, then fill it with photos.",
+  /** Opened from the home page's year album. */
+  chooseSubtitleYear: "Pick a book for “{albumName}”. Once it's set up, you'll bring in your {year} photos.",
   tileLines: [
     "{includedPhotos} photos, each made into a coloring page",
     "{touchUps} on each page",

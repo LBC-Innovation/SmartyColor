@@ -39,6 +39,7 @@ export function PackagePay({
   onPaid,
   onUnavailable,
   onReload,
+  albumName,
 }: {
   pkg: BookPackage;
   signedIn: boolean;
@@ -53,6 +54,8 @@ export function PackagePay({
   onUnavailable: () => void;
   /** Reload the catalog (after a price change). */
   onReload: () => void;
+  /** Name for the album the package makes; the server's default ("My paperback") when absent. */
+  albumName?: string;
 }) {
   const photo = BINDING_PHOTOS[pkg.bindingId];
   const tokens = packageTokens(pkg);
@@ -86,7 +89,7 @@ export function PackagePay({
     setBusy(true);
     setError(null);
     setPriceChanged(false);
-    const base = { bindingId: pkg.bindingId, expectedPriceCents: pkg.priceCents };
+    const base = { bindingId: pkg.bindingId, expectedPriceCents: pkg.priceCents, ...(albumName ? { albumName } : {}) };
     track("package_pay_started", {
       format: trackFormat(pkg.bindingId),
       value: centsToValue(pkg.priceCents),

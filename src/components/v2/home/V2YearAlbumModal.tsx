@@ -17,14 +17,22 @@ type Props = {
   year: number;
   albumName: string;
   onClose: () => void;
-  onCreated: (project: LibraryProject) => void;
-};
+} & (
+  | { /** Make a new album from the chosen photos. */ onCreated: (project: LibraryProject) => void; intoAlbumId?: undefined }
+  | {
+      /** Add the chosen photos to this album (made earlier through the book wizard). */
+      intoAlbumId: string;
+      onAdded: (copied: number) => void;
+    }
+);
 
 /**
  * Start a "book of the year" album: every photo uploaded this calendar year, already picked,
  * so the customer only has to take out the ones they don't want.
  */
-export function V2YearAlbumModal({ year, albumName, onClose, onCreated }: Props) {
+export function V2YearAlbumModal(props: Props) {
+  const { year, albumName, onClose } = props;
+  const adding = props.intoAlbumId != null;
   const toast = useV2Toast();
   const [photos, setPhotos] = useState<YearPhoto[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -57,16 +65,24 @@ export function V2YearAlbumModal({ year, albumName, onClose, onCreated }: Props)
   async function create() {
     if (creating || chosen.length === 0) return;
     setCreating(true);
-    const res = await library.createProjectFromPhotos(
-      albumName,
-      chosen.map((p) => p.id),
-    );
+    const ids = chosen.map((p) => p.id);
+    if (props.intoAlbumId != null) {
+      const res = await library.copyPhotosIntoProject(props.intoAlbumId, ids);
+      setCreating(false);
+      if (res.error) {
+        toast.error(res.error.message, "Couldn't add the photos");
+        return;
+      }
+      props.onAdded(res.data!.copied);
+      return;
+    }
+    const res = await library.createProjectFromPhotos(albumName, ids);
     setCreating(false);
     if (res.error) {
       toast.error(res.error.message, "Couldn't create the album");
       return;
     }
-    onCreated(res.data!);
+    props.onCreated(res.data!);
   }
 
   return (
@@ -74,7 +90,7 @@ export function V2YearAlbumModal({ year, albumName, onClose, onCreated }: Props)
       onClose={() => !creating && onClose()}
       maxWidthClass="max-w-2xl"
       icon={<CalendarHeart />}
-      eyebrow="New album"
+      eyebrow={adding ? `Your ${year} photos` : "New album"}
       title={albumName}
     >
       <div className="space-y-4 px-5 pb-6 pt-1 sm:px-7 sm:pb-7">
@@ -90,15 +106,21 @@ export function V2YearAlbumModal({ year, albumName, onClose, onCreated }: Props)
         ) : photos.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center">
             <p className="text-sm text-v2-muted">You haven&apos;t added any photos in {year} yet.</p>
-            <Link href={STUDIO_PATH} className="v2-btn-primary mt-4 inline-flex">
-              Add photos
-            </Link>
+            {adding ? (
+              <button type="button" onClick={onClose} className="v2-btn-primary mt-4 inline-flex">
+                Choose other photos
+              </button>
+            ) : (
+              <Link href={STUDIO_PATH} className="v2-btn-primary mt-4 inline-flex">
+                Add photos
+              </Link>
+            )}
           </div>
         ) : (
           <>
             <p className="text-sm leading-relaxed text-v2-muted">
               These are the photos you added in {year}. Tap any you&apos;d rather leave out. They&apos;re
-              copied into the new album, coloring pages included, and stay in their albums too.
+              copied into {adding ? "this" : "the new"} album, coloring pages included, and stay in their albums too.
             </p>
             <ul className="grid max-h-[50vh] grid-cols-3 gap-2 overflow-y-auto overscroll-contain sm:grid-cols-5">
               {photos.map((photo) => {
@@ -147,7 +169,13 @@ export function V2YearAlbumModal({ year, albumName, onClose, onCreated }: Props)
                 className="v2-btn-primary"
               >
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
-                {creating ? "Creating album…" : "Create album"}
+                {adding
+                  ? creating
+                    ? "Adding photos…"
+                    : `Add ${chosen.length} ${chosen.length === 1 ? "photo" : "photos"}`
+                  : creating
+                    ? "Creating album…"
+                    : "Create album"}
               </button>
             </div>
           </>

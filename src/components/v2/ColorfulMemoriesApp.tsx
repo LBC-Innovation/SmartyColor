@@ -28,6 +28,8 @@ import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedD
 import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
 import { StudioEmptyAlbum } from "@/components/v2/studio/StudioEmptyAlbum";
 import { markThemeDecided } from "@/components/v2/studio/themeDecided";
+import { V2YearAlbumModal } from "@/components/v2/home/V2YearAlbumModal";
+import { clearYearAlbumIntent, yearAlbumIntentFor } from "@/lib/v2/yearAlbumIntent";
 import { KeepAlbumPrompt } from "@/components/v2/studio/KeepAlbumPrompt";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
@@ -212,6 +214,15 @@ export function ColorfulMemoriesApp() {
       })
     : null;
   const [themeOpen, setThemeOpen] = useState(false);
+  // The home page's year album, made through the book wizard: its year's photos come in here.
+  const [yearPhotosOpen, setYearPhotosOpen] = useState(false);
+  const [yearIntentTick, setYearIntentTick] = useState(0);
+  const yearIntent = useMemo(
+    () => (cloud && activeProjectId && typeof window !== "undefined" ? yearAlbumIntentFor(activeProjectId) : null),
+    // yearIntentTick re-reads it once the photos are in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cloud, activeProjectId, yearIntentTick],
+  );
   const [cancelPkgOpen, setCancelPkgOpen] = useState(false);
   // A package canceled elsewhere (the album menu): re-read the allowance so the meter goes away.
   const refreshAlbumCode = albumCode.refresh;
@@ -1093,6 +1104,7 @@ export function ColorfulMemoriesApp() {
                       : null
                   }
                   pkg={pkgCode ? { code: pkgCode, photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)) } : null}
+                  yearPhotos={yearIntent ? { year: yearIntent.year, onOpen: () => setYearPhotosOpen(true) } : null}
                 />
               ) : (
                 <StudioGallery
@@ -1481,6 +1493,24 @@ export function ColorfulMemoriesApp() {
               setCancelPkgOpen(false);
               toast.error(fillPackageCopy(BOOK_PACKAGES.cancelDeleteFailed, { refund }) ?? "Could not delete the album.");
             }
+          }}
+        />
+      ) : null}
+      {yearPhotosOpen && yearIntent && activeProjectId ? (
+        <V2YearAlbumModal
+          year={yearIntent.year}
+          albumName={activeProject?.name ?? yearIntent.albumName}
+          intoAlbumId={activeProjectId}
+          onClose={() => setYearPhotosOpen(false)}
+          onAdded={(copied) => {
+            setYearPhotosOpen(false);
+            clearYearAlbumIntent();
+            setYearIntentTick((t) => t + 1);
+            void refreshActiveProject();
+            toast.success({
+              title: "Photos added",
+              message: `${copied} ${copied === 1 ? "photo is" : "photos are"} in your album.`,
+            });
           }}
         />
       ) : null}
