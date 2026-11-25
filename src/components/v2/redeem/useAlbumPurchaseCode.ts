@@ -12,6 +12,8 @@ import type { AlbumPurchaseCode } from "@/lib/purchaseCodes/types";
 export function useAlbumPurchaseCode(albumId: string | null): {
   code: AlbumPurchaseCode | null;
   refresh: () => void;
+  /** True once this album's code (or lack of one) has been read. */
+  loaded: boolean;
 } {
   const [state, setState] = useState<{ albumId: string; code: AlbumPurchaseCode | null } | null>(null);
   const [tick, setTick] = useState(0);
@@ -28,5 +30,6 @@ export function useAlbumPurchaseCode(albumId: string | null): {
   }, [albumId, tick]);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
-  return { code: albumId && state?.albumId === albumId ? state.code : null, refresh };
+  const loaded = Boolean(albumId) && state?.albumId === albumId;
+  return { code: loaded ? state!.code : null, refresh, loaded };
 }

@@ -27,9 +27,10 @@ import { AddPhotosModal } from "@/components/v2/studio/AddPhotosModal";
 import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedDialog";
 import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
 import { StudioEmptyAlbum } from "@/components/v2/studio/StudioEmptyAlbum";
+import { KeepAlbumPrompt } from "@/components/v2/studio/KeepAlbumPrompt";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
-import { PLACEHOLDER_ALBUM_NAME } from "@/components/v2/studio/albumNames";
+import { PLACEHOLDER_ALBUM_NAME, isAutomaticAlbumName } from "@/components/v2/studio/albumNames";
 import { GallerySkeletonCard, type CardState } from "@/components/v2/studio/GalleryCard";
 import { usePhotoLocks } from "@/components/v2/studio/usePhotoLocks";
 import { useSheetGeneration, type GenerateOptions } from "@/components/v2/studio/useSheetGeneration";
@@ -862,6 +863,21 @@ export function ColorfulMemoriesApp() {
   );
   const buyButton = order.signedIn && hasBookPage ? <ConfirmButton order={order} blocker={blocker} onConfirm={openConfirm} /> : undefined;
 
+  // A new album left as it came (made-up name, no photos, nothing bought for it) is asked about
+  // on the way out. Not the only album (one always exists), and not one shared with you.
+  const untouchedAlbumId =
+    hydrated &&
+    !albumLoading &&
+    activeProject &&
+    activeProject.role !== "contributor" &&
+    projects.length > 1 &&
+    photos.length + pendingUploads.length === 0 &&
+    !addPhotos &&
+    isAutomaticAlbumName(activeProject.name) &&
+    (!signedIn || (albumCode.loaded && !code))
+      ? activeProject.id
+      : null;
+
   return (
     <V2StudioFrame pageScroll hideBottomNav={showBookBar || deletion.active}>
       <div className="flex w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:overflow-hidden">
@@ -1475,6 +1491,7 @@ export function ColorfulMemoriesApp() {
         <V2GuestLimitModal scope={guestLimit.scope} kind={guestLimit.kind} onClose={() => setGuestLimit(null)} />
       ) : null}
       {deletion.modal}
+      <KeepAlbumPrompt albumId={untouchedAlbumId} onDiscard={deleteProject} />
       {bulk === "move" && selectedPhotos.length > 0 ? (
         <MoveSelectedDialog photos={selectedPhotos} onClose={() => setBulk(null)} onDone={deletion.exit} />
       ) : null}

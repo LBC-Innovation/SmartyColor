@@ -132,7 +132,17 @@ export type LandingSections = {
 };
 
 /** The sections of the book-first layout that can follow the hero. */
-export type BookSectionId = "transform" | "giftPoints" | "themes" | "how" | "books" | "photoBand" | "giftStrip";
+export type BookSectionId =
+  | "made"
+  | "transform"
+  | "giftPoints"
+  | "themes"
+  | "how"
+  | "books"
+  | "photoBand"
+  | "why"
+  | "ideas"
+  | "giftStrip";
 
 /**
  * How a page reads while book packages are on sale: its own headline, subhead, section list (in
@@ -308,8 +318,7 @@ const CONSUMER_SECTIONS: LandingSections = {
   reassurance: true,
   priceLine: true,
   bestPhotos: true,
-  // Off until the owner confirms these are real customer photos with permission (see MADE_PHOTOS).
-  madeGallery: false,
+  madeGallery: true,
 };
 
 /** The shared questions of the free-try layout, for pages that show them all. */
@@ -355,7 +364,8 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       headline: ["A coloring book", "starring your family."],
       subhead:
         "Choose your book and add your photos. Every page becomes a coloring page of the people you love, and we print it and ship it.",
-      order: ["transform", "themes", "how", "books", "photoBand", "giftStrip"],
+      // "What people are making" right under the hero; the why and ideas blocks after the books.
+      order: ["made", "transform", "themes", "how", "books", "photoBand", "why", "ideas", "giftStrip"],
       themesBody:
         "Give your book a theme, like “Under the sea” or “Space explorers.” Every page is drawn in that world, and everyone still looks like themselves.",
       faq: [],
@@ -1273,6 +1283,15 @@ export const NEW_ALBUM = {
   exampleCaption: "Your photo, as a page to color",
   exampleTime: "About a minute",
   guide: "How it works",
+};
+
+/** Asked when someone leaves a new album without naming it or adding photos. */
+export const KEEP_ALBUM = {
+  title: "Keep this album?",
+  description: "You haven’t named it or added any photos yet. Keep it to come back to later, or let it go.",
+  keep: "Keep album",
+  discard: "Don’t keep it",
+  discardFailed: "Couldn't remove the album",
 };
 
 /** Name of a brand-new first album for visitors who arrived from a landing page. */
