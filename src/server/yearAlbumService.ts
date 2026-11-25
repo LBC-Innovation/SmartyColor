@@ -3,6 +3,7 @@ import type { ApiResult } from "@/lib/api/types";
 import type { LibraryProject, YearPhoto } from "@/lib/library/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { createProject } from "@/server/libraryService";
+import { claimMadePagesForCode } from "@/server/purchaseCodesService";
 import { libraryPaths, signedReadUrls } from "@/server/storage/libraryFiles";
 import { copyPhoto, revisionsByPhoto } from "@/server/photoCopy";
 
@@ -202,7 +203,9 @@ export async function copyPhotosIntoProject(
   const first = typeof last?.position === "number" ? last.position + 1 : 0;
 
   const copied = await copyInto(userId, projectId, chosen.data, first);
-  log("info", "year photos added", { userId, projectId, requested: chosen.data.requested, copied });
+  // A book package counts pages that came in already made, in album order, before any others.
+  const claimed = copied > 0 ? await claimMadePagesForCode(projectId) : 0;
+  log("info", "year photos added", { userId, projectId, requested: chosen.data.requested, copied, claimed });
   if (copied === 0) return err("Those photos couldn't be copied. Please try again.");
   return { data: { copied }, error: null };
 }

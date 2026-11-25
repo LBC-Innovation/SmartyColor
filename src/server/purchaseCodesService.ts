@@ -432,6 +432,144 @@ export async function redeemPurchaseCode(input: {
   return { data: { albumId, code: row.code as string }, error: null };
 }
 
+/**
+ * Photos in the album that have a coloring page and were paid for outside the code: a page made
+ * here from credit, which the ledger records against the photo. Copies brought in from another
+ * album have new ids and no charge here, so they aren't in this set.
+ */
+async function chargedPhotoIds(photoIds: string[]): Promise<Set<string>> {
+  if (photoIds.length === 0) return new Set();
+  const { data, error } = await db()
+    .from("credit_ledger")
+    .select("reference_id")
+    .eq("reference_type", "library_photo")
+    .eq("reason", "sheet_generation")
+    .in("reference_id", photoIds);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => r.reference_id as string));
+}
+
+/** Photos among these that have a coloring page (not only a reframed photo). */
+async function photosWithPages(photoIds: string[]): Promise<Set<string>> {
+  if (photoIds.length === 0) return new Set();
+  const { data, error } = await db()
+    .from("library_sheet_revisions")
+    .select("photo_id, kind")
+    .in("photo_id", photoIds);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).filter((r) => r.kind !== "photo").map((r) => r.photo_id as string));
+}
+
+/**
+ * Pages already in the album that its code hasn't counted (photos copied in with their pages, as
+ * the year album does) take the code's free photos, in album order, so the first ones make up the
+ * book. Claims with claim_brought_in_page(), which never charges and isn't counted against a
+ * refund, and stops when the code has none left. Safe to call again: a claimed or paid photo is
+ * skipped. Returns how many it claimed.
+ */
+export async function claimMadePagesForCode(projectId: string): Promise<number> {
+  const { data: code, error } = await db()
+    .from("purchase_codes")
+    .select("id, pages_used, included_pages, book_order_id")
+    .eq("project_id", projectId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error || !code || code.book_order_id) return 0;
+  if ((code.pages_used as number) >= (code.included_pages as number)) return 0;
+
+  const [{ data: photos, error: pErr }, { data: uses, error: uErr }] = await Promise.all([
+    db().from("library_photos").select("id").eq("project_id", projectId).order("position", { ascending: true }),
+    db().from("purchase_code_photos").select("photo_id").eq("code_id", code.id as string),
+  ]);
+  if (pErr || uErr || !photos?.length) return 0;
+  const used = new Set((uses ?? []).map((u) => u.photo_id as string));
+  const open = photos.map((p) => p.id as string).filter((id) => !used.has(id));
+  if (open.length === 0) return 0;
+
+  let withPages: Set<string>;
+  let charged: Set<string>;
+  try {
+    [withPages, charged] = await Promise.all([photosWithPages(open), chargedPhotoIds(open)]);
+  } catch (e) {
+    log("error", "claimMadePagesForCode: lookup failed", { projectId, error: String(e) });
+    return 0;
+  }
+
+  let claimed = 0;
+  for (const id of open) {
+    if (!withPages.has(id) || charged.has(id)) continue;
+    // Counted as brought in (migration 0045), so canceling the package doesn't charge for it.
+    const { data: claimedBy, error: cErr } = await db().rpc("claim_brought_in_page", { p_photo_id: id });
+    if (cErr) {
+      log("error", "claimMadePagesForCode: claim failed", { projectId, photoId: id, error: cErr.message });
+      break;
+    }
+    // None left (or another request got there first): the rest stay outside the code.
+    if (typeof claimedBy !== "string" || !claimedBy) break;
+    claimed++;
+  }
+  if (claimed > 0) log("info", "Code claimed pages already made", { projectId, codeId: code.id, claimed });
+  return claimed;
+}
+
+/**
+ * "Add for a fee" on a page the album's code doesn't cover: charges one page from the caller's
+ * credit (charge_photo_usage), so it counts as a paid extra page of this album's book. Refuses a
+ * photo with no page, one the code already covers, and one already paid for.
+ */
+export async function payForExtraPage(
+  userId: string,
+  photoId: string,
+): Promise<ApiResult<{ chargedCents: number; creditsBalanceCents: number }>> {
+  const { data: photo, error } = await db().from("library_photos").select("id, project_id").eq("id", photoId).maybeSingle();
+  if (error) return { data: null, error: { message: error.message } };
+  if (!photo) return { data: null, error: { message: "Photo not found", code: "NOT_FOUND" } };
+  const projectId = photo.project_id as string;
+  if (!(await projectAccess(userId, projectId))) return { data: null, error: { message: "Photo not found", code: "NOT_FOUND" } };
+
+  const { data: code } = await db()
+    .from("purchase_codes")
+    .select("id, book_order_id")
+    .eq("project_id", projectId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!code) return { data: null, error: { message: "This album has no book package.", code: "INVALID" } };
+  if (code.book_order_id) return { data: null, error: { message: "This book has already been ordered.", code: "INVALID" } };
+
+  const { data: use } = await db()
+    .from("purchase_code_photos")
+    .select("photo_id")
+    .eq("code_id", code.id as string)
+    .eq("photo_id", photoId)
+    .maybeSingle();
+  if (use) return { data: null, error: { message: "Your book already includes this page.", code: "ALREADY" } };
+  try {
+    if (!(await photosWithPages([photoId])).has(photoId)) {
+      return { data: null, error: { message: "Make the page first.", code: "INVALID" } };
+    }
+    if ((await chargedPhotoIds([photoId])).has(photoId)) {
+      return { data: null, error: { message: "This page is already paid for.", code: "ALREADY" } };
+    }
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : "Could not check the page" } };
+  }
+
+  const { data: result, error: chargeErr } = await db().rpc("charge_photo_usage", {
+    p_user_id: userId,
+    p_photo_id: photoId,
+    p_kind: "generation",
+  });
+  if (chargeErr) {
+    if (/insufficient credits/i.test(chargeErr.message)) {
+      return { data: null, error: { message: "Not enough credit for this page.", code: "INSUFFICIENT_CREDITS" } };
+    }
+    return { data: null, error: { message: chargeErr.message } };
+  }
+  const r = (result ?? {}) as { chargedCents?: number; creditsBalanceCents?: number };
+  log("info", "Paid for an extra page", { userId, photoId, projectId, chargedCents: r.chargedCents });
+  return { data: { chargedCents: r.chargedCents ?? 0, creditsBalanceCents: r.creditsBalanceCents ?? 0 }, error: null };
+}
+
 /** The album's code and what is left of it; null when the album has none (or the caller can't see it). */
 export async function getAlbumPurchaseCode(actorId: string, projectId: string): Promise<ApiResult<AlbumPurchaseCode | null>> {
   const access = await projectAccess(actorId, projectId);
@@ -444,6 +582,11 @@ export async function getAlbumPurchaseCode(actorId: string, projectId: string): 
     .maybeSingle();
   if (error) return { data: null, error: { message: error.message } };
   if (!row) return { data: null, error: null };
+  // Pages brought in already made count first; re-read the code if any were claimed.
+  if (!row.book_order_id && (row.pages_used as number) < (row.included_pages as number)) {
+    const claimed = await claimMadePagesForCode(projectId);
+    if (claimed > 0) row.pages_used = (row.pages_used as number) + claimed;
+  }
   const { data: uses, error: usesError } = await db()
     .from("purchase_code_photos")
     .select("photo_id, generations_used, portraits_used")
@@ -455,6 +598,15 @@ export async function getAlbumPurchaseCode(actorId: string, projectId: string): 
       generationsUsed: u.generations_used as number,
       portraitsUsed: u.portraits_used as number,
     };
+  }
+  // Pages outside the code that were paid for here, so the studio doesn't ask for them again.
+  let extraPhotoIds: string[] = [];
+  const { data: albumPhotos } = await db().from("library_photos").select("id").eq("project_id", projectId);
+  const outside = (albumPhotos ?? []).map((p) => p.id as string).filter((id) => !photos[id]);
+  try {
+    extraPhotoIds = [...(await chargedPhotoIds(outside))];
+  } catch (e) {
+    log("error", "getAlbumPurchaseCode: paid extras lookup failed", { projectId, error: String(e) });
   }
   return {
     data: {
@@ -468,6 +620,7 @@ export async function getAlbumPurchaseCode(actorId: string, projectId: string): 
       isBuyer: row.redeemed_by === actorId,
       pagesUsed: row.pages_used as number,
       photos,
+      extraPhotoIds,
       bookOrderId: (row.book_order_id as string | null) ?? null,
     },
     error: null,

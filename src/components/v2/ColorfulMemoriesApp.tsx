@@ -48,7 +48,7 @@ import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
 import { authedFetch } from "@/lib/api/client";
-import { copyPhotoToAlbum } from "@/lib/library/client";
+import { copyPhotoToAlbum, payForExtraPage } from "@/lib/library/client";
 import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { GuestLimitScope } from "@/lib/guestLimit";
 import { formatCredits } from "@/lib/credits/money";
@@ -161,7 +161,7 @@ export function ColorfulMemoriesApp() {
   const searchParams = useSearchParams();
   const welcomeGuide = useV2WelcomeGuide();
   const prices = usePriceList();
-  const { user } = useAuth();
+  const { user, setCreditsBalance } = useAuth();
   const desktop = useIsDesktop();
   const {
     hydrated,
@@ -477,8 +477,59 @@ export function ColorfulMemoriesApp() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [sweepInterrupted]);
 
+  // ---- book package: which photos it reaches --------------------------------------------
+  /**
+   * Package albums: photos the package doesn't reach, in album order. A photo the package already
+   * counts, or whose page was paid for here as an extra, is in the book. The package's free photos
+   * go to the next photos in order, with a page or not (the server counts pages that came in
+   * already made, like the year album's, on its next read); a page being made takes one first.
+   * Every photo after that is "not covered": set aside, and out of the book until added for a fee.
+   */
+  const beyondIds: string[] = [];
+  if (pkgCode && !pkgCode.bookOrderId) {
+    const paid = new Set(pkgCode.extraPhotoIds ?? []);
+    const outside = photos.filter((p) => !pkgCode.photos[p.id] && !paid.has(p.id));
+    const busy = (p: V2PhotoEntry) => Boolean(p.generating || queue.job(p.id));
+    let free = Math.max(0, pkgCode.bundle.includedPages - pkgCode.pagesUsed - outside.filter(busy).length);
+    for (const p of outside) {
+      if (busy(p)) continue;
+      if (free > 0) free--;
+      else beyondIds.push(p.id);
+    }
+  }
+  // Keyed on the ids, so the book below is rebuilt only when the set really changes.
+  const beyondKey = beyondIds.join(",");
+  const beyondPackageIds = useMemo(() => new Set(beyondKey ? beyondKey.split(",") : []), [beyondKey]);
+  const [payingExtraId, setPayingExtraId] = useState<string | null>(null);
+
+  /** "Add for a fee" on a finished page past the package: pay for it from credit. */
+  async function payExtraPage(photoId: string) {
+    if (payingExtraId) return;
+    setPayingExtraId(photoId);
+    const res = await payForExtraPage(photoId);
+    setPayingExtraId(null);
+    if (res.error) {
+      if (res.error.code === "INSUFFICIENT_CREDITS") setAddCreditFor(pagePriceCents ?? 0);
+      else if (res.error.code === "ALREADY") void refreshAlbumCode();
+      else toast.error(res.error.message, "Couldn't add the page");
+      return;
+    }
+    setCreditsBalance(res.data!.creditsBalanceCents);
+    void refreshAlbumCode();
+    toast.success({ title: "Added to your book", message: BOOK_PACKAGES.beyondAddedBody });
+  }
+
   // ---- book --------------------------------------------------------------------------
-  const book = useMemo(() => galleryBook(photos, activeProjectId, activeProject?.name ?? "Album"), [photos, activeProjectId, activeProject?.name]);
+  // Pages past the package stay out of the book until they're added.
+  const book = useMemo(
+    () =>
+      galleryBook(
+        beyondPackageIds.size ? photos.filter((p) => !beyondPackageIds.has(p.id)) : photos,
+        activeProjectId,
+        activeProject?.name ?? "Album",
+      ),
+    [photos, beyondPackageIds, activeProjectId, activeProject?.name],
+  );
   const cartParam = searchParams.get("cart");
   const order = useBookOrder({
     pages: book.pages,
@@ -605,7 +656,7 @@ export function ColorfulMemoriesApp() {
   const giftOffset = order.giftNotePage ? 1 : 0;
   /** Package albums: what each finished page's allowance is, under its card. */
   function pkgCardAllowance(photo: V2PhotoEntry): { text: string; extra: boolean } | null {
-    if (!pkgCode || !photo.remote || cardState(photo) !== "ready") return null;
+    if (!pkgCode || !photo.remote || cardState(photo) !== "ready" || beyondPackageIds.has(photo.id)) return null;
     const left = touchUpsLeft(pkgCode, photo);
     if (left == null) return { text: BOOK_PACKAGES.extraPage, extra: true };
     if (pkgCode.bundle.editsPerPage === 0) return null;
@@ -619,33 +670,6 @@ export function ColorfulMemoriesApp() {
     };
   }
 
-  /**
-   * Package albums: photos with no page yet that the package's remaining photos don't reach, in
-   * album order. Pages already made (by the package, or paid as extras) and pages being made don't
-   * count; a page waiting or drawing outside the package takes a free slot first.
-   */
-  const beyondPackageIds = new Set<string>();
-  if (pkgCode && !pkgCode.bookOrderId) {
-    const inFlight = photos.filter((p) => !pkgCode.photos[p.id] && (p.generating || queue.job(p.id))).length;
-    let free = Math.max(0, pkgCode.bundle.includedPages - pkgCode.pagesUsed - inFlight);
-    for (const p of photos) {
-      if (pkgCode.photos[p.id]) continue;
-      const state = cardState(p);
-      if (state !== "none" && state !== "failed") continue;
-      if (free > 0) free--;
-      else beyondPackageIds.add(p.id);
-    }
-  }
-  const beyondPackage = beyondPackageIds.size
-    ? {
-        caption: BOOK_PACKAGES.beyondCaption,
-        addLabel:
-          pagePriceCents != null
-            ? (fillPackageCopy(BOOK_PACKAGES.beyondAdd, { pagePrice: formatCredits(pagePriceCents) }) ?? BOOK_PACKAGES.beyondAddNoPrice)
-            : BOOK_PACKAGES.beyondAddNoPrice,
-      }
-    : null;
-
   const cardInfo = (photo: V2PhotoEntry) => {
     const position = book.positionByPhotoId.get(photo.id);
     return {
@@ -655,7 +679,21 @@ export function ColorfulMemoriesApp() {
       leftOut: photo.printPrefs.book?.leftOut === true,
       failureMessage: queue.failures[photo.id],
       allowance: pkgCardAllowance(photo),
-      beyondPackage: beyondPackageIds.has(photo.id) ? beyondPackage : null,
+      beyondPackage: beyondPackageIds.has(photo.id)
+        ? {
+            caption: BOOK_PACKAGES.beyondCaption,
+            addLabel:
+              payingExtraId === photo.id
+                ? BOOK_PACKAGES.beyondAdding
+                : pagePriceCents != null
+                  ? (fillPackageCopy(BOOK_PACKAGES.beyondAdd, { pagePrice: formatCredits(pagePriceCents) }) ??
+                    BOOK_PACKAGES.beyondAddNoPrice)
+                  : BOOK_PACKAGES.beyondAddNoPrice,
+            // A finished page is paid for as it is; one without a page is made (and charged) as usual.
+            onAdd: activePageVersion(photo) ? () => void payExtraPage(photo.id) : undefined,
+            busy: payingExtraId === photo.id,
+          }
+        : null,
     };
   };
 

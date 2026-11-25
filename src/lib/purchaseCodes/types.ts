@@ -93,6 +93,8 @@ export type AlbumPurchaseCode = {
   pagesUsed: number;
   /** Photos the code is paying for, by photo id. */
   photos: Record<string, PurchaseCodePhotoUse>;
+  /** Photos outside the code whose page was paid for from credit in this album (extra pages). */
+  extraPhotoIds?: string[];
   /** Set once the code's book has been paid for. */
   bookOrderId: string | null;
 };

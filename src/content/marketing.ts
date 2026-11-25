@@ -1805,6 +1805,8 @@ export const BOOK_PACKAGES = {
   beyondCaption: "Not covered by your book",
   beyondAdd: "Add for {pagePrice}",
   beyondAddNoPrice: "Add for a fee",
+  beyondAdding: "Adding…",
+  beyondAddedBody: "It's paid from your credit and goes in your book.",
   meterExtraChip: "Extras {pagePrice} each",
   meterDetails: "Details",
   meterAddPhotos: "Add photos",
