@@ -136,12 +136,11 @@ export function getBookFormat(id: BookFormatId, blankBacks = false): BookBinding
 }
 
 /**
- * The "Print as you go" card's picture, in the same style as the binding photos. Until the file
- * exists in public/marketing the card shows a drawn printer instead.
+ * The "Print as you go" card's picture, in the same style as the binding photos.
  */
 export const PRINT_AS_YOU_GO_PHOTO = {
   src: "/marketing/print-as-you-go.webp",
-  alt: "A home printer with a fresh coloring page coming out",
+  alt: "A purple home printer with a fresh coloring page coming out",
   width: 960,
   height: 540,
 };

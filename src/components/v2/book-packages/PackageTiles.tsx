@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Check, ChevronLeft, Loader2, Printer } from "lucide-react";
 import { PackageTileCard } from "@/components/v2/book-packages/PackageTileCard";
 import { fillPackageCopy } from "@/lib/bookPackages/copy";
@@ -134,23 +134,8 @@ export function PackageTiles({
   );
 }
 
-/** The picture for "Print as you go", or a drawn printer until the photo file exists. */
+/** The picture for "Print as you go", in the same style as the package photos. */
 function PrintAsYouGoPicture() {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <div
-        aria-hidden
-        className="flex aspect-[16/9] w-full items-center justify-center bg-gradient-to-b from-gray-100 to-gray-200"
-      >
-        <span className="relative flex flex-col items-center">
-          {/* A page coming out of the printer. */}
-          <span className="absolute -top-5 h-12 w-10 rounded-sm border border-gray-300 bg-white shadow-sm" />
-          <Printer className="relative h-20 w-20 text-v2-primary" strokeWidth={1.5} />
-        </span>
-      </div>
-    );
-  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -158,7 +143,6 @@ function PrintAsYouGoPicture() {
       alt=""
       width={PRINT_AS_YOU_GO_PHOTO.width}
       height={PRINT_AS_YOU_GO_PHOTO.height}
-      onError={() => setFailed(true)}
       className="aspect-[16/9] w-full object-cover"
     />
   );
