@@ -1470,7 +1470,7 @@ export function ColorfulMemoriesApp() {
               return;
             }
             try {
-              await deleteProject(albumId);
+              await deleteProject(albumId, { loadNextInBackground: true });
               setCancelPkgOpen(false);
               toast.success({
                 title: BOOK_PACKAGES.cancelDoneTitle,

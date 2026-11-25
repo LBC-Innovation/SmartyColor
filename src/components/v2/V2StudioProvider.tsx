@@ -97,7 +97,12 @@ type V2StudioContextValue = {
    * Permanently removes a project and all its photos; switches to another project (or a fresh one).
    * For an album someone else shared, this leaves it instead and nothing is deleted.
    */
-  deleteProject: (projectId: string) => Promise<void>;
+  /**
+   * Deletes an album (or leaves one shared with you). Deleting the open album opens the next one;
+   * `loadNextInBackground` resolves as soon as the server has deleted it and loads the next album
+   * afterwards, for callers that leave the studio right away.
+   */
+  deleteProject: (projectId: string, opts?: { loadNextInBackground?: boolean }) => Promise<void>;
   /** Keep the "Shared with N" hint in step after invites change. */
   setProjectSharedCount: (projectId: string, sharedCount: number) => void;
   /** Remember an album's design theme (null = none) after it was saved on the server. */
@@ -881,13 +886,15 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteProject = useCallback(
-    async (projectId: string) => {
-      if (switchingRef.current) return;
+    async (projectId: string, opts?: { loadNextInBackground?: boolean }) => {
+      if (switchingRef.current) throw new Error("Another album change is still finishing. Try again in a moment.");
       const remaining = projectsRef.current.filter((project) => project.id !== projectId);
       const wasActive = activeProjectIdRef.current === projectId;
 
       switchingRef.current = true;
       persistSkipRef.current = true;
+      // Set when the next album keeps loading after this returns; the lock is released when it's done.
+      let backgroundLoad: Promise<void> | null = null;
       try {
         if (modeRef.current === "cloud") {
           const removedEntries = wasActive ? photosRef.current : [];
@@ -910,6 +917,13 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
             if (userIdRef.current) writeActiveProjectPref(userIdRef.current, nextActiveId);
             revokeAllPreviews();
             setPendingUploads([]);
+            if (opts?.loadNextInBackground) {
+              setProjects(nextProjects);
+              backgroundLoad = loadCloudProject(nextActiveId, nextProjects).catch((e: unknown) => {
+                console.error("loading the next album failed", e);
+              });
+              return;
+            }
             await loadCloudProject(nextActiveId, nextProjects);
           }
           setProjects(nextProjects);
@@ -941,8 +955,12 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
         setProjects(nextProjects);
         await saveV2ProjectsMeta({ activeProjectId: nextActiveId!, projects: nextProjects });
       } finally {
-        persistSkipRef.current = false;
-        switchingRef.current = false;
+        const release = () => {
+          persistSkipRef.current = false;
+          switchingRef.current = false;
+        };
+        if (backgroundLoad) void backgroundLoad.finally(release);
+        else release();
       }
     },
     [loadCloudProject, revokeAllPreviews, setters],

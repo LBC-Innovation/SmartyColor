@@ -2,24 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Loader2, LogOut, Users } from "lucide-react";
-import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
+import { ChevronDown, Users } from "lucide-react";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { AlbumSwitcherPanel, AlbumThumb } from "@/components/v2/albums/AlbumSwitcherPanel";
 import { leaveAlbum } from "@/components/v2/studio/leaveAlbumGuard";
-import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
+import { useAlbumRemoval } from "@/components/v2/albums/useAlbumRemoval";
 import { ThemeModal } from "@/components/v2/book-packages/ThemeModal";
-import { CancelPackageModal } from "@/components/v2/book-packages/CancelPackageModal";
-import { BOOK_PACKAGES } from "@/content/marketing";
-import { isError } from "@/lib/api/client";
-import { fetchPackageRefundQuote } from "@/lib/bookPackages/client";
-import { fillPackageCopy } from "@/lib/bookPackages/copy";
-import type { BookPackageRefundQuote } from "@/lib/bookPackages/types";
-import { formatCredits } from "@/lib/credits/money";
-import { notifyPackageChanged } from "@/lib/bookPackages/events";
 import { V2ShareAlbumModal } from "@/components/v2/V2ShareAlbumModal";
 import { V2SendToFamilyModal } from "@/components/v2/share/V2SendToFamilyModal";
-import { V2Modal, V2ModalActions } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import * as library from "@/lib/library/client";
 import { cn } from "@/lib/cn";
@@ -42,18 +32,13 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
     createProject,
     switchProject,
     renameProject,
-    deleteProject,
     setProjectSharedCount,
     setProjectDesignTheme,
   } = useV2Studio();
   const toast = useV2Toast();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<V2ProjectMeta | null>(null);
-  // A package album being deleted: the cancel-and-refund dialog shows instead of the plain confirm.
-  const [pkgTarget, setPkgTarget] = useState<{ project: V2ProjectMeta; quote: BookPackageRefundQuote } | null>(null);
-  const [leaveTarget, setLeaveTarget] = useState<V2ProjectMeta | null>(null);
-  const [busy, setBusy] = useState(false);
+  const removal = useAlbumRemoval();
   const [sharing, setSharing] = useState<V2ProjectMeta | null>(null);
   const [sendingToFamily, setSendingToFamily] = useState<V2ProjectMeta | null>(null);
   const [themeTarget, setThemeTarget] = useState<V2ProjectMeta | null>(null);
@@ -93,83 +78,6 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
       (project.id === activeProjectId ? (photos[0]?.previewUrl ?? null) : null),
     [covers, activeProjectId, photos],
   );
-
-  async function confirmDeleteProject() {
-    const target = deleteTarget;
-    if (!target) return;
-    const wasActive = target.id === activeProjectId;
-    setBusy(true);
-    try {
-      await deleteProject(target.id);
-      setDeleteTarget(null);
-      toast.success({ title: "Album deleted", message: `“${target.name}” and its photos were removed.` });
-      // Back to the albums at home; guests have no home page, so they stay in the studio.
-      if (cloud && wasActive) router.push(SIGNED_IN_HOME);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete the album.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /**
-   * Delete from the album menu. An album holding an unspent book package opens the cancel dialog
-   * (refund first, then delete or keep); every other album gets the plain confirm.
-   */
-  async function requestDelete(p: V2ProjectMeta) {
-    if (cloud && p.role !== "contributor") {
-      const res = await fetchPackageRefundQuote(p.id);
-      if (!isError(res) && res.data?.cancelable) {
-        setPkgTarget({ project: p, quote: res.data });
-        return;
-      }
-    }
-    setDeleteTarget(p);
-  }
-
-  async function onPackageCanceled(result: { refundCents: number; deleteAlbum: boolean }) {
-    const target = pkgTarget?.project;
-    if (!target) return;
-    const refund = formatCredits(result.refundCents);
-    notifyPackageChanged(target.id);
-    if (!result.deleteAlbum) {
-      setPkgTarget(null);
-      toast.success({
-        title: BOOK_PACKAGES.cancelDoneTitle,
-        message: fillPackageCopy(BOOK_PACKAGES.cancelDoneBody, { refund }) ?? "",
-      });
-      return;
-    }
-    const wasActive = target.id === activeProjectId;
-    try {
-      await deleteProject(target.id);
-      setPkgTarget(null);
-      toast.success({
-        title: BOOK_PACKAGES.cancelDoneTitle,
-        message: fillPackageCopy(BOOK_PACKAGES.cancelDoneDeleted, { refund }) ?? "",
-      });
-      if (wasActive) router.push(SIGNED_IN_HOME);
-    } catch {
-      // The refund stands; the album stays as a normal album and can be deleted again.
-      setPkgTarget(null);
-      toast.error(fillPackageCopy(BOOK_PACKAGES.cancelDeleteFailed, { refund }) ?? "Could not delete the album.");
-    }
-  }
-
-  async function confirmLeaveAlbum() {
-    const target = leaveTarget;
-    if (!target) return;
-    setBusy(true);
-    try {
-      await deleteProject(target.id);
-      setLeaveTarget(null);
-      toast.success({ title: "You left the album", message: `“${target.name}” was removed from your list.` });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not leave the album.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   const label = !hydrated ? "Loading…" : (activeProject?.name ?? "Select an album");
 
@@ -234,36 +142,15 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
           }}
           onDelete={(p) => {
             setOpen(false);
-            void requestDelete(p);
+            void removal.requestDelete(p);
           }}
           onLeave={(p) => {
             setOpen(false);
-            setLeaveTarget(p);
+            removal.requestLeave(p);
           }}
         />
       ) : null}
 
-      {pkgTarget ? (
-        <CancelPackageModal
-          albumId={pkgTarget.project.id}
-          photoCount={pkgTarget.project.photoCount}
-          initialChoice="delete"
-          quote={pkgTarget.quote}
-          onClose={() => setPkgTarget(null)}
-          onCanceled={onPackageCanceled}
-        />
-      ) : null}
-
-      {deleteTarget ? (
-        <V2DeleteProjectConfirmModal
-          projectName={deleteTarget.name}
-          photoCount={deleteTarget.photoCount}
-          sharedCount={deleteTarget.sharedCount}
-          busy={busy}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => void confirmDeleteProject()}
-        />
-      ) : null}
 
       {sharing ? (
         <V2ShareAlbumModal
@@ -292,41 +179,7 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
         />
       ) : null}
 
-      {leaveTarget ? (
-        <V2Modal
-          onClose={() => !busy && setLeaveTarget(null)}
-          maxWidthClass="max-w-lg"
-          tone="danger"
-          icon={<LogOut />}
-          title={`Leave “${leaveTarget.name}”?`}
-          description={
-            <>
-              The album will disappear from your list. Photos you added stay in it for
-              {leaveTarget.ownerName ? ` ${leaveTarget.ownerName}` : " its owner"}, who can invite you again later.
-            </>
-          }
-        >
-          <V2ModalActions>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setLeaveTarget(null)}
-              className="v2-modal-btn v2-modal-btn--secondary"
-            >
-              Stay in album
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void confirmLeaveAlbum()}
-              className="v2-modal-btn v2-modal-btn--danger"
-            >
-              {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
-              Leave album
-            </button>
-          </V2ModalActions>
-        </V2Modal>
-      ) : null}
+      {removal.modals}
     </div>
   );
 }
