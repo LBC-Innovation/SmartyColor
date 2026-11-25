@@ -46,8 +46,8 @@ function suggestions(): string[] {
 /**
  * What a brand-new, empty album shows: a short guided setup, one step at a time. Choose a theme
  * (optional, and only where themes exist), name the album, then add its first photos. Finished
- * steps fold into one line with a Change link; photos can be added at any point. Beside it (below
- * on phones), an example of what a photo becomes and a few photo tips.
+ * steps fold into one line with a Change link, and a step opens only once the one before it is
+ * answered (chosen, saved or skipped). Beside it (below on phones), a step-by-step guide to the app.
  * Give it `key={albumId}`, so opening another empty album starts over.
  */
 export function StudioEmptyAlbum({
@@ -300,9 +300,8 @@ export function StudioEmptyAlbum({
                 );
               }
               return (
-                <Step key={id} n={n} state={state} last={last} title={NEW_ALBUM.stepPhotos} alwaysOpen>
+                <Step key={id} n={n} state={state} last={last} title={NEW_ALBUM.stepPhotos}>
                   <PhotosStep
-                    emphasized={state === "active"}
                     line={photosLine}
                     onChoose={onChoose}
                     onFiles={onFiles}
@@ -334,7 +333,6 @@ function Step({
   badge,
   action,
   summary,
-  alwaysOpen,
   children,
 }: {
   n: number;
@@ -344,11 +342,9 @@ function Step({
   badge?: string;
   action?: { label: string; onClick: () => void };
   summary?: ReactNode;
-  /** Shows its body even when it isn't the current step (photos can be added at any point). */
-  alwaysOpen?: boolean;
   children: ReactNode;
 }) {
-  const open = state === "active" || alwaysOpen;
+  const open = state === "active";
   return (
     <li aria-current={state === "active" ? "step" : undefined} className={cn("relative flex gap-4", !last && "pb-7")}>
       {!last ? (
@@ -444,14 +440,12 @@ function ThemeAsk({ onAdd, onSkip }: { onAdd: () => void; onSkip: () => void }) 
   );
 }
 
-/** The photo step: a drop area with the picker button. Bold once it's the current step. */
+/** The photo step: a drop area with the picker button. */
 function PhotosStep({
-  emphasized,
   line,
   onChoose,
   onFiles,
 }: {
-  emphasized: boolean;
   line: string;
   onChoose: () => void;
   onFiles: (files: File[]) => void;
@@ -460,7 +454,7 @@ function PhotosStep({
     <V2UploadDropzone
       className={cn(
         "!flex-none rounded-2xl transition",
-        emphasized ? "!border-v2-primary/25 !bg-v2-primary-light/40" : "!border-gray-200 !bg-white",
+        "!border-v2-primary/25 !bg-v2-primary-light/40",
       )}
       onFiles={(files) => onFiles(Array.from(files))}
     >
@@ -469,7 +463,7 @@ function PhotosStep({
           aria-hidden
           className={cn(
             "flex h-12 w-12 items-center justify-center rounded-2xl",
-            emphasized ? "bg-white text-v2-primary shadow-sm" : "bg-v2-bg-subtle text-v2-muted",
+            "bg-white text-v2-primary shadow-sm",
           )}
         >
           <ImagePlus className="h-6 w-6" />
@@ -480,7 +474,7 @@ function PhotosStep({
           onClick={onChoose}
           className={cn(
             "mt-5 min-h-12 w-full max-w-xs text-base",
-            emphasized ? "v2-btn-primary v2-radiate" : "v2-btn-outline",
+            "v2-btn-primary v2-radiate",
           )}
         >
           <ImagePlus className="h-5 w-5" aria-hidden />
