@@ -30,6 +30,7 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 import { trackFormat } from "@/lib/marketing/events";
 import { track } from "@/lib/track";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
+import { markThemeDecided } from "@/components/v2/studio/themeDecided";
 
 const CHOICE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -64,7 +65,8 @@ function clearChoice() {
 /**
  * /studio/new: "Start with the book". Step 1 picks a package (or "Print as you go"), step 2 pays
  * once (wallet or card), the return from Stripe confirms the payment, step 3 sets an optional
- * theme, and the album opens in the studio for its photos. The step and the chosen book live in
+ * theme, and the album opens in the studio for its photos. "Print as you go" has nothing to pay,
+ * so a signed-in person goes from step 1 straight to the theme (`flow=pages`). The step and the chosen book live in
  * the address, so sign-up, a reload and the phone Back button all keep their place.
  */
 export function NewAlbumWizard() {
@@ -80,6 +82,7 @@ export function NewAlbumWizard() {
   const step = params.get("step");
   const bookParam = params.get("book");
   const albumParam = params.get("album");
+  const flow = params.get("flow") === "pages" ? "pages" : "package";
   // The cancel note is read once and then taken out of the address, so a reload doesn't repeat it.
   const [canceledParam] = useState(() => params.get("package") === "canceled");
 
@@ -153,9 +156,11 @@ export function NewAlbumWizard() {
         toast.error(res.error.message, "Couldn't create the album");
         return;
       }
-      router.replace(albumHref(res.data.id));
+      // Same path as a package: choose a theme first, then the album opens for its photos.
+      router.replace(`/studio/new?step=theme&flow=pages&album=${encodeURIComponent(res.data.id)}`);
       return;
     }
+    // Guests: a theme is kept with an account, so the album opens straight away.
     studio.createProject();
     router.replace(STUDIO_PATH);
   }, [creatingPages, signedIn, studio, router, toast]);
@@ -294,7 +299,9 @@ export function NewAlbumWizard() {
         key={themeAlbum.id}
         albumId={themeAlbum.id}
         initialTheme={themeAlbum.theme}
+        flow={flow}
         onDone={(saved) => {
+          markThemeDecided(themeAlbum.id);
           if (saved) toast.success({ message: DESIGN_THEMES.saved });
           router.replace(albumHref(themeAlbum.id));
         }}

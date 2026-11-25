@@ -27,6 +27,7 @@ import { AddPhotosModal } from "@/components/v2/studio/AddPhotosModal";
 import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedDialog";
 import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
 import { StudioEmptyAlbum } from "@/components/v2/studio/StudioEmptyAlbum";
+import { markThemeDecided } from "@/components/v2/studio/themeDecided";
 import { KeepAlbumPrompt } from "@/components/v2/studio/KeepAlbumPrompt";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
@@ -865,6 +866,9 @@ export function ColorfulMemoriesApp() {
 
   // A new album left as it came (made-up name, no photos, nothing bought for it) is asked about
   // on the way out. Not the only album (one always exists), and not one shared with you.
+  // The album has nothing in it yet, so it shows the guided setup instead of the gallery.
+  const albumEmpty = !albumLoading && photos.length + pendingUploads.length === 0;
+
   const untouchedAlbumId =
     hydrated &&
     !albumLoading &&
@@ -874,6 +878,7 @@ export function ColorfulMemoriesApp() {
     photos.length + pendingUploads.length === 0 &&
     !addPhotos &&
     isAutomaticAlbumName(activeProject.name) &&
+    !activeProject.designTheme &&
     (!signedIn || (albumCode.loaded && !code))
       ? activeProject.id
       : null;
@@ -967,7 +972,8 @@ export function ColorfulMemoriesApp() {
                   inFlight={photos.filter((p) => !pkgCode.photos[p.id] && queue.job(p.id)).length}
                   pagePriceCents={pagePriceCents}
                   theme={activeProject?.designTheme ?? null}
-                  canEditTheme={activeProject?.role !== "contributor"}
+                  // The empty album asks for the theme itself, so the strip doesn't repeat it.
+                  canEditTheme={activeProject?.role !== "contributor" && !albumEmpty}
                   onAddPhotos={() => setAddPhotos({ files: [] })}
                   onOrderBook={openBook}
                   onEditTheme={() => setThemeOpen(true)}
@@ -1068,6 +1074,7 @@ export function ColorfulMemoriesApp() {
               ) : photos.length + pendingUploads.length === 0 ? (
                 <StudioEmptyAlbum
                   key={activeProjectId ?? "none"}
+                  albumId={activeProjectId ?? "none"}
                   albumName={activeProject?.name ?? ""}
                   canRename={activeProject?.role !== "contributor"}
                   onRename={renameActiveProject}
@@ -1076,17 +1083,16 @@ export function ColorfulMemoriesApp() {
                   onHowItWorks={welcomeGuide.open}
                   line={STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}
                   guest={!cloud}
-                  pkg={
-                    pkgCode
+                  theme={
+                    cloud && activeProjectId
                       ? {
-                          code: pkgCode,
-                          photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
-                          theme: activeProject?.designTheme ?? null,
-                          canEditTheme: activeProject?.role !== "contributor",
-                          onEditTheme: () => setThemeOpen(true),
+                          value: activeProject?.designTheme ?? null,
+                          canEdit: activeProject?.role !== "contributor",
+                          onEdit: () => setThemeOpen(true),
                         }
                       : null
                   }
+                  pkg={pkgCode ? { code: pkgCode, photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)) } : null}
                 />
               ) : (
                 <StudioGallery
@@ -1483,7 +1489,10 @@ export function ColorfulMemoriesApp() {
           albumId={activeProjectId}
           albumName={activeProject?.name ?? "Album"}
           theme={activeProject?.designTheme ?? null}
-          onSaved={(theme) => setProjectDesignTheme(activeProjectId, theme)}
+          onSaved={(theme) => {
+            markThemeDecided(activeProjectId);
+            setProjectDesignTheme(activeProjectId, theme);
+          }}
           onClose={() => setThemeOpen(false)}
         />
       ) : null}

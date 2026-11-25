@@ -8,7 +8,8 @@ import { BINDING_PHOTOS, BOOK_BINDINGS } from "@/lib/print/bookBindings";
 /**
  * One book package as a card: photo, name and price, what it includes, and a button. The wizard's
  * step 1 and the landing page's "Choose your book" both render this, so they can't drift apart.
- * The caller wraps it in a list item and decides what the button does.
+ * The caller wraps it in a list item and decides what the button does. A click anywhere on the
+ * card presses the button: the button's ::after stretches over the card, so it stays one button.
  */
 export function PackageTileCard({
   pkg,
@@ -37,7 +38,7 @@ export function PackageTileCard({
   const nameId = `pkg-${pkg.bindingId}-name`;
   const detailId = `pkg-${pkg.bindingId}-detail`;
   return (
-    <article aria-labelledby={nameId} className="v2-panel flex h-full flex-col overflow-hidden">
+    <article aria-labelledby={nameId} className="v2-panel relative flex h-full cursor-pointer flex-col overflow-hidden transition duration-200 hover:-translate-y-0.5 hover:border-v2-primary/40 hover:shadow-lg focus-within:ring-2 focus-within:ring-v2-primary/40 has-[:disabled]:cursor-default motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={photo.src}
@@ -78,7 +79,7 @@ export function PackageTileCard({
           type="button"
           onClick={() => onChoose(pkg)}
           aria-describedby={detailId}
-          className="v2-btn-primary mt-4 min-h-11 w-full"
+          className="v2-btn-primary mt-4 min-h-11 w-full after:absolute after:inset-0 after:content-['']"
         >
           {fillPackageCopy(BOOK_PACKAGES.tileButton, values)}
         </button>

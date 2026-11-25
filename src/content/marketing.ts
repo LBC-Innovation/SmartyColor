@@ -1283,6 +1283,38 @@ export const NEW_ALBUM = {
   exampleCaption: "Your photo, as a page to color",
   exampleTime: "About a minute",
   guide: "How it works",
+  // The guided setup on an empty album: theme, then name, then photos.
+  setupEyebrow: "New album",
+  setupTitle: "Let's set up your album",
+  /** A book package's album. Tokens as in BOOK_PACKAGES. */
+  setupEyebrowBook: "{bindingName} · {includedPhotos} photos included",
+  setupTitleBook: "Let's set up your {bindingNameLower}",
+  setupSub: "A couple of quick choices, then your photos. You can change anything later.",
+  stepTheme: "Choose a theme",
+  stepThemeDone: "Theme",
+  stepThemeOptional: "Optional",
+  stepThemeAsk: "Draw every page in a world you pick, like space explorers or under the sea. Or keep pages just like your photos.",
+  stepThemeAdd: "Add a theme",
+  stepThemeSkip: "No theme",
+  stepThemeNone: "No theme",
+  stepThemeNoneSub: "Pages look like your photos",
+  stepName: "Name your album",
+  stepNameDone: "Album name",
+  stepNameNext: "Save name",
+  stepNameSkip: "Skip for now",
+  cancel: "Cancel",
+  stepPhotos: "Add your photos",
+  change: "Change",
+  // The step-by-step guide beside the setup.
+  guideEyebrow: "How it works",
+  guideTitle: "From photo to coloring book",
+  guideSteps: [
+    { title: "Add a photo", body: "Any photo from your phone. One to three people facing the camera, in good light, works best." },
+    { title: "We draw your page", body: "It becomes a black-and-white coloring page of the people in it." },
+    { title: "Touch it up if you like", body: "Type a change, like “take out the stroller”, and the page is drawn again." },
+    { title: "Print or order your book", body: "Print pages at home, or order the finished book. We print it and mail it to you." },
+  ],
+  guideMore: "See the full guide",
 };
 
 /** Asked when someone leaves a new album without naming it or adding photos. */
@@ -1656,6 +1688,8 @@ export const GUEST_LIMIT = {
  */
 export const BOOK_PACKAGES = {
   steps: ["Book", "Pay", "Theme", "Photos"],
+  /** "Print as you go" has nothing to pay up front, so it skips the Pay step. */
+  stepsPages: ["Book", "Theme", "Photos"],
   stepsLabel: "Steps",
   back: "Back",
   chooseTitle: "Start with the book",

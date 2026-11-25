@@ -172,7 +172,7 @@ function PrintAsYouGoCard({
   const lines = signedIn ? BOOK_PACKAGES.justPagesLines : BOOK_PACKAGES.justPagesLinesGuest;
   const note = signedIn ? BOOK_PACKAGES.justPagesNote : BOOK_PACKAGES.justPagesNoteGuest;
   return (
-    <article aria-labelledby="pkg-pages-name" className="v2-panel flex h-full flex-col overflow-hidden">
+    <article aria-labelledby="pkg-pages-name" className="v2-panel relative flex h-full cursor-pointer flex-col overflow-hidden transition duration-200 hover:-translate-y-0.5 hover:border-v2-primary/40 hover:shadow-lg focus-within:ring-2 focus-within:ring-v2-primary/40 has-[:disabled]:cursor-default motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <PrintAsYouGoPicture />
       <div className="flex flex-1 flex-col p-4">
         <div id="pkg-pages-detail" className="flex-1">
@@ -205,7 +205,7 @@ function PrintAsYouGoCard({
           onClick={onJustPages}
           disabled={creatingPages}
           aria-describedby="pkg-pages-detail"
-          className="v2-btn-primary mt-4 min-h-11 w-full"
+          className="v2-btn-primary mt-4 min-h-11 w-full after:absolute after:inset-0 after:content-['']"
         >
           {creatingPages ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           {BOOK_PACKAGES.justPagesButton}
