@@ -61,6 +61,10 @@ type Props = {
   blankBacks?: boolean;
   /** The binding the album's purchase code pays for: shown as included, the others as extra. */
   includedId?: BookBindingId | null;
+  /** What to say under the included binding instead of "Paid by your code" (a book package). */
+  includedNote?: string;
+  /** The included binding is a package: other bindings show their whole price, not a difference. */
+  packageIncluded?: boolean;
 };
 
 type Card = {
@@ -150,6 +154,8 @@ export function BookBindingPicker({
   layout = "grid",
   blankBacks = false,
   includedId = null,
+  includedNote,
+  packageIncluded = false,
 }: Props) {
   const includedPrice = includedId ? prices[includedId] : undefined;
   const CARDS = useMemo(() => formatCards(blankBacks), [blankBacks]);
@@ -284,6 +290,8 @@ export function BookBindingPicker({
                       </span>
                     ) : card.id === includedId ? (
                       <span className="text-base font-bold text-v2-success-text">Included</span>
+                    ) : priced && includedId && packageIncluded ? (
+                      <span className="text-base font-bold text-v2-ink">{formatCredits(price.bookCents!)}</span>
                     ) : priced && includedId ? (
                       includedPrice?.bookCents != null ? (
                         price.bookCents! > includedPrice.bookCents ? (
@@ -309,7 +317,7 @@ export function BookBindingPicker({
                 <span id={`${idBase}-${card.id}-info`} className="mt-1 flex items-baseline justify-between gap-2 text-xs leading-snug">
                   <span className={cn("min-w-0", unavailable ? "font-semibold text-v2-navy" : "text-v2-muted")}>{facts}</span>
                   {card.id === includedId ? (
-                    <span className="shrink-0 text-v2-success-text">Paid by your code</span>
+                    <span className="shrink-0 text-v2-success-text">{includedNote ?? "Paid by your code"}</span>
                   ) : priced && !includedId ? (
                     <span className="shrink-0 text-v2-muted">+ shipping &amp; tax</span>
                   ) : null}

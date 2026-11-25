@@ -10,6 +10,8 @@ type V2DeletePagesConfirmModalProps = {
   onConfirm: () => void;
   onCancel: () => void;
   busy?: boolean;
+  /** A plain note under the question (a package album's included slot stays used). */
+  note?: string | null;
 };
 
 export function V2DeletePagesConfirmModal({
@@ -18,6 +20,7 @@ export function V2DeletePagesConfirmModal({
   onConfirm,
   onCancel,
   busy,
+  note,
 }: V2DeletePagesConfirmModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -61,6 +64,9 @@ export function V2DeletePagesConfirmModal({
               {pageCount === 1 ? "This photo and its coloring page" : "These photos and their coloring pages"}{" "}
               will be deleted for good. This can&apos;t be undone.
             </p>
+            {note ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{note}</p>
+            ) : null}
           </div>
         </div>
 

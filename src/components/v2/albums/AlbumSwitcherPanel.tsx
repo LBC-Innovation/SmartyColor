@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { DESIGN_THEMES } from "@/content/marketing";
 import {
   Check,
   ChevronLeft,
@@ -19,6 +20,7 @@ import {
   LogOut,
   Mail,
   MoreHorizontal,
+  Palette,
   Pencil,
   Plus,
   Search,
@@ -122,6 +124,8 @@ export type AlbumSwitcherPanelProps = {
   onRename: (id: string, name: string) => void;
   onShare: (project: V2ProjectMeta) => void;
   onSendToFamily: (project: V2ProjectMeta) => void;
+  /** Opens the album's theme settings (owner, signed in). */
+  onTheme: (project: V2ProjectMeta) => void;
   onDelete: (project: V2ProjectMeta) => void;
   onLeave: (project: V2ProjectMeta) => void;
 };
@@ -350,6 +354,7 @@ function Popover(props: AlbumSwitcherPanelProps) {
                 onStartRename={() => setFlyout({ ...flyout, mode: "rename" })}
                 onShare={done(() => props.onShare(flyoutProject))}
                 onSendToFamily={done(() => props.onSendToFamily(flyoutProject))}
+                onTheme={done(() => props.onTheme(flyoutProject))}
                 onDelete={done(() => props.onDelete(flyoutProject))}
                 onLeave={done(() => props.onLeave(flyoutProject))}
               />
@@ -625,6 +630,7 @@ function ActionsView({
   onRename,
   onShare,
   onSendToFamily,
+  onTheme,
   onDelete,
   onLeave,
   showClose,
@@ -675,6 +681,7 @@ function ActionsView({
             onStartRename={onStartRename}
             onShare={() => onShare(project)}
             onSendToFamily={() => onSendToFamily(project)}
+            onTheme={() => onTheme(project)}
             onDelete={() => onDelete(project)}
             onLeave={() => onLeave(project)}
           />
@@ -693,6 +700,7 @@ function ActionList({
   onStartRename,
   onShare,
   onSendToFamily,
+  onTheme,
   onDelete,
   onLeave,
 }: {
@@ -704,6 +712,7 @@ function ActionList({
   onStartRename: () => void;
   onShare: () => void;
   onSendToFamily: () => void;
+  onTheme: () => void;
   onDelete: () => void;
   onLeave: () => void;
 }) {
@@ -726,6 +735,15 @@ function ActionList({
           label="Share with family"
           hint="Invite people to add photos"
           onClick={onShare}
+        />
+      ) : null}
+      {!contributor && cloud ? (
+        <ActionRow
+          compact={compact}
+          icon={<Palette className={ic} />}
+          label={DESIGN_THEMES.rowLabel}
+          hint={project.designTheme?.trim() || DESIGN_THEMES.rowNone}
+          onClick={onTheme}
         />
       ) : null}
       {canSend ? (

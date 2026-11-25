@@ -485,7 +485,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     {order.dueCents != null
                       ? order.purchaseCode && order.dueCents === 0
                         ? " · nothing to pay"
-                        : ` · ${formatCredits(order.dueCents)}${order.purchaseCode ? " extra" : ""}`
+                        : ` · ${formatCredits(order.dueCents)}${order.purchaseCode && order.purchaseCode.source !== "package" ? " extra" : ""}`
                       : ""}
                   </button>
                 )}
@@ -628,22 +628,30 @@ function Overview({
             )}
           >
             <div className="flex items-baseline justify-between gap-3">
-              <p className="font-semibold">{order.dueCents ? "Extra to pay" : "You pay"}</p>
+              <p className="font-semibold">{order.dueCents && order.purchaseCode.source !== "package" ? "Extra to pay" : "You pay"}</p>
               <p className="text-2xl font-bold tabular-nums">{order.dueCents != null ? formatCredits(order.dueCents) : "…"}</p>
             </div>
             <p className="mt-1 text-xs leading-relaxed opacity-80">
-              {order.dueCents === 0
-                ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
-                : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your account credit.`}
+              {order.purchaseCode.source === "package"
+                ? order.dueCents === 0
+                  ? "Your package pays for this book. You won't be charged."
+                  : `Your package pays ${formatCredits(order.coveredCents)} of it, the printing. Shipping, its tax and anything past the package come from your account credit.`
+                : order.dueCents === 0
+                  ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
+                  : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your account credit.`}
             </p>
           </div>
           <dl className="space-y-1 px-1 text-xs text-v2-muted">
             <div className="flex items-baseline justify-between">
-              <dt>Book, {shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax</dt>
+              <dt>
+                {order.purchaseCode.source === "package"
+                  ? `Book, ${shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax`
+                  : `Book, ${shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax`}
+              </dt>
               <dd className="tabular-nums">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
             </div>
             <div className="flex items-baseline justify-between text-v2-success-text">
-              <dt>Paid by code {order.purchaseCode.code}</dt>
+              <dt>{order.purchaseCode.source === "package" ? "Printing paid by your package" : `Paid by code ${order.purchaseCode.code}`}</dt>
               <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
             </div>
             {creditApplied != null && creditApplied > 0 ? (

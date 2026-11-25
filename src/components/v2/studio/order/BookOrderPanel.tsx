@@ -5,6 +5,11 @@ import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, sh
 import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
+import { PackagePriceSummary } from "@/components/v2/book-packages/PackagePriceSummary";
+import { SwitchBindingModal } from "@/components/v2/book-packages/SwitchBindingModal";
+import { BOOK_PACKAGES } from "@/content/marketing";
+import { trackFormat } from "@/lib/marketing/events";
+import { track } from "@/lib/track";
 import { BookBindingPicker } from "@/components/v2/book-order/BookBindingPicker";
 import { BlankBacksOption } from "@/components/v2/studio/order/BlankBacksOption";
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
@@ -222,6 +227,18 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
    * format; otherwise straight on to the cover (printed), or the total (PDF, or a guest's
    * account card).
    */
+  // A package pays for printing its own binding. Moving the book to another one asks first, because
+  // the package then pays nothing toward printing.
+  const pkgCode = order.albumPurchaseCode?.source === "package" ? order.albumPurchaseCode : null;
+  const [switchTo, setSwitchTo] = useState<{ id: BookFormatId; via: "click" | "arrow" } | null>(null);
+  function requestFormat(id: BookFormatId, via: "click" | "arrow") {
+    if (pkgCode && order.formatChosen && !order.isDigital && order.bindingId === pkgCode.bundle.bindingId && id !== order.bindingId) {
+      setSwitchTo({ id, via });
+      return;
+    }
+    pickFormat(id, via);
+  }
+
   function pickFormat(id: BookFormatId, via: "click" | "arrow") {
     order.chooseFormat(id);
     if (via !== "click") return;
@@ -379,9 +396,11 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           contentPageCount={order.contentCount}
           recommendedId={order.recommendedFormat}
           digitalPriceCents={order.digitalCents}
-          onChange={pickFormat}
+          onChange={requestFormat}
           blankBacks={order.blankBacksChoice}
           includedId={codeBindingId(order)}
+          includedNote={pkgCode ? BOOK_PACKAGES.orderIncludedNote : undefined}
+          packageIncluded={pkgCode != null}
         />
         {order.formatChosen && order.isDigital ? null : <BlankBacksOption order={order} className="mt-3 rounded-xl border border-gray-200 bg-v2-bg-subtle/60 p-3" />}
         {examplePrice ? <p className="mt-3 text-xs text-v2-muted">{examplePrice}</p> : null}
@@ -665,7 +684,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
       <div id={`${idBase}-next`} className="scroll-mt-3" aria-hidden />
       {order.signedIn ? (
         <div className="mt-4 rounded-2xl bg-v2-bg-subtle/70 p-4">
-          {order.formatChosen && order.purchaseCode ? (
+          {order.formatChosen && pkgCode && !order.isDigital ? (
+            <PackagePriceSummary order={order} onSwitchBack={() => pickFormat(pkgCode.bundle.bindingId, "click")} />
+          ) : order.formatChosen && order.purchaseCode ? (
             <CodePriceSummary order={order} />
           ) : order.formatChosen ? (
             <dl className="space-y-1.5 text-sm">
@@ -810,6 +831,27 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           </div>
         </V2Modal>
       ) : null}
+      {switchTo && pkgCode ? (
+        <SwitchBindingModal
+          packageBindingId={pkgCode.bundle.bindingId}
+          includedPhotos={pkgCode.bundle.includedPages}
+          editsPerPhoto={pkgCode.bundle.editsPerPage}
+          to={switchTo.id}
+          otherPrintCents={
+            switchTo.id !== "digital" ? (order.formatPrices[switchTo.id]?.bookCents ?? null) : order.digitalCents
+          }
+          onKeep={() => setSwitchTo(null)}
+          onSwitch={() => {
+            track("package_binding_switched", {
+              from: trackFormat(pkgCode.bundle.bindingId),
+              to: trackFormat(switchTo.id),
+            });
+            const pending = switchTo;
+            setSwitchTo(null);
+            pickFormat(pending.id, pending.via);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -826,7 +868,8 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
   const picked = order.shippingChosen;
   const current = picked ? (choices.find((c) => c.level === order.shippingLevel) ?? null) : null;
   // With a purchase code, standard shipping is included and every other speed is priced as extra.
-  const includedLevel = order.purchaseCode?.bundle.shippingLevel ?? null;
+  // A package doesn't include shipping, so every speed shows its plain price.
+  const includedLevel = order.purchaseCode && order.purchaseCode.shippingIncluded ? order.purchaseCode.bundle.shippingLevel : null;
   const included = includedLevel ? (choices.find((c) => c.level === includedLevel) ?? null) : null;
   return (
     <fieldset data-shipping-speed className="scroll-mt-3">

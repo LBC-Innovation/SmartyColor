@@ -154,6 +154,7 @@ export async function POST(request: Request) {
             userId: auth.user.id,
             projectId,
             pageCount: body.pageCount,
+            bindingId: body.bindingId,
             shippingAddress: shippingAddressOverride ?? defaultQuoteShippingAddress(),
           })
         : Promise.resolve(null),

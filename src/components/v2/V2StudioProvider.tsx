@@ -100,6 +100,8 @@ type V2StudioContextValue = {
   deleteProject: (projectId: string) => Promise<void>;
   /** Keep the "Shared with N" hint in step after invites change. */
   setProjectSharedCount: (projectId: string, sharedCount: number) => void;
+  /** Remember an album's design theme (null = none) after it was saved on the server. */
+  setProjectDesignTheme: (projectId: string, designTheme: string | null) => void;
   /** Cloud only: after a photo is copied into another album, add that album or refresh its count. */
   upsertProject: (project: V2ProjectMeta) => void;
   photos: V2PhotoEntry[];
@@ -950,6 +952,10 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
     setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, sharedCount } : p)));
   }, []);
 
+  const setProjectDesignTheme = useCallback((projectId: string, designTheme: string | null) => {
+    setProjects((prev) => prev.map((p) => (p.id === projectId ? { ...p, designTheme } : p)));
+  }, []);
+
   const upsertProject = useCallback((project: V2ProjectMeta) => {
     setProjects((prev) =>
       prev.some((p) => p.id === project.id)
@@ -984,6 +990,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       renameProject,
       deleteProject,
       setProjectSharedCount,
+      setProjectDesignTheme,
       upsertProject,
       photos,
       photosRef,
@@ -1027,6 +1034,7 @@ export function V2StudioProvider({ children }: { children: ReactNode }) {
       renameProject,
       deleteProject,
       setProjectSharedCount,
+      setProjectDesignTheme,
       upsertProject,
       photos,
       pendingUploads,

@@ -9,6 +9,8 @@ type Props = {
   photoCount: number;
   uploading: boolean;
   onAddPhotos: () => void;
+  /** Package album: how many included photos are left, and the price of an extra one (for the label). */
+  pkgAdd?: { photosLeft: number; priceLabel: string | null } | null;
   onSelectPhotos: () => void;
   selectDisabled?: boolean;
   /** Select mode is on: the Select button turns into a filled Cancel that leaves it. */
@@ -26,6 +28,7 @@ export function StudioHeader({
   photoCount,
   uploading,
   onAddPhotos,
+  pkgAdd,
   onSelectPhotos,
   selectDisabled,
   selecting = false,
@@ -42,14 +45,27 @@ export function StudioHeader({
         <V2ProjectSwitcher />
       </div>
       {(photoCount > 0 || uploading) && !selecting ? (
-        <button type="button" onClick={onAddPhotos} aria-label="Add photos" className={btn}>
+        <button
+          type="button"
+          onClick={onAddPhotos}
+          aria-label={
+            !pkgAdd
+              ? "Add photos"
+              : pkgAdd.photosLeft > 0
+                ? `Add photos, ${pkgAdd.photosLeft} included left`
+                : pkgAdd.priceLabel
+                  ? `Add extra photos, ${pkgAdd.priceLabel} each from your credit`
+                  : "Add extra photos, paid from your credit"
+          }
+          className={btn}
+        >
           {uploading ? (
             <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
           ) : (
             <Upload className="h-4 w-4" aria-hidden />
           )}
-          <span className="hidden min-[360px]:inline sm:hidden">Add</span>
-          <span className="hidden sm:inline">Add photos</span>
+          <span className="hidden min-[360px]:inline sm:hidden">{pkgAdd && pkgAdd.photosLeft === 0 ? "Add extra" : "Add"}</span>
+          <span className="hidden sm:inline">{pkgAdd && pkgAdd.photosLeft === 0 ? "Add extra photos" : "Add photos"}</span>
         </button>
       ) : null}
       {selecting ? (

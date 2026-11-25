@@ -26,6 +26,7 @@ export function projectMetaFromLibrary(p: LibraryProject): V2ProjectMeta {
     ownerName: p.ownerName,
     sharedCount: p.sharedCount,
     coverUrl: p.previewUrls?.[0] ?? null,
+    designTheme: p.designTheme ?? null,
   };
 }
 

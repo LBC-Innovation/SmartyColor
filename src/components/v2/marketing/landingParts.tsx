@@ -50,7 +50,8 @@ export function SectionHeading({
   id,
   tone = "light",
 }: {
-  eyebrow: string;
+  /** Left out on most sections: a page keeps only a few of these. */
+  eyebrow?: string;
   title: string;
   body?: string;
   align?: "center" | "left";
@@ -61,8 +62,10 @@ export function SectionHeading({
   const dark = tone === "dark";
   return (
     <div className={cn(align === "center" && "text-center")}>
-      <p className={cn("text-xs font-bold uppercase tracking-wider", dark ? "text-brand-amber" : "text-v2-primary")}>{eyebrow}</p>
-      <h2 id={id} className={cn("v2-brand-title mt-2 text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]", dark ? "text-white" : "text-v2-ink")}>
+      {eyebrow ? (
+        <p className={cn("text-xs font-bold uppercase tracking-wider", dark ? "text-brand-amber" : "text-v2-primary")}>{eyebrow}</p>
+      ) : null}
+      <h2 id={id} className={cn("v2-brand-title text-3xl sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]", eyebrow && "mt-2", dark ? "text-white" : "text-v2-ink")}>
         {title}
       </h2>
       {body ? (

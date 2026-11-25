@@ -12,7 +12,7 @@ import { checkGuestUsage, guestLimitResponse } from "@/server/guestUsageGuard";
 import { photoDataUrlById, revisionDataUrlById } from "@/server/libraryImages";
 import { withVisionUser } from "@/lib/visionCost/context";
 import { startRequestTimer, type RequestTimer } from "@/server/requestTiming";
-import { addRevisionFromSheet, type RevisionMeta } from "@/server/libraryService";
+import { addRevisionFromSheet, getAlbumDesignTheme, type RevisionMeta } from "@/server/libraryService";
 import { quoted, recordActivity } from "@/server/activityService";
 import {
   chargeSheetUsage,
@@ -315,6 +315,10 @@ async function handleLibraryModeForUser(
   // A reframed photo already has its page's shape; only a page of the upload is turned.
   const sheetOrientation = sourceRevisionId ? undefined : pageOrientation;
 
+  // The album's design theme is read here from the database, never from the request: it shapes a
+  // new page (including a remake of one), and never an edit of an existing page.
+  const designTheme = current ? null : await getAlbumDesignTheme(record.projectId);
+
   const sheet = current
     ? await ai.correctPhotoColoring({
         photoDataUrl: source.dataUrl,
@@ -329,6 +333,7 @@ async function handleLibraryModeForUser(
         printPrefs: source.printPrefs,
         image: source.image,
         pageOrientation: sheetOrientation,
+        designTheme,
       });
 
   timer.mark("model");

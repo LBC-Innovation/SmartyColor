@@ -20,7 +20,16 @@ export type SheetEditMessage = {
 };
 
 /** A line under the box about what the next edit costs: free edits left, or that edits are now paid. */
-export type SheetEditCostNotice = { tone: "info" | "cost"; text: string };
+export type SheetEditCostNotice = {
+  tone: "info" | "cost";
+  text: string;
+  /**
+   * When set, the send button becomes a labeled pill ("Touch up · $0.25") so a paid touch-up shows
+   * its price on the button itself. `ariaLabel` is the spoken version.
+   */
+  buttonLabel?: string;
+  buttonAriaLabel?: string;
+};
 
 type PreviewMode = EditChatPreviewMode;
 
@@ -374,10 +383,16 @@ export function V2SheetEditChat({
               <button
                 type="submit"
                 disabled={!draft.trim() || busy || disabled}
-                className="v2-hit inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-v2-primary text-white transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-v2-muted"
-                aria-label="Send"
+                className={cn(
+                  "inline-flex shrink-0 items-center justify-center bg-v2-primary text-white transition hover:bg-v2-primary-dark disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-v2-muted",
+                  costNotice?.buttonLabel
+                    ? "min-h-10 gap-1.5 rounded-full px-4 text-sm font-semibold"
+                    : "v2-hit h-10 w-10 rounded-full",
+                )}
+                aria-label={costNotice?.buttonAriaLabel ?? costNotice?.buttonLabel ?? "Send"}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
+                {costNotice?.buttonLabel && !busy ? <span className="whitespace-nowrap">{costNotice.buttonLabel}</span> : null}
               </button>
             </div>
             {nearLimit ? (

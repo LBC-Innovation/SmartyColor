@@ -135,6 +135,17 @@ export function getBookFormat(id: BookFormatId, blankBacks = false): BookBinding
   return withBlankBacks(id === "digital" ? DIGITAL_FORMAT : BOOK_BINDINGS[id], blankBacks);
 }
 
+/**
+ * The "Print as you go" card's picture, in the same style as the binding photos. Until the file
+ * exists in public/marketing the card shows a drawn printer instead.
+ */
+export const PRINT_AS_YOU_GO_PHOTO = {
+  src: "/marketing/print-as-you-go.webp",
+  alt: "A home printer with a fresh coloring page coming out",
+  width: 960,
+  height: 540,
+};
+
 /** A close-up photo of each printed binding, for the format pickers and the landing page. */
 export const BINDING_PHOTOS: Record<BookBindingId, { src: string; alt: string; width: number; height: number }> = {
   perfect_bound: {

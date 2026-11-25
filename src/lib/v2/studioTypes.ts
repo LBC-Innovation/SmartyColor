@@ -171,6 +171,8 @@ export type V2ProjectMeta = {
   sharedCount?: number;
   /** Cloud albums: a thumbnail of the first photo, when the list was fetched with previews. */
   coverUrl?: string | null;
+  /** Cloud albums: the design theme new pages are drawn in. Never sent to analytics. */
+  designTheme?: string | null;
 };
 
 export type V2ProjectsMeta = {

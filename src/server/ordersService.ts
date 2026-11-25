@@ -565,6 +565,7 @@ export async function confirmDraftBookOrder(input: {
     projectId: draft.project_id,
     orderId: input.orderId,
     pageCount: draft.page_count,
+    bindingId,
     shippingAddress,
   });
   if (coverage.error) {

@@ -19,6 +19,7 @@ import type { BookCartSummary } from "@/lib/orders/cartTypes";
 import type { BookOrderStatus, BookOrderSummary } from "@/lib/orders/types";
 import { getBookFormat, isPrintBindingId } from "@/lib/print/bookBindings";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
+import { BOOK_PACKAGES_ENABLED } from "@/lib/auth/features";
 
 const CONTENT = "mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8";
 
@@ -135,6 +136,11 @@ export function V2HomeStudio() {
 
   async function createAlbum() {
     if (creating) return;
+    // New albums start at "Start with the book"; with nothing to sell there it makes the album as before.
+    if (BOOK_PACKAGES_ENABLED) {
+      router.push("/studio/new");
+      return;
+    }
     setCreating(true);
     const res = await library.createProject(`Album ${(projects?.length ?? 0) + 1}`);
     setCreating(false);

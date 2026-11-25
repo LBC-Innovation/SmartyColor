@@ -12,10 +12,16 @@
  *   {date}      The Christmas order-by date (e.g. "December 7"). Only exists while the owner sets
  *               NEXT_PUBLIC_HOLIDAY_ORDER_BY and the date is still ahead.
  *   {min} {max} {format}  Page limits and name of a binding, read from src/lib/print/bookBindings.ts
+ *   {packageFrom}  Lowest price among the book packages on sale
+ *   {photosRange}  Photos the packages include ("20 to 40", or "20" when there is one number)
+ *   {editsEach}    Free touch-ups per page, only when every package has the same number above 0
+ *   {touchUps}     The same as words ("2 free touch-ups"). Hidden when {editsEach} is.
+ *   All four come from the book_packages catalog and hide when no package is on sale.
  *
  * Only say what the product does today: one book per order (no multi-copy, bulk pricing, gift wrap
  * or partner program), a free coloring page with no account, edits by typing, a free letter-size
- * PDF of a single page, a print-at-home PDF of a whole book, printed books made in the US.
+ * PDF of a single page, a print-at-home PDF of a whole book, printed books made to order.
+ * Never "Printed in the US" or "first page in about a minute": the owner has not confirmed them.
  *
  * This file is plain data (no imports) so scripts/generate-share-images.mjs can read it too.
  */
@@ -26,7 +32,21 @@ export type LandingIntent = "default" | "gift" | "birthday" | "pets" | "partners
 export const PRIMARY_CTA = "Try a free coloring page";
 
 /** Where on a marketing page a call to action sits. Sent with the `cta_click` event. */
-export type CtaLocation = "hero" | "offer_bar" | "sticky" | "products" | "final" | "occasion" | "header" | "upsell";
+export type CtaLocation =
+  | "hero"
+  | "offer_bar"
+  | "sticky"
+  | "products"
+  | "final"
+  | "occasion"
+  | "header"
+  | "upsell"
+  | "transform"
+  | "themes"
+  | "books";
+
+/** Which path a tap starts: the book flow, one package's checkout, or a free coloring page. */
+export type CtaTarget = "book" | "package" | "free";
 
 export type HeroPair = {
   photoSrc: string;
@@ -111,6 +131,26 @@ export type LandingSections = {
   madeGallery: boolean;
 };
 
+/** The sections of the book-first layout that can follow the hero. */
+export type BookSectionId = "transform" | "giftPoints" | "themes" | "how" | "books" | "photoBand" | "giftStrip";
+
+/**
+ * How a page reads while book packages are on sale: its own headline, subhead, section list (in
+ * the order shown) and questions. A page without this, or any page while no package is priced,
+ * uses the plain fields of LandingPageCopy (the free-try layout).
+ */
+export type BookFirstCopy = {
+  headline: [string, string];
+  subhead: string;
+  /** The one pill above the headline, shown only while the Christmas order-by date is set. */
+  holidayEyebrow?: string;
+  order: BookSectionId[];
+  /** Body under the themes heading. */
+  themesBody: string;
+  faq: FaqEntry[];
+  commonFaq: string[];
+};
+
 export type LandingPageCopy = {
   intent: LandingIntent;
   path: string;
@@ -141,6 +181,8 @@ export type LandingPageCopy = {
   /** Full-width photo behind the hero text. The hero pair's photo is used until it is ready. */
   heroPhoto: LifestyleId;
   sections: LandingSections;
+  /** The book-first layout, used while packages are on sale. */
+  bookFirst?: BookFirstCopy;
   why: WhyBlock;
   ideas?: IdeasBlock;
   /** This page's own questions, shown first. Its structured data is built from these and `commonFaq`. */
@@ -185,7 +227,7 @@ export const WHY_FAMILIES: WhyBlock = {
   body: "Most coloring books are full of pictures that mean nothing to you. These are yours: last summer's hike, the kids at the beach, your parents on their wedding day. They're the kind of pages you take your time with, and keep.",
   points: [
     { icon: "message", title: "Change anything by typing", body: "“Give him a shave.” “Take out the stroller.” It draws the page again." },
-    { icon: "truck", title: "A real book on real paper", body: "Stapled, spiral or paperback. Printed in the US and mailed wherever you like." },
+    { icon: "truck", title: "A real book on real paper", body: "Stapled, spiral or paperback. Printed to order and mailed wherever you like." },
     {
       icon: "shield",
       title: "Your photos stay yours",
@@ -266,16 +308,35 @@ const CONSUMER_SECTIONS: LandingSections = {
   reassurance: true,
   priceLine: true,
   bestPhotos: true,
-  madeGallery: true,
+  // Off until the owner confirms these are real customer photos with permission (see MADE_PHOTOS).
+  madeGallery: false,
 };
+
+/** The shared questions of the free-try layout, for pages that show them all. */
+const FREE_TRY_FAQ = [
+  "account",
+  "cost",
+  "photos",
+  "fix",
+  "price",
+  "adults",
+  "events",
+  "bleed",
+  "deadline",
+  "gift",
+  "time",
+  "copies",
+  "business",
+  "safe",
+];
 
 export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
   default: {
     intent: "default",
     path: "/",
-    title: "Coloring books made from your family photos | Colorful Memories",
+    title: "A coloring book starring your family | Colorful Memories",
     description:
-      "Turn the photos on your phone into coloring pages of your own family. Print them at home or order a printed book for the kids, the grandparents or yourself. Try a page free, no account needed.",
+      "Choose your book and add your family photos. Every page becomes a coloring page of the people you love, printed and shipped. Try a page free, no account needed.",
     shareImage: "/share/home.png",
     shareImageAlt: "A family photo next to the coloring page made from it",
     eyebrow: "Personalized coloring books",
@@ -284,15 +345,26 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     coverTitle: "Our Family Book",
     headline: ["Family photos", "you can color."],
     subhead:
-      "Pick a photo from your phone and get a coloring page of it in about a minute. Print it at home, or put a few together into a real book for the kids, the grandparents, or yourself.",
+      "Pick a photo from your phone and get a coloring page of it. Print it at home, or put a few together into a real book for the kids, the grandparents, or yourself.",
     primaryCta: PRIMARY_CTA,
-    trustBullets: ["No account to start", "First page in about a minute", "Your photos stay private"],
+    trustBullets: ["No account to start", "Exact price before you pay", "Your photos stay private"],
     hero: FAMILY_BALCONY,
     heroPhoto: "new-sibling",
     sections: { ...CONSUMER_SECTIONS, occasions: true },
+    bookFirst: {
+      headline: ["A coloring book", "starring your family."],
+      subhead:
+        "Choose your book and add your photos. Every page becomes a coloring page of the people you love, and we print it and ship it.",
+      order: ["transform", "themes", "how", "books", "photoBand", "giftStrip"],
+      themesBody:
+        "Give your book a theme, like “Under the sea” or “Space explorers.” Every page is drawn in that world, and everyone still looks like themselves.",
+      faq: [],
+      commonFaq: ["package", "shipping", "deadline", "morePhotos", "cancel", "tryFree", "themes", "bleed", "safe"],
+    },
     why: WHY_FAMILIES,
     ideas: HOME_IDEAS,
     faq: [],
+    commonFaq: FREE_TRY_FAQ,
   },
   gift: {
     intent: "gift",
@@ -311,12 +383,36 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     subhead:
       "Turn this year's family photos into a printed coloring book. It ships straight to the grandparents, or anyone you choose, with a note from you.",
     primaryCta: PRIMARY_CTA,
-    trustBullets: ["Ships to them, not you", "Printed in the US", "Exact price before you pay"],
+    trustBullets: ["Ships to them, not you", "Printed to order and shipped", "Exact price before you pay"],
     // TODO(owner): swap in a photo of a grandparent with a grandkid and the page made from it, with
     // written consent. Replace `hero` and `why.example` with the new HeroPair.
     hero: FAMILY_BALCONY,
     heroPhoto: "kitchen-table",
     sections: { ...CONSUMER_SECTIONS, occasions: true, giftTiming: true },
+    bookFirst: {
+      headline: ["A coloring book", "starring the grandkids."],
+      subhead:
+        "Fill a book with this year's family photos. We print it and ship it straight to them, with a note from you on the first page.",
+      holidayEyebrow: "Christmas gifts",
+      order: ["transform", "giftPoints", "themes", "books", "how"],
+      themesBody:
+        "Make the grandkids superheroes, astronauts or ninjas. Every page is drawn in that world, and everyone still looks like themselves.",
+      faq: [
+        {
+          q: "How does the gift note work?",
+          a: "Choose “This is a gift” when you order the book and write a short note. It prints on the book's first page. The note takes a page, so it is added to the book and its price.",
+        },
+        {
+          q: "Can it ship straight to the grandparents?",
+          a: "Yes. Choose “This is a gift,” then enter their address as the delivery address. Your own address stays on the order as the billing address.",
+        },
+        {
+          q: "Can I see the book before it's printed?",
+          a: "Yes. You turn through every page, cover to cover, and confirm it before you place your book order. You see the shipping price before you pay for it.",
+        },
+      ],
+      commonFaq: ["package", "shipping", "deadline", "cancel", "tryFree", "safe"],
+    },
     why: {
       eyebrow: "Why it works as a gift",
       title: "A gift only you can give",
@@ -355,7 +451,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       },
       {
         q: "When should I order?",
-        a: "Order by {date} for Christmas. Delivery dates for your address are shown at checkout before you pay.",
+        a: "Place your book order by {date} for Christmas. Delivery dates for your address are shown at checkout before you pay.",
         fallback:
           "Books are printed to order. Delivery dates for your address are shown at checkout before you pay.",
       },
@@ -553,7 +649,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     subhead:
       "For photographers, schools, family attractions and event organizers. A session, a class or an event becomes a coloring book that families keep.",
     primaryCta: "Email us about a book",
-    trustBullets: ["Try a free page first", "Printed in the US", "Larger orders quoted individually"],
+    trustBullets: ["Try a free page first", "Printed to order and shipped", "Larger orders quoted individually"],
     // TODO(owner): swap in a photographer-session or event photo and its coloring page, with written consent.
     hero: FAMILY_BALCONY,
     heroPhoto: "holiday-party",
@@ -565,7 +661,7 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
       points: [
         { icon: "image", title: "Starts with a photo", body: "A session favorite, a class picture or a day-out snapshot." },
         { icon: "message", title: "Easy to adjust", body: "Type a note like “take out the sign” and the page redraws." },
-        { icon: "truck", title: "Printed in the US", body: "Printed books are made to order and shipped." },
+        { icon: "truck", title: "Printed to order", body: "Printed books are made to order and shipped." },
       ],
       // TODO(owner): a photographer-session or event pair, with written consent.
       example: BOYS_CATFISH,
@@ -627,13 +723,14 @@ export const LANDING_PAGES: Record<LandingIntent, LandingPageCopy> = {
     subhead:
       "Pick a vacation album and add a line or two about what happened. Get a captioned coloring storybook to print at home or order as a real book.",
     primaryCta: PRIMARY_CTA,
-    trustBullets: ["Captions you can edit", "Printed in the US", "Your photos stay private"],
+    trustBullets: ["Captions you can edit", "Printed to order and shipped", "Your photos stay private"],
     // TODO(owner): swap in a trip photo and a captioned story page, with written consent.
     hero: FAMILY_BALCONY,
     heroPhoto: "living-room-floor",
     sections: { ...CONSUMER_SECTIONS },
     why: WHY_FAMILIES,
     faq: [],
+    commonFaq: FREE_TRY_FAQ,
   },
 };
 
@@ -666,19 +763,29 @@ export const OFFER_BAR = {
  * Slim banner at the top of the home and gift pages, and next to the delivery estimate at checkout.
  * It never promises arrival; delivery dates for the address are shown at checkout.
  */
-export const HOLIDAY_LINE = "Order by {date} for Christmas.";
+export const HOLIDAY_LINE = "Place your book order by {date} for Christmas.";
 export const HOLIDAY_CHECKOUT_NOTE = "Delivery dates for your address are shown at checkout before you pay.";
 
 /** Homepage toast at the bottom of the screen. Shown only while the Christmas order-by date is set. */
 export const HOLIDAY_BLOCK = {
   title: "Giving a book for Christmas?",
-  line: "Order by {date}. It ships to them with your note.",
+  line: "Place your book order by {date}. It ships to them with your note.",
   link: "See Christmas gifts",
   href: "/gift",
   dismiss: "Dismiss",
 };
 
 export const HERO_SECONDARY_CTA = "See how it works";
+
+/**
+ * The hero while book packages are on sale: the book is the primary path, the free page a quiet
+ * second one. "Book packages from", never "Books from": a small pay-per-page book can cost less.
+ */
+export const HERO_BOOK = {
+  primary: "Start your book",
+  secondary: "Or try a free coloring page first",
+  priceLine: "Book packages from {packageFrom}. Shipping is added at checkout.",
+};
 /** The hero's drag-to-compare slider. */
 export const HERO_COMPARE = {
   photo: "Your photo",
@@ -693,6 +800,8 @@ export const GIFT_NOTE_PLACEHOLDER = { christmas: "Merry Christmas! Love, Grandm
 
 /** Phone-only sticky footer button. */
 export const STICKY_CTA = PRIMARY_CTA;
+/** The same button while book packages are on sale. */
+export const STICKY_CTA_BOOK = HERO_BOOK.primary;
 
 export const HEADER = {
   signIn: "Sign in",
@@ -763,10 +872,30 @@ export const OCCASIONS = {
 };
 
 export const HOW_IT_WORKS = {
-  eyebrow: "How it works",
-  title: "If you can text a photo, you can make one",
-  body: "No drawing, no design, nothing to install.",
+  title: "How it works",
+  /** While book packages are on sale. */
   steps: [
+    {
+      icon: "book",
+      title: "Choose your book",
+      body: "A stapled booklet, a spiral bound book or a paperback. You pay once.",
+    },
+    {
+      icon: "image",
+      title: "Add your photos",
+      body: "Each photo becomes a coloring page of the people in it. Not quite right? Type a touch-up, like “take out the stroller.”",
+    },
+    {
+      icon: "truck",
+      title: "We print and ship it",
+      body: "Check every page, then place your order. It ships to you, or straight to someone you're giving it to.",
+    },
+  ],
+  /** The free-try layout (no packages on sale) and the partners page. */
+  pagesEyebrow: "How it works",
+  pagesTitle: "If you can text a photo, you can make one",
+  pagesBody: "No drawing, no design, nothing to install.",
+  stepsPages: [
     {
       icon: "image",
       title: "Pick a photo",
@@ -775,7 +904,7 @@ export const HOW_IT_WORKS = {
     {
       icon: "sparkles",
       title: "Get a coloring page",
-      body: "About a minute later you have clean black-and-white line art, ready for crayons, markers or colored pencils.",
+      body: "You get clean black-and-white line art, ready for crayons, markers or colored pencils.",
     },
     {
       icon: "printer",
@@ -785,6 +914,40 @@ export const HOW_IT_WORKS = {
   ],
 } as const;
 
+/** "Choose your book": the landing's package tiles. Tile words come from BOOK_PACKAGES so they match the wizard. */
+export const LANDING_BOOKS = {
+  eyebrow: "Books",
+  title: "Choose your book",
+  body: "One price covers your photos made into coloring pages[[, {touchUps} on each page]] and printing the book. Shipping is added at checkout.",
+  blankBacks: "Each photo prints on its own page with a blank back, so markers don't bleed through.",
+  refund: "Change your mind before you order the book? Cancel, and the unused value goes back to your account credit.",
+  freeTitle: "Not ready for a whole book?",
+  freeBody: "Make one page at a time and print it at home.",
+  freeButton: PRIMARY_CTA,
+  /** Gift page only, under the tiles. Hidden when no order-by date is set. */
+  giftDeadline: "Place your book order by {date} for Christmas. Delivery dates for your address are shown at checkout.",
+};
+
+/** The themes showcase. The pictures are DESIGN_THEMES.examples; the ideas are DESIGN_THEMES.starters. */
+export const LANDING_THEMES = {
+  eyebrow: "Themes",
+  title: "Or draw them into another world",
+  /** Which examples show, and in what order (indexes into DESIGN_THEMES.examples.pairs): the lake first. */
+  order: [1, 0, 2] as number[],
+  /** Starter theme ids named in the ideas line, in this order. */
+  ideaIds: ["superheroes", "under_sea", "space", "dinosaurs", "fairy_castle", "toy_bricks"] as string[],
+  smallPrint: "Optional. You choose a theme when you start your book, and you can change it later.",
+  cta: "Start your book",
+};
+
+/** The homepage's gift strip: one row that sends gift buyers to /gift. */
+export const LANDING_GIFT_STRIP = {
+  title: "Giving it as a gift?",
+  body: "It can ship straight to them, with a note from you on the first page.[[ Place your book order by {date} for Christmas.]]",
+  link: "Gift a book",
+  href: "/gift",
+};
+
 /**
  * "See the finished book". While PRODUCT_PHOTOS is empty the page shows a CSS mock of a printed
  * cover instead; the formats below come from src/lib/print/bookBindings.ts.
@@ -792,7 +955,7 @@ export const HOW_IT_WORKS = {
 export const FINISHED_BOOK = {
   eyebrow: "See the finished book",
   title: "A real book, printed and shipped",
-  body: "Your coloring pages, printed in the US and mailed to you, or to someone you are giving it to.",
+  body: "Your coloring pages, printed to order and mailed to you, or to someone you are giving it to.",
   mockCaption: "A sample cover. Yours is made from your own pages.",
   sizeNote: "Letter-size pages (8.5 by 11 inches), black and white inside, ready to color. Each page gets its own sheet with a blank back, so markers don't bleed through.",
   formatsTitle: "Choose how to get it",
@@ -941,10 +1104,8 @@ export const LIFESTYLE_PHOTOS: Record<LifestyleId, LifestylePhoto> = {
  * the strip is hidden until at least three of the rest are ready.
  */
 export const PHOTO_BAND = {
-  eyebrow: "Who's coloring",
   title: "Kids, grandparents and everyone in between",
-  body: "A rainy Saturday on the living room floor. Grandma's kitchen table. The end of a long party table. The best ones end up on the fridge.",
-  ids: ["new-sibling", "kitchen-table", "living-room-floor", "fridge", "birthday-table", "dog-coloring"] as LifestyleId[],
+  ids: ["kitchen-table", "living-room-floor", "fridge", "dog-coloring"] as LifestyleId[],
 };
 
 /** One phone snapshot in the "What people are making" gallery. */
@@ -1016,7 +1177,11 @@ export const MADE_GALLERY = {
 export const TRANSFORM = {
   eyebrow: "Before and after",
   title: "This started as an everyday photo",
-  body: "Every page on this site was made from a real family photo. Drag the slider to see both.",
+  /** The title while book packages are on sale. */
+  titleBook: "Made from your own photos",
+  body: "These are real family photos and the coloring pages made from them. Drag to see both.",
+  /** Under the slider while book packages are on sale (the touch-up box and the big button go). */
+  tryLink: "Try it with one of your photos, free",
   fixTitle: "Not quite right?",
   fixBody: "Type what you'd change, like “take out the stroller” or “make the hat say Duke,” and it draws the page again. Want more to color? Ask for more detail.",
 };
@@ -1029,7 +1194,7 @@ export const REASSURANCE = {
   title: "Before you order",
   items: [
     { icon: "shield", text: "You see the exact price before you pay" },
-    { icon: "truck", text: "Printed in the US and shipped" },
+    { icon: "truck", text: "Printed to order and shipped" },
     { icon: "sparkles", text: "Try pages free, no account needed" },
     { icon: "message", text: "Edit any page before printing" },
     { icon: "book", text: "Look through every page before you order a printed book" },
@@ -1041,7 +1206,7 @@ export const REASSURANCE = {
 /** The gift page's timing cards. The first reads right whether or not an order-by date is set. */
 export const GIFT_TIMING = {
   withDate: {
-    title: "Order by {date} for Christmas",
+    title: "Place your book order by {date} for Christmas",
     body: HOLIDAY_CHECKOUT_NOTE,
   },
   withoutDate: {
@@ -1073,7 +1238,7 @@ export const PARTNER_CONTACT = {
 /** The empty studio: the first thing a new visitor sees after "Try a free coloring page". */
 export const STUDIO_EMPTY = {
   title: "Choose a photo to start",
-  line: "We'll turn it into a coloring page in about a minute.",
+  line: "We'll turn it into a coloring page.",
   button: "Choose a photo",
   /** Mouse and trackpad only; touch screens don't drag files in. */
   dragHint: "Or drag a photo in.",
@@ -1084,9 +1249,9 @@ export const STUDIO_EMPTY = {
   howItWorks: "How it works",
   /** Replaces `line` for visitors who arrived from a landing page. Other intents use `line`. */
   lineByIntent: {
-    gift: "Pick a photo of the grandkids. We'll turn it into a coloring page in about a minute.",
-    birthday: "Pick a photo of the birthday kid. We'll turn it into a coloring page in about a minute.",
-    pets: "Pick a photo of your dog, cat or favorite animal. We'll turn it into a coloring page in about a minute.",
+    gift: "Pick a photo of the grandkids. We'll turn it into a coloring page.",
+    birthday: "Pick a photo of the birthday kid. We'll turn it into a coloring page.",
+    pets: "Pick a photo of your dog, cat or favorite animal. We'll turn it into a coloring page.",
   } as Partial<Record<LandingIntent, string>>,
 };
 
@@ -1166,7 +1331,7 @@ export const PRODUCTS = {
       price: PRICE_LINE,
       points: [
         "Pages your kids recognize: their faces, their dog, their house",
-        "Stapled, spiral or paperback, printed in the US",
+        "Stapled, spiral or paperback, printed to order",
         "Exact price shown before you pay",
       ],
       cta: PRIMARY_CTA,
@@ -1189,10 +1354,43 @@ export const PRODUCTS = {
 };
 
 /** Shared questions. Landing pages pick from these by `id` (see LandingPageCopy.commonFaq). */
-export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: string })[] } = {
-  eyebrow: "Questions",
-  title: "Good to know",
+export const FAQ: { title: string; items: (FaqEntry & { id: string })[] } = {
+  title: "Questions",
   items: [
+    {
+      id: "package",
+      q: "How does a book package work?",
+      a: "Choose a stapled booklet, a spiral bound book or a paperback and pay once. The price covers your photos made into coloring pages[[, {touchUps} on each page]] and printing the book. Shipping is added when you order the book.",
+    },
+    {
+      id: "shipping",
+      q: "Is shipping included?",
+      a: "No. Shipping is added when you place your book order. You see the shipping price and delivery dates for your address before you pay.",
+    },
+    {
+      id: "morePhotos",
+      q: "What if I have more photos than my book includes?",
+      a: "You can still add them. Each extra photo is {pagePrice} from your account credit, and you see the price before anything is charged. Extra pages also add to the printing price of the book.",
+      fallback:
+        "You can still add them. Extra photos are paid from your account credit, and you see the price before anything is charged. Extra pages also add to the printing price of the book.",
+    },
+    {
+      id: "cancel",
+      q: "Can I change my mind?",
+      a: "Yes, any time before you order the book. You get back what you paid, minus {pagePrice} for each coloring page already made. It goes to your account credit, not back to your card.",
+      fallback:
+        "Yes, any time before you order the book. You get back what you paid, minus the price of the coloring pages already made. It goes to your account credit, not back to your card.",
+    },
+    {
+      id: "tryFree",
+      q: "Can I try it before I buy?",
+      a: "Yes. Make a coloring page from one of your photos without an account, up to a daily limit, and print it at home for free.",
+    },
+    {
+      id: "themes",
+      q: "What is a theme?",
+      a: "An optional world for your whole book, like “Under the sea.” Every new page is drawn in it, and everyone still looks like themselves. You can change or remove it later. Pages you've already made stay as they are.",
+    },
     {
       id: "account",
       q: "Do I need an account?",
@@ -1233,12 +1431,12 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
     {
       id: "bleed",
       q: "Will markers bleed through the paper?",
-      a: "Not onto another picture. Each coloring page prints on its own sheet with the back left blank. You can turn that off at checkout to print on both sides and pay less.",
+      a: "Not onto another picture. Each photo prints on its own page with the back left blank.",
     },
     {
       id: "deadline",
       q: "When do I need to order for Christmas?",
-      a: "Order by {date} for Christmas. Delivery dates for your address are shown at checkout before you pay.",
+      a: "Place your book order by {date} for Christmas. Delivery dates for your address are shown at checkout before you pay.",
     },
     {
       id: "gift",
@@ -1272,20 +1470,30 @@ export const FAQ: { eyebrow: string; title: string; items: (FaqEntry & { id: str
 
 export const FINAL_CTA = {
   title: "Start with one free coloring page",
-  body: "Pick a photo from your camera roll. In about a minute you'll have a page ready to print and color.",
+  body: "Pick a photo from your camera roll. You'll have a page ready to print and color.",
   creditBadge: "Sign up free and get {freeSheets}",
   cta: PRIMARY_CTA,
-  points: ["Free to try, no account", "Exact price before you pay", "Printed in the US"],
+  points: ["Free to try, no account", "Exact price before you pay", "Printed to order and shipped"],
   signIn: "Already have an account? Sign in",
+  /** While book packages are on sale: the brand line, one button, one quiet link. */
+  book: {
+    title: "Color the moments that matter.",
+    body: "Choose your book, add your photos, and we'll print it for you.",
+    cta: HERO_BOOK.primary,
+    secondary: HERO_BOOK.secondary,
+  },
 };
 
 export const FOOTER: {
+  /** The brand line above the copyright row. */
+  brandLine: string;
   copyright: string;
   links: { href: string; label: string; intent: LandingIntent; feature?: "storybook" }[];
   legal: { href: string; label: string }[];
   contact: string;
   signIn: string;
 } = {
+  brandLine: "Color the moments that matter.",
   copyright: "Colorful Memories · LBC Innovation",
   /** First row: where to go next. */
   links: [
@@ -1306,7 +1514,7 @@ export const SAVE_PROMPT = {
   title: "Save this page and get {freeSheets}.",
   /** Used when there is no sign-up credit. */
   titleNoCredit: "Save this page to your free account.",
-  body: "A free account keeps your pages safe. You can still print without one.",
+  body: "A free account keeps your pages safe and lets you start a book.",
   save: "Save my pages",
   dismiss: "Not now",
 };
@@ -1326,10 +1534,14 @@ export const BOOK_NUDGE = {
  */
 export const UPSELL = {
   title: "Turn this into a book",
+  /** While book packages are on sale (a person with too few pages for a book of their own). */
+  bookTitle: "Make it a book",
+  bookLine: "Book packages from {packageFrom}: your photos as coloring pages, printed and shipped.",
+  bookCta: "See the books",
   /** "{more}" pages short of the smallest printed format. One line, so the card stays small. */
   needMore: "Add {more} more pages to print and ship a book.",
   needMoreOne: "Add 1 more page to print and ship a book.",
-  enough: "Your pages, printed in the US and shipped.",
+  enough: "Your pages, printed and shipped.",
   cta: "Make a book",
   addPhotos: "Add more photos",
   dismiss: "Dismiss",
@@ -1413,4 +1625,295 @@ export const GUEST_LIMIT = {
   busyBody: "Create a free account to keep going, or try again later.",
   primary: "Create free account",
   dismiss: "Not now",
+  /** Under the body while book packages are on sale. */
+  bookLine: "Or start a book: your photos and the printing, for one price.",
+  bookLink: "See the books",
+};
+
+/**
+ * Book packages: pick a book, pay once, then fill it. Numbers are tokens filled from the server's
+ * catalog and the price list ({packagePrice}, {includedPhotos}, {editsEach}, {pagePrice}, ...);
+ * a line whose token can't be filled hides itself (see fillCopy).
+ */
+export const BOOK_PACKAGES = {
+  steps: ["Book", "Pay", "Theme", "Photos"],
+  stepsLabel: "Steps",
+  back: "Back",
+  chooseTitle: "Start with the book",
+  chooseSubtitle: "Pick a book, pay once, then fill it with photos.",
+  tileLines: [
+    "{includedPhotos} photos, each made into a coloring page",
+    "{touchUps} on each page",
+    "The printed {bindingNameLower}",
+  ],
+  tileShipping: "Shipping is added when you order the book.",
+  tileButton: "Choose {bindingName}",
+  blankBacksNote: "Each photo prints on its own page with a blank back, so it's easy to color.",
+  // The fourth card: the pay-per-page album (no package).
+  justPagesTitle: "Print as you go",
+  // After the per-page price on the card ("$0.10 / page").
+  justPagesPriceUnit: " / page",
+  justPagesLines: [
+    "Pay only for the pages you make",
+    "Print any page at home for free",
+    "Make it into a book whenever you like",
+  ],
+  justPagesLinesGuest: [
+    "Try a free coloring page, no account needed",
+    "Print any page at home for free",
+    "Make it into a book whenever you like",
+  ],
+  justPagesNote: "Each new page uses a little of your credit.",
+  justPagesNoteGuest: "Create a free account to save your pages.",
+  justPagesButton: "Print as you go",
+  loadError: "We couldn't load the books just now.",
+  tryAgain: "Try again",
+
+  payTitle: "Your {bindingName}",
+  included: "What's included",
+  includedLines: [
+    "{includedPhotos} photos made into coloring pages",
+    "{touchUps} on each of those pages",
+    "Printing your {bindingNameLower}, up to {includedPhotos} photos",
+  ],
+  notIncluded: "Not included",
+  notIncludedShipping: "Shipping. You'll see the price when you order the book.",
+  notIncludedPhotos: "Photos past {includedPhotos}: {pagePrice} each from your credit",
+  notIncludedTouchUps: "More touch-ups on a page: {editPrice} each from your credit",
+  oneAlbumNote: "This package belongs to one album. It can't be used for another album.",
+  payHeading: "How would you like to pay?",
+  payCredit: "My credit · {balance}",
+  payCreditSub: "You'll have {balanceAfter} left for extras.",
+  payCard: "Card",
+  payCardSub: "Pay securely with Stripe. Your credit stays as it is.",
+  buttonCredit: "Pay {packagePrice} from my credit",
+  buttonCard: "Pay {packagePrice} by card",
+  buttonPaying: "Paying…",
+  buttonOpening: "Opening secure payment…",
+  underButton: "One payment for this album's book. You'll see what's left of it as you go.",
+  creditStays: "Your credit ({balance}) stays for extras.",
+  guestTitle: "Create a free account to get your book",
+  guestBody: "Your book and its photos are kept in your account, so you can fill it on any device.",
+  guestPrimary: "Create free account",
+  guestSecondary: "I already have an account",
+  unavailable: "That book isn't available right now. Please pick another.",
+  priceChanged: "The price of this book changed to {packagePrice}. Please check it before you pay.",
+  creditShort: "Your credit no longer covers this. You can pay by card.",
+  payFailed: "That didn't go through, and you weren't charged. Please try again.",
+  paidToastTitle: "Your book is ready",
+  paidToastBody: "{includedPhotos} photos and the printing are paid for.",
+  canceledNote: "Payment canceled. No charge was made. Your book choice is kept.",
+
+  returnConfirmingTitle: "Confirming your payment",
+  returnConfirmingBody: "This takes a few seconds.",
+  returnPaidTitle: "Your book is paid for",
+  returnPaidBody: "{includedPhotos} photos and the printing of your {bindingNameLower} are ready to use.",
+  returnContinue: "Continue",
+  returnPendingTitle: "Still confirming your payment",
+  returnPendingBody:
+    "Your bank is taking a moment. You can wait here, or leave: your book will show up in your albums as soon as it's confirmed.",
+  returnGaveUpTitle: "We're still waiting on your bank",
+  returnGaveUpBody:
+    "Your book will show up in your albums once the payment is confirmed. If it doesn't, write to us at {email}.",
+  returnGaveUpBodyNoEmail: "Your book will show up in your albums once the payment is confirmed.",
+  returnAlbums: "Go to my albums",
+  returnCheckAgain: "Check again",
+  returnFailedTitle: "That payment didn't go through",
+  returnFailedBody: "You weren't charged. You can try again with another card or your credit.",
+  returnTryAgain: "Try again",
+  returnPickAnother: "Pick another book",
+  returnOpenAlbum: "Open my album",
+
+  // The package landing in an empty package album.
+  landingIncluded: "{includedPhotos} photos included",
+  landingSub: "{bindingName} · {touchUps} on each page",
+  landingPick: "Pick up to {photosLeft}. Each one becomes a coloring page, already paid for.",
+  landingPickNone: "Your included photos are used. New photos are extra pages, paid from your credit.",
+  themeRowSet: "Theme: {theme}",
+  themeRowNone: "No theme yet",
+  themeChange: "Change",
+  themeAdd: "Add a theme",
+
+  // The meter above the gallery.
+  meterTitle: "Your {bindingNameLower}",
+  meterMain: "{photosUsed} of {includedPhotos} photos used",
+  // The slim strip: "4 of 40 photos" then a short status.
+  meterCount: "{photosUsed} of {includedPhotos} photos",
+  meterLeftShort: "{photosLeft} left, already paid for",
+  meterLeftTiny: "{photosLeft} left",
+  meterAllShort: "All included photos used",
+  meterExtraChip: "Extras {pagePrice} each",
+  meterDetails: "Details",
+  meterAddPhotos: "Add photos",
+  meterAllMain: "All {includedPhotos} photos used",
+  meterOrderedMain: "Book ordered",
+  meterViewOrder: "View order",
+  meterStepOrder: "Order my book",
+  meterDisclosure: "What your book includes",
+  meterIncludes: [
+    "{includedPhotos} photos made into coloring pages",
+    "{touchUps} on each of those pages",
+    "Printing your {bindingNameLower}",
+    "Not included: shipping, added when you order the book",
+  ],
+  meterCancel: "Cancel package",
+  // Canceling a package (refund to the wallet).
+  cancelTitle: "Cancel your book package?",
+  cancelLoading: "Checking your package…",
+  cancelPaid: "You paid for your {bindingNameLower}",
+  cancelPages: "{pagesUsed} pages made × {pagePrice}",
+  cancelPagesNone: "No pages made yet",
+  cancelRefund: "Back to your credit",
+  cancelRefundNote: "Refunds go to your account credit, ready for pages or a book anytime.",
+  cancelKeep: "Keep my album and pages",
+  cancelKeepSub: "It becomes a regular album. New pages use your credit.",
+  cancelDelete: "Delete the album and photos too",
+  cancelDeleteSub: "Permanently deletes all {photos} and every coloring page made from them.",
+  cancelDeleteWarning: "This can't be undone. Download or print any pages you want to keep first.",
+  cancelDeleteSubEmpty: "Permanently deletes the album.",
+  cancelConfirmKeep: "Refund {refund}",
+  cancelConfirmDelete: "Refund {refund} and delete",
+  cancelNever: "Keep package",
+  cancelDoneTitle: "Package canceled",
+  cancelDoneBody: "{refund} is back in your credit.",
+  cancelDoneDeleted: "{refund} is back in your credit, and the album was deleted.",
+  cancelDeleteFailed: "Your package was canceled and {refund} is back in your credit, but the album couldn't be deleted. Try deleting it again.",
+  cancelOrdered: "Your book has already been ordered with this package, so there's nothing to refund.",
+  cancelError: "We couldn't check your package just now. Nothing was changed.",
+  // Shown before paying.
+  refundPolicy: "Change your mind before ordering the book? Cancel anytime and the unused value goes back to your credit.",
+  meterExtraNote:
+    "You can add more photos and touch-ups. Those come from your credit, never from your book, and always show their price first.",
+
+  // Upload.
+  addTitleLeft: "Add photos",
+  addLineLeft: "{photosLeft} more photos are included in your book.",
+  addTitleAll: "Add extra photos",
+  addLineAll:
+    "Your book's {includedPhotos} photos are all in. Extra photos are {pagePrice} each from your credit. Your book package isn't used.",
+  addButtonExtra: "Add extra photos · {pagePrice} each from your credit",
+  splitTitle: "You picked {pickedCount} photos",
+  splitDescription: "{includedCount} are included in your book. {extraCount} are extra.",
+  splitNote:
+    "Extra photos cost {extraTotal} from your credit, charged as each page is made. Your book package isn't used for them.",
+  splitPrimary: "Add all {pickedCount} · {extraTotal} extra",
+  splitSecondary: "Add only the {includedCount} included",
+  splitCancel: "Cancel",
+  splitAllExtraTitle: "These photos are extra",
+  splitAllExtraDescription:
+    "Your book's {includedPhotos} photos are all in. These {pickedCount} photos are {pagePrice} each from your credit.",
+  splitAllExtraPrimary: "Add {pickedCount} extra photos · {extraTotal}",
+  splitCredit: "Your credit is {balance}. You can add credit after, when a page is made.",
+  splitMore: "+{n} more",
+
+  // Pages.
+  touchUpsLeft: "{touchUpsLeft} free touch-ups left",
+  oneTouchUpLeft: "1 free touch-up left",
+  touchUpsUsed: "Touch-ups used",
+  extraPage: "Extra page",
+  deleteNote:
+    "This photo's included slot stays used. Deleting it won't give the page back to your book, so you can't add another included photo in its place.",
+  deleteNoteExtra: "This is an extra page, so nothing in your book package changes.",
+  restIncluded: "included in your book",
+  editInfoOne: "1 free touch-up left on this page. After that, {editPrice} each from your credit.",
+  editInfoMany: "{touchUpsLeft} of {editsEach} free touch-ups left on this page.",
+  editCostUsed:
+    "This page's free touch-ups are used. Each touch-up from here is {editPrice} from your credit. Your book package isn't used.",
+  editCostExtraPage: "This is an extra page, so touch-ups are {editPrice} each from your credit.",
+  touchUpButton: "Touch up · {editPrice}",
+  addCreditNote:
+    "Your {bindingNameLower} package is untouched. Its {photosLeft} included photos and the printing are still saved for this album.",
+  addCreditNoteNoPhotos: "Your {bindingNameLower} package is untouched. The printing is still paid for.",
+  addCreditFor: ["this extra page", "this extra touch-up", "these extra pages"],
+
+  // Order panel.
+  orderPrintingIncluded: "Your package pays for printing. You pay for shipping and its tax.",
+  orderExtraPages: "Your package pays for printing {includedPhotos} photos. The {k} extra pages and shipping come from your credit.",
+  orderOtherBinding:
+    "You chose a {otherBindingNameLower}, so your package isn't paying toward printing. Switch back to your {bindingNameLower} to use it.",
+  orderSwitchBack: "Switch back",
+  orderPrintingLine: "Printing: included by your package",
+  orderExtraLine: "Extra pages ({k})",
+  orderShippingChoose: "Shipping: choose a speed",
+  orderIncludedNote: "Printing paid by your package",
+  orderBlankBacksLocked: "Blank backs come with your package, so each photo has its own page.",
+  switchTitle: "Switch to {otherBindingName}?",
+  switchBody:
+    "Your package pays for printing a {bindingNameLower}. If you switch, it won't pay toward printing this book, and the full printing price of {otherPrintPrice} comes from your credit.",
+  switchBodyNoPrice:
+    "Your package pays for printing a {bindingNameLower}. If you switch, it won't pay toward printing this book, and the full printing price comes from your credit.",
+  switchBody2: "Your included photos and touch-ups are not affected. You can switch back any time before you order.",
+  switchKeep: "Keep my {bindingNameLower}",
+  switchConfirm: "Switch to {otherBindingName}",
+  orderButtonPrintingIncluded: "Printing included",
+  orderButtonPrintingIncludedShipping: "Printing included · shipping at checkout",
+};
+
+/** Design themes: an album-wide world every new page is drawn in. Never sent to analytics. */
+export const DESIGN_THEMES = {
+  title: "Want a theme?",
+  subtitle: "Skip it and your pages look just like your photos. Add one and every page is drawn in a world you pick, with everyone still looking like themselves.",
+  optionalBadge: "Optional",
+  choiceLabel: "Theme or no theme",
+  choiceNone: "No theme",
+  choiceNoneSub: "Pages look just like your photos.",
+  choiceTheme: "Add a theme",
+  choiceThemeSub: "Every page is drawn in a world you pick.",
+  continue: "Continue",
+  examplesTitle: "What a theme does",
+  examplesTheme: "Theme: “{theme}”",
+  examplesPhoto: "Photo",
+  examplesPage: "Coloring page",
+  /** Real photo and page pairs made with one theme (the owner's own album, used with permission). */
+  examples: {
+    theme: "Ninjas and warriors saving the city",
+    pairs: [
+      {
+        photo: "/marketing/theme-examples/ninja-b-photo.webp",
+        page: "/marketing/theme-examples/ninja-b-page.webp",
+        alt: "A toddler in a park, drawn as a smiling young ninja with a sword in front of a castle",
+      },
+      {
+        photo: "/marketing/theme-examples/ninja-c-photo.webp",
+        page: "/marketing/theme-examples/ninja-c-page.webp",
+        alt: "Two boys at a lake, drawn as young warriors outside a castle",
+      },
+      {
+        photo: "/marketing/theme-examples/ninja-a-photo.webp",
+        page: "/marketing/theme-examples/ninja-a-page.webp",
+        alt: "A boy playing with a toy drill, drawn as a ninja polishing his sword in a castle courtyard",
+      },
+    ],
+  },
+  label: "Your theme",
+  placeholder: "For example: we're all space explorers",
+  help: "A few words is plenty. You can change or remove it anytime from the album.",
+  ideas: "Ideas",
+  ideasLabel: "Theme ideas",
+  /** `id` is the fixed analytics id; the text is what fills the box. */
+  starters: [
+    { id: "superheroes", text: "Superheroes saving the city" },
+    { id: "toy_bricks", text: "Toy brick town" },
+    { id: "under_sea", text: "Under the sea" },
+    { id: "space", text: "Space explorers" },
+    { id: "fairy_castle", text: "Fairy tale castle" },
+    { id: "dinosaurs", text: "Dinosaur safari" },
+  ] as const,
+  use: "Use this theme",
+  saving: "Saving…",
+  saved: "Theme saved. Your pages will be drawn in it.",
+  savedSettings: "Theme saved. New pages will use it.",
+  removed: "Theme removed. New pages will look like your photos.",
+  notAllowed: "That theme won't work for a family coloring book. Try something like “Under the sea” or “Space explorers”.",
+  tooLong: "Please keep it under 200 characters.",
+  saveFailed: "We couldn't save your theme. Try again, or skip and add it later.",
+  albumMissing: "We couldn't find that album.",
+  // Album menu and settings.
+  rowLabel: "Theme",
+  rowNone: "None",
+  modalEyebrow: "Album theme",
+  modalDescription: "New pages in this album are drawn in this world. Everyone still looks like themselves.",
+  modalNote: "Pages you've already made stay as they are.",
+  modalSave: "Save theme",
+  modalRemove: "Remove theme",
 };

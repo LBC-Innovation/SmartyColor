@@ -1,8 +1,10 @@
 import "server-only";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { LANDING_ORDER, LANDING_PAGES } from "@/content/marketing";
+import { BOOK_PACKAGES_ENABLED } from "@/lib/auth/features";
 import { BOOK_BINDINGS, type BookBindingId } from "@/lib/print/bookBindings";
-import type { NumbersInput } from "@/lib/marketing/copy";
+import type { MarketingPackage, NumbersInput } from "@/lib/marketing/copy";
+import { listBuyablePackages } from "@/server/bookPackagesService";
 import { luluConfigured } from "@/server/lulu/config";
 import { chargeableCents, pricePrintOrder } from "@/server/pricingService";
 import { getPromoCreditSettings } from "@/server/promoCreditsService";
@@ -84,6 +86,44 @@ export async function getWelcomeFreeSheets(): Promise<number | null> {
   }
 }
 
+/** Cache tag on the package catalog; the admin package save expires it so the landing updates at once. */
+export const BOOK_PACKAGES_TAG = "marketing-book-packages";
+
+// Same list the wizard's API sells from (active, priced, fitting, in sort order). Throws on failure
+// so a failed read is never cached; the wrapper below turns that into null.
+const cachedBookPackages = unstable_cache(
+  async (): Promise<MarketingPackage[]> => {
+    const res = await listBuyablePackages();
+    if (res.error) throw new Error(res.error.message);
+    return res.data;
+  },
+  ["marketing-book-packages-v1"],
+  { revalidate: 60 * 60, tags: [BOOK_PACKAGES_TAG] },
+);
+
+/**
+ * The packages the landing sells, or null when the feature is off or the catalog can't be read
+ * (an empty list means none is priced). Either way the landing shows its free-try layout.
+ */
+export async function getBookPackagesForMarketing(): Promise<MarketingPackage[] | null> {
+  if (!BOOK_PACKAGES_ENABLED) return null;
+  try {
+    return await cachedBookPackages();
+  } catch (e) {
+    log("warn", "Book packages unavailable", { error: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+/**
+ * After an admin changes a package: drop the cached catalog and the pages that quote it, so the
+ * next visit shows the new price instead of waiting out the hour. Call from a route handler.
+ */
+export function refreshBookPackages(): void {
+  revalidateTag(BOOK_PACKAGES_TAG, { expire: 0 });
+  for (const intent of LANDING_ORDER) revalidatePath(LANDING_PAGES[intent].path);
+}
+
 // The print-at-home PDF's list price, read the same way checkout reads it (chargeableCents).
 const cachedDigitalPrice = unstable_cache(
   async (): Promise<number> => {
@@ -131,17 +171,19 @@ export async function getPagePrice(): Promise<number | null> {
 export type MarketingNumbers = NumbersInput;
 
 export async function getMarketingNumbers(): Promise<MarketingNumbers> {
-  const [referencePriceCents, welcomeFreeSheets, digitalPriceCents, pagePriceCents] = await Promise.all([
+  const [referencePriceCents, welcomeFreeSheets, digitalPriceCents, pagePriceCents, packages] = await Promise.all([
     getReferencePrice(),
     getWelcomeFreeSheets(),
     getDigitalBookPrice(),
     getPagePrice(),
+    getBookPackagesForMarketing(),
   ]);
   return {
     referencePriceCents,
     welcomeFreeSheets,
     digitalPriceCents,
     pagePriceCents,
+    packages,
     // The example behind "{price}": the same book REFERENCE_BOOK prices.
     referencePages: REFERENCE_BOOK.pageCount,
     referenceFormat: BOOK_BINDINGS[REFERENCE_BOOK.bindingId].shortLabel.toLowerCase(),

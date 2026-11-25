@@ -15,9 +15,11 @@ import {
   Printer,
   Pencil,
   RotateCcw,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
+import { ExtraChip } from "@/components/v2/book-packages/AllowanceChips";
 import { V2SheetGeneratingPlaceholder } from "@/components/v2/V2SheetGeneratingPlaceholder";
 import { cn } from "@/lib/cn";
 import { useThumbUrl } from "@/lib/v2/thumbnail";
@@ -35,6 +37,8 @@ export type GalleryCardProps = {
   bookNumber: number | null;
   leftOut: boolean;
   failureMessage?: string;
+  /** Package albums: what the page's allowance is (free touch-ups left, or an extra page). */
+  allowance?: { text: string; extra: boolean } | null;
   selectMode: boolean;
   /** The book panel is open: shows the check that keeps the page in the book or leaves it out. */
   bookMode?: boolean;
@@ -195,6 +199,7 @@ export function GalleryCard({
   bookNumber,
   leftOut,
   failureMessage,
+  allowance,
   selectMode,
   bookMode = false,
   selected,
@@ -439,6 +444,18 @@ export function GalleryCard({
       ) : (
         <p className="mt-1 h-4" aria-hidden />
       )}
+      {allowance ? (
+        <p className="mt-0.5 flex items-center justify-center gap-1 text-xs">
+          {allowance.extra ? (
+            <ExtraChip label={allowance.text} />
+          ) : (
+            <span className="inline-flex items-center gap-1 text-v2-muted">
+              <Sparkles className="h-3 w-3 text-v2-primary" aria-hidden />
+              {allowance.text}
+            </span>
+          )}
+        </p>
+      ) : null}
     </div>
   );
 }

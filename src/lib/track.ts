@@ -1,4 +1,4 @@
-import type { CtaLocation } from "@/content/marketing";
+import type { CtaLocation, CtaTarget } from "@/content/marketing";
 import { readCookieFromHeader } from "@/lib/marketing/attribution";
 import { intentFromAttributionCookie, readTrackIntent } from "@/lib/marketing/copy";
 import {
@@ -323,9 +323,12 @@ export function trackPageGenerated(signedIn: boolean): void {
   track("page_generated", { is_first: made === 0, signed_in: signedIn, intent: readTrackIntent() });
 }
 
-/** A tap on a marketing call to action. `intent` is the page or card the visitor is heading for. */
-export function trackCta(location: CtaLocation, intent: TrackEventParams["cta_click"]["intent"]): void {
-  track("cta_click", { location, intent });
+/**
+ * A tap on a marketing call to action. `intent` is the page or card the visitor is heading for;
+ * `target` says which path the tap starts (the book, one package, or a free page).
+ */
+export function trackCta(location: CtaLocation, intent: TrackEventParams["cta_click"]["intent"], target?: CtaTarget): void {
+  track("cta_click", target ? { location, intent, target } : { location, intent });
 }
 
 /** Send `book_started` with the visit's landing intent. */

@@ -1,5 +1,11 @@
 import Stripe from "stripe";
 import { jsonError, jsonResult } from "@/lib/api/respond";
+import {
+  NOT_BOOK_PACKAGE_CODE,
+  PACKAGE_PAYMENT_PENDING_CODE,
+  fulfillPackageFromCheckoutSession,
+  isBookPackageCheckout,
+} from "@/server/bookPackagesService";
 import { getStripe } from "@/server/stripe/client";
 import { stripeWebhookSecret } from "@/server/stripe/config";
 import {
@@ -37,6 +43,24 @@ export async function POST(request: Request) {
     event.type === "checkout.session.async_payment_succeeded"
   ) {
     const session = event.data.object as Stripe.Checkout.Session;
+    // A book package checkout makes the package; it never touches the wallet.
+    if (isBookPackageCheckout(session)) {
+      const pkg = await fulfillPackageFromCheckoutSession({
+        id: session.id,
+        metadata: session.metadata,
+        payment_status: session.payment_status,
+        amount_total: session.amount_total,
+        currency: session.currency,
+      });
+      if (pkg.error) {
+        if (pkg.error.code === NOT_BOOK_PACKAGE_CODE || pkg.error.code === PACKAGE_PAYMENT_PENDING_CODE) {
+          return jsonResult({ data: { ignored: true }, error: null }, 200);
+        }
+        // Stripe retries on 500, and the database call is idempotent, so a retry is safe.
+        return jsonError(pkg.error.message, 500);
+      }
+      return jsonResult({ data: { codeId: pkg.data!.codeId, created: pkg.data!.created }, error: null }, 200);
+    }
     const result = await fulfillCreditTopUpFromCheckoutSession({
       id: session.id,
       metadata: session.metadata,

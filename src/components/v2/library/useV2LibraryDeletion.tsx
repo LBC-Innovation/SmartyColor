@@ -28,7 +28,10 @@ export type V2LibraryDeletion = {
  * confirm, remove. Pages still generating, and photos other people added to
  * a shared album, are never deleted.
  */
-export function useV2LibraryDeletion(): V2LibraryDeletion {
+export function useV2LibraryDeletion(options?: {
+  /** An extra line for the confirm dialog about these photos (null = none), e.g. a package album's slot note. */
+  note?: (ids: string[]) => string | null;
+}): V2LibraryDeletion {
   const { photos, photosRef, removePhotosByIds } = useV2Studio();
   const toast = useV2Toast();
   const [active, setActive] = useState(false);
@@ -131,6 +134,7 @@ export function useV2LibraryDeletion(): V2LibraryDeletion {
       <V2DeletePagesConfirmModal
         open={confirmOpen}
         pageCount={pendingIds.length}
+        note={confirmOpen ? (options?.note?.(pendingIds) ?? null) : null}
         onConfirm={confirm}
         onCancel={cancel}
       />

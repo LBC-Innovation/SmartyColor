@@ -3,7 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
 import { useCreditCheckoutReturn } from "@/components/v2/credits/useCreditCheckoutReturn";
+import { BOOK_PACKAGES } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
+import { packageUntouchedNote } from "@/lib/bookPackages/copy";
 import {
   INSUFFICIENT_CREDITS_CODE,
   sheetUsageCostCents,
@@ -18,6 +20,13 @@ const SHORTFALL_FOR: Record<SheetUsageKind, string> = {
   generation: "a coloring page",
   edit: "this edit",
   portrait: "a portrait version",
+};
+
+/** Same, in an album with a book package: whatever is bought past the package says "extra". */
+const PACKAGE_SHORTFALL_FOR: Record<SheetUsageKind, string> = {
+  generation: BOOK_PACKAGES.addCreditFor[0],
+  edit: BOOK_PACKAGES.addCreditFor[1],
+  portrait: BOOK_PACKAGES.addCreditFor[1],
 };
 
 /** Fields of a /api/photo-coloring response that concern the wallet. */
@@ -41,6 +50,8 @@ export function useSheetUsageCredits(
     covers?: (kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "id" | "editCount">) => boolean;
     /** Called after every successful action, so what the code has left can be read again. */
     onUsage?: () => void;
+    /** The open album has a book package: the modal says the package is untouched. */
+    packageNote?: { bindingNameLower: string; photosLeft: number; ordered: boolean } | null;
   },
 ): {
   canAfford: (kind: SheetUsageKind, photo: Pick<V2PhotoEntry, "id" | "remote" | "editCount">) => boolean;
@@ -72,12 +83,14 @@ export function useSheetUsageCredits(
     return true;
   }
 
+  const pkg = opts?.packageNote ?? null;
   const addCreditModal = shortfall ? (
     <V2AddCreditModal
       onClose={() => setShortfall(null)}
       returnPath={returnPath}
       shortfallCents={shortfall.cents}
-      shortfallFor={SHORTFALL_FOR[shortfall.kind]}
+      shortfallFor={pkg ? PACKAGE_SHORTFALL_FOR[shortfall.kind] : SHORTFALL_FOR[shortfall.kind]}
+      packageNote={pkg ? packageUntouchedNote(pkg) : null}
     />
   ) : null;
 

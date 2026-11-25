@@ -16,6 +16,8 @@ export type PhotoColoringGenerateRequest = {
    * canvas, recomposing the scene, with no reframed photo made first.
    */
   pageOrientation?: ReframeTarget;
+  /** The album's design theme (already sanitized by the server). Only set for a new page. */
+  designTheme?: string | null;
 };
 
 /** Sent back when a photo that is already upright is offered for a portrait version. */
