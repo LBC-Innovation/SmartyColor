@@ -1246,8 +1246,10 @@ export function ColorfulMemoriesApp() {
         />
       ) : null}
 
-      {/* Held back while photos are still being added or drawn: the book can wait until they're all in. */}
-      {order.contentCount > 0 && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden && !uploadProgress ? (
+      {/* Held back while photos are still being added or drawn: the book can wait until they're all in.
+          Not in an album whose book is already paid for by a package or code (it has its own strip),
+          and not until that's known, so it never flashes in and out. */}
+      {order.contentCount > 0 && (!signedIn || albumCode.loaded) && !code && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden && !uploadProgress ? (
         <BookPromoCard
           pageCount={order.contentCount}
           pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
