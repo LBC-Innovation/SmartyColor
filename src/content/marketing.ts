@@ -1801,6 +1801,10 @@ export const BOOK_PACKAGES = {
   meterLeftShort: "{photosLeft} left, already paid for",
   meterLeftTiny: "{photosLeft} left",
   meterAllShort: "All included photos used",
+  // A photo past what the package covers, on its gallery card.
+  beyondCaption: "Not covered by your book",
+  beyondAdd: "Add for {pagePrice}",
+  beyondAddNoPrice: "Add for a fee",
   meterExtraChip: "Extras {pagePrice} each",
   meterDetails: "Details",
   meterAddPhotos: "Add photos",

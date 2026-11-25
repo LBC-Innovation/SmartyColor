@@ -619,6 +619,33 @@ export function ColorfulMemoriesApp() {
     };
   }
 
+  /**
+   * Package albums: photos with no page yet that the package's remaining photos don't reach, in
+   * album order. Pages already made (by the package, or paid as extras) and pages being made don't
+   * count; a page waiting or drawing outside the package takes a free slot first.
+   */
+  const beyondPackageIds = new Set<string>();
+  if (pkgCode && !pkgCode.bookOrderId) {
+    const inFlight = photos.filter((p) => !pkgCode.photos[p.id] && (p.generating || queue.job(p.id))).length;
+    let free = Math.max(0, pkgCode.bundle.includedPages - pkgCode.pagesUsed - inFlight);
+    for (const p of photos) {
+      if (pkgCode.photos[p.id]) continue;
+      const state = cardState(p);
+      if (state !== "none" && state !== "failed") continue;
+      if (free > 0) free--;
+      else beyondPackageIds.add(p.id);
+    }
+  }
+  const beyondPackage = beyondPackageIds.size
+    ? {
+        caption: BOOK_PACKAGES.beyondCaption,
+        addLabel:
+          pagePriceCents != null
+            ? (fillPackageCopy(BOOK_PACKAGES.beyondAdd, { pagePrice: formatCredits(pagePriceCents) }) ?? BOOK_PACKAGES.beyondAddNoPrice)
+            : BOOK_PACKAGES.beyondAddNoPrice,
+      }
+    : null;
+
   const cardInfo = (photo: V2PhotoEntry) => {
     const position = book.positionByPhotoId.get(photo.id);
     return {
@@ -628,6 +655,7 @@ export function ColorfulMemoriesApp() {
       leftOut: photo.printPrefs.book?.leftOut === true,
       failureMessage: queue.failures[photo.id],
       allowance: pkgCardAllowance(photo),
+      beyondPackage: beyondPackageIds.has(photo.id) ? beyondPackage : null,
     };
   };
 
