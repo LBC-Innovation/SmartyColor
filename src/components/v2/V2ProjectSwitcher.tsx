@@ -6,6 +6,7 @@ import { ChevronDown, Loader2, LogOut, Users } from "lucide-react";
 import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { AlbumSwitcherPanel, AlbumThumb } from "@/components/v2/albums/AlbumSwitcherPanel";
+import { leaveAlbum } from "@/components/v2/studio/leaveAlbumGuard";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
 import { ThemeModal } from "@/components/v2/book-packages/ThemeModal";
 import { CancelPackageModal } from "@/components/v2/book-packages/CancelPackageModal";
@@ -206,12 +207,14 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
           onClose={close}
           onCreate={() => {
             setOpen(false);
-            if (BOOK_PACKAGES_ENABLED) router.push("/studio/new");
-            else createProject();
+            leaveAlbum(() => {
+              if (BOOK_PACKAGES_ENABLED) router.push("/studio/new");
+              else createProject();
+            });
           }}
           onSwitch={(id) => {
             setOpen(false);
-            switchProject(id);
+            if (id !== activeProjectId) leaveAlbum(() => switchProject(id));
           }}
           onRename={(id, name) => {
             renameProject(id, name);

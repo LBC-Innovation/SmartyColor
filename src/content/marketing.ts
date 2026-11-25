@@ -1285,6 +1285,15 @@ export const NEW_ALBUM = {
   guide: "How it works",
 };
 
+/** Asked when someone leaves a new album without naming it or adding photos. */
+export const KEEP_ALBUM = {
+  title: "Keep this album?",
+  description: "You haven’t named it or added any photos yet. Keep it to come back to later, or let it go.",
+  keep: "Keep album",
+  discard: "Don’t keep it",
+  discardFailed: "Couldn't remove the album",
+};
+
 /** Name of a brand-new first album for visitors who arrived from a landing page. */
 export const INTENT_ALBUM_NAME: Partial<Record<LandingIntent, string>> = {
   gift: "Gift book",
