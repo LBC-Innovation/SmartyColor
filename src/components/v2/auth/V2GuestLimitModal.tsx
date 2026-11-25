@@ -6,7 +6,8 @@ import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { ACCOUNT_CREDIT_LINE, GUEST_GATES, GUEST_LIMIT } from "@/content/marketing";
 import { withNextParam } from "@/lib/auth/nextPath";
 import type { GuestLimitScope } from "@/lib/guestLimit";
-import { fillCopy, formatFreeSheets } from "@/lib/marketing/copy";
+import { fillCopy, formatFreeSheets, hasPackages, readTrackIntent } from "@/lib/marketing/copy";
+import { trackCta } from "@/lib/track";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
@@ -21,9 +22,12 @@ export function V2GuestLimitModal({
   kind: "page" | "edit";
   onClose: () => void;
 }) {
-  const freeSheets = useMarketingNumbers()?.welcomeFreeSheets ?? null;
-  const credit = freeSheets != null ? fillCopy(ACCOUNT_CREDIT_LINE, { freeSheets: formatFreeSheets(freeSheets) }) : null;
   const busy = scope === "global";
+  const numbers = useMarketingNumbers();
+  const freeSheets = numbers?.welcomeFreeSheets ?? null;
+  // A book is the other way forward, but only while a package is on sale.
+  const showBooks = hasPackages(numbers) && !busy;
+  const credit = freeSheets != null ? fillCopy(ACCOUNT_CREDIT_LINE, { freeSheets: formatFreeSheets(freeSheets) }) : null;
   const title = busy ? GUEST_LIMIT.busyTitle : kind === "edit" ? GUEST_LIMIT.editsTitle : GUEST_LIMIT.pagesTitle;
 
   return (
@@ -55,6 +59,18 @@ export function V2GuestLimitModal({
         >
           {GUEST_GATES.book.secondary}
         </Link>
+        {showBooks ? (
+          <p className="mt-1 text-sm text-v2-muted">
+            {GUEST_LIMIT.bookLine}{" "}
+            <Link
+              href="/studio/new"
+              onClick={() => trackCta("upsell", readTrackIntent(), "book")}
+              className="inline-flex min-h-11 items-center font-semibold text-v2-link underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+            >
+              {GUEST_LIMIT.bookLink}
+            </Link>
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={onClose}

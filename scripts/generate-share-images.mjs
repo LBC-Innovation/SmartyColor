@@ -74,9 +74,11 @@ async function textLine(text, { size, gradient, color = INK }) {
 /** Eyebrow, headline (plain then gradient) and logo, laid out on the left half. */
 async function textLayers(page) {
   const maxChars = Math.floor(TEXT_WIDTH / (FONT_SIZE * CHAR_EM));
+  // The book-first headline is what shares should say while packages are on sale.
+  const headline = page.bookFirst?.headline ?? page.headline;
   const lines = [
-    ...wrap(page.headline[0], maxChars).map((t) => ({ t, gradient: false })),
-    ...wrap(page.headline[1], maxChars).map((t) => ({ t, gradient: true })),
+    ...wrap(headline[0], maxChars).map((t) => ({ t, gradient: false })),
+    ...wrap(headline[1], maxChars).map((t) => ({ t, gradient: true })),
   ];
   const eyebrow = await textLine(page.eyebrow.toUpperCase(), { size: 22, color: PRIMARY });
   const rendered = await Promise.all(lines.map((l) => textLine(l.t, { size: FONT_SIZE, gradient: l.gradient })));

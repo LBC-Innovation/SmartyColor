@@ -7,12 +7,22 @@ import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
 import { useV2Studio } from "@/components/v2/V2StudioProvider";
 import { AlbumSwitcherPanel, AlbumThumb } from "@/components/v2/albums/AlbumSwitcherPanel";
 import { V2DeleteProjectConfirmModal } from "@/components/v2/V2DeleteProjectConfirmModal";
+import { ThemeModal } from "@/components/v2/book-packages/ThemeModal";
+import { CancelPackageModal } from "@/components/v2/book-packages/CancelPackageModal";
+import { BOOK_PACKAGES } from "@/content/marketing";
+import { isError } from "@/lib/api/client";
+import { fetchPackageRefundQuote } from "@/lib/bookPackages/client";
+import { fillPackageCopy } from "@/lib/bookPackages/copy";
+import type { BookPackageRefundQuote } from "@/lib/bookPackages/types";
+import { formatCredits } from "@/lib/credits/money";
+import { notifyPackageChanged } from "@/lib/bookPackages/events";
 import { V2ShareAlbumModal } from "@/components/v2/V2ShareAlbumModal";
 import { V2SendToFamilyModal } from "@/components/v2/share/V2SendToFamilyModal";
 import { V2Modal, V2ModalActions } from "@/components/v2/ui/V2Modal";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import * as library from "@/lib/library/client";
 import { cn } from "@/lib/cn";
+import { BOOK_PACKAGES_ENABLED } from "@/lib/auth/features";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 
 /**
@@ -33,15 +43,19 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
     renameProject,
     deleteProject,
     setProjectSharedCount,
+    setProjectDesignTheme,
   } = useV2Studio();
   const toast = useV2Toast();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<V2ProjectMeta | null>(null);
+  // A package album being deleted: the cancel-and-refund dialog shows instead of the plain confirm.
+  const [pkgTarget, setPkgTarget] = useState<{ project: V2ProjectMeta; quote: BookPackageRefundQuote } | null>(null);
   const [leaveTarget, setLeaveTarget] = useState<V2ProjectMeta | null>(null);
   const [busy, setBusy] = useState(false);
   const [sharing, setSharing] = useState<V2ProjectMeta | null>(null);
   const [sendingToFamily, setSendingToFamily] = useState<V2ProjectMeta | null>(null);
+  const [themeTarget, setThemeTarget] = useState<V2ProjectMeta | null>(null);
   const [covers, setCovers] = useState<Record<string, string>>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -97,6 +111,50 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
     }
   }
 
+  /**
+   * Delete from the album menu. An album holding an unspent book package opens the cancel dialog
+   * (refund first, then delete or keep); every other album gets the plain confirm.
+   */
+  async function requestDelete(p: V2ProjectMeta) {
+    if (cloud && p.role !== "contributor") {
+      const res = await fetchPackageRefundQuote(p.id);
+      if (!isError(res) && res.data?.cancelable) {
+        setPkgTarget({ project: p, quote: res.data });
+        return;
+      }
+    }
+    setDeleteTarget(p);
+  }
+
+  async function onPackageCanceled(result: { refundCents: number; deleteAlbum: boolean }) {
+    const target = pkgTarget?.project;
+    if (!target) return;
+    const refund = formatCredits(result.refundCents);
+    notifyPackageChanged(target.id);
+    if (!result.deleteAlbum) {
+      setPkgTarget(null);
+      toast.success({
+        title: BOOK_PACKAGES.cancelDoneTitle,
+        message: fillPackageCopy(BOOK_PACKAGES.cancelDoneBody, { refund }) ?? "",
+      });
+      return;
+    }
+    const wasActive = target.id === activeProjectId;
+    try {
+      await deleteProject(target.id);
+      setPkgTarget(null);
+      toast.success({
+        title: BOOK_PACKAGES.cancelDoneTitle,
+        message: fillPackageCopy(BOOK_PACKAGES.cancelDoneDeleted, { refund }) ?? "",
+      });
+      if (wasActive) router.push(SIGNED_IN_HOME);
+    } catch {
+      // The refund stands; the album stays as a normal album and can be deleted again.
+      setPkgTarget(null);
+      toast.error(fillPackageCopy(BOOK_PACKAGES.cancelDeleteFailed, { refund }) ?? "Could not delete the album.");
+    }
+  }
+
   async function confirmLeaveAlbum() {
     const target = leaveTarget;
     if (!target) return;
@@ -148,7 +206,8 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
           onClose={close}
           onCreate={() => {
             setOpen(false);
-            createProject();
+            if (BOOK_PACKAGES_ENABLED) router.push("/studio/new");
+            else createProject();
           }}
           onSwitch={(id) => {
             setOpen(false);
@@ -162,18 +221,33 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
             setOpen(false);
             setSharing(p);
           }}
+          onTheme={(p) => {
+            setOpen(false);
+            setThemeTarget(p);
+          }}
           onSendToFamily={(p) => {
             setOpen(false);
             setSendingToFamily(p);
           }}
           onDelete={(p) => {
             setOpen(false);
-            setDeleteTarget(p);
+            void requestDelete(p);
           }}
           onLeave={(p) => {
             setOpen(false);
             setLeaveTarget(p);
           }}
+        />
+      ) : null}
+
+      {pkgTarget ? (
+        <CancelPackageModal
+          albumId={pkgTarget.project.id}
+          photoCount={pkgTarget.project.photoCount}
+          initialChoice="delete"
+          quote={pkgTarget.quote}
+          onClose={() => setPkgTarget(null)}
+          onCanceled={onPackageCanceled}
         />
       ) : null}
 
@@ -202,6 +276,16 @@ export function V2ProjectSwitcher({ className }: { className?: string }) {
           projectId={sendingToFamily.id}
           projectName={sendingToFamily.name}
           onClose={() => setSendingToFamily(null)}
+        />
+      ) : null}
+
+      {themeTarget ? (
+        <ThemeModal
+          albumId={themeTarget.id}
+          albumName={themeTarget.name}
+          theme={projects.find((p) => p.id === themeTarget.id)?.designTheme ?? null}
+          onSaved={(theme) => setProjectDesignTheme(themeTarget.id, theme)}
+          onClose={() => setThemeTarget(null)}
         />
       ) : null}
 

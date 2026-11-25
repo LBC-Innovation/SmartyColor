@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { ImageIcon, ImagePlus, Info, Plus, Upload, X } from "lucide-react";
+import { useId, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { ImagePlus, Info, Plus, Upload, X } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
+import { PhotoThumb } from "@/components/v2/studio/PhotoThumb";
+import { ExtraPhotosConfirm } from "@/components/v2/book-packages/ExtraPhotosConfirm";
+import { BOOK_PACKAGES } from "@/content/marketing";
+import { fillPackageCopy } from "@/lib/bookPackages/copy";
 import { STUDIO_EMPTY } from "@/content/marketing";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
 import { fillCopy } from "@/lib/marketing/copy";
-import { isAllowedPhotoFile, isHeicFile } from "@/lib/photo/heicFile";
+import { isAllowedPhotoFile } from "@/lib/photo/heicFile";
 import { formatPhotoSizeLimit, PHOTO_UPLOAD_MAX_BYTES } from "@/lib/photo/payloadBudget";
 
 type Props = {
@@ -21,6 +25,8 @@ type Props = {
   pagePriceCents: number | null;
   /** Pages the album's purchase code still includes; null when it has no code. */
   codePagesLeft?: number | null;
+  /** The album has a book package: how many photos it still includes, and the wallet's side of extras. */
+  pkg?: { photosLeft: number; includedPhotos: number; balanceCents: number | null } | null;
   onUpload: (files: File[]) => void;
   onClose: () => void;
 };
@@ -45,37 +51,6 @@ function screen(files: File[], existing: File[]): { ok: File[]; problems: string
   return { ok, problems };
 }
 
-/** Square preview. The object URL is made and revoked with the tile; HEIC keeps the generic tile. */
-function Thumb({ file }: { file: File }) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const heic = isHeicFile(file);
-  useEffect(() => {
-    const img = imgRef.current;
-    if (heic || !img) return;
-    const url = URL.createObjectURL(file);
-    img.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [file, heic]);
-  return (
-    <>
-      <span className="absolute inset-0 flex items-center justify-center bg-v2-primary-light text-v2-primary" aria-hidden>
-        <ImageIcon className="h-6 w-6" />
-      </span>
-      {heic ? null : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          ref={imgRef}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
-      )}
-    </>
-  );
-}
-
 export function AddPhotosModal({
   initialFiles,
   signedIn,
@@ -87,12 +62,14 @@ export function AddPhotosModal({
   onUpload,
   onClose,
   codePagesLeft = null,
+  pkg = null,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [initial] = useState(() => screen(initialFiles ?? [], []));
   const [files, setFiles] = useState<File[]>(initial.ok);
   const [problems, setProblems] = useState<string[]>(initial.problems);
   const [dragging, setDragging] = useState(false);
+  const [splitting, setSplitting] = useState(false);
   const dragDepth = useRef(0);
 
   function stage(list: FileList | File[]) {
@@ -133,10 +110,21 @@ export function AddPhotosModal({
   }
 
   const count = files.length;
+  const pkgTokens = {
+    photosLeft: pkg?.photosLeft,
+    includedPhotos: pkg?.includedPhotos,
+    pagePrice: pagePriceCents != null ? formatCredits(pagePriceCents) : null,
+  };
+  const pkgLine = pkg
+    ? pkg.photosLeft > 0
+      ? fillPackageCopy(BOOK_PACKAGES.addLineLeft, pkgTokens)
+      : fillPackageCopy(BOOK_PACKAGES.addLineAll, pkgTokens)
+    : undefined;
+  const extraButton = fillPackageCopy(BOOK_PACKAGES.addButtonExtra, pkgTokens);
   const formats = fillCopy(STUDIO_EMPTY.formats, { size: formatPhotoSizeLimit(PHOTO_UPLOAD_MAX_BYTES) });
   const pageCost = signedIn
     ? codePagesLeft != null && codePagesLeft > 0
-      ? `${codePagesLeft} included with your code${pagePriceCents != null ? `, then ${formatCredits(pagePriceCents)} each extra` : ""}`
+      ? `${codePagesLeft} included with your ${pkg ? "book" : "code"}${pagePriceCents != null ? `, then ${formatCredits(pagePriceCents)} each extra` : ""}`
       : pagePriceCents != null
         ? `${formatCredits(pagePriceCents)} per page${codePagesLeft != null ? " extra" : ""}`
         : "Uses credit"
@@ -146,7 +134,9 @@ export function AddPhotosModal({
     <V2Modal
       onClose={onClose}
       maxWidthClass="max-w-lg"
-      icon={<ImagePlus />} title="Add photos"
+      icon={<ImagePlus />}
+      title={pkg && pkg.photosLeft === 0 ? BOOK_PACKAGES.addTitleAll : BOOK_PACKAGES.addTitleLeft}
+      description={pkgLine}
     >
       <input
         ref={inputRef}
@@ -183,7 +173,7 @@ export function AddPhotosModal({
           <div className="pointer-fine:hidden">
             <button type="button" onClick={openPicker} className="v2-btn-primary min-h-14 w-full text-base">
               <Upload className="h-5 w-5" aria-hidden />
-              Choose photos
+              {pkg && pkg.photosLeft === 0 ? (extraButton ?? "Add extra photos") : "Choose photos"}
             </button>
           </div>
           {/* Mouse and trackpad: a drop target. */}
@@ -221,7 +211,7 @@ export function AddPhotosModal({
             <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {files.map((file) => (
                 <li key={fileKey(file)} className="relative aspect-square overflow-hidden rounded-xl border border-gray-200 bg-white">
-                  <Thumb file={file} />
+                  <PhotoThumb file={file} />
                   <button
                     type="button"
                     onClick={() => remove(file)}
@@ -283,11 +273,27 @@ export function AddPhotosModal({
           Cancel
         </button>
         {count > 0 ? (
-          <button type="button" onClick={() => onUpload(files)} className="v2-btn-primary min-h-11 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => (pkg && count > pkg.photosLeft ? setSplitting(true) : onUpload(files))}
+            className="v2-btn-primary min-h-11 w-full sm:w-auto"
+          >
             Upload {count} {count === 1 ? "photo" : "photos"}
           </button>
         ) : null}
       </div>
+      {splitting && pkg ? (
+        <ExtraPhotosConfirm
+          files={files}
+          photosLeft={pkg.photosLeft}
+          includedPhotos={pkg.includedPhotos}
+          pagePriceCents={pagePriceCents}
+          balanceCents={pkg.balanceCents}
+          onAll={() => onUpload(files)}
+          onOnlyIncluded={() => onUpload(files.slice(0, pkg.photosLeft))}
+          onCancel={() => setSplitting(false)}
+        />
+      ) : null}
     </V2Modal>
   );
 }

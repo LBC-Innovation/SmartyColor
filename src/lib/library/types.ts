@@ -22,6 +22,8 @@ export type LibraryProject = {
   sharedCount: number;
   /** A few photo thumbnails for the album's collage; only when the list was asked for with previews. */
   previewUrls?: string[];
+  /** The album's design theme: new pages are drawn in this world. Null or absent = none. */
+  designTheme?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -122,6 +124,8 @@ export type LibraryProjectPatch = Partial<{
   generatedStory: unknown | null;
   printArtMode: string | null;
   storyPhase: string | null;
+  /** Owner only. Empty or null removes the theme. */
+  designTheme: string | null;
 }>;
 
 /** What the client sends after it has PUT the original to the signed upload URL. */

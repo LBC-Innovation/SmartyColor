@@ -11,6 +11,7 @@ import {
   FINISHED_BOOK,
   GIFT_TIMING,
   HOLIDAY_BLOCK,
+  LANDING_GIFT_STRIP,
   LANDING_PAGES,
   OCCASIONS,
   PARTNER_CONTACT,
@@ -344,45 +345,59 @@ export function ReassuranceStrip() {
  * The "why" block: an edge-to-edge split, a lifestyle photo on one half and the pitch on deep plum on
  * the other. Until the photo is ready, the real before/after takes the photo's half.
  */
-export function WhySection({ why, showBestPhotos }: { why: WhyBlock; showBestPhotos: boolean }) {
+export function WhySection({
+  why,
+  showBestPhotos,
+  plain = false,
+}: {
+  why: WhyBlock;
+  showBestPhotos: boolean;
+  /** Cream instead of plum, and only the points: no use-case pills, no photo tips (the gift page). */
+  plain?: boolean;
+}) {
   const photo = why.photo && LIFESTYLE_PHOTOS[why.photo].ready ? why.photo : null;
+  const dark = !plain;
   return (
     <section className="px-2 sm:px-3" aria-labelledby="why-title">
-      <div className="grid overflow-hidden rounded-[1.75rem] bg-v2-plum text-white lg:grid-cols-2 lg:rounded-[2.25rem]">
+      <div className={cn("grid overflow-hidden rounded-[1.75rem] lg:grid-cols-2 lg:rounded-[2.25rem]", dark ? "bg-v2-plum text-white" : "bg-v2-butter text-v2-ink")}>
         {photo ? (
           <LifestyleImage id={photo} sizes="(min-width: 1024px) 50vw, 100vw" className="aspect-[3/2] w-full lg:aspect-auto lg:h-full lg:min-h-[44rem]" />
         ) : (
-          <div className="flex items-center justify-center bg-white/[0.06] px-5 py-12 sm:px-10">
+          <div className={cn("flex items-center justify-center px-5 py-12 sm:px-10", dark ? "bg-white/[0.06]" : "bg-white/50")}>
             <BeforeAfter className="w-full max-w-sm" pair={why.example} />
           </div>
         )}
         <div className="flex flex-col justify-center px-5 py-14 sm:px-10 sm:py-20 lg:px-16 xl:px-20">
-          <SectionHeading align="left" tone="dark" eyebrow={why.eyebrow} title={why.title} body={why.body} id="why-title" />
+          <SectionHeading align="left" tone={dark ? "dark" : "light"} eyebrow={plain ? undefined : why.eyebrow} title={why.title} body={why.body} id="why-title" />
           <ul className="mt-8 space-y-5">
             {why.points.map(({ icon, title, body }) => {
               const Icon = ICONS[icon];
               return (
                 <li key={title} className="flex gap-4">
-                  <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-amber">
+                  <span className={cn("mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", dark ? "bg-white/10 text-brand-amber" : "bg-white text-v2-primary")}>
                     <Icon className="h-5 w-5" aria-hidden />
                   </span>
                   <span>
-                    <span className="block font-semibold text-white">{title}</span>
-                    <span className="block text-sm leading-relaxed text-white/75">{body}</span>
+                    <span className={cn("block font-semibold", dark ? "text-white" : "text-v2-ink")}>{title}</span>
+                    <span className={cn("block text-sm leading-relaxed", dark ? "text-white/75" : "text-v2-muted")}>{body}</span>
                   </span>
                 </li>
               );
             })}
           </ul>
-          <p className="mt-8 text-xs font-bold uppercase tracking-wider text-white/70">{why.useCasesTitle}</p>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {why.useCases.map((u) => (
-              <li key={u} className="rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-white">
-                {u}
-              </li>
-            ))}
-          </ul>
-          {showBestPhotos ? (
+          {plain ? null : (
+            <>
+              <p className="mt-8 text-xs font-bold uppercase tracking-wider text-white/70">{why.useCasesTitle}</p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {why.useCases.map((u) => (
+                  <li key={u} className="rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-white">
+                    {u}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {showBestPhotos && !plain ? (
             <div className="mt-8 rounded-2xl bg-white p-4 text-v2-ink">
               <p className="text-xs font-bold uppercase tracking-wider text-v2-muted">{BEST_PHOTOS.title}</p>
               <ul className="mt-2 space-y-1.5 text-sm text-v2-navy">
@@ -534,13 +549,13 @@ export function PartnerContactSection({ onInquiry, onStart }: { onInquiry: (loca
  * An edge-to-edge strip of lifestyle photos: the "people" moment of the page. The page's own hero
  * photo is left out. Shows once at least three are ready; on a phone it scrolls sideways.
  */
-export function PhotoBand({ exclude }: { exclude?: LifestyleId }) {
+export function PhotoBand({ exclude, surface = false }: { exclude?: LifestyleId; surface?: boolean }) {
   const ids = readyLifestyle(PHOTO_BAND.ids.filter((id) => id !== exclude));
   if (ids.length < 3) return null;
   return (
-    <section className="py-14 sm:py-20" aria-labelledby="band-title">
+    <section className={cn("py-14 sm:py-20", surface && "bg-white")} aria-labelledby="band-title">
       <div className="v2-gutter-x mx-auto w-full max-w-7xl">
-        <SectionHeading eyebrow={PHOTO_BAND.eyebrow} title={PHOTO_BAND.title} body={PHOTO_BAND.body} id="band-title" />
+        <SectionHeading title={PHOTO_BAND.title} id="band-title" />
       </div>
       <ul
         className="mt-10 flex snap-x snap-mandatory gap-2 overflow-x-auto px-2 pb-1 sm:mt-12 sm:gap-3 sm:px-3 lg:grid lg:overflow-visible lg:pb-0"
@@ -557,6 +572,37 @@ export function PhotoBand({ exclude }: { exclude?: LifestyleId }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * The homepage's gift strip: one row (photo, a line, a link) that sends gift buyers to /gift. It
+ * replaces the old occasion cards, so there is no card grid and no second pitch on the page.
+ */
+export function GiftStrip({ values }: { values: CopyValues }) {
+  const body = fillCopy(LANDING_GIFT_STRIP.body, values);
+  const photo = LIFESTYLE_PHOTOS["kitchen-table"].ready ? "kitchen-table" : null;
+  return (
+    <section className="v2-gutter-x mx-auto w-full max-w-5xl py-14 sm:py-20" aria-labelledby="gift-strip-title">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:gap-8">
+        {photo ? (
+          <LifestyleImage id={photo} sizes="(min-width: 1024px) 256px, 100vw" className="aspect-[3/2] w-full rounded-2xl lg:w-64 lg:shrink-0" />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <h2 id="gift-strip-title" className="v2-brand-title text-2xl text-v2-ink sm:text-3xl">
+            {LANDING_GIFT_STRIP.title}
+          </h2>
+          {body ? <p className="mt-2 text-sm text-v2-muted sm:text-base">{body}</p> : null}
+        </div>
+        <Link
+          href={LANDING_GIFT_STRIP.href}
+          onClick={() => trackCta("occasion", "gift")}
+          className="v2-btn-outline min-h-11 w-full shrink-0 px-6 text-center lg:w-auto"
+        >
+          {LANDING_GIFT_STRIP.link}
+        </Link>
+      </div>
     </section>
   );
 }

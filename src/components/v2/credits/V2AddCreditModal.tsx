@@ -1,6 +1,6 @@
 "use client";
 
-import { Wallet } from "lucide-react";
+import { ShieldCheck, Wallet } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { V2AddCreditForm } from "@/components/v2/credits/V2AddCreditForm";
 import { useAuth } from "@/context/AuthContext";
@@ -14,10 +14,12 @@ type Props = {
   shortfallCents?: number | null;
   /** What the shortfall is for, e.g. "this book". */
   shortfallFor?: string;
+  /** In an album with a book package: says the package is untouched (null = no note). */
+  packageNote?: string | null;
 };
 
 /** Pick an amount, then hand off to Stripe Checkout for card entry. */
-export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfallFor = "this book" }: Props) {
+export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfallFor = "this book", packageNote }: Props) {
   const { user } = useAuth();
   const balance = user?.creditsBalanceCents ?? 0;
 
@@ -42,6 +44,12 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfal
       }
     >
       <div className="px-5 pb-6 pt-1 sm:px-7">
+        {packageNote ? (
+          <p className="mb-4 flex items-start gap-2 rounded-xl border border-v2-success-border bg-v2-success-bg p-3 text-sm text-v2-success-text">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>{packageNote}</span>
+          </p>
+        ) : null}
         <V2AddCreditForm returnPath={returnPath} suggestedCents={shortfallCents} />
       </div>
     </V2Modal>

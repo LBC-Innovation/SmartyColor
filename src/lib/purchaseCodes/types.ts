@@ -82,6 +82,14 @@ export type AlbumPurchaseCode = {
   code: string;
   campaign: string;
   bundle: PurchaseCodeBundle;
+  /** admin = a gift code; package = a book the customer bought for this album. */
+  source: "admin" | "package";
+  /** False for packages: shipping (and its tax) is paid from the wallet. */
+  shippingIncluded: boolean;
+  /** What the customer paid, for packages. */
+  packagePriceCents: number | null;
+  /** The person looking is the one who redeemed or bought it (only they can cancel a package). */
+  isBuyer: boolean;
   pagesUsed: number;
   /** Photos the code is paying for, by photo id. */
   photos: Record<string, PurchaseCodePhotoUse>;

@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowRight, Check, ImagePlus, Pencil, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, Check, ImagePlus, Palette, Pencil, ShieldCheck, Sparkles } from "lucide-react";
+import { WizardProgress } from "@/components/v2/book-packages/WizardProgress";
+import { BOOK_PACKAGES } from "@/content/marketing";
+import { fillPackageCopy, packageTokens } from "@/lib/bookPackages/copy";
+import type { AlbumPurchaseCode } from "@/lib/purchaseCodes/types";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
 import { BEST_PHOTOS, NEW_ALBUM, STUDIO_EMPTY } from "@/content/marketing";
 import { PLACEHOLDER_ALBUM_NAME, isAutomaticAlbumName } from "@/components/v2/studio/albumNames";
@@ -25,6 +29,14 @@ type Props = {
   line: string;
   /** Signed out: photos stay on this device, so say so. */
   guest: boolean;
+  /** The album holds a book package: shows what it includes, the theme, and how many photos are left. */
+  pkg?: {
+    code: AlbumPurchaseCode;
+    photosLeft: number;
+    theme: string | null;
+    canEditTheme: boolean;
+    onEditTheme: () => void;
+  } | null;
 };
 
 function suggestions(): string[] {
@@ -37,7 +49,7 @@ function suggestions(): string[] {
  * first photos. An example pair beside it shows what a photo becomes, with a few photo tips.
  * Give it `key={albumId}`, so opening another empty album starts over from that album's name.
  */
-export function StudioEmptyAlbum({ albumName, canRename, onRename, onChoose, onFiles, onHowItWorks, line, guest }: Props) {
+export function StudioEmptyAlbum({ albumName, canRename, onRename, onChoose, onFiles, onHowItWorks, line, guest, pkg }: Props) {
   const automatic = canRename && isAutomaticAlbumName(albumName);
   const [editing, setEditing] = useState(automatic);
   // A placeholder ("Album 3") starts the field empty; a landing-page name ("Gift book") is kept to edit.
@@ -77,6 +89,21 @@ export function StudioEmptyAlbum({ albumName, canRename, onRename, onChoose, onF
     }
   }
 
+  const pkgTokens = pkg
+    ? {
+        ...packageTokens({
+          bindingId: pkg.code.bundle.bindingId,
+          includedPhotos: pkg.code.bundle.includedPages,
+          editsPerPhoto: pkg.code.bundle.editsPerPage,
+        }),
+        photosLeft: pkg.photosLeft,
+      }
+    : null;
+  // Slots never come back when a photo is deleted, so an empty package album can have none left.
+  const pkgUsedUp = pkg != null && pkg.photosLeft <= 0;
+  const dropLine = pkgTokens
+    ? (fillPackageCopy(pkgUsedUp ? BOOK_PACKAGES.landingPickNone : BOOK_PACKAGES.landingPick, pkgTokens) ?? line)
+    : line;
   const named = !editing && !automatic;
   const dropTitle = named ? NEW_ALBUM.dropTitleNamed.replace("{name}", albumName) : NEW_ALBUM.dropTitle;
 
@@ -90,6 +117,7 @@ export function StudioEmptyAlbum({ albumName, canRename, onRename, onChoose, onF
       <div className="relative grid gap-10 p-5 sm:p-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-14 lg:p-12">
         {/* ---- Name, then photos ---- */}
         <div className="flex min-w-0 flex-col gap-8">
+          {pkg ? <WizardProgress step={4} className="-mb-2" /> : null}
           <div>
             {named ? (
               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -174,13 +202,41 @@ export function StudioEmptyAlbum({ albumName, canRename, onRename, onChoose, onF
             )}
           </div>
 
+          {pkg && pkgTokens ? (
+            <div className="-mt-2 space-y-2">
+              <div className="rounded-xl border border-v2-success-border bg-v2-success-bg p-3 text-v2-success-text">
+                <p className="flex items-center gap-1.5 text-sm font-bold">
+                  <Check className="h-4 w-4" strokeWidth={3} aria-hidden />
+                  {fillPackageCopy(pkgUsedUp ? BOOK_PACKAGES.meterAllMain : BOOK_PACKAGES.landingIncluded, pkgTokens)}
+                </p>
+                <p className="mt-0.5 text-sm">
+                  {fillPackageCopy(
+                    pkg.code.bundle.editsPerPage > 0 ? BOOK_PACKAGES.landingSub : "{bindingName}",
+                    pkgTokens,
+                  )}
+                </p>
+              </div>
+              {pkg.canEditTheme ? (
+                <p className="flex min-w-0 items-center gap-2 text-sm text-v2-muted">
+                  <Palette className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
+                  <span className="min-w-0 truncate" title={pkg.theme ?? undefined}>
+                    {pkg.theme ? fillPackageCopy(BOOK_PACKAGES.themeRowSet, { theme: pkg.theme }) : BOOK_PACKAGES.themeRowNone}
+                  </span>
+                  <button type="button" onClick={pkg.onEditTheme} className="v2-hit-y shrink-0 font-semibold text-v2-link">
+                    {pkg.theme ? BOOK_PACKAGES.themeChange : BOOK_PACKAGES.themeAdd}
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <V2UploadDropzone
             className="!flex-none rounded-2xl !border-v2-primary/20 !bg-v2-primary-light/40"
             onFiles={(files) => onFiles(Array.from(files))}
           >
             <div className="flex flex-col items-center px-5 py-10 text-center sm:px-8 sm:py-12">
               <h3 className="v2-brand-title text-xl text-v2-ink sm:text-2xl">{dropTitle}</h3>
-              <p className="mx-auto mt-1.5 max-w-sm text-sm text-v2-muted">{line}</p>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm text-v2-muted">{dropLine}</p>
               <button type="button" onClick={onChoose} className="v2-btn-primary v2-radiate mt-6 min-h-12 w-full max-w-xs text-base">
                 <ImagePlus className="h-5 w-5" aria-hidden />
                 {NEW_ALBUM.button}

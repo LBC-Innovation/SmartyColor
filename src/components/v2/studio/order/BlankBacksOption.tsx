@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, NotebookPen, Square } from "lucide-react";
+import { BOOK_PACKAGES } from "@/content/marketing";
 import { formatCredits } from "@/lib/credits/money";
 import { cn } from "@/lib/cn";
 import type { BookOrder } from "@/components/v2/studio/order/useBookOrder";
@@ -19,9 +20,12 @@ export function BlankBacksOption({ order, className }: { order: BookOrder; class
       ? "Each picture prints on its own sheet, with writing lines on the back for a journal or notes."
       : "Each picture prints on its own sheet, so markers can't bleed through onto the next one."
     : "Pictures print on both sides of the paper, so markers can bleed through.";
-  const money =
-    // The album's purchase code includes blank or lined backs, so there is nothing to save or add.
-    order.purchaseCode?.bundle.backsIncluded
+  // A package is bought on the promise that each photo gets its own page with a blank back.
+  const packageLocked = order.albumPurchaseCode?.source === "package" && !order.isDigital && order.bindingId === order.albumPurchaseCode.bundle.bindingId;
+  // An album's purchase code includes blank or lined backs, so there is nothing to save or add.
+  const money = packageLocked
+    ? BOOK_PACKAGES.orderBlankBacksLocked
+    : order.purchaseCode?.bundle.backsIncluded
       ? "Included with your code."
       : extra != null && extra > 0
         ? on
@@ -39,7 +43,7 @@ export function BlankBacksOption({ order, className }: { order: BookOrder; class
   return (
     <div className={className ?? "rounded-xl border border-gray-200 bg-v2-bg-subtle/60 p-3"}>
       <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-v2-navy">
-        <input type="checkbox" className="h-5 w-5" checked={on} onChange={(e) => order.chooseBlankBacks(e.target.checked)} />
+        <input type="checkbox" className="h-5 w-5" checked={on} disabled={packageLocked && on} onChange={(e) => order.chooseBlankBacks(e.target.checked)} />
         Leave the back of each page blank
         {on ? (
           <span className="rounded-full bg-v2-primary-light px-1.5 py-0.5 text-[10px] font-semibold text-v2-link">Recommended</span>

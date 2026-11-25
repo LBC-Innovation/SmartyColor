@@ -32,6 +32,7 @@ import { failSignedUpload, finishSignedUpload, startSignedUpload } from "@/serve
 import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } from "@/server/libraryAccess";
 import { mirrorImageBytes } from "@/lib/photo/mirrorImageServer";
 import { mirrorPhotoCrop, type PhotoCropRect } from "@/lib/v2/storybookTypes";
+import { checkDesignTheme, sanitizeDesignTheme } from "@/lib/designTheme";
 
 type Row = Record<string, unknown>;
 const err = (message: string, code?: string): ApiResult<never> => ({ data: null, error: { message, ...(code ? { code } : {}) } });
@@ -148,6 +149,7 @@ function baseProjectFromRow(row: Row, photoCount: number): Omit<LibraryProject, 
     generatedStory: row.generated_story ?? null,
     printArtMode: (row.print_art_mode as string | null) ?? null,
     storyPhase: (row.story_phase as string | null) ?? null,
+    designTheme: (row.design_theme as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -273,6 +275,17 @@ export async function createProject(userId: string, name: string): Promise<ApiRe
   return { data: projectFromRow(data, 0), error: null };
 }
 
+/** The album's design theme for drawing a new page; null when there is none. Server-side only. */
+export async function getAlbumDesignTheme(projectId: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("library_projects")
+    .select("design_theme")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return sanitizeDesignTheme(data.design_theme);
+}
+
 export async function updateProject(
   userId: string,
   projectId: string,
@@ -292,6 +305,11 @@ export async function updateProject(
   if (patch.generatedStory !== undefined) update.generated_story = patch.generatedStory;
   if (patch.printArtMode !== undefined) update.print_art_mode = patch.printArtMode;
   if (patch.storyPhase !== undefined) update.story_phase = patch.storyPhase;
+  if (patch.designTheme !== undefined) {
+    const checked = checkDesignTheme(patch.designTheme);
+    if (checked.error) return checked;
+    update.design_theme = checked.data;
+  }
 
   const { data, error } = await db()
     .from("library_projects")
@@ -355,6 +373,24 @@ async function updateContributorView(
 
 /** Deletes the project row (cascades photos/revisions/shares) and every file under it. Owner only. */
 export async function deleteProject(userId: string, projectId: string): Promise<ApiResult<{ id: string }>> {
+  // A paid book package lives on its album. A plain delete would strand what the customer paid for
+  // (project_id goes null), so it is refused; the app cancels the package first, which refunds its
+  // unused value to the wallet and voids it (POST /api/library/projects/[id]/package-refund).
+  const { data: pkg, error: pkgError } = await db()
+    .from("purchase_codes")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("source", "package")
+    .eq("status", "active")
+    .is("book_order_id", null)
+    .maybeSingle();
+  if (pkgError) return err(pkgError.message);
+  if (pkg) {
+    return err(
+      "This album holds your book package. Cancel the package to get its unused value back, then the album can be deleted.",
+      "PACKAGE_ALBUM",
+    );
+  }
   const { count: photoCount } = await db()
     .from("library_photos")
     .select("id", { count: "exact", head: true })

@@ -11,6 +11,7 @@ const FOOTER_LINK =
 export function MarketingFooter({ stickyCta = false }: { stickyCta?: boolean }) {
   return (
     <footer className={cn("border-t border-gray-200 bg-white py-6", stickyCta && "pb-28 lg:pb-6")}>
+      <p className="v2-gutter-x mx-auto mb-4 w-full max-w-6xl text-center text-sm font-semibold text-v2-ink lg:text-left">{FOOTER.brandLine}</p>
       <div className="v2-gutter-x mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 text-xs text-v2-muted lg:flex-row">
         <span>
           © {new Date().getFullYear()} {FOOTER.copyright}

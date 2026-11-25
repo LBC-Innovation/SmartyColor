@@ -268,7 +268,7 @@ export function createPhotoHandlers(): Pick<
       const photo = await photoForModel(parsePhotoDataUrl(input.photoDataUrl));
       const layout = await layoutForPhotoBytes(photo.bytes, input.printPrefs, input.image);
       const canvas = pageCanvas(layout, input.pageOrientation);
-      const prompt = buildPhotoColoringPrompt(input.printPrefs, layout, canvas);
+      const prompt = buildPhotoColoringPrompt(input.printPrefs, layout, canvas, input.designTheme);
       const reshaped = canvas.orientation !== layout.orientation;
 
       return drawFromReferences(
@@ -278,7 +278,9 @@ export function createPhotoHandlers(): Pick<
           {
             base64: photo.base64,
             mediaType: photo.mediaType,
-            caption: reshaped
+            caption: input.designTheme
+              ? `REFERENCE PHOTOGRAPH — the people in it (how many, their faces, hair, expressions, poses and arrangement) must carry over exactly; the setting, costumes and drawing style follow the DESIGN THEME in the instructions. Outlines only: never fill regions with solid black.`
+              : reshaped
               ? `REFERENCE PHOTOGRAPH — draw every person and key object in it faithfully, recomposed for a ${canvas.orientation} page as the canvas rules say. Outlines only: never fill regions with solid black. Do not add people, objects, or background scribbles.`
               : "REFERENCE PHOTOGRAPH — trace the FULL frame faithfully (all people, full width). Outlines only: never fill regions with solid black. Do not zoom, crop, or add background scribbles.",
           },

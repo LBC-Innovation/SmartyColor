@@ -5,7 +5,7 @@ import { holidayOrderBy } from "@/lib/marketing/holiday";
 import { getMarketingNumbers } from "@/server/marketing/marketingNumbers";
 import { HERO_PHOTO_SIZES, heroImage } from "@/lib/marketing/heroImage";
 import { V2LandingPage } from "@/components/v2/marketing/V2LandingPage";
-import { landingFaq, landingValues } from "@/lib/marketing/landingValues";
+import { isBookFirst, landingFaq, landingValues } from "@/lib/marketing/landingValues";
 
 /** Title, description, canonical URL and share image for one landing page. */
 export function landingMetadata(intent: LandingIntent): Metadata {
@@ -35,7 +35,7 @@ export async function LandingRoute({ intent }: { intent: LandingIntent }) {
   preload(hero.src, { as: "image", fetchPriority: "high", imageSrcSet: hero.srcSet, imageSizes: HERO_PHOTO_SIZES });
   const numbers = await getMarketingNumbers();
   const holiday = holidayOrderBy();
-  const faq = landingFaq(intent, landingValues(numbers, holiday?.label ?? null));
+  const faq = landingFaq(intent, landingValues(numbers, holiday?.label ?? null), isBookFirst(intent, numbers));
   return (
     <>
       <V2LandingPage intent={intent} numbers={numbers} holiday={holiday} />

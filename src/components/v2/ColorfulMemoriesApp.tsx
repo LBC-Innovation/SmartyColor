@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BookOpen, Check, Download, FolderInput, Loader2, Minus, Pencil, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { cn } from "@/lib/cn";
@@ -54,6 +54,15 @@ import type { QuickFixKind } from "@/lib/photo/sheetQuickFixes";
 import { usePriceList } from "@/lib/pricing/usePriceList";
 import { codeCoversAction, newPagesCovered } from "@/lib/purchaseCodes/types";
 import { AlbumCodeBanner } from "@/components/v2/redeem/AlbumCodeBanner";
+import { PackageMeter } from "@/components/v2/book-packages/PackageMeter";
+import { ThemeModal } from "@/components/v2/book-packages/ThemeModal";
+import { CancelPackageModal } from "@/components/v2/book-packages/CancelPackageModal";
+import { PACKAGE_CHANGED_EVENT, notifyPackageChanged } from "@/lib/bookPackages/events";
+import { SIGNED_IN_HOME } from "@/components/v2/nav-config";
+import { isPackageCode, packagePhotosLeft, touchUpsLeft } from "@/lib/bookPackages/allowance";
+import { fillPackageCopy, packageTokens, packageUntouchedNote } from "@/lib/bookPackages/copy";
+import { packageEditNotice } from "@/lib/bookPackages/notices";
+import { BOOK_PACKAGES } from "@/content/marketing";
 import { useAlbumPurchaseCode } from "@/components/v2/redeem/useAlbumPurchaseCode";
 import { photoOrientation, type V2PhotoEntry } from "@/lib/v2/studioTypes";
 
@@ -144,6 +153,7 @@ function useIsDesktop() {
  */
 export function ColorfulMemoriesApp() {
   const toast = useV2Toast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const welcomeGuide = useV2WelcomeGuide();
   const prices = usePriceList();
@@ -159,7 +169,9 @@ export function ColorfulMemoriesApp() {
     renameActiveProject,
     switchProject,
     refreshActiveProject,
+    setProjectDesignTheme,
     upsertProject,
+    deleteProject,
     photos,
     photosRef,
     pendingUploads,
@@ -188,11 +200,36 @@ export function ColorfulMemoriesApp() {
   // The album's purchase code, if it has one: it pays for its included pages, edits and book first.
   const albumCode = useAlbumPurchaseCode(signedIn ? activeProjectId : null);
   const code = albumCode.code;
+  // A book package is a code the customer bought: same allowance, its own wording, shipping not included.
+  const pkgCode = isPackageCode(code) ? code : null;
+  const pkgTokens = pkgCode
+    ? packageTokens({
+        bindingId: pkgCode.bundle.bindingId,
+        includedPhotos: pkgCode.bundle.includedPages,
+        editsPerPhoto: pkgCode.bundle.editsPerPage,
+      })
+    : null;
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [cancelPkgOpen, setCancelPkgOpen] = useState(false);
+  // A package canceled elsewhere (the album menu): re-read the allowance so the meter goes away.
+  const refreshAlbumCode = albumCode.refresh;
+  useEffect(() => {
+    const onChanged = () => refreshAlbumCode();
+    window.addEventListener(PACKAGE_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PACKAGE_CHANGED_EVENT, onChanged);
+  }, [refreshAlbumCode]);
   // The order panel handles the return from adding credit, so it can finish the purchase.
   const sheetCredits = useSheetUsageCredits("/studio", {
     handleCheckoutReturn: false,
     covers: (kind, photo) => codeCoversAction(code, kind, photo),
     onUsage: albumCode.refresh,
+    packageNote: pkgCode
+      ? {
+          bindingNameLower: String(pkgTokens?.bindingNameLower ?? ""),
+          photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
+          ordered: Boolean(pkgCode.bookOrderId),
+        }
+      : null,
   });
   const [guestLimit, setGuestLimit] = useState<{ scope: GuestLimitScope; kind: "page" | "edit" } | null>(null);
   const guestLimitShownRef = useRef(false);
@@ -255,7 +292,7 @@ export function ColorfulMemoriesApp() {
     const included = Math.min(count, newPagesCovered(code));
     const paid = count - included;
     if (!code) return formatCredits(pagePriceCents * count);
-    if (paid === 0) return "included with your code";
+    if (paid === 0) return pkgCode ? BOOK_PACKAGES.restIncluded : "included with your code";
     return included > 0
       ? `${included} included, ${formatCredits(pagePriceCents * paid)} extra`
       : `${formatCredits(pagePriceCents * paid)} extra`;
@@ -530,7 +567,10 @@ export function ColorfulMemoriesApp() {
   }
 
   // ---- deleting and selecting -----------------------------------------------------------
-  const deletion = useV2LibraryDeletion();
+  const deletion = useV2LibraryDeletion({
+    // A package's included slot is never freed by deleting its photo: say so before it happens.
+    note: (ids) => (pkgCode && ids.some((id) => pkgCode.photos[id]) ? BOOK_PACKAGES.deleteNote : null),
+  });
   const [arrangeOpen, setArrangeOpen] = useState(false);
   const [bulk, setBulk] = useState<"move" | "download" | null>(null);
   const selectedPhotos = photos.filter((p) => deletion.selectedIds.has(p.id));
@@ -550,6 +590,22 @@ export function ColorfulMemoriesApp() {
     return "none";
   }
   const giftOffset = order.giftNotePage ? 1 : 0;
+  /** Package albums: what each finished page's allowance is, under its card. */
+  function pkgCardAllowance(photo: V2PhotoEntry): { text: string; extra: boolean } | null {
+    if (!pkgCode || !photo.remote || cardState(photo) !== "ready") return null;
+    const left = touchUpsLeft(pkgCode, photo);
+    if (left == null) return { text: BOOK_PACKAGES.extraPage, extra: true };
+    if (pkgCode.bundle.editsPerPage === 0) return null;
+    if (left === 0) return { text: BOOK_PACKAGES.touchUpsUsed, extra: false };
+    return {
+      text:
+        left === 1
+          ? BOOK_PACKAGES.oneTouchUpLeft
+          : (fillPackageCopy(BOOK_PACKAGES.touchUpsLeft, { touchUpsLeft: left }) ?? BOOK_PACKAGES.touchUpsUsed),
+      extra: false,
+    };
+  }
+
   const cardInfo = (photo: V2PhotoEntry) => {
     const position = book.positionByPhotoId.get(photo.id);
     return {
@@ -558,6 +614,7 @@ export function ColorfulMemoriesApp() {
       bookNumber: (bookOpen || order.started) && position != null ? position + giftOffset : null,
       leftOut: photo.printPrefs.book?.leftOut === true,
       failureMessage: queue.failures[photo.id],
+      allowance: pkgCardAllowance(photo),
     };
   };
 
@@ -715,6 +772,9 @@ export function ColorfulMemoriesApp() {
   // What the next edit in the chat will cost, said under the box so a paid edit is never a surprise.
   const editNotice = (() => {
     if (!editorPhoto?.remote || !signedIn || !prices) return null;
+    if (pkgCode) {
+      return packageEditNotice(pkgCode, editorPhoto, sheetUsageCostCents(prices, "edit", Number.MAX_SAFE_INTEGER));
+    }
     if (code) {
       const paidCents = sheetUsageCostCents(prices, "edit", Number.MAX_SAFE_INTEGER);
       const paid = paidCents != null ? formatCredits(paidCents) : null;
@@ -768,7 +828,13 @@ export function ColorfulMemoriesApp() {
           ? formatCredits(pagePriceCents)
           : null;
   const bookPriceLabel =
-    order.signedIn && order.purchaseCode && order.dueCents != null && !order.quoteLoading
+    order.signedIn && pkgCode && order.purchaseCode && !order.isDigital
+      ? order.quoteLoading || order.dueCents == null || !order.addressComplete
+        ? BOOK_PACKAGES.orderButtonPrintingIncludedShipping
+        : order.dueCents - (order.shippingCents ?? 0) - (order.taxCents ?? 0) <= 0
+          ? BOOK_PACKAGES.orderButtonPrintingIncluded
+          : `${formatCredits(order.dueCents)} extra`
+    : order.signedIn && order.purchaseCode && order.dueCents != null && !order.quoteLoading
       ? order.dueCents === 0
         ? "Included"
         : `${formatCredits(order.dueCents)} extra`
@@ -809,6 +875,15 @@ export function ColorfulMemoriesApp() {
             onAutoPortraitChange={setAutoPortrait}
             pagePriceCents={pagePriceCents}
             codePagesLeft={code ? newPagesCovered(code) : null}
+            pkg={
+              pkgCode
+                ? {
+                    photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
+                    includedPhotos: pkgCode.bundle.includedPages,
+                    balanceCents,
+                  }
+                : null
+            }
             onClose={() => setAddPhotos(null)}
             onUpload={(files) => {
               setAddPhotos(null);
@@ -829,6 +904,14 @@ export function ColorfulMemoriesApp() {
             photoCount={photos.length}
             uploading={uploading}
             onAddPhotos={() => setAddPhotos({ files: [] })}
+            pkgAdd={
+              pkgCode
+                ? {
+                    photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
+                    priceLabel: pagePriceCents != null ? formatCredits(pagePriceCents) : null,
+                  }
+                : null
+            }
             onSelectPhotos={deletion.enter}
             selectDisabled={activeCount > 0}
             selecting={deletion.active}
@@ -862,7 +945,22 @@ export function ColorfulMemoriesApp() {
             onDrop={onDrop}
           >
             <div className="space-y-3">
-              {code && !deletion.active ? (
+              {pkgCode && activeProjectId && !deletion.active ? (
+                <PackageMeter
+                  code={pkgCode}
+                  inFlight={photos.filter((p) => !pkgCode.photos[p.id] && queue.job(p.id)).length}
+                  pagePriceCents={pagePriceCents}
+                  theme={activeProject?.designTheme ?? null}
+                  canEditTheme={activeProject?.role !== "contributor"}
+                  onAddPhotos={() => setAddPhotos({ files: [] })}
+                  onOrderBook={openBook}
+                  onEditTheme={() => setThemeOpen(true)}
+                  onCancelPackage={
+                    pkgCode.isBuyer && !pkgCode.bookOrderId ? () => setCancelPkgOpen(true) : undefined
+                  }
+                  canOrder={hasBookPage}
+                />
+              ) : code && !pkgCode && !deletion.active ? (
                 <AlbumCodeBanner
                   code={code}
                   photoCount={photos.length}
@@ -962,6 +1060,17 @@ export function ColorfulMemoriesApp() {
                   onHowItWorks={welcomeGuide.open}
                   line={STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}
                   guest={!cloud}
+                  pkg={
+                    pkgCode
+                      ? {
+                          code: pkgCode,
+                          photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
+                          theme: activeProject?.designTheme ?? null,
+                          canEditTheme: activeProject?.role !== "contributor",
+                          onEditTheme: () => setThemeOpen(true),
+                        }
+                      : null
+                  }
                 />
               ) : (
                 <StudioGallery
@@ -1307,10 +1416,61 @@ export function ColorfulMemoriesApp() {
           onClose={() => setAddCreditFor(null)}
           returnPath="/studio"
           shortfallCents={addCreditFor || null}
-          shortfallFor="these pages"
+          shortfallFor={pkgCode ? BOOK_PACKAGES.addCreditFor[2] : "these pages"}
+          packageNote={
+            pkgCode
+              ? packageUntouchedNote({
+                  bindingNameLower: String(pkgTokens?.bindingNameLower ?? ""),
+                  photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
+                  ordered: Boolean(pkgCode.bookOrderId),
+                })
+              : null
+          }
         />
       ) : null}
       {sheetCredits.addCreditModal}
+      {cancelPkgOpen && activeProjectId ? (
+        <CancelPackageModal
+          albumId={activeProjectId}
+          photoCount={photos.length}
+          initialChoice="keep"
+          onClose={() => setCancelPkgOpen(false)}
+          onCanceled={async ({ refundCents, deleteAlbum }) => {
+            const refund = formatCredits(refundCents);
+            const albumId = activeProjectId;
+            notifyPackageChanged(albumId);
+            if (!deleteAlbum) {
+              setCancelPkgOpen(false);
+              toast.success({
+                title: BOOK_PACKAGES.cancelDoneTitle,
+                message: fillPackageCopy(BOOK_PACKAGES.cancelDoneBody, { refund }) ?? "",
+              });
+              return;
+            }
+            try {
+              await deleteProject(albumId);
+              setCancelPkgOpen(false);
+              toast.success({
+                title: BOOK_PACKAGES.cancelDoneTitle,
+                message: fillPackageCopy(BOOK_PACKAGES.cancelDoneDeleted, { refund }) ?? "",
+              });
+              router.push(SIGNED_IN_HOME);
+            } catch {
+              setCancelPkgOpen(false);
+              toast.error(fillPackageCopy(BOOK_PACKAGES.cancelDeleteFailed, { refund }) ?? "Could not delete the album.");
+            }
+          }}
+        />
+      ) : null}
+      {themeOpen && activeProjectId ? (
+        <ThemeModal
+          albumId={activeProjectId}
+          albumName={activeProject?.name ?? "Album"}
+          theme={activeProject?.designTheme ?? null}
+          onSaved={(theme) => setProjectDesignTheme(activeProjectId, theme)}
+          onClose={() => setThemeOpen(false)}
+        />
+      ) : null}
       {guestLimit ? (
         <V2GuestLimitModal scope={guestLimit.scope} kind={guestLimit.kind} onClose={() => setGuestLimit(null)} />
       ) : null}

@@ -50,3 +50,10 @@ export function homePathFor(access: FeatureAccess): string {
   const first = PRODUCT_FEATURES.find((f) => access[f.key]);
   return first?.href ?? PRODUCT_FEATURES[0].href;
 }
+
+/**
+ * Feature switch for the "start with the book" new-album screen (/studio/new). On unless
+ * NEXT_PUBLIC_BOOK_PACKAGES is "off". Even when on, with no active priced package every
+ * "New album" keeps the old behavior (see src/server/bookPackagesService.ts).
+ */
+export const BOOK_PACKAGES_ENABLED = process.env.NEXT_PUBLIC_BOOK_PACKAGES !== "off";

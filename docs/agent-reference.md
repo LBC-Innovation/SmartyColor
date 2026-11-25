@@ -28,7 +28,7 @@ then fix this document.
 |---|---|
 | Framework | Next.js 16, React 19, Tailwind 4, TypeScript |
 | Backend | Supabase (auth, Postgres, storage). Project ref `dltkblbezsfjoadgpjga` |
-| Payments | Stripe, used only to top up a credit wallet |
+| Payments | Stripe: top up a credit wallet, or buy a book package (card money goes to the package, never the wallet) |
 | Printing | Lulu print API (see section 9, it is not fully wired) |
 | Image model | Google Gemini, called from the server |
 | Email | Resend |
@@ -114,7 +114,7 @@ robots allow list, homepage cards and footer. Flip `ready` to `true` in `LANDING
 
 **Account pages:** `/sign-in`, `/sign-up`, `/forgot-password`, `/reset-password`.
 
-**App pages:** `/studio` (make pages), `/studio/order` (book wizard), `/home` (signed-in home),
+**App pages:** `/studio` (make pages), `/studio/new` (start with the book: pick a package or just make pages), `/studio/order` (book wizard), `/home` (signed-in home),
 `/orders`, `/orders/[id]`, `/account`, `/activity`, `/storybook` (locked), `/p/[token]` (shared page).
 
 **Admin pages:** `/admin/users`, `/admin/finance`, `/admin/pricing`, `/admin/promo-credits`,
@@ -239,6 +239,59 @@ Files: `src/components/v2/book-order/V2BookOrderWizard.tsx` (1800+ lines, the wh
 `src/components/v2/orders/BookOrderCheckoutPanel.tsx`, `src/lib/print/bookBindings.ts`,
 `src/server/ordersService.ts`, `src/app/api/orders/*`.
 
+### 5.8 Book packages and design themes (branch `feat/book-packages`)
+
+A **Book Package** is a purchase code (section 5.5's wallet is a different thing) that the customer
+buys for themselves: N photo pages, E free touch-ups per page and the printing of one book in one
+binding, bound to one album. It reuses the purchase-code machinery
+(`purchase_code_covers`, `charge_photo_usage`, `place_book_order_with_credits`, the cancel trigger)
+and adds no second allowance system. **Package money is never wallet money.**
+
+1. "New album" (home tile, album menu) goes to `/studio/new`. With the switch off
+   (`NEXT_PUBLIC_BOOK_PACKAGES=off`) or no active priced package, it falls straight through to the
+   old behavior (an album named "Album N").
+2. **Book:** one tile per package from `GET /api/book-packages`, plus a fourth card, "Print as you go" (the pay-per-page album; picture `public/marketing/print-as-you-go.webp`, a drawn printer until it exists).
+3. **Pay:** summary of what is and is not included (shipping never is). Guests see `V2GuestGate`
+   and come back to `/studio/new?book=...&step=pay` after sign-up. Signed in: pay from credit
+   (`POST /api/book-packages/buy`, one SQL transaction) or by card (`POST /api/book-packages/checkout`
+   then Stripe, return to `/studio/new?step=paid&session_id=...`, `POST /api/book-packages/confirm`;
+   the Stripe webhook has a `kind=book_package` branch). Both card paths call the idempotent
+   `create_book_package_from_stripe`.
+4. **Theme** (optional): `library_projects.design_theme`, max 200 characters. Set in the wizard, or
+   later from the album menu (Theme). Every new page (a first page, a remake) is drawn in it:
+   the server reads the theme from the album, never from the request, and `designThemePromptBlock`
+   in `src/lib/ai/prompts.ts` relaxes the "do not invent backgrounds / do not cartoonify" rules for
+   setting, costume and style only. People, poses, recognizability and every line-art rule stay.
+   Edits and corrections never get the theme. The theme text is never sent to analytics.
+5. **Photos:** the studio shows `PackageMeter` (photos used, touch-ups left, theme row). Included
+   pages are labeled "Included", anything past the package says "{price} extra" (amber, never red)
+   and comes from the wallet. Picking more photos than are included opens `ExtraPhotosConfirm`.
+   A deleted photo never frees its slot (`pages_used` never goes down); the delete dialog says so.
+6. **Order:** the package pays for printing only. `purchaseCodeBookCoverage` returns the print
+   price (not shipping, not tax) for codes with `shipping_included = false`, and nothing when the
+   order is in another binding. Switching binding asks first (`SwitchBindingModal`). Blank backs
+   stay on. The price box is `PackagePriceSummary`.
+7. **Admin:** `/admin/pricing` has a "Book packages" section (photos, touch-ups, price, show/hide,
+   order). A package with no price is hidden. Table `book_packages`, migration 0043.
+
+Money rules to keep: the price is always read from `book_packages` on the server (the browser sends
+only an `expectedPriceCents` guard that can refuse, never set a price); a card checkout creates no
+`credit_ledger` row; a repeat confirm returns the same package.
+
+Canceling (migration 0044): the buyer can cancel any time before the package's book is ordered.
+Refund = price paid − `pages_used` × the `ai.sheet_generation` list price, never below 0, always to
+the wallet (also for card purchases), computed only in SQL (`book_package_refund_quote`,
+`cancel_book_package`; voids the code so `purchase_code_covers` stops paying). Entry points: "Cancel
+package" in the meter's Details popover (keep album and pages) and Delete in the album menu (refund,
+then the studio's normal delete). A plain album DELETE still refuses an unspent package
+(`PACKAGE_ALBUM`), so nothing is ever deleted without its refund. Analytics: `package_refunded`.
+Policy text: `BOOK_PACKAGES.refundPolicy` on the Pay step and "Book packages" in `/terms`.
+
+Files: `supabase/migrations/0043_book_packages.sql`, `0044_book_package_refund.sql`, `src/server/bookPackagesService.ts`,
+`src/app/api/book-packages/*`, `src/app/api/admin/book-packages/*`, `src/lib/bookPackages/*`,
+`src/lib/designTheme.ts`, `src/components/v2/book-packages/*`, `src/app/(studio)/studio/new/page.tsx`,
+copy in `BOOK_PACKAGES` and `DESIGN_THEMES` in `src/content/marketing.ts`.
+
 ### 5.6 Signed-in: come back later
 
 - `/home` shows "Continue your book" (the saved cart), the albums, and a seasonal card.
@@ -291,6 +344,15 @@ cannot be filled hides itself.** Text inside `[[ ... ]]` is optional and drops o
 | `{date}` | Christmas order-by date, only when `NEXT_PUBLIC_HOLIDAY_ORDER_BY` is set and not past |
 | `{email}` | Contact address (`CONTACT_EMAIL`) |
 | `{min}`, `{max}`, `{format}`, `{more}`, `{count}`, `{size}` | Binding limits, page counts, file size |
+| `{packageFrom}` | Lowest price among the book packages on sale. Say "Book packages from {packageFrom}", never "Books from" |
+| `{photosRange}` | Photos the packages include ("20 to 40", or one number) |
+| `{editsEach}`, `{touchUps}` | Free touch-ups per page ("2 free touch-ups"); only when every package gives the same number above 0 |
+
+The package tokens come from the `book_packages` catalog (`getBookPackagesForMarketing()` in
+`src/server/marketing/marketingNumbers.ts`, cached one hour). Saving a package in `/admin/pricing`
+calls `refreshBookPackages()`, which expires the cache and the landing pages at once. While at least
+one package is on sale, `/` and `/gift` lead with the book (`bookFirst` in `LANDING_PAGES`); with
+none (feature off, nothing priced, catalog unreadable) they render the free-try layout.
 
 Prices are edited by the owner at `/admin/pricing` (table `price_items`). Never write one in code.
 
@@ -392,6 +454,9 @@ All start with `cm_`. Useful when you need a "fresh visitor" or need to fake a s
 | `cm_attr` | cookie, 30 days | Ad attribution: `utm_*`, click ids, landing path |
 | `cm_ads_optout` | cookie | "Do not sell or share" choice. Turns all tracking off |
 | `cm_purchase_tracked` | localStorage | Stops the purchase event firing twice |
+| `cm_package_choice` | sessionStorage | The book chosen on `/studio/new` (kept across sign-up, 24 hours) |
+| `cm_package_tracked_{codeId}` | localStorage | Stops `package_purchased` firing twice |
+| `cm_pkg_meter_seen_{albumId}` | sessionStorage | The package meter was shown once (folds on phones after that) |
 
 Guest albums and pages: IndexedDB database `smartycolor-v2-studio`.
 
@@ -403,13 +468,19 @@ title, caption, photo or free text.**
 
 | Event | Fires when | Parameters |
 |---|---|---|
-| `cta_click` | A marketing button, the header Sign up link, or the upsell "Make a book" is tapped | `location` (hero, sticky, products, final, occasion, header, upsell), `intent` |
+| `cta_click` | A marketing button, the header Sign up link, or the upsell "Make a book" is tapped | `location` (hero, sticky, products, final, occasion, header, upsell, transform, themes, books), `intent`, `target` (book, package, free) |
 | `page_generated` | A coloring page finishes | `is_first`, `signed_in`, `intent` |
 | `sign_up` | An account is created | `method` |
 | `book_started` | The wizard opens for a signed-in person, after the saved cart is restored | `format`, `intent` |
 | `checkout_started` | Order placement begins | `value`, `currency`, `page_count`, `format`, `is_gift` |
 | `purchase` | An order is placed (browser and server copies) | `value`, `currency`, `order_id`, `format`, `is_gift`, `intent` |
 | `partner_inquiry` | The partners email link or Copy email is tapped | `location` (hero, final) |
+
+Book packages and themes add (params are fixed ids and numbers, never the theme, an album name or a
+file name): `package_viewed`, `package_selected`, `album_started`, `package_pay_started`,
+`package_purchased` (browser only; the server copy and its ad-platform mapping are still an owner
+decision), `package_payment_canceled`, `package_payment_failed`, `theme_set`, `theme_skipped`,
+`theme_removed`, `theme_rejected`, `package_extra_confirmed`, `package_binding_switched`.
 
 `partner_inquiry` is sent as a custom event, not as a "Lead": a tap is not proof an email was sent.
 Average order value and repeat rate are read from `purchase` in GA4 (same device only).

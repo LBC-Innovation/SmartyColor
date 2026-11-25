@@ -1,5 +1,7 @@
 import { LANDING_PAGES, LANDING_ORDER, type LandingIntent } from "@/content/marketing";
 import { ATTRIBUTION_COOKIE, parseAttribution, readCookieFromHeader } from "@/lib/marketing/attribution";
+import { formatCredits } from "@/lib/credits/money";
+import type { BookPackage } from "@/lib/bookPackages/types";
 
 /** Fills {tokens} in marketing copy (src/content/marketing.ts). */
 
@@ -19,7 +21,11 @@ export type CopyValues = Partial<
     | "size"
     | "email"
     | "refPages"
-    | "refFormat",
+    | "refFormat"
+    | "packageFrom"
+    | "photosRange"
+    | "editsEach"
+    | "touchUps",
     string | null
   >
 >;
@@ -49,6 +55,9 @@ export function fillCopy(template: string, values: CopyValues): string | null {
   return missing ? null : out;
 }
 
+/** A package as the landing shows it: the same fields as the wizard's `BookPackage`. */
+export type MarketingPackage = BookPackage;
+
 /** The marketing numbers the server reads from the real pricing code (null when unknown). */
 export type NumbersInput = {
   referencePriceCents: number | null;
@@ -58,7 +67,37 @@ export type NumbersInput = {
   pagePriceCents: number | null;
   referencePages: number;
   referenceFormat: string;
+  /**
+   * Buyable book packages, in sort order. null when the feature is off or the catalog can't be
+   * read; an empty list when none is priced. Both mean "no packages": the landing falls back.
+   */
+  packages: MarketingPackage[] | null;
 };
+
+/** True when there is at least one package to sell, so a landing page can lead with the book. */
+export function hasPackages(n: NumbersInput | null): boolean {
+  return (n?.packages?.length ?? 0) > 0;
+}
+
+/** Page-level tokens from the package catalog. Each hides itself when it can't be said truthfully. */
+function packageValues(packages: MarketingPackage[] | null): CopyValues {
+  if (!packages || packages.length === 0) {
+    return { packageFrom: null, photosRange: null, editsEach: null, touchUps: null };
+  }
+  const prices = packages.map((p) => p.priceCents);
+  const photos = packages.map((p) => p.includedPhotos);
+  const lo = Math.min(...photos);
+  const hi = Math.max(...photos);
+  const edits = new Set(packages.map((p) => p.editsPerPhoto));
+  const shared = edits.size === 1 ? [...edits][0] : 0;
+  return {
+    packageFrom: formatCredits(Math.min(...prices)),
+    photosRange: lo === hi ? String(lo) : `${lo} to ${hi}`,
+    // Only when every package gives the same number, and it is above 0.
+    editsEach: shared > 0 ? String(shared) : null,
+    touchUps: shared > 0 ? `${shared} free touch-up${shared === 1 ? "" : "s"}` : null,
+  };
+}
 
 /** Copy tokens for the numbers. The reference example (pages and format) hides with its price. */
 export function numberValues(n: NumbersInput | null): CopyValues {
@@ -71,6 +110,7 @@ export function numberValues(n: NumbersInput | null): CopyValues {
     freePages: n.welcomeFreeSheets != null ? `${n.welcomeFreeSheets} free ${n.welcomeFreeSheets === 1 ? "page" : "pages"}` : null,
     refPages: String(n.referencePages),
     refFormat: n.referenceFormat,
+    ...packageValues(n.packages),
   };
 }
 

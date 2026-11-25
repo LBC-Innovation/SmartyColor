@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { BookOpen, X } from "lucide-react";
 import { UPSELL } from "@/content/marketing";
-import { fillCopy, readTrackIntent } from "@/lib/marketing/copy";
+import { fillCopy, hasPackages, numberValues, readTrackIntent } from "@/lib/marketing/copy";
+import { useMarketingNumbers } from "@/lib/marketing/useMarketingNumbers";
 import { smallestPrintedBinding } from "@/lib/marketing/smallestBook";
 import { trackCta } from "@/lib/track";
 import { cn } from "@/lib/cn";
@@ -37,14 +39,22 @@ export function V2BookUpsellCard({
   onAddPhotos: () => void;
   className?: string;
 }) {
+  const router = useRouter();
+  const numbers = useMarketingNumbers();
   // Mounted only after the studio has loaded in the browser, so storage can be read up front.
   const [dismissed, setDismissed] = useState(readDismissed);
   if (dismissed) return null;
 
   const smallest = smallestPrintedBinding();
   const more = Math.max(0, smallest.minPages - pageCount);
+  // While books are on sale, a person without enough pages for a book of their own is pointed to
+  // the packages. Someone who already has enough pages keeps "Make a book": buying a package for
+  // them would pay for those pages twice.
+  const packageLine = hasPackages(numbers) && more > 0 ? fillCopy(UPSELL.bookLine, numberValues(numbers)) : null;
+  const toBooks = packageLine != null;
   const progress =
-    more === 0 ? UPSELL.enough : more === 1 ? UPSELL.needMoreOne : fillCopy(UPSELL.needMore, { more: String(more) });
+    packageLine ??
+    (more === 0 ? UPSELL.enough : more === 1 ? UPSELL.needMoreOne : fillCopy(UPSELL.needMore, { more: String(more) }));
   // The reference example is a different book from the smallest format, so the price stays out of
   // this card and the sentence names no format: nothing here can disagree with anything else.
 
@@ -72,7 +82,7 @@ export function V2BookUpsellCard({
       <div className="min-w-0 pr-9">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-v2-ink">
           <BookOpen className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
-          {UPSELL.title}
+          {toBooks ? UPSELL.bookTitle : UPSELL.title}
         </h3>
         <p className="mt-0.5 text-xs leading-snug text-v2-navy">{progress}</p>
       </div>
@@ -87,14 +97,15 @@ export function V2BookUpsellCard({
       <div className="flex gap-2">
         <button
           type="button"
-          disabled={!canMakeBook}
+          disabled={!toBooks && !canMakeBook}
           onClick={() => {
-            trackCta("upsell", readTrackIntent());
-            onMakeBook();
+            trackCta("upsell", readTrackIntent(), toBooks ? "book" : undefined);
+            if (toBooks) router.push("/studio/new");
+            else onMakeBook();
           }}
           className="v2-btn-primary h-11 min-w-0 flex-1 whitespace-nowrap px-2 text-sm"
         >
-          {UPSELL.cta}
+          {toBooks ? UPSELL.bookCta : UPSELL.cta}
         </button>
         <button type="button" onClick={onAddPhotos} className="v2-btn-outline h-11 min-w-0 flex-1 whitespace-nowrap px-2 text-sm">
           {UPSELL.addPhotos}

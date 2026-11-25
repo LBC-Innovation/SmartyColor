@@ -1,4 +1,4 @@
-import type { CtaLocation, LandingIntent } from "@/content/marketing";
+import type { CtaLocation, CtaTarget, LandingIntent } from "@/content/marketing";
 import { bindingIdForProduct, DIGITAL_FORMAT, type BookFormatId } from "@/lib/print/bookBindings";
 
 /**
@@ -17,16 +17,36 @@ export type TrackEventParams = {
   checkout_started: { value: number; currency: string; page_count: number; format: TrackFormat; is_gift: boolean };
   purchase: { value: number; currency: string; order_id: string; format: TrackFormat; is_gift: boolean; intent: TrackIntent };
   /** A tap on a marketing call to action, or the studio's "Turn this into a book" card. */
-  cta_click: { location: CtaLocation; intent: TrackIntent };
+  cta_click: { location: CtaLocation; intent: TrackIntent; target?: CtaTarget };
   /** The partners page's email link was tapped or its address copied. Not a confirmed lead. */
   partner_inquiry: { location: "hero" | "final" };
   /** Answer to "How did you hear about us?" (a fixed option id, never free text). */
   heard_from: { answer: string };
   /** A share link was copied or sent. `method` is how; `content_type` is what. */
   share: { method: "copy" | "email" | "native" | "sms"; content_type: "page" | "referral" | "album" };
+  // Book packages and design themes. Params are fixed ids and numbers; never the theme text, an
+  // album name or a file name.
+  package_viewed: { count: number; signed_in: boolean; intent: TrackIntent };
+  package_selected: { format: TrackFormat; value: number; currency: string; from: "landing" | "wizard" };
+  album_started: { mode: "pages" | "package" };
+  package_pay_started: { format: TrackFormat; value: number; currency: string; method: "card" | "credit" };
+  package_purchased: { format: TrackFormat; value: number; currency: string; method: "card" | "credit"; package_id: string };
+  /** A book package was canceled and its unused value returned to the wallet. `value` is the refund. */
+  package_refunded: { format: TrackFormat; value: number; currency: string; album_deleted: boolean };
+  package_payment_canceled: { format: TrackFormat };
+  package_payment_failed: { format: TrackFormat; reason: "declined" | "expired" | "unknown" };
+  theme_set: { where: "wizard" | "settings"; source: "starter" | "typed" | "starter_edited"; starter_id?: ThemeStarterId };
+  theme_skipped: { where: "wizard" };
+  theme_removed: { where: "settings" };
+  theme_rejected: { where: "wizard" | "settings" };
+  package_extra_confirmed: { kind: "photos" | "touch_up"; count: number };
+  package_binding_switched: { from: TrackFormat; to: TrackFormat };
 };
 
 export type TrackEvent = keyof TrackEventParams;
+
+/** Fixed ids of the starter themes (never the customer's own words). */
+export type ThemeStarterId = "superheroes" | "toy_bricks" | "under_sea" | "space" | "fairy_castle" | "dinosaurs";
 
 const FORMAT_FOR_BINDING: Record<BookFormatId, TrackFormat> = {
   saddle_stitch: "stapled",
@@ -73,6 +93,21 @@ export const VENDOR_EVENT_NAMES: Record<
   heard_from: { ga4: "heard_from", meta: { name: "HeardFrom", custom: true }, pinterest: null, tiktok: null },
   // Someone shared a page or their referral link.
   share: { ga4: "share", meta: { name: "Share", custom: true }, pinterest: null, tiktok: null },
+  package_viewed: { ga4: "package_viewed", meta: { name: "ViewContent", custom: false }, pinterest: null, tiktok: "ViewContent" },
+  package_selected: { ga4: "package_selected", meta: { name: "PackageSelected", custom: true }, pinterest: null, tiktok: null },
+  album_started: { ga4: "album_started", meta: { name: "AlbumStarted", custom: true }, pinterest: null, tiktok: null },
+  package_pay_started: { ga4: "begin_checkout", meta: { name: "InitiateCheckout", custom: false }, pinterest: null, tiktok: "InitiateCheckout" },
+  // Open question (Q8): custom for now, so the later book order stays the platforms' only Purchase.
+  package_purchased: { ga4: "package_purchased", meta: { name: "PackagePurchased", custom: true }, pinterest: null, tiktok: null },
+  package_refunded: { ga4: "package_refunded", meta: { name: "PackageRefunded", custom: true }, pinterest: null, tiktok: null },
+  package_payment_canceled: { ga4: "package_payment_canceled", meta: { name: "PackagePaymentCanceled", custom: true }, pinterest: null, tiktok: null },
+  package_payment_failed: { ga4: "package_payment_failed", meta: { name: "PackagePaymentFailed", custom: true }, pinterest: null, tiktok: null },
+  theme_set: { ga4: "theme_set", meta: { name: "ThemeSet", custom: true }, pinterest: null, tiktok: null },
+  theme_skipped: { ga4: "theme_skipped", meta: { name: "ThemeSkipped", custom: true }, pinterest: null, tiktok: null },
+  theme_removed: { ga4: "theme_removed", meta: { name: "ThemeRemoved", custom: true }, pinterest: null, tiktok: null },
+  theme_rejected: { ga4: "theme_rejected", meta: { name: "ThemeRejected", custom: true }, pinterest: null, tiktok: null },
+  package_extra_confirmed: { ga4: "package_extra_confirmed", meta: { name: "PackageExtraConfirmed", custom: true }, pinterest: null, tiktok: null },
+  package_binding_switched: { ga4: "package_binding_switched", meta: { name: "PackageBindingSwitched", custom: true }, pinterest: null, tiktok: null },
 };
 
 /** Cookie set by "Do not sell or share my personal information". Honored in the browser and on the server. */

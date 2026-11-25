@@ -195,6 +195,8 @@ export async function listPurchaseCodes(): Promise<ApiResult<AdminPurchaseCode[]
   const { data, error } = await db()
     .from("purchase_codes")
     .select("*")
+    // Packages customers bought for themselves are not gift codes; they live in the package catalog.
+    .eq("source", "admin")
     .order("created_at", { ascending: false })
     .limit(1000);
   if (error) return { data: null, error: { message: error.message } };
@@ -460,6 +462,10 @@ export async function getAlbumPurchaseCode(actorId: string, projectId: string): 
       code: row.code as string,
       campaign: row.campaign as string,
       bundle: bundleFromRow(row),
+      source: row.source === "package" ? "package" : "admin",
+      shippingIncluded: row.shipping_included !== false,
+      packagePriceCents: (row.package_price_cents as number | null) ?? null,
+      isBuyer: row.redeemed_by === actorId,
       pagesUsed: row.pages_used as number,
       photos,
       bookOrderId: (row.book_order_id as string | null) ?? null,
@@ -494,6 +500,11 @@ export async function purchaseCodeBookCoverage(input: {
   projectId: string | null | undefined;
   orderId?: string | null;
   pageCount: number;
+  /**
+   * The binding the order is in. A package pays for printing its own binding only: an order in
+   * another binding gets no coverage from it. Admin codes ignore this (they cover a book's price).
+   */
+  bindingId?: string | null;
   shippingAddress: Pick<ShippingAddress, "city" | "state_code" | "postcode" | "country_code">;
 }): Promise<ApiResult<{ codeId: string; coveredCents: number } | null>> {
   if (!input.projectId) return { data: null, error: null };
@@ -507,6 +518,9 @@ export async function purchaseCodeBookCoverage(input: {
   if (!row || row.redeemed_by !== input.userId) return { data: null, error: null };
   if (row.book_order_id && row.book_order_id !== input.orderId) return { data: null, error: null };
   const bundle = bundleFromRow(row);
+  const shippingIncluded = row.shipping_included !== false;
+  // A package pays toward printing its own binding, and nothing toward another one.
+  if (!shippingIncluded && input.bindingId && input.bindingId !== bundle.bindingId) return { data: null, error: null };
   // The included book's page count for this order: no more than the code covers, fitted to the
   // code's binding (an order in another binding can have a count this one can't print).
   const spec = BOOK_BINDINGS[bundle.bindingId];
@@ -526,7 +540,9 @@ export async function purchaseCodeBookCoverage(input: {
     },
   });
   if (priced.error) return { data: null, error: priced.error };
-  const full = priced.data.price.totalCents;
+  // An admin code covers print + standard shipping + tax. A package covers the printed book only:
+  // shipping and the tax on it stay with the customer's wallet.
+  const full = shippingIncluded ? priced.data.price.totalCents : priced.data.price.printPriceCents;
   const coveredCents = bundle.maxBookCents != null ? Math.min(full, bundle.maxBookCents) : full;
   return { data: { codeId: row.id as string, coveredCents }, error: null };
 }

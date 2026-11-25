@@ -3,12 +3,13 @@
 import { STORY_MODE_PUBLIC } from "@/lib/auth/features";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type MouseEvent } from "react";
 import { ArrowRight, Check, Gift } from "lucide-react";
 import {
   FAQ,
   FINAL_CTA,
   FINAL_CTA_PHOTOS,
+  HERO_BOOK,
   HERO_PRICE_TAG,
   HERO_SECONDARY_CTA,
   LIFESTYLE_PHOTOS,
@@ -18,15 +19,20 @@ import {
   PRIMARY_CTA,
   PRODUCTS,
   STICKY_CTA,
+  STICKY_CTA_BOOK,
   TRANSFORM,
+  type BookSectionId,
   type CtaLocation,
   type HeroPair,
   type LandingIntent,
 } from "@/content/marketing";
 import { TESTIMONIALS } from "@/content/testimonials";
 import { markGuestTryFree, STUDIO_PATH } from "@/lib/v2/guestSession";
-import { fillCopy, rememberIntent, type NumbersInput } from "@/lib/marketing/copy";
-import { landingFaq, landingValues } from "@/lib/marketing/landingValues";
+import { fillCopy, rememberIntent, type MarketingPackage, type NumbersInput } from "@/lib/marketing/copy";
+import { isBookFirst, landingFaq, landingValues } from "@/lib/marketing/landingValues";
+import { writePackageChoice } from "@/lib/bookPackages/choice";
+import { centsToValue, trackFormat } from "@/lib/marketing/events";
+import { BINDING_PHOTOS, type BookBindingId } from "@/lib/print/bookBindings";
 import type { HolidayOrderBy } from "@/lib/marketing/holiday";
 import { marketingSrcSet } from "@/lib/marketing/images";
 import { HERO_PHOTO_SIZES, heroImage } from "@/lib/marketing/heroImage";
@@ -39,8 +45,8 @@ import { ScrollToTopButton } from "@/components/v2/marketing/ScrollToTopButton";
 import {
   CopyEmail,
   FinishedBookSection,
+  GiftStrip,
   GiftTimingSection,
-  HolidayToast,
   IdeasSection,
   OccasionsSection,
   PARTNER_MAILTO,
@@ -52,10 +58,14 @@ import {
 } from "@/components/v2/marketing/LandingSections";
 import { BeforeAfter, ICONS, LifestyleImage, PrintedBook, SectionHeading } from "@/components/v2/marketing/landingParts";
 import { CompareSlider } from "@/components/v2/marketing/CompareSlider";
+import { LandingBookTiles } from "@/components/v2/marketing/LandingBookTiles";
+import { ThemesShowcase } from "@/components/v2/marketing/ThemesShowcase";
 import { MadeGallery } from "@/components/v2/marketing/MadeGallery";
 import { cn } from "@/lib/cn";
 
 export type LandingNumbers = NumbersInput;
+
+const BOOK_PATH = "/studio/new";
 
 type Props = {
   intent: LandingIntent;
@@ -74,28 +84,60 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   const home = intent === "default";
   const EyebrowIcon = ICONS[page.eyebrowIcon];
   const values = landingValues(numbers, holiday?.label ?? null);
+  // With packages on sale the page leads with the book. With none (feature off, nothing priced, or
+  // the catalog unreadable) it renders its free-try layout, which stands on its own.
+  const book = isBookFirst(intent, numbers) ? page.bookFirst : undefined;
+  const packages = numbers.packages ?? [];
+  const heroPriceLine = book ? fillCopy(HERO_BOOK.priceLine, values) : null;
   const tagPrice = fillCopy(HERO_PRICE_TAG.price, values);
   const tagDetail = fillCopy(HERO_PRICE_TAG.detail, values);
-  const priceTag = sections.priceLine && tagPrice && tagDetail ? { label: HERO_PRICE_TAG.label, price: tagPrice, detail: tagDetail } : null;
+  const priceTag = !book && sections.priceLine && tagPrice && tagDetail ? { label: HERO_PRICE_TAG.label, price: tagPrice, detail: tagDetail } : null;
   const heroPhoto = heroImage(page);
   // Every real photo-and-page pair on this page, once each, for the before/after switcher.
   const examplePairs = [page.hero, page.why.example].filter((p, i, all) => all.findIndex((q) => q.photoSrc === p.photoSrc) === i);
   // Story mode shows only while it is on for everyone (see STORY_MODE_PUBLIC).
   const productItems = PRODUCTS.items.filter((item) => !("feature" in item) || STORY_MODE_PUBLIC);
-  const faq = landingFaq(intent, values);
+  const faq = landingFaq(intent, values, Boolean(book));
   // Christmas wording lasts only while the order-by date is set (it ends itself the day after).
-  const eyebrow = holiday && page.holidayEyebrow ? page.holidayEyebrow : page.eyebrow;
-  // The top banner is for the gift page, which people reach through Christmas gift ads. Home shows
-  // the same date in its dismissible toast instead.
-  const showBanner = holiday != null && intent === "gift";
+  // The book-first hero has no pill on the homepage, and only the Christmas one on the gift page.
+  const eyebrow = book
+    ? holiday && book.holidayEyebrow
+      ? book.holidayEyebrow
+      : null
+    : holiday && page.holidayEyebrow
+      ? page.holidayEyebrow
+      : page.eyebrow;
+  const headline = book?.headline ?? page.headline;
+  const subhead = book?.subhead ?? page.subhead;
+  // The one true urgency fact, as a slim bar on the pages people reach through Christmas ads.
+  const showBanner = holiday != null && (intent === "gift" || home);
   const finalPhoto = FINAL_CTA_PHOTOS.find((id) => LIFESTYLE_PHOTOS[id].ready && id !== page.heroPhoto) ?? null;
 
   /** Starts the free-page flow. `target` is the page whose promise the visitor is following. */
   const startFree: StartFree = (location: CtaLocation, target: LandingIntent = intent) => {
-    trackCta(location, target);
+    trackCta(location, target, "free");
     markGuestTryFree();
     rememberIntent(target);
     router.push(target === "default" ? STUDIO_PATH : `${STUDIO_PATH}?intent=${target}`);
+  };
+  /** Opens the book wizard's tiles. Not a guest "try free" path: nothing here makes a page. */
+  const startBook = (location: CtaLocation) => {
+    trackCta(location, intent, "book");
+    rememberIntent(intent);
+    router.push(BOOK_PATH);
+  };
+  /** A tile's button: straight to the wizard's summary with the choice kept (a guest meets sign-up there). */
+  const choosePackage = (pkg: MarketingPackage) => {
+    trackCta("books", intent, "package");
+    track("package_selected", {
+      format: trackFormat(pkg.bindingId),
+      value: centsToValue(pkg.priceCents),
+      currency: "USD",
+      from: "landing",
+    });
+    rememberIntent(intent);
+    writePackageChoice(pkg.bindingId);
+    router.push(`${BOOK_PATH}?book=${pkg.bindingId}&step=pay`);
   };
   const inquire = (location: "hero" | "final") => track("partner_inquiry", { location });
 
@@ -125,25 +167,62 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
     return () => observer.disconnect();
   }, []);
 
+  /** One section of the book-first layout. A plain function, not a component, so a section keeps its state. */
+  function renderBookSection(id: BookSectionId) {
+    switch (id) {
+      case "transform":
+        return <TransformSection pairs={examplePairs} bookFirst onStart={() => startFree("transform")} />;
+      case "giftPoints":
+        return <WhySection why={page.why} showBestPhotos={false} plain />;
+      case "themes":
+        return book ? <ThemesShowcase body={book.themesBody} onStart={() => startBook("themes")} /> : null;
+      case "how":
+        return <HowItWorks bookFirst pair={page.hero} coverTitle={page.coverTitle} />;
+      case "books":
+        return (
+          <LandingBookTiles
+            packages={packages}
+            values={values}
+            showDeadline={intent === "gift"}
+            onChoose={choosePackage}
+            onFree={() => startFree("books")}
+          />
+        );
+      case "photoBand":
+        return <PhotoBand exclude={page.heroPhoto} surface />;
+      case "giftStrip":
+        return <GiftStrip values={values} />;
+      default:
+        return null;
+    }
+  }
+
   // Rendered without waiting for the session check so the hero is in the server HTML.
   // A strip of the hero band's light top color across the top, under the header, so the translucent white bar
   // picks up a faint tint where it starts. bg-local keeps it with the content when this box scrolls.
   return (
     <div ref={scrollBoxRef} className="v2-landing flex flex-1 flex-col lg:min-h-0 lg:overflow-y-auto bg-v2-cream bg-[linear-gradient(var(--color-v2-butter),var(--color-v2-butter))] bg-[length:100%_12rem] bg-no-repeat bg-local text-v2-ink">
+      {/* The sign-up credit can't pay toward a package, so it stays off while books are on sale. */}
       {showBanner && holiday ? (
         <HolidayBanner label={holiday.label} />
-      ) : sections.partnerContact ? null : (
+      ) : sections.partnerContact || book ? null : (
         <SignUpOfferBar values={values} intent={intent} />
       )}
       <V2MarketingHeader intent={intent} wide tinted />
 
       <main className="flex-1">
         {/* ---------------------------------------------------------- hero */}
-        {/* Edge to edge, like a photo: the picture fills the right (the top on a phone) and the text
-            sits on the plum it fades into. A thin inset keeps the rounded corners off the screen edge. */}
-        <section className="bg-gradient-to-b from-v2-butter to-v2-mast px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6" aria-labelledby="hero-title">
-          <div className="relative isolate overflow-hidden rounded-[1.75rem] bg-v2-plum text-white lg:flex lg:min-h-[min(88vh,50rem)] lg:items-center lg:rounded-[2.25rem]">
-            <div className="relative aspect-[4/3] w-full sm:aspect-[16/9] lg:absolute lg:inset-y-0 lg:left-[30%] lg:right-0 lg:aspect-auto lg:w-auto">
+        {/* Phone and tablet: the photo on top, fading into a plum panel the text sits on.
+            Desktop: the photo fills the whole header edge to edge. It is set to the right so the people
+            stay clear, and a translucent plum gradient from the left carries the text. */}
+        <section className="bg-gradient-to-b from-v2-butter to-v2-mast px-3 py-3 sm:px-5 sm:py-5 lg:p-0" aria-labelledby="hero-title">
+          <div
+            className="relative isolate overflow-hidden rounded-[1.75rem] bg-v2-plum text-white lg:flex lg:min-h-[min(80vh,44rem)] lg:items-center lg:rounded-none"
+            // Desktop geometry: --hero-pad lines the text up with the page's content edge, --hero-text is
+            // the text column; the photo starts a little before the text ends, under its fade.
+            style={{ "--hero-pad": "max(2.5rem, calc((100vw - 80rem) / 2 + 2.5rem))", "--hero-text": "min(32rem, 40vw)" } as React.CSSProperties}
+          >
+            <div className="relative aspect-[4/3] w-full sm:aspect-[16/9] lg:absolute lg:inset-y-0 lg:right-0 lg:left-[calc(var(--hero-pad)+var(--hero-text)-6rem)] lg:aspect-auto lg:w-auto">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={heroPhoto.src}
@@ -153,25 +232,28 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                 height={heroPhoto.height}
                 alt={heroPhoto.alt}
                 fetchPriority="high"
-                className="block h-full w-full object-cover"
+                className="block h-full w-full object-cover lg:object-[65%_center]"
               />
               {/* phone and tablet: the photo fades into the plum the text sits on */}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-v2-plum to-transparent lg:hidden" aria-hidden />
+              {/* desktop: the photo's left edge melts into the plum, then a light translucent fade */}
+              <div
+                className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_right,var(--color-v2-plum)_0%,rgb(36_26_77/0.6)_12%,rgb(36_26_77/0.15)_28%,transparent_40%)] lg:block"
+                aria-hidden
+              />
             </div>
-            <div
-              className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_right,var(--color-v2-plum)_30%,rgb(36_26_77/0.7)_42%,rgb(36_26_77/0.1)_60%,transparent_72%)] lg:block"
-              aria-hidden
-            />
 
-            <div className="relative -mt-6 w-full px-5 pb-8 sm:-mt-10 sm:px-10 sm:pb-12 lg:mt-0 lg:max-w-[44rem] lg:px-16 lg:py-20 xl:px-20">
-              <p className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white backdrop-blur">
-                <EyebrowIcon className="h-3.5 w-3.5 text-brand-amber" aria-hidden />
-                {eyebrow}
-              </p>
-              <h1 id="hero-title" className="v2-brand-title mt-4 break-words text-[2.6rem] leading-[1.04] sm:text-6xl lg:text-[4.5rem]">
-                {page.headline[0]} <span className="v2-crayon-underline">{page.headline[1]}</span>
+            <div className="relative -mt-6 w-full px-5 pb-8 sm:-mt-10 sm:px-10 sm:pb-12 lg:mt-0 lg:w-[calc(var(--hero-pad)+var(--hero-text))] lg:shrink-0 lg:py-20 lg:pl-[var(--hero-pad)] lg:pr-0">
+              {eyebrow ? (
+                <p className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white backdrop-blur">
+                  <EyebrowIcon className="h-3.5 w-3.5 text-brand-amber" aria-hidden />
+                  {eyebrow}
+                </p>
+              ) : null}
+              <h1 id="hero-title" className={cn("v2-brand-title break-words text-[2.6rem] leading-[1.04] sm:text-6xl lg:text-[4rem] xl:text-[4.5rem]", eyebrow && "mt-4")}>
+                {headline[0]} <span className="v2-crayon-underline">{headline[1]}</span>
               </h1>
-              <p className="mt-4 max-w-lg break-words text-base leading-relaxed text-white/85 sm:mt-5 sm:text-lg">{page.subhead}</p>
+              <p className="mt-4 max-w-lg break-words text-base leading-relaxed text-white/85 sm:mt-5 sm:text-lg">{subhead}</p>
 
               <div ref={heroCtaRef} className="mt-6 flex flex-col items-stretch gap-3 sm:mt-7 sm:flex-row sm:items-center">
                 {sections.partnerContact ? (
@@ -192,6 +274,24 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                       {PARTNER_CONTACT.secondary}
                     </button>
                   </>
+                ) : book ? (
+                  <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto sm:items-start">
+                    <button
+                      type="button"
+                      onClick={() => startBook("hero")}
+                      className="inline-flex min-h-13 items-center justify-center gap-2 rounded-full bg-white px-7 py-2 text-center text-base font-bold text-v2-primary shadow-lg transition hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      {HERO_BOOK.primary}
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startFree("hero")}
+                      className="inline-flex min-h-11 items-center justify-center px-2 text-center text-base font-semibold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:justify-start sm:px-0"
+                    >
+                      {HERO_BOOK.secondary}
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <button
@@ -218,6 +318,12 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                 </div>
               ) : null}
 
+              {heroPriceLine ? (
+                <p suppressHydrationWarning className="mt-4 max-w-md text-sm text-white/80">
+                  {heroPriceLine}
+                </p>
+              ) : null}
+
               {priceTag ? (
                 <div className="mt-6 inline-flex max-w-md flex-col rounded-2xl bg-white/10 px-4 py-3 ring-1 ring-white/20 backdrop-blur">
                   <span className="text-xs font-bold uppercase tracking-wider text-brand-amber">{priceTag.label}</span>
@@ -226,45 +332,54 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
                 </div>
               ) : null}
 
-              <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/85">
-                {page.trustBullets.map((t) => (
-                  <li key={t} className="inline-flex items-center gap-1.5">
-                    <Check className="h-4 w-4 text-brand-amber" strokeWidth={2.5} aria-hidden />
-                    {t}
-                  </li>
-                ))}
-              </ul>
+              {book ? null : (
+                <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/85">
+                  {page.trustBullets.map((t) => (
+                    <li key={t} className="inline-flex items-center gap-1.5">
+                      <Check className="h-4 w-4 text-brand-amber" strokeWidth={2.5} aria-hidden />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </section>
 
-        {sections.partnerContact ? null : <PhotoBand exclude={page.heroPhoto} />}
-        {sections.partnerContact ? null : <TransformSection pairs={examplePairs} onStart={() => startFree("hero")} />}
-        {home && sections.occasions ? (
-          <OccasionsSection current={intent} holidayOn={holiday != null} onStart={startFree} />
-        ) : null}
-        {sections.giftTiming ? <GiftTimingSection values={values} /> : null}
-
-        {/* ------------------------------------------- how it works, book */}
-        {sections.howItWorks && !sections.partnerContact ? <HowItWorks pair={page.hero} coverTitle={page.coverTitle} /> : null}
-        {home && sections.finishedBook ? <FinishedBookSection values={values} coverTitle={page.coverTitle} /> : null}
-
-        {/* Proof right after the explanation: real pages, out in the world. */}
-        {sections.madeGallery ? <MadeGallery /> : null}
-
-        {/* -------------------------------------------------- why, ideas */}
-        <WhySection why={page.why} showBestPhotos={sections.bestPhotos} />
-        {page.ideas ? <IdeasSection ideas={page.ideas} /> : null}
-        {!home && sections.finishedBook ? <FinishedBookSection values={values} coverTitle={page.coverTitle} /> : null}
-        {sections.partnerContact ? (
+        {book ? (
+          book.order.map((id) => <Fragment key={id}>{renderBookSection(id)}</Fragment>)
+        ) : (
           <>
-            <HowItWorks pair={page.hero} coverTitle={page.coverTitle} />
-            <PartnerContactSection onInquiry={inquire} onStart={startFree} />
+            {sections.partnerContact ? null : <PhotoBand exclude={page.heroPhoto} />}
+            {sections.partnerContact ? null : <TransformSection pairs={examplePairs} onStart={() => startFree("hero")} />}
+            {home && sections.occasions ? (
+              <OccasionsSection current={intent} holidayOn={holiday != null} onStart={startFree} />
+            ) : null}
+            {sections.giftTiming ? <GiftTimingSection values={values} /> : null}
+
+            {/* ------------------------------------------- how it works, book */}
+            {sections.howItWorks && !sections.partnerContact ? <HowItWorks pair={page.hero} coverTitle={page.coverTitle} /> : null}
+            {home && sections.finishedBook ? <FinishedBookSection values={values} coverTitle={page.coverTitle} /> : null}
+
+            {/* Proof right after the explanation: real pages, out in the world. */}
+            {sections.madeGallery ? <MadeGallery /> : null}
+
+            {/* -------------------------------------------------- why, ideas */}
+            <WhySection why={page.why} showBestPhotos={sections.bestPhotos} />
+            {page.ideas ? <IdeasSection ideas={page.ideas} /> : null}
+            {!home && sections.finishedBook ? <FinishedBookSection values={values} coverTitle={page.coverTitle} /> : null}
+            {sections.partnerContact ? (
+              <>
+                <HowItWorks pair={page.hero} coverTitle={page.coverTitle} />
+                <PartnerContactSection onInquiry={inquire} onStart={startFree} />
+              </>
+            ) : null}
+
           </>
-        ) : null}
+        )}
 
         {/* -------------------------------------------------------- products */}
-        {sections.products ? (
+        {!book && sections.products ? (
           <section className="v2-gutter-x mx-auto w-full max-w-7xl py-12 sm:py-16" aria-labelledby="products-title">
             <SectionHeading eyebrow={PRODUCTS.eyebrow} title={PRODUCTS.title} body={PRODUCTS.body} id="products-title" />
             <div
@@ -324,16 +439,17 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
           </section>
         ) : null}
 
-        {!home && sections.occasions ? (
+        {!book && !home && sections.occasions ? (
           <OccasionsSection current={intent} holidayOn={holiday != null} onStart={startFree} />
         ) : null}
 
         <Testimonials />
 
         {/* ------------------------------------------------------------- faq */}
-        <section className="v2-gutter-x mx-auto w-full max-w-3xl py-12 sm:py-16" aria-labelledby="faq-title">
-          <SectionHeading eyebrow={FAQ.eyebrow} title={FAQ.title} id="faq-title" />
-          <div className="mt-8 divide-y divide-gray-200 rounded-2xl border border-gray-200 bg-white">
+        <div className={cn(book && "bg-white")}>
+        <section className="v2-gutter-x mx-auto w-full max-w-3xl py-14 sm:py-20" aria-labelledby="faq-title">
+          <SectionHeading title={FAQ.title} id="faq-title" />
+          <div className={cn("mt-8 divide-y divide-gray-200 rounded-2xl border border-gray-200", book ? "bg-v2-cream" : "bg-white")}>
             {faq.map(({ q, a, link }) => (
               <details key={q} className="group open:bg-v2-bg/60">
                 <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 text-base font-semibold text-v2-ink focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-v2-primary [&::-webkit-details-marker]:hidden">
@@ -360,6 +476,7 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
             ))}
           </div>
         </section>
+        </div>
 
         {/* ------------------------------------------------------- final cta */}
         {sections.partnerContact ? null : (
@@ -372,38 +489,66 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
               ) : null}
               <div className="absolute inset-0 bg-[linear-gradient(to_top,rgb(36_26_77/0.92),rgb(36_26_77/0.7)_55%,rgb(36_26_77/0.45))]" aria-hidden />
               <div className="relative mx-auto max-w-2xl px-6 py-20 text-center sm:px-10 sm:py-28">
-                <h2 id="final-title" className="v2-brand-title text-4xl sm:text-5xl">
-                  {FINAL_CTA.title}
-                </h2>
-                <p className="mx-auto mt-3 max-w-md text-sm text-white sm:text-base">{FINAL_CTA.body}</p>
-                {fillCopy(FINAL_CTA.creditBadge, values) ? (
-                  <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white">
-                    <Gift className="h-4 w-4" aria-hidden />
-                    {fillCopy(FINAL_CTA.creditBadge, values)}
-                  </p>
-                ) : null}
-                <ul className="mx-auto mt-4 flex max-w-lg flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-white">
-                  {FINAL_CTA.points.map((t) => (
-                    <li key={t} className="inline-flex items-center gap-1.5">
-                      <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-7 flex flex-col items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => startFree("final")}
-                    aria-label={`${FINAL_CTA.cta}: ${FINAL_CTA.title}`}
-                    className="inline-flex min-h-13 items-center justify-center gap-2 rounded-full bg-white px-8 py-2 text-center text-base font-bold text-v2-primary shadow-lg transition hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  >
-                    {FINAL_CTA.cta}
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </button>
-                  <Link href="/sign-in" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-                    {FINAL_CTA.signIn}
-                  </Link>
-                </div>
+                {book ? (
+                  <>
+                    <h2 id="final-title" className="v2-brand-title text-4xl sm:text-5xl">
+                      {FINAL_CTA.book.title}
+                    </h2>
+                    <p className="mx-auto mt-3 max-w-md text-base text-white/90">{FINAL_CTA.book.body}</p>
+                    <div className="mt-7 flex flex-col items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => startBook("final")}
+                        className="inline-flex min-h-13 items-center justify-center gap-2 rounded-full bg-white px-8 py-2 text-center text-base font-bold text-v2-primary shadow-lg transition hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                      >
+                        {FINAL_CTA.book.cta}
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startFree("final")}
+                        className="inline-flex min-h-11 items-center px-2 text-base font-semibold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                      >
+                        {FINAL_CTA.book.secondary}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h2 id="final-title" className="v2-brand-title text-4xl sm:text-5xl">
+                      {FINAL_CTA.title}
+                    </h2>
+                    <p className="mx-auto mt-3 max-w-md text-sm text-white sm:text-base">{FINAL_CTA.body}</p>
+                    {fillCopy(FINAL_CTA.creditBadge, values) ? (
+                      <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white">
+                        <Gift className="h-4 w-4" aria-hidden />
+                        {fillCopy(FINAL_CTA.creditBadge, values)}
+                      </p>
+                    ) : null}
+                    <ul className="mx-auto mt-4 flex max-w-lg flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-white">
+                      {FINAL_CTA.points.map((t) => (
+                        <li key={t} className="inline-flex items-center gap-1.5">
+                          <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                          {t}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-7 flex flex-col items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => startFree("final")}
+                        aria-label={`${FINAL_CTA.cta}: ${FINAL_CTA.title}`}
+                        className="inline-flex min-h-13 items-center justify-center gap-2 rounded-full bg-white px-8 py-2 text-center text-base font-bold text-v2-primary shadow-lg transition hover:bg-v2-primary-light focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                      >
+                        {FINAL_CTA.cta}
+                        <ArrowRight className="h-4 w-4" aria-hidden />
+                      </button>
+                      <Link href="/sign-in" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-white underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+                        {FINAL_CTA.signIn}
+                      </Link>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </section>
@@ -411,8 +556,6 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
       </main>
 
       <MarketingFooter stickyCta />
-
-      {home && holiday ? <HolidayToast label={holiday.label} raised={!heroCtaVisible} /> : null}
 
       <ScrollToTopButton containerRef={scrollBoxRef} focusId="hero-title" />
 
@@ -431,11 +574,21 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
             {page.primaryCta}
             <ArrowRight className="h-4 w-4" aria-hidden />
           </a>
+        ) : book ? (
+          <button
+            type="button"
+            onClick={() => startBook("sticky")}
+            aria-label={STICKY_CTA_BOOK}
+            className="v2-btn-primary min-h-12 w-full px-3 text-center text-base"
+          >
+            {STICKY_CTA_BOOK}
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </button>
         ) : (
           <button
             type="button"
             onClick={() => startFree("sticky")}
-            aria-label={`${STICKY_CTA}: ${eyebrow}`}
+            aria-label={`${STICKY_CTA}: ${page.eyebrow}`}
             className="v2-btn-primary min-h-12 w-full px-3 text-center text-base"
           >
             {STICKY_CTA}
@@ -450,14 +603,23 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
 const STEP_COLORS = ["bg-brand-coral", "bg-brand-amber", "bg-brand-blue"] as const;
 
 /** Three steps from photo to book, each with its own picture. Its #how anchor is the hero's secondary link. */
-function HowItWorks({ pair, coverTitle }: { pair: HeroPair; coverTitle: string }) {
-  const visuals = [<StepPhone key="phone" pair={pair} />, <StepPage key="page" pair={pair} />, <StepBook key="book" title={coverTitle} />];
+function HowItWorks({ pair, coverTitle, bookFirst = false }: { pair: HeroPair; coverTitle: string; bookFirst?: boolean }) {
+  const visuals = [
+    bookFirst ? <StepBindings key="bindings" /> : <StepPhone key="phone" pair={pair} />,
+    <StepPage key="page" pair={pair} />,
+    <StepBook key="book" title={coverTitle} />,
+  ];
+  const steps = bookFirst ? HOW_IT_WORKS.steps : HOW_IT_WORKS.stepsPages;
   return (
     <section id="how" className="relative scroll-mt-20 overflow-hidden bg-v2-butter" aria-labelledby="how-title">
       <div className="v2-gutter-x relative mx-auto w-full max-w-7xl py-14 sm:py-20">
-        <SectionHeading eyebrow={HOW_IT_WORKS.eyebrow} title={HOW_IT_WORKS.title} body={HOW_IT_WORKS.body} id="how-title" />
+        {bookFirst ? (
+          <SectionHeading title={HOW_IT_WORKS.title} id="how-title" />
+        ) : (
+          <SectionHeading eyebrow={HOW_IT_WORKS.pagesEyebrow} title={HOW_IT_WORKS.pagesTitle} body={HOW_IT_WORKS.pagesBody} id="how-title" />
+        )}
         <ol className="relative mt-10 grid gap-5 sm:mt-12 md:grid-cols-3 md:gap-8">
-          {HOW_IT_WORKS.steps.map(({ title, body }, i) => (
+          {steps.map(({ title, body }, i) => (
             <li key={title} className="relative flex flex-col rounded-3xl bg-white p-5 shadow-[0_12px_32px_rgb(36_26_77/0.08)] sm:p-6">
               <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-2xl bg-v2-cream">{visuals[i]}</div>
               <div className="mt-5 flex items-center gap-3">
@@ -470,7 +632,7 @@ function HowItWorks({ pair, coverTitle }: { pair: HeroPair; coverTitle: string }
                 <h3 className="text-lg font-semibold text-v2-ink">{title}</h3>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-v2-muted">{body}</p>
-              {i < HOW_IT_WORKS.steps.length - 1 ? (
+              {i < steps.length - 1 ? (
                 <span
                   className="absolute -right-6 top-24 z-10 hidden h-8 w-8 items-center justify-center rounded-full bg-v2-ink text-white shadow-md md:flex"
                   aria-hidden
@@ -483,6 +645,33 @@ function HowItWorks({ pair, coverTitle }: { pair: HeroPair; coverTitle: string }
         </ol>
       </div>
     </section>
+  );
+}
+
+/** Step 1 of the book layout: the three bindings, fanned. Their real close-up photos. */
+function StepBindings() {
+  const order: BookBindingId[] = ["saddle_stitch", "coil_bound", "perfect_bound"];
+  const place = ["-translate-x-10 -rotate-6", "z-10 translate-y-2", "translate-x-10 rotate-6"];
+  return (
+    <div className="relative flex h-full w-full items-center justify-center" aria-hidden>
+      {order.map((id, i) => {
+        const photo = BINDING_PHOTOS[id];
+        return (
+          <div key={id} className={cn("absolute w-24 overflow-hidden rounded-lg border-2 border-white bg-white shadow-lg", place[i])}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo.src}
+              alt=""
+              width={photo.width}
+              height={photo.height}
+              loading="lazy"
+              decoding="async"
+              className="block aspect-video w-full object-cover"
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -569,7 +758,7 @@ function Testimonials() {
  * The real before/after, big: drag between a family photo and the page made from it. With more than
  * one real pair on the page, a switcher swaps between them.
  */
-function TransformSection({ pairs, onStart }: { pairs: HeroPair[]; onStart: () => void }) {
+function TransformSection({ pairs, onStart, bookFirst = false }: { pairs: HeroPair[]; onStart: () => void; bookFirst?: boolean }) {
   const [index, setIndex] = useState(0);
   const pair = pairs[index] ?? pairs[0];
   const portrait = pair.height > pair.width;
@@ -577,7 +766,13 @@ function TransformSection({ pairs, onStart }: { pairs: HeroPair[]; onStart: () =
     <section className="bg-white" aria-labelledby="transform-title">
       <div className="v2-gutter-x mx-auto grid w-full max-w-[90rem] gap-10 py-14 sm:py-20 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:items-center lg:gap-16">
         <div>
-          <SectionHeading align="left" eyebrow={TRANSFORM.eyebrow} title={TRANSFORM.title} body={TRANSFORM.body} id="transform-title" />
+          <SectionHeading
+            align="left"
+            eyebrow={TRANSFORM.eyebrow}
+            title={bookFirst ? TRANSFORM.titleBook : TRANSFORM.title}
+            body={TRANSFORM.body}
+            id="transform-title"
+          />
           {pairs.length > 1 ? (
             <div className="mt-6 inline-flex rounded-full bg-v2-cream p-1 ring-1 ring-v2-ink/10" role="group" aria-label="Example photos">
               {pairs.map((p, i) => (
@@ -596,17 +791,32 @@ function TransformSection({ pairs, onStart }: { pairs: HeroPair[]; onStart: () =
               ))}
             </div>
           ) : null}
-          <div className="mt-6 rounded-2xl border-l-4 border-v2-primary bg-v2-primary-light p-4 sm:p-5">
-            <p className="font-semibold text-v2-ink">{TRANSFORM.fixTitle}</p>
-            <p className="mt-1 text-sm leading-relaxed text-v2-navy">{TRANSFORM.fixBody}</p>
-          </div>
-          <button type="button" onClick={onStart} className="v2-btn-primary mt-6 min-h-13 w-full px-7 text-base sm:w-auto">
-            {PRIMARY_CTA}
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          </button>
+          {bookFirst ? null : (
+            <>
+              <div className="mt-6 rounded-2xl border-l-4 border-v2-primary bg-v2-primary-light p-4 sm:p-5">
+                <p className="font-semibold text-v2-ink">{TRANSFORM.fixTitle}</p>
+                <p className="mt-1 text-sm leading-relaxed text-v2-navy">{TRANSFORM.fixBody}</p>
+              </div>
+              <button type="button" onClick={onStart} className="v2-btn-primary mt-6 min-h-13 w-full px-7 text-base sm:w-auto">
+                {PRIMARY_CTA}
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </button>
+            </>
+          )}
         </div>
         <div className={cn("mx-auto w-full", portrait && "max-w-[30rem]")}>
           <CompareSlider key={pair.photoSrc} pair={pair} />
+          {bookFirst ? (
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={onStart}
+                className="inline-flex min-h-11 items-center px-2 text-base font-semibold text-v2-link underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary"
+              >
+                {TRANSFORM.tryLink}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

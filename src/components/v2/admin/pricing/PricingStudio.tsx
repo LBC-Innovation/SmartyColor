@@ -6,6 +6,7 @@ import { DataTable, type Column } from "@/components/v2/admin/DataTable";
 import { fullDateTime, money, percent, relativeTime, usd4FromCents } from "@/components/v2/admin/format";
 import { PriceEditorDrawer } from "@/components/v2/admin/pricing/PriceEditorDrawer";
 import { draftFor, isPrintItem, previewPrice, type PricePreview } from "@/components/v2/admin/pricing/pricingMath";
+import { PackagesSection } from "@/components/v2/admin/pricing/PackagesSection";
 import { PromotionsSection } from "@/components/v2/admin/pricing/PromotionsSection";
 import {
   AttentionList,
@@ -326,6 +327,8 @@ export function PricingStudio() {
           </>
         )
       ) : null}
+
+      {canPrices ? <PackagesSection /> : null}
 
       {canPromos || canFinance ? <PromotionsSection canEdit={canPromos} canSeeFinance={canFinance} /> : null}
 
