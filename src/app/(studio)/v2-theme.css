@@ -1428,21 +1428,7 @@ body:has(.v2-shell) {
   }
 }
 
-/* The new-album name field is display-sized. The touch-screen rule that keeps fields at 16px (so
-   iOS doesn't zoom) would shrink it; it is already well over 16px, so keep its size. */
-@media (pointer: coarse) {
-  .v2-shell input.v2-album-name-input {
-    font-size: 1.75rem;
-  }
-}
-
-@media (pointer: coarse) and (min-width: 640px) {
-  .v2-shell input.v2-album-name-input {
-    font-size: 2.25rem;
-  }
-}
-
-/* The name field shows focus with its own underline, so no box outline around it. */
+/* The new-album name field's box shows focus with its own ring, so no outline on the input. */
 .v2-shell input.v2-album-name-input:focus-visible {
   outline: none;
 }

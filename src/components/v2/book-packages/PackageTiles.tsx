@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, Loader2, Printer } from "lucide-react";
 import { PackageTileCard } from "@/components/v2/book-packages/PackageTileCard";
+import { fillPackageCopy } from "@/lib/bookPackages/copy";
 import { WizardProgress } from "@/components/v2/book-packages/WizardProgress";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { formatCredits } from "@/lib/credits/money";
@@ -38,6 +39,7 @@ export function PackageTiles({
   onJustPages,
   onRetry,
   onBack,
+  yearAlbum,
 }: {
   load: PackagesLoad;
   signedIn: boolean;
@@ -47,6 +49,8 @@ export function PackageTiles({
   onJustPages: () => void;
   onRetry: () => void;
   onBack: () => void;
+  /** Opened from the home page's year album: say what this book is for. */
+  yearAlbum?: { year: number; albumName: string } | null;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -67,7 +71,11 @@ export function PackageTiles({
       <h1 ref={headingRef} tabIndex={-1} className="v2-brand-title text-2xl text-v2-ink outline-none sm:text-3xl">
         {BOOK_PACKAGES.chooseTitle}
       </h1>
-      <p className="mt-1 text-v2-muted">{BOOK_PACKAGES.chooseSubtitle}</p>
+      <p className="mt-1 text-v2-muted">
+        {yearAlbum
+          ? fillPackageCopy(BOOK_PACKAGES.chooseSubtitleYear, { albumName: yearAlbum.albumName, year: yearAlbum.year })
+          : BOOK_PACKAGES.chooseSubtitle}
+      </p>
       {/* About the books, so it sits above the cards rather than under "Print as you go". */}
       {load.status === "ready" && load.packages.length > 0 ? (
         <p className="mt-1 text-sm text-v2-muted">{BOOK_PACKAGES.blankBacksNote}</p>
@@ -172,7 +180,7 @@ function PrintAsYouGoCard({
   const lines = signedIn ? BOOK_PACKAGES.justPagesLines : BOOK_PACKAGES.justPagesLinesGuest;
   const note = signedIn ? BOOK_PACKAGES.justPagesNote : BOOK_PACKAGES.justPagesNoteGuest;
   return (
-    <article aria-labelledby="pkg-pages-name" className="v2-panel flex h-full flex-col overflow-hidden">
+    <article aria-labelledby="pkg-pages-name" className="v2-panel relative flex h-full cursor-pointer flex-col overflow-hidden transition duration-200 hover:-translate-y-0.5 hover:border-v2-primary/40 hover:shadow-lg focus-within:ring-2 focus-within:ring-v2-primary/40 has-[:disabled]:cursor-default motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <PrintAsYouGoPicture />
       <div className="flex flex-1 flex-col p-4">
         <div id="pkg-pages-detail" className="flex-1">
@@ -205,7 +213,7 @@ function PrintAsYouGoCard({
           onClick={onJustPages}
           disabled={creatingPages}
           aria-describedby="pkg-pages-detail"
-          className="v2-btn-primary mt-4 min-h-11 w-full"
+          className="v2-btn-primary mt-4 min-h-11 w-full after:absolute after:inset-0 after:content-['']"
         >
           {creatingPages ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           {BOOK_PACKAGES.justPagesButton}

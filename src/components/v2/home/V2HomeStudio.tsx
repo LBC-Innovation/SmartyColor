@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BookOpen, CalendarHeart, ImagePlus, Loader2, Package, Plus, Users } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarHeart, ImagePlus, Loader2, LogOut, Package, Plus, Trash2, Users } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderTrackCard } from "@/components/v2/orders/V2OrderTrackCard";
 import { isUnpaid } from "@/components/v2/orders/V2MyOrdersStudio";
 import { V2YearAlbumModal } from "@/components/v2/home/V2YearAlbumModal";
 import { V2HeardFromCard } from "@/components/v2/home/V2HeardFromCard";
 import { useV2Toast } from "@/components/v2/V2Toast";
+import { useV2Studio } from "@/components/v2/V2StudioProvider";
+import { useAlbumRemoval } from "@/components/v2/albums/useAlbumRemoval";
+import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
+import { YEAR_ALBUM_PARAM, YEAR_ALBUM_PARAM_VALUE, writeYearAlbumIntent } from "@/lib/v2/yearAlbumIntent";
 import { activeSeasonalPrompt } from "@/content/seasonalPrompt";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
@@ -94,8 +98,57 @@ function AlbumCollage({ urls, shared }: { urls: string[]; shared: boolean }) {
 }
 
 /**
- * Where signed-in people land: the book they were making (if any), their albums, and the
- * seasonal prompt, in that order. Guests have no albums on the server, so they go to the studio.
+ * Delete (or leave, for an album shared with you) on an album card. Always shown on touch screens;
+ * with a mouse it appears when the card is hovered or the button has keyboard focus.
+ */
+function RemoveAlbumButton({ name, shared, onClick }: { name: string; shared: boolean; onClick: () => void }) {
+  const Icon = shared ? LogOut : Trash2;
+  const label = shared ? `Leave “${name}”` : `Delete “${name}”`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={shared ? "Leave album" : "Delete album"}
+      className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-v2-muted shadow-sm ring-1 ring-black/5 transition hover:bg-white hover:text-red-600 focus-visible:opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover/album:opacity-100 pointer-fine:group-focus-within/album:opacity-100"
+    >
+      <Icon className="h-4 w-4" aria-hidden />
+    </button>
+  );
+}
+
+/**
+ * The seasonal "book of the year" album, as a card the same size as the albums beside it, as if
+ * it had always been there waiting. Opens the year-album picker.
+ */
+function YearAlbumTile({ year, albumName, onStart }: { year: number; albumName: string; onStart: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onStart}
+      className="v2-panel group flex h-full w-full flex-col overflow-hidden text-left transition hover:border-v2-primary/40 hover:shadow-md"
+    >
+      <span className="relative flex aspect-[4/3] w-full flex-col items-center justify-center bg-gradient-to-br from-v2-primary via-v2-primary to-v2-plum text-white">
+        <CalendarHeart className="h-5 w-5 text-brand-amber" aria-hidden />
+        <span className="v2-brand-title mt-1 text-3xl leading-none tracking-tight sm:text-4xl">{year}</span>
+        <span className="absolute left-2 top-2 rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-semibold backdrop-blur-sm">
+          New
+        </span>
+      </span>
+      <span className="min-w-0 px-3 py-2.5">
+        <span className="block truncate font-semibold text-v2-ink">{albumName}</span>
+        <span className="flex items-center gap-1 truncate text-xs font-semibold text-v2-link">
+          Start this album
+          <ArrowRight className="h-3 w-3 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Where signed-in people land: the book they were making (if any) and their albums, with the
+ * seasonal album as the first card when one is running. Each album card can be deleted from here. Guests have no albums on the server, so they go to the studio.
  */
 export function V2HomeStudio() {
   const router = useRouter();
@@ -113,6 +166,21 @@ export function V2HomeStudio() {
   useEffect(() => {
     if (!authLoading && !user) router.replace(STUDIO_PATH);
   }, [authLoading, user, router]);
+
+  const studio = useV2Studio();
+  // After a delete: fetch the list again (deleting the last album makes a fresh one).
+  const reloadAlbums = useCallback(async () => {
+    const res = await library.listProjects({ previews: true });
+    if (!res.error) setProjects(res.data!);
+  }, []);
+  const removal = useAlbumRemoval({
+    onRemoved: (removed) => {
+      setProjects((prev) => prev?.filter((p) => p.id !== removed.id) ?? prev);
+      void reloadAlbums();
+    },
+  });
+  // The studio keeps the album list too; deleting before it has loaded would leave it out of step.
+  const canRemove = studio.hydrated && studio.cloud;
 
   const userId = user?.id;
   useEffect(() => {
@@ -149,6 +217,17 @@ export function V2HomeStudio() {
       return;
     }
     router.push(albumHref(res.data!.id));
+  }
+
+  /** The year album starts like every new album, at "Start with the book"; its photos come after. */
+  function startYearAlbum() {
+    if (!seasonal) return;
+    if (!BOOK_PACKAGES_ENABLED) {
+      setYearAlbumOpen(true);
+      return;
+    }
+    writeYearAlbumIntent({ year: seasonal.year, albumName: seasonal.albumName });
+    router.push(`/studio/new?${YEAR_ALBUM_PARAM}=${YEAR_ALBUM_PARAM_VALUE}`);
   }
 
   const firstName = user?.displayName?.trim().split(/\s+/)[0];
@@ -266,8 +345,17 @@ export function V2HomeStudio() {
                   Your albums
                 </h2>
                 <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {seasonal && !projects.some((p) => p.name.trim() === seasonal.albumName) ? (
+                    <li>
+                      <YearAlbumTile
+                        year={seasonal.year}
+                        albumName={seasonal.albumName}
+                        onStart={startYearAlbum}
+                      />
+                    </li>
+                  ) : null}
                   {projects.map((project) => (
-                    <li key={project.id}>
+                    <li key={project.id} className="group/album relative">
                       <Link
                         href={albumHref(project.id)}
                         className="v2-panel group flex h-full flex-col overflow-hidden transition hover:border-v2-primary/40 hover:shadow-md"
@@ -284,6 +372,17 @@ export function V2HomeStudio() {
                           </span>
                         </span>
                       </Link>
+                      {canRemove ? (
+                        <RemoveAlbumButton
+                          name={project.name}
+                          shared={project.role === "contributor"}
+                          onClick={() => {
+                            const meta = studio.projects.find((p) => p.id === project.id) ?? projectMetaFromLibrary(project);
+                            if (project.role === "contributor") removal.requestLeave(meta);
+                            else void removal.requestDelete(meta);
+                          }}
+                        />
+                      ) : null}
                     </li>
                   ))}
                   <li>
@@ -300,28 +399,13 @@ export function V2HomeStudio() {
                 </ul>
               </section>
 
-              {seasonal ? (
-                <section aria-label={seasonal.title}>
-                  <div className="v2-panel flex flex-col gap-4 bg-gradient-to-br from-v2-primary-light to-white p-5 sm:flex-row sm:items-center sm:p-6">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-v2-primary shadow-sm">
-                      <CalendarHeart className="h-6 w-6" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-lg font-semibold text-v2-ink">{seasonal.title}</h2>
-                      <p className="mt-1 text-sm leading-relaxed text-v2-muted">{seasonal.body}</p>
-                    </div>
-                    <button type="button" onClick={() => setYearAlbumOpen(true)} className="v2-btn-primary shrink-0">
-                      {seasonal.cta}
-                    </button>
-                  </div>
-                </section>
-              ) : null}
               </div>
             </div>
           )}
         </div>
       </main>
 
+      {removal.modals}
       {yearAlbumOpen && seasonal ? (
         <V2YearAlbumModal
           year={seasonal.year}

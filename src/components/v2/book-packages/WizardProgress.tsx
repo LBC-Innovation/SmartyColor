@@ -2,9 +2,20 @@ import { Check } from "lucide-react";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { cn } from "@/lib/cn";
 
-/** Where the person is in "pick a book, pay, theme, photos". `step` is 1 to 4. Not clickable. */
-export function WizardProgress({ step, className }: { step: 1 | 2 | 3 | 4; className?: string }) {
-  const labels = BOOK_PACKAGES.steps;
+/**
+ * Where the person is in "pick a book, pay, theme, photos". `step` is 1-based. Not clickable.
+ * `flow="pages"` is "Print as you go", which has no Pay step.
+ */
+export function WizardProgress({
+  step,
+  flow = "package",
+  className,
+}: {
+  step: number;
+  flow?: "package" | "pages";
+  className?: string;
+}) {
+  const labels = flow === "pages" ? BOOK_PACKAGES.stepsPages : BOOK_PACKAGES.steps;
   return (
     <nav aria-label={BOOK_PACKAGES.stepsLabel} className={className}>
       {/* Phones: one line and a four-part bar. */}

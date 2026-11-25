@@ -14,6 +14,7 @@ import {
   EllipsisVertical,
   Printer,
   Pencil,
+  Plus,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -39,6 +40,17 @@ export type GalleryCardProps = {
   failureMessage?: string;
   /** Package albums: what the page's allowance is (free touch-ups left, or an extra page). */
   allowance?: { text: string; extra: boolean } | null;
+  /**
+   * Package albums: a photo past what the book package covers. It shows set aside behind a red
+   * dashed edge, and its button makes the page for the fee in `addLabel` instead of "Make page".
+   */
+  beyondPackage?: {
+    addLabel: string;
+    caption: string;
+    /** A finished page is paid for as it is; without it, the button makes the page (`onMake`). */
+    onAdd?: () => void;
+    busy?: boolean;
+  } | null;
   selectMode: boolean;
   /** The book panel is open: shows the check that keeps the page in the book or leaves it out. */
   bookMode?: boolean;
@@ -200,6 +212,7 @@ export function GalleryCard({
   leftOut,
   failureMessage,
   allowance,
+  beyondPackage,
   selectMode,
   bookMode = false,
   selected,
@@ -225,7 +238,15 @@ export function GalleryCard({
   const sheetThumb = useThumbUrl(page?.sheet.imageDataUrl, page?.sheet.thumbUrl);
   const hasPage = state === "ready";
   const label = `Photo ${index + 1}`;
-  const caption = leftOut ? "Left out of book" : !hasPage && state !== "drawing" ? "Not in book yet" : null;
+  // Not while its page is being made: that page is the one being paid for.
+  const beyond = beyondPackage && state !== "drawing" && state !== "queued" ? beyondPackage : null;
+  const caption = leftOut
+    ? "Left out of book"
+    : beyond && state !== "failed"
+      ? beyond.caption
+      : !hasPage && state !== "drawing"
+        ? "Not in book yet"
+        : null;
 
   return (
     <div
@@ -244,6 +265,8 @@ export function GalleryCard({
           selected ? "border-v2-primary ring-2 ring-v2-primary/30" : "border-gray-200",
           // Left out of the book: washed out and gray behind a dashed edge, so it reads as set aside.
           leftOut && !selected && "border-dashed border-gray-300 opacity-55 grayscale shadow-none",
+          // Past the package: dimmed behind a red dashed edge until it's added for a fee.
+          beyond && !selected && "border-2 border-dashed border-red-400 shadow-none",
           isOverlay && "scale-[1.04] border-v2-primary shadow-xl shadow-v2-primary/25",
         )}
       >
@@ -262,7 +285,10 @@ export function GalleryCard({
               src={photoThumb}
               alt=""
               draggable={false}
-              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+              className={cn(
+                "pointer-events-none absolute inset-0 h-full w-full object-cover",
+                beyond && "opacity-45 grayscale",
+              )}
               style={{ objectPosition: photoThumbObjectPosition(photo) === "top" ? "center top" : "center center" }}
             />
           ) : null}
@@ -285,6 +311,7 @@ export function GalleryCard({
             data-lift-ok
             className={cn(
               "absolute bottom-2 right-2 aspect-[3/4] w-[52%] overflow-hidden rounded-lg border-2 border-white bg-white shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-primary",
+              beyond && "opacity-50 grayscale",
             )}
             aria-label={`Open the coloring page for ${label}`}
             onClick={() => (selectMode ? onToggleSelect() : onOpen("page"))}
@@ -330,14 +357,15 @@ export function GalleryCard({
         ) : null}
 
         {/* No page yet (or it failed): one full-width button along the bottom */}
-        {(state === "none" || state === "failed") && !selectMode ? (
+        {(state === "none" || state === "failed" || (state === "ready" && beyond?.onAdd)) && !selectMode ? (
           <button
             type="button"
             className={cn(
               "absolute inset-x-2 bottom-2 inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold shadow-md",
-              state === "failed" ? "bg-white text-red-700" : "bg-v2-primary text-white",
+              state === "failed" || beyond ? "bg-white text-red-700 ring-1 ring-red-200" : "bg-v2-primary text-white",
             )}
-            onClick={onMake}
+            onClick={state === "ready" && beyond?.onAdd ? beyond.onAdd : onMake}
+            disabled={beyond?.busy}
             onPointerDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
             title={state === "failed" ? failureMessage : undefined}
@@ -347,6 +375,11 @@ export function GalleryCard({
                 <span className="h-2 w-2 shrink-0 rounded-full bg-red-600" aria-hidden />
                 <RotateCcw className="h-4 w-4" aria-hidden />
                 Try again
+              </>
+            ) : beyond ? (
+              <>
+                <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                {beyond.addLabel}
               </>
             ) : (
               <>
@@ -380,7 +413,7 @@ export function GalleryCard({
         </span>
       ) : (
         <>
-          {bookMode && (hasPage || leftOut) ? (
+          {bookMode && (hasPage || leftOut) && !beyond ? (
             <button
               type="button"
               role="checkbox"
@@ -434,7 +467,7 @@ export function GalleryCard({
       )}
 
       {caption ? (
-        <p className="mt-1 truncate text-center text-xs text-v2-muted">
+        <p className={cn("mt-1 truncate text-center text-xs", beyond && state !== "failed" ? "font-semibold text-red-700" : "text-v2-muted")}>
           {state === "failed"
             ? failureMessage && failureMessage.length <= 48
               ? failureMessage

@@ -219,6 +219,22 @@ export function listYearPhotos(year: number) {
   return api.request<YearPhoto[]>(`${base}/photos/year/${year}`);
 }
 
+/** Pays for a page the album's book package doesn't cover, from credit (an extra page). */
+export function payForExtraPage(photoId: string) {
+  return api.request<{ chargedCents: number; creditsBalanceCents: number }>(
+    `${base}/photos/${encodeURIComponent(photoId)}/extra-page`,
+    { method: "POST" },
+  );
+}
+
+/** Copies of these photos and their coloring pages, added to an album the caller owns. */
+export function copyPhotosIntoProject(projectId: string, photoIds: string[]) {
+  return api.request<{ copied: number }>(`${base}/projects/${encodeURIComponent(projectId)}/photos/copy`, {
+    method: "POST",
+    body: JSON.stringify({ photoIds }),
+  });
+}
+
 /** A new album holding copies of these photos and their coloring pages. */
 export function createProjectFromPhotos(name: string, photoIds: string[]) {
   return api.request<LibraryProject>(`${base}/projects/from-photos`, {

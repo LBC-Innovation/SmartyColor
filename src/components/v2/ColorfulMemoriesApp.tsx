@@ -27,6 +27,9 @@ import { AddPhotosModal } from "@/components/v2/studio/AddPhotosModal";
 import { DownloadSelectedDialog } from "@/components/v2/studio/DownloadSelectedDialog";
 import { MoveSelectedDialog } from "@/components/v2/studio/MoveSelectedDialog";
 import { StudioEmptyAlbum } from "@/components/v2/studio/StudioEmptyAlbum";
+import { markThemeDecided } from "@/components/v2/studio/themeDecided";
+import { V2YearAlbumModal } from "@/components/v2/home/V2YearAlbumModal";
+import { clearYearAlbumIntent, yearAlbumIntentFor } from "@/lib/v2/yearAlbumIntent";
 import { KeepAlbumPrompt } from "@/components/v2/studio/KeepAlbumPrompt";
 import { StudioHeader } from "@/components/v2/studio/StudioHeader";
 import { UploadStrip } from "@/components/v2/studio/UploadStrip";
@@ -45,7 +48,7 @@ import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
 import { authedFetch } from "@/lib/api/client";
-import { copyPhotoToAlbum } from "@/lib/library/client";
+import { copyPhotoToAlbum, payForExtraPage } from "@/lib/library/client";
 import { projectMetaFromLibrary } from "@/lib/v2/cloudLibrary";
 import type { GuestLimitScope } from "@/lib/guestLimit";
 import { formatCredits } from "@/lib/credits/money";
@@ -158,7 +161,7 @@ export function ColorfulMemoriesApp() {
   const searchParams = useSearchParams();
   const welcomeGuide = useV2WelcomeGuide();
   const prices = usePriceList();
-  const { user } = useAuth();
+  const { user, setCreditsBalance } = useAuth();
   const desktop = useIsDesktop();
   const {
     hydrated,
@@ -211,6 +214,15 @@ export function ColorfulMemoriesApp() {
       })
     : null;
   const [themeOpen, setThemeOpen] = useState(false);
+  // The home page's year album, made through the book wizard: its year's photos come in here.
+  const [yearPhotosOpen, setYearPhotosOpen] = useState(false);
+  const [yearIntentTick, setYearIntentTick] = useState(0);
+  const yearIntent = useMemo(
+    () => (cloud && activeProjectId && typeof window !== "undefined" ? yearAlbumIntentFor(activeProjectId) : null),
+    // yearIntentTick re-reads it once the photos are in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cloud, activeProjectId, yearIntentTick],
+  );
   const [cancelPkgOpen, setCancelPkgOpen] = useState(false);
   // A package canceled elsewhere (the album menu): re-read the allowance so the meter goes away.
   const refreshAlbumCode = albumCode.refresh;
@@ -465,8 +477,59 @@ export function ColorfulMemoriesApp() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [sweepInterrupted]);
 
+  // ---- book package: which photos it reaches --------------------------------------------
+  /**
+   * Package albums: photos the package doesn't reach, in album order. A photo the package already
+   * counts, or whose page was paid for here as an extra, is in the book. The package's free photos
+   * go to the next photos in order, with a page or not (the server counts pages that came in
+   * already made, like the year album's, on its next read); a page being made takes one first.
+   * Every photo after that is "not covered": set aside, and out of the book until added for a fee.
+   */
+  const beyondIds: string[] = [];
+  if (pkgCode && !pkgCode.bookOrderId) {
+    const paid = new Set(pkgCode.extraPhotoIds ?? []);
+    const outside = photos.filter((p) => !pkgCode.photos[p.id] && !paid.has(p.id));
+    const busy = (p: V2PhotoEntry) => Boolean(p.generating || queue.job(p.id));
+    let free = Math.max(0, pkgCode.bundle.includedPages - pkgCode.pagesUsed - outside.filter(busy).length);
+    for (const p of outside) {
+      if (busy(p)) continue;
+      if (free > 0) free--;
+      else beyondIds.push(p.id);
+    }
+  }
+  // Keyed on the ids, so the book below is rebuilt only when the set really changes.
+  const beyondKey = beyondIds.join(",");
+  const beyondPackageIds = useMemo(() => new Set(beyondKey ? beyondKey.split(",") : []), [beyondKey]);
+  const [payingExtraId, setPayingExtraId] = useState<string | null>(null);
+
+  /** "Add for a fee" on a finished page past the package: pay for it from credit. */
+  async function payExtraPage(photoId: string) {
+    if (payingExtraId) return;
+    setPayingExtraId(photoId);
+    const res = await payForExtraPage(photoId);
+    setPayingExtraId(null);
+    if (res.error) {
+      if (res.error.code === "INSUFFICIENT_CREDITS") setAddCreditFor(pagePriceCents ?? 0);
+      else if (res.error.code === "ALREADY") void refreshAlbumCode();
+      else toast.error(res.error.message, "Couldn't add the page");
+      return;
+    }
+    setCreditsBalance(res.data!.creditsBalanceCents);
+    void refreshAlbumCode();
+    toast.success({ title: "Added to your book", message: BOOK_PACKAGES.beyondAddedBody });
+  }
+
   // ---- book --------------------------------------------------------------------------
-  const book = useMemo(() => galleryBook(photos, activeProjectId, activeProject?.name ?? "Album"), [photos, activeProjectId, activeProject?.name]);
+  // Pages past the package stay out of the book until they're added.
+  const book = useMemo(
+    () =>
+      galleryBook(
+        beyondPackageIds.size ? photos.filter((p) => !beyondPackageIds.has(p.id)) : photos,
+        activeProjectId,
+        activeProject?.name ?? "Album",
+      ),
+    [photos, beyondPackageIds, activeProjectId, activeProject?.name],
+  );
   const cartParam = searchParams.get("cart");
   const order = useBookOrder({
     pages: book.pages,
@@ -593,7 +656,7 @@ export function ColorfulMemoriesApp() {
   const giftOffset = order.giftNotePage ? 1 : 0;
   /** Package albums: what each finished page's allowance is, under its card. */
   function pkgCardAllowance(photo: V2PhotoEntry): { text: string; extra: boolean } | null {
-    if (!pkgCode || !photo.remote || cardState(photo) !== "ready") return null;
+    if (!pkgCode || !photo.remote || cardState(photo) !== "ready" || beyondPackageIds.has(photo.id)) return null;
     const left = touchUpsLeft(pkgCode, photo);
     if (left == null) return { text: BOOK_PACKAGES.extraPage, extra: true };
     if (pkgCode.bundle.editsPerPage === 0) return null;
@@ -616,6 +679,21 @@ export function ColorfulMemoriesApp() {
       leftOut: photo.printPrefs.book?.leftOut === true,
       failureMessage: queue.failures[photo.id],
       allowance: pkgCardAllowance(photo),
+      beyondPackage: beyondPackageIds.has(photo.id)
+        ? {
+            caption: BOOK_PACKAGES.beyondCaption,
+            addLabel:
+              payingExtraId === photo.id
+                ? BOOK_PACKAGES.beyondAdding
+                : pagePriceCents != null
+                  ? (fillPackageCopy(BOOK_PACKAGES.beyondAdd, { pagePrice: formatCredits(pagePriceCents) }) ??
+                    BOOK_PACKAGES.beyondAddNoPrice)
+                  : BOOK_PACKAGES.beyondAddNoPrice,
+            // A finished page is paid for as it is; one without a page is made (and charged) as usual.
+            onAdd: activePageVersion(photo) ? () => void payExtraPage(photo.id) : undefined,
+            busy: payingExtraId === photo.id,
+          }
+        : null,
     };
   };
 
@@ -865,6 +943,9 @@ export function ColorfulMemoriesApp() {
 
   // A new album left as it came (made-up name, no photos, nothing bought for it) is asked about
   // on the way out. Not the only album (one always exists), and not one shared with you.
+  // The album has nothing in it yet, so it shows the guided setup instead of the gallery.
+  const albumEmpty = !albumLoading && photos.length + pendingUploads.length === 0;
+
   const untouchedAlbumId =
     hydrated &&
     !albumLoading &&
@@ -874,6 +955,7 @@ export function ColorfulMemoriesApp() {
     photos.length + pendingUploads.length === 0 &&
     !addPhotos &&
     isAutomaticAlbumName(activeProject.name) &&
+    !activeProject.designTheme &&
     (!signedIn || (albumCode.loaded && !code))
       ? activeProject.id
       : null;
@@ -967,7 +1049,8 @@ export function ColorfulMemoriesApp() {
                   inFlight={photos.filter((p) => !pkgCode.photos[p.id] && queue.job(p.id)).length}
                   pagePriceCents={pagePriceCents}
                   theme={activeProject?.designTheme ?? null}
-                  canEditTheme={activeProject?.role !== "contributor"}
+                  // The empty album asks for the theme itself, so the strip doesn't repeat it.
+                  canEditTheme={activeProject?.role !== "contributor" && !albumEmpty}
                   onAddPhotos={() => setAddPhotos({ files: [] })}
                   onOrderBook={openBook}
                   onEditTheme={() => setThemeOpen(true)}
@@ -1068,6 +1151,7 @@ export function ColorfulMemoriesApp() {
               ) : photos.length + pendingUploads.length === 0 ? (
                 <StudioEmptyAlbum
                   key={activeProjectId ?? "none"}
+                  albumId={activeProjectId ?? "none"}
                   albumName={activeProject?.name ?? ""}
                   canRename={activeProject?.role !== "contributor"}
                   onRename={renameActiveProject}
@@ -1076,17 +1160,17 @@ export function ColorfulMemoriesApp() {
                   onHowItWorks={welcomeGuide.open}
                   line={STUDIO_EMPTY.lineByIntent[readIntent()] ?? STUDIO_EMPTY.line}
                   guest={!cloud}
-                  pkg={
-                    pkgCode
+                  theme={
+                    cloud && activeProjectId
                       ? {
-                          code: pkgCode,
-                          photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)),
-                          theme: activeProject?.designTheme ?? null,
-                          canEditTheme: activeProject?.role !== "contributor",
-                          onEditTheme: () => setThemeOpen(true),
+                          value: activeProject?.designTheme ?? null,
+                          canEdit: activeProject?.role !== "contributor",
+                          onEdit: () => setThemeOpen(true),
                         }
                       : null
                   }
+                  pkg={pkgCode ? { code: pkgCode, photosLeft: packagePhotosLeft(pkgCode, photos.map((p) => p.id)) } : null}
+                  yearPhotos={yearIntent ? { year: yearIntent.year, onOpen: () => setYearPhotosOpen(true) } : null}
                 />
               ) : (
                 <StudioGallery
@@ -1464,7 +1548,7 @@ export function ColorfulMemoriesApp() {
               return;
             }
             try {
-              await deleteProject(albumId);
+              await deleteProject(albumId, { loadNextInBackground: true });
               setCancelPkgOpen(false);
               toast.success({
                 title: BOOK_PACKAGES.cancelDoneTitle,
@@ -1478,12 +1562,33 @@ export function ColorfulMemoriesApp() {
           }}
         />
       ) : null}
+      {yearPhotosOpen && yearIntent && activeProjectId ? (
+        <V2YearAlbumModal
+          year={yearIntent.year}
+          albumName={activeProject?.name ?? yearIntent.albumName}
+          intoAlbumId={activeProjectId}
+          onClose={() => setYearPhotosOpen(false)}
+          onAdded={(copied) => {
+            setYearPhotosOpen(false);
+            clearYearAlbumIntent();
+            setYearIntentTick((t) => t + 1);
+            void refreshActiveProject();
+            toast.success({
+              title: "Photos added",
+              message: `${copied} ${copied === 1 ? "photo is" : "photos are"} in your album.`,
+            });
+          }}
+        />
+      ) : null}
       {themeOpen && activeProjectId ? (
         <ThemeModal
           albumId={activeProjectId}
           albumName={activeProject?.name ?? "Album"}
           theme={activeProject?.designTheme ?? null}
-          onSaved={(theme) => setProjectDesignTheme(activeProjectId, theme)}
+          onSaved={(theme) => {
+            markThemeDecided(activeProjectId);
+            setProjectDesignTheme(activeProjectId, theme);
+          }}
           onClose={() => setThemeOpen(false)}
         />
       ) : null}

@@ -37,7 +37,7 @@ const BROWSE: ArrangeSession = { mode: "browse" };
 
 const HINT_KEY = "cm_reorder_hint_seen";
 
-type CardInfo = Pick<GalleryCardProps, "state" | "bookNumber" | "leftOut" | "failureMessage" | "allowance">;
+type CardInfo = Pick<GalleryCardProps, "state" | "bookNumber" | "leftOut" | "failureMessage" | "allowance" | "beyondPackage">;
 
 type Props = {
   photos: V2PhotoEntry[];

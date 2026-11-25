@@ -12,16 +12,19 @@ import { track } from "@/lib/track";
 type Choice = "none" | "theme";
 
 /**
- * Step 3: an optional theme for the paid album. It reads as a plain choice, "No theme" (picked
+ * Step 3 (step 2 for "Print as you go"): an optional theme for the new album. It reads as a plain choice, "No theme" (picked
  * by default) or "Add a theme", with real examples above it, so nobody thinks a theme is required.
  */
 export function ThemeStep({
   albumId,
   initialTheme,
+  flow = "package",
   onDone,
 }: {
   albumId: string;
   initialTheme: string | null;
+  /** "pages" is "Print as you go": no Pay step in the progress. */
+  flow?: "package" | "pages";
   /** Leave the wizard for the album. `saved` is true when a theme was stored. */
   onDone: (saved: boolean) => void;
 }) {
@@ -63,7 +66,7 @@ export function ThemeStep({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-32 pt-6 sm:px-6 sm:pb-12">
-      <WizardProgress step={3} className="mb-5" />
+      <WizardProgress step={flow === "pages" ? 2 : 3} flow={flow} className="mb-5" />
       <div className="v2-panel p-5 sm:p-8">
         <div className="flex flex-wrap items-center gap-2">
           <h1 ref={headingRef} tabIndex={-1} className="v2-brand-title text-2xl text-v2-ink outline-none sm:text-3xl">

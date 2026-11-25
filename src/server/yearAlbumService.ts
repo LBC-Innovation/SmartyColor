@@ -3,6 +3,7 @@ import type { ApiResult } from "@/lib/api/types";
 import type { LibraryProject, YearPhoto } from "@/lib/library/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { createProject } from "@/server/libraryService";
+import { claimMadePagesForCode } from "@/server/purchaseCodesService";
 import { libraryPaths, signedReadUrls } from "@/server/storage/libraryFiles";
 import { copyPhoto, revisionsByPhoto } from "@/server/photoCopy";
 
@@ -107,11 +108,10 @@ async function forEachLimited<T>(items: T[], limit: number, fn: (item: T, index:
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-export async function createProjectFromPhotos(
-  userId: string,
-  name: string,
-  photoIds: unknown,
-): Promise<ApiResult<LibraryProject>> {
+type Chosen = { ordered: Row[]; revsByPhoto: Map<string, Row[]>; requested: number };
+
+/** The caller's own photos among `photoIds`, in the order given, with their coloring pages. */
+async function chosenPhotos(userId: string, photoIds: unknown): Promise<ApiResult<Chosen>> {
   if (!Array.isArray(photoIds) || photoIds.length === 0) return err("Pick at least one photo.", "INVALID");
   if (photoIds.length > MAX_YEAR_ALBUM_PHOTOS) {
     return err(`An album can start with up to ${MAX_YEAR_ALBUM_PHOTOS} photos.`, "INVALID");
@@ -126,24 +126,23 @@ export async function createProjectFromPhotos(
   const byId = new Map(photos.map((p) => [p.id as string, p]));
   const ordered = ids.map((id) => byId.get(id)).filter((p): p is Row => Boolean(p));
 
-  let revsByPhoto: Map<string, Row[]>;
   try {
-    revsByPhoto = await revisionsByPhoto(ordered.map((p) => p.id as string));
+    const revsByPhoto = await revisionsByPhoto(ordered.map((p) => p.id as string));
+    return { data: { ordered, revsByPhoto, requested: ids.length }, error: null };
   } catch (e) {
     return err(e instanceof Error ? e.message : "Could not read coloring pages");
   }
+}
 
-  const created = await createProject(userId, name);
-  if (created.error) return created;
-  const project = created.data!;
-
+/** Copies each photo (and its pages) into the album from `firstPosition` on; returns how many made it. */
+async function copyInto(userId: string, projectId: string, chosen: Chosen, firstPosition: number): Promise<number> {
   let copied = 0;
-  await forEachLimited(ordered, COPY_CONCURRENCY, async (photo, index) => {
+  await forEachLimited(chosen.ordered, COPY_CONCURRENCY, async (photo, index) => {
     try {
-      await copyPhoto(photo, revsByPhoto.get(photo.id as string) ?? [], {
-        projectId: project.id,
+      await copyPhoto(photo, chosen.revsByPhoto.get(photo.id as string) ?? [], {
+        projectId,
         ownerId: userId,
-        position: index,
+        position: firstPosition + index,
         keepCreatedAt: true,
       });
       copied++;
@@ -152,6 +151,61 @@ export async function createProjectFromPhotos(
       log("warn", "year album: photo copy failed", { userId, photoId: photo.id, error: String(e) });
     }
   });
-  log("info", "year album created", { userId, projectId: project.id, requested: ids.length, copied });
+  return copied;
+}
+
+export async function createProjectFromPhotos(
+  userId: string,
+  name: string,
+  photoIds: unknown,
+): Promise<ApiResult<LibraryProject>> {
+  const chosen = await chosenPhotos(userId, photoIds);
+  if (chosen.error) return chosen;
+
+  const created = await createProject(userId, name);
+  if (created.error) return created;
+  const project = created.data!;
+
+  const copied = await copyInto(userId, project.id, chosen.data, 0);
+  log("info", "year album created", { userId, projectId: project.id, requested: chosen.data.requested, copied });
   return { data: { ...project, photoCount: copied }, error: null };
+}
+
+/**
+ * Copies of these photos added to an album the caller owns, after the photos already in it. Used
+ * when the year's album was made through the book wizard first (book, pay, theme) and then filled.
+ */
+export async function copyPhotosIntoProject(
+  userId: string,
+  projectId: string,
+  photoIds: unknown,
+): Promise<ApiResult<{ copied: number }>> {
+  const { data: project, error: projectErr } = await db()
+    .from("library_projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (projectErr) return err(projectErr.message);
+  if (!project) return err("Album not found.", "NOT_FOUND");
+
+  const chosen = await chosenPhotos(userId, photoIds);
+  if (chosen.error) return chosen;
+
+  const { data: last, error: posErr } = await db()
+    .from("library_photos")
+    .select("position")
+    .eq("project_id", projectId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (posErr) return err(posErr.message);
+  const first = typeof last?.position === "number" ? last.position + 1 : 0;
+
+  const copied = await copyInto(userId, projectId, chosen.data, first);
+  // A book package counts pages that came in already made, in album order, before any others.
+  const claimed = copied > 0 ? await claimMadePagesForCode(projectId) : 0;
+  log("info", "year photos added", { userId, projectId, requested: chosen.data.requested, copied, claimed });
+  if (copied === 0) return err("Those photos couldn't be copied. Please try again.");
+  return { data: { copied }, error: null };
 }

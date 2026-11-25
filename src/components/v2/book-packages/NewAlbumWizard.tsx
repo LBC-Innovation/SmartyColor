@@ -30,6 +30,15 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 import { trackFormat } from "@/lib/marketing/events";
 import { track } from "@/lib/track";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
+import { markThemeDecided } from "@/components/v2/studio/themeDecided";
+import {
+  YEAR_ALBUM_PARAM,
+  YEAR_ALBUM_PARAM_VALUE,
+  attachYearAlbumIntent,
+  clearYearAlbumIntent,
+  readYearAlbumIntent,
+  type YearAlbumIntent,
+} from "@/lib/v2/yearAlbumIntent";
 
 const CHOICE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -64,7 +73,8 @@ function clearChoice() {
 /**
  * /studio/new: "Start with the book". Step 1 picks a package (or "Print as you go"), step 2 pays
  * once (wallet or card), the return from Stripe confirms the payment, step 3 sets an optional
- * theme, and the album opens in the studio for its photos. The step and the chosen book live in
+ * theme, and the album opens in the studio for its photos. "Print as you go" has nothing to pay,
+ * so a signed-in person goes from step 1 straight to the theme (`flow=pages`). The step and the chosen book live in
  * the address, so sign-up, a reload and the phone Back button all keep their place.
  */
 export function NewAlbumWizard() {
@@ -80,6 +90,18 @@ export function NewAlbumWizard() {
   const step = params.get("step");
   const bookParam = params.get("book");
   const albumParam = params.get("album");
+  const flow = params.get("flow") === "pages" ? "pages" : "package";
+  // The home page's year album runs through here too. A plain "New album" (step 1 without the
+  // year param) drops any year album left from earlier in this tab.
+  const [yearAlbum] = useState<YearAlbumIntent | null>(() => {
+    if (typeof window === "undefined") return null;
+    const onStepOne = !step || step === "book";
+    if (onStepOne && !bookParam && params.get(YEAR_ALBUM_PARAM) !== YEAR_ALBUM_PARAM_VALUE) {
+      clearYearAlbumIntent();
+      return null;
+    }
+    return readYearAlbumIntent();
+  });
   // The cancel note is read once and then taken out of the address, so a reload doesn't repeat it.
   const [canceledParam] = useState(() => params.get("package") === "canceled");
 
@@ -147,18 +169,21 @@ export function NewAlbumWizard() {
     track("album_started", { mode: "pages" });
     clearChoice();
     if (signedIn) {
-      const res = await library.createProject(`Album ${studio.projects.length + 1}`);
+      const res = await library.createProject(yearAlbum?.albumName ?? `Album ${studio.projects.length + 1}`);
       if (isError(res)) {
         setCreatingPages(false);
         toast.error(res.error.message, "Couldn't create the album");
         return;
       }
-      router.replace(albumHref(res.data.id));
+      attachYearAlbumIntent(res.data.id);
+      // Same path as a package: choose a theme first, then the album opens for its photos.
+      router.replace(`/studio/new?step=theme&flow=pages&album=${encodeURIComponent(res.data.id)}`);
       return;
     }
+    // Guests: a theme is kept with an account, so the album opens straight away.
     studio.createProject();
     router.replace(STUDIO_PATH);
-  }, [creatingPages, signedIn, studio, router, toast]);
+  }, [creatingPages, signedIn, studio, router, toast, yearAlbum]);
 
   // With nothing to sell (switch off, no priced package) "New album" behaves as it always did.
   useEffect(() => {
@@ -254,11 +279,13 @@ export function NewAlbumWizard() {
   // Pay step of this same wizard, which would bounce the person forward again.
   function goBack() {
     clearChoice();
+    clearYearAlbumIntent();
     router.push(signedIn ? "/home" : STUDIO_PATH);
   }
 
   function onPaid(purchase: BookPackagePurchase) {
     clearChoice();
+    attachYearAlbumIntent(purchase.projectId);
     track("album_started", { mode: "package" });
     void refreshUser();
     toast.success({
@@ -276,6 +303,7 @@ export function NewAlbumWizard() {
         bindingHint={bindingHint}
         onContinue={(purchase) => {
           clearChoice();
+          attachYearAlbumIntent(purchase.projectId);
           track("album_started", { mode: "package" });
           void refreshUser();
           router.replace(`/studio/new?step=theme&album=${encodeURIComponent(purchase.projectId)}`);
@@ -294,7 +322,9 @@ export function NewAlbumWizard() {
         key={themeAlbum.id}
         albumId={themeAlbum.id}
         initialTheme={themeAlbum.theme}
+        flow={flow}
         onDone={(saved) => {
+          markThemeDecided(themeAlbum.id);
           if (saved) toast.success({ message: DESIGN_THEMES.saved });
           router.replace(albumHref(themeAlbum.id));
         }}
@@ -324,6 +354,7 @@ export function NewAlbumWizard() {
             }
           }}
           onPaid={onPaid}
+          albumName={yearAlbum?.albumName}
           onUnavailable={() => {
             clearChoice();
             toast.info(BOOK_PACKAGES.unavailable);
@@ -342,6 +373,7 @@ export function NewAlbumWizard() {
           onJustPages={() => void justPages()}
           onRetry={reload}
           onBack={goBack}
+          yearAlbum={yearAlbum}
         />
       ) : null;
   } else {
@@ -355,6 +387,7 @@ export function NewAlbumWizard() {
         onJustPages={() => void justPages()}
         onRetry={reload}
         onBack={goBack}
+        yearAlbum={yearAlbum}
       />
     );
   }
