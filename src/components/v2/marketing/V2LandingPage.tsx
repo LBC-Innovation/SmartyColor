@@ -170,6 +170,8 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
   /** One section of the book-first layout. A plain function, not a component, so a section keeps its state. */
   function renderBookSection(id: BookSectionId) {
     switch (id) {
+      case "made":
+        return <MadeGallery />;
       case "transform":
         return <TransformSection pairs={examplePairs} bookFirst onStart={() => startFree("transform")} />;
       case "giftPoints":
@@ -190,6 +192,10 @@ export function V2LandingPage({ intent, numbers, holiday }: Props) {
         );
       case "photoBand":
         return <PhotoBand exclude={page.heroPhoto} surface />;
+      case "why":
+        return <WhySection why={page.why} showBestPhotos={sections.bestPhotos} />;
+      case "ideas":
+        return page.ideas ? <IdeasSection ideas={page.ideas} /> : null;
       case "giftStrip":
         return <GiftStrip values={values} />;
       default:
