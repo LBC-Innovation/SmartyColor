@@ -71,7 +71,10 @@ function PageStack({ pictures }: { pictures: string[] }) {
 export function BookPromoCard({ pageCount, pictures, progress, onStart, onDismiss, className }: Props) {
   const numbers = useMarketingNumbers(progress == null);
   const values = numberValues(numbers);
-  const priceHint = values.price && values.refPages ? fillCopy("A {refPages}-page book is about {price} shipped.", values) : null;
+  // The cheapest book package from the live catalog; without packages, the reference book's price.
+  const priceHint =
+    fillCopy("Books starting at {packageFrom}.", values) ??
+    fillCopy("A {refPages}-page book is about {price} shipped.", values);
   const pages = `${pageCount} ${pageCount === 1 ? "page" : "pages"}`;
   // Give them a moment with their pages before suggesting a book.
   const [shown, setShown] = useState(false);

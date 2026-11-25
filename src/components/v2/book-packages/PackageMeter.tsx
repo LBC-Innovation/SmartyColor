@@ -115,14 +115,16 @@ export function PackageMeter({
   return (
     <section
       aria-label={title}
-      className="flex items-center gap-x-3 rounded-2xl border border-v2-primary/20 bg-v2-primary-light/40 px-3 py-1 sm:flex-wrap sm:gap-x-4 sm:px-4 sm:py-2"
+      // A size container, so the theme name hides when the strip itself is narrow (the book card
+      // open beside it), not only on a narrow screen.
+      className="@container flex items-center gap-x-3 rounded-2xl border border-v2-primary/20 bg-v2-primary-light/40 px-3 py-1 sm:flex-wrap sm:gap-x-4 sm:px-4 sm:py-2"
     >
       {/* Book and progress. */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <BookOpen className="h-5 w-5 shrink-0 text-v2-primary" aria-hidden />
         <span className="hidden shrink-0 text-sm font-semibold text-v2-ink sm:inline">{title}</span>
         <div
-          className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-white sm:block"
+          className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-white @2xl:block"
           role="progressbar"
           aria-label="Included photos used"
           aria-valuemin={0}
@@ -151,7 +153,8 @@ export function PackageMeter({
           className="v2-hit-y group inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-full text-sm text-v2-muted sm:max-w-xs"
         >
           <Palette className="h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
-          <span className="hidden min-w-0 truncate sm:inline">{theme ?? BOOK_PACKAGES.themeRowNone}</span>
+          {/* Only when the strip has room for it; the full name stays in the tooltip and label. */}
+          <span className="hidden min-w-0 truncate @4xl:inline">{theme ?? BOOK_PACKAGES.themeRowNone}</span>
           <span className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-v2-link group-hover:underline">
             <Pencil className="h-3.5 w-3.5 sm:hidden" aria-hidden />
             <span className="hidden sm:inline">{theme ? BOOK_PACKAGES.themeChange : BOOK_PACKAGES.themeAdd}</span>
