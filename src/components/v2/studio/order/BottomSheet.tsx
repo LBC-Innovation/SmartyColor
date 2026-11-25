@@ -22,13 +22,13 @@ export function BottomSheet({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, initialFocusRef: bodyRef, onClose });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 50, panelRef, initialFocusRef: bodyRef, onClose });
   useLayerHistory(true, onClose);
   const [drag, setDrag] = useState(0);
   const startRef = useRef<{ y: number; id: number } | null>(null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-50 flex items-end" style={{ zIndex: layerZ }} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" tabIndex={-1} className="absolute inset-0 bg-v2-ink/40" aria-label="Close" onClick={onClose} />
       <div
         ref={panelRef}

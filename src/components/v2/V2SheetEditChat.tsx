@@ -97,7 +97,7 @@ export function V2SheetEditChat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const pipRef = useRef<EditChatPipHandle>(null);
-  useModalLayer({ panelRef, onClose, active: open });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 50, panelRef, onClose, active: open });
   const keyboardBox = useKeyboardSafeBox(open);
 
   // Phones: the full-screen page viewer, opened from the floating page. Closed again on every open.
@@ -168,7 +168,7 @@ export function V2SheetEditChat({
   return (
     <div
       className="v2-modal fixed inset-0 z-50 flex items-stretch justify-center bg-v2-plum/50 backdrop-blur-sm lg:items-center lg:p-6"
-      style={keyboardBox}
+      style={{ ...keyboardBox, zIndex: layerZ }}
       role="dialog"
       aria-labelledby="v2-sheet-edit-title"
       aria-modal="true"

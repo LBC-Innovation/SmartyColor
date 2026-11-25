@@ -3,6 +3,7 @@
 import { useId, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
+import { useLayerHistory } from "@/components/v2/studio/useLayerHistory";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -80,11 +81,14 @@ function V2ModalPanel({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, initialFocusRef: bodyRef, onClose });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 50, panelRef, initialFocusRef: bodyRef, onClose });
+  // The phone's Back button closes this dialog, not whatever is open underneath it (the order
+  // review under add-credit, say). Dialogs that can't be cancelled keep no history entry.
+  useLayerHistory(!hideClose, onClose);
 
   return (
     <div
-      className="v2-modal fixed inset-0 z-50 flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4"
+      className="v2-modal fixed inset-0 z-50 flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4" style={{ zIndex: layerZ }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? titleId : undefined}

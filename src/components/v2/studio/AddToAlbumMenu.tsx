@@ -93,7 +93,7 @@ function AlbumPicker({
   const [newName, setNewName] = useState("");
 
   // Esc closes only this menu, focus stays inside it, and focus goes back to the button after.
-  useModalLayer({ panelRef, initialFocusRef: listRef, onClose: () => !working && onClose() });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 60, panelRef, initialFocusRef: listRef, onClose: () => !working && onClose() });
 
   useLayoutEffect(() => {
     if (sheet) return;
@@ -248,7 +248,7 @@ function AlbumPicker({
 
   if (sheet) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-end" role="dialog" aria-modal="true" aria-label="Add this photo to">
+      <div className="fixed inset-0 z-[60] flex items-end" style={{ zIndex: layerZ }} role="dialog" aria-modal="true" aria-label="Add this photo to">
         <button type="button" tabIndex={-1} className="absolute inset-0 bg-v2-ink/40" aria-label="Close" onClick={() => !working && onClose()} />
         <div
           ref={panelRef}
@@ -277,7 +277,7 @@ function AlbumPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-[60]" role="presentation">
+    <div className="fixed inset-0 z-[60]" role="presentation" style={{ zIndex: layerZ }}>
       <button type="button" tabIndex={-1} className="absolute inset-0 cursor-default" aria-label="Close" onClick={() => !working && onClose()} />
       <div
         ref={panelRef}

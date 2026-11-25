@@ -44,12 +44,12 @@ function DrawerPanel({ onClose, title, subtitle, headerActions, footer, width = 
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, initialFocusRef: bodyRef, onClose });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 50, panelRef, initialFocusRef: bodyRef, onClose });
 
   return (
     <div
       className="v2-shell fixed inset-0 z-50"
-      style={{ fontFamily: shellFontFamily() }}
+      style={{ fontFamily: shellFontFamily(), zIndex: layerZ }}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
