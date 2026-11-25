@@ -173,7 +173,7 @@ export function PageEditorModal(props: Props) {
   } = props;
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, initialFocusRef: bodyRef, onClose });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 50, panelRef, initialFocusRef: bodyRef, onClose });
   useLayerHistory(true, onClose);
 
   const revisions = normalizeV2SheetRevisions(photo);
@@ -278,7 +278,7 @@ export function PageEditorModal(props: Props) {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label={`Page ${index + 1} of ${total}`}>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center lg:items-center lg:p-6" style={{ zIndex: layerZ }} role="dialog" aria-modal="true" aria-label={`Page ${index + 1} of ${total}`}>
       <button type="button" tabIndex={-1} className="absolute inset-0 hidden bg-v2-ink/40 backdrop-blur-[2px] lg:block" aria-label="Close" onClick={onClose} />
       <div
         ref={panelRef}
@@ -558,7 +558,7 @@ export function PageEditorModal(props: Props) {
 /** The page or photo alone, filling the screen. X, Esc, a tap anywhere or Back closes it. */
 function FullScreenImage({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, onClose });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 60, panelRef, onClose });
   useLayerHistory(true, onClose);
   return (
     <div
@@ -567,7 +567,7 @@ function FullScreenImage({ src, alt, onClose }: { src: string; alt: string; onCl
       role="dialog"
       aria-modal="true"
       aria-label={alt}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/95 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] focus:outline-none sm:p-6"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/95 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] focus:outline-none sm:p-6" style={{ zIndex: layerZ }}
       onClick={onClose}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

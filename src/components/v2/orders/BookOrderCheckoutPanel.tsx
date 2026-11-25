@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Gift, Loader2, Wallet } from "lucide-react";
 import { V2AddCreditModal } from "@/components/v2/credits/V2AddCreditModal";
+import { recheckTopUp, useTopUpStatus } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { formatCredits } from "@/lib/credits/money";
@@ -25,6 +26,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
   const [placing, setPlacing] = useState(false);
   const [addCreditOpen, setAddCreditOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const topUp = useTopUpStatus();
 
   const totalCents = order.totalCents;
   // The album's purchase code pays `coveredCents`; the wallet pays what is left.
@@ -132,7 +134,33 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {shortfallCents > 0 ? (
+        {shortfallCents > 0 && topUp.kind === "confirming" ? (
+          // Back from Stripe, credit not on the balance yet: no second pay button meanwhile.
+          <button type="button" className="v2-btn-primary min-h-11 w-full text-sm sm:w-auto" disabled aria-busy>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            Confirming your payment…
+          </button>
+        ) : shortfallCents > 0 && (topUp.kind === "slow" || topUp.kind === "bank") ? (
+          <>
+            <p className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+              {topUp.kind === "bank"
+                ? `Your ${formatCredits(topUp.amountCents)} is on its way from your bank, which can take a few days. Place the order once it arrives.`
+                : "We're still confirming your payment. If you were charged, your credit will show up shortly, so please don't pay again yet."}
+            </p>
+            {topUp.kind === "slow" ? (
+              <button type="button" className="v2-btn-primary min-h-11 w-full text-sm sm:w-auto" onClick={recheckTopUp}>
+                Check again
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="v2-btn-outline min-h-11 w-full text-sm sm:w-auto"
+              onClick={() => setAddCreditOpen(true)}
+            >
+              {topUp.kind === "bank" ? "Pay by card instead" : "Add credit again"}
+            </button>
+          </>
+        ) : shortfallCents > 0 ? (
           <button
             type="button"
             className="v2-btn-primary min-h-11 w-full text-sm sm:w-auto"

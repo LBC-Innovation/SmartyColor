@@ -150,14 +150,14 @@ function Sheet(props: AlbumSwitcherPanelProps) {
   const [view, setView] = useState<View>(null);
   const [shown, setShown] = useState(false);
   const back = useBack(view, setView, props.onClose);
-  useModalLayer({ panelRef, onClose: back });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 50, panelRef, onClose: back });
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="presentation">
+    <div className="fixed inset-0 z-50 flex items-end justify-center" role="presentation" style={{ zIndex: layerZ }}>
       <button
         type="button"
         tabIndex={-1}

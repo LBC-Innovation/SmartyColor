@@ -9,6 +9,7 @@ import { BookCoverCredit } from "@/components/v2/book-order/BookCoverCredit";
 import { BookPrintGuidesToggle } from "@/components/v2/book-order/BookPrintGuidesToggle";
 import { BookPrintPagePreview } from "@/components/v2/book-order/BookPrintPagePreview";
 import { useModalLayer } from "@/components/v2/ui/useModalLayer";
+import { recheckTopUp, useTopUpStatus } from "@/components/v2/credits/useCreditCheckoutReturn";
 import { useV2Toast } from "@/components/v2/V2Toast";
 import { useLayerHistory } from "@/components/v2/studio/useLayerHistory";
 import { Confetti } from "@/components/v2/studio/order/Confetti";
@@ -62,11 +63,16 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
   const bodyRef = useRef<HTMLDivElement>(null);
   const wide = useWide();
   const toast = useV2Toast();
+  const topUp = useTopUpStatus();
   const placed = order.placed;
   const closeIfIdle = () => {
-    if (!order.placing) onClose();
+    if (order.placing) return;
+    // Leaving the thank-you screen any way (Esc, Back, the backdrop) does what "Make another book"
+    // does, so the ordered book doesn't linger in the panel with its cart already closed.
+    if (placed) order.startOver();
+    onClose();
   };
-  useModalLayer({ panelRef, initialFocusRef: bodyRef, onClose: closeIfIdle });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 55, panelRef, initialFocusRef: bodyRef, onClose: closeIfIdle });
   useLayerHistory(true, closeIfIdle);
   const [step, setStep] = useState<ConfirmStep>(initialStep === "overview" && order.proofConfirmed ? "overview" : "proof");
   const [showGuides, setShowGuides] = useState(false);
@@ -175,6 +181,11 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
   const canPlace =
     order.proofConfirmed && order.quoteCents != null && !order.quoteLoading && order.shortfallCents === 0 && !order.placing && !placed;
   const quoteUnchanged = order.restoredCart?.quotedCents == null || order.restoredCart.quotedCents === order.quoteCents;
+  // The book changed under the overview (a page redrawn, the cover edited): paying or placing needs a
+  // fresh look, so go back to the proof, which shows just what changed.
+  if (step === "overview" && !order.proofConfirmed && !placed && !order.placing && countdown == null) {
+    setStep("proof");
+  }
   // Once, when everything is ready after the top-up: start a short countdown (a new total waits for a tap).
   if (autoArmed && step === "overview" && canPlace) {
     setAutoArmed(false);
@@ -201,6 +212,8 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const [delivery, setDelivery] = useState<{ min: string | null; max: string | null } | null>(null);
   const [downloading, setDownloading] = useState(false);
+  /** Saving the book before add-credit opens (a moment, on a slow connection). */
+  const [startingTopUp, setStartingTopUp] = useState(false);
   useEffect(() => {
     if (!placed) return;
     headlineRef.current?.focus();
@@ -284,7 +297,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
   const progress = step === "proof" ? (items.length - unseen) / Math.max(1, items.length) : 1;
 
   return (
-    <div className="v2-modal fixed inset-0 z-[55] flex items-stretch justify-center lg:items-center lg:p-6" role="dialog" aria-modal="true" aria-label="Review and order">
+    <div className="v2-modal fixed inset-0 z-[55] flex items-stretch justify-center lg:items-center lg:p-6" style={{ zIndex: layerZ }} role="dialog" aria-modal="true" aria-label="Review and order">
       <button type="button" tabIndex={-1} className="v2-modal-backdrop absolute inset-0 hidden bg-v2-plum/50 backdrop-blur-sm lg:block" aria-label="Close" onClick={closeIfIdle} />
       <div
         ref={panelRef}
@@ -465,13 +478,50 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden />
                     Placing your order…
                   </button>
+                ) : order.shortfallCents > 0 && topUp.kind === "confirming" ? (
+                  // Back from Stripe, credit not on the balance yet: no second pay button meanwhile.
+                  <button type="button" className="v2-btn-primary min-h-12 w-full text-base" disabled aria-busy>
+                    <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden />
+                    Confirming your payment…
+                  </button>
+                ) : order.shortfallCents > 0 && (topUp.kind === "slow" || topUp.kind === "bank") ? (
+                  <div>
+                    <p className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
+                      {topUp.kind === "bank"
+                        ? `Your ${formatCredits(topUp.amountCents)} is on its way from your bank, which can take a few days. Your book is saved; place the order once it arrives.`
+                        : "We're still confirming your payment. If you were charged, your credit will show up shortly, so please don't pay again yet."}
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      {topUp.kind === "slow" ? (
+                        <button type="button" className="v2-btn-primary min-h-12 flex-1 text-base" onClick={recheckTopUp}>
+                          Check again
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="v2-btn-outline min-h-12 flex-1 text-base"
+                        disabled={startingTopUp}
+                        onClick={() => {
+                          setStartingTopUp(true);
+                          void order.startTopUp(order.shortfallCents).finally(() => setStartingTopUp(false));
+                        }}
+                      >
+                        {topUp.kind === "bank" ? "Pay by card instead" : "Add credit again"}
+                      </button>
+                    </div>
+                  </div>
                 ) : order.shortfallCents > 0 ? (
                   <button
                     type="button"
                     className="v2-btn-primary min-h-12 w-full text-base"
-                    disabled={order.quoteCents == null || order.quoteLoading}
-                    onClick={() => void order.startTopUp(order.shortfallCents)}
+                    disabled={order.quoteCents == null || order.quoteLoading || startingTopUp || !order.proofConfirmed}
+                    aria-busy={startingTopUp}
+                    onClick={() => {
+                      setStartingTopUp(true);
+                      void order.startTopUp(order.shortfallCents).finally(() => setStartingTopUp(false));
+                    }}
                   >
+                    {startingTopUp ? <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden /> : null}
                     Pay {formatCredits(order.shortfallCents)} and place order
                   </button>
                 ) : (

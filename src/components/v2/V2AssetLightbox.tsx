@@ -176,7 +176,7 @@ export function V2AssetLightbox({
     !saveOverlayRevisionBusy;
 
   const panelRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, onClose });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 100, panelRef, onClose });
 
   const title =
     focus === "original" ? "Original photo" : "Coloring page";
@@ -185,7 +185,7 @@ export function V2AssetLightbox({
     <div
       ref={panelRef}
       tabIndex={-1}
-      className="v2-safe-overlay fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none"
+      className="v2-safe-overlay fixed inset-0 z-[100] flex flex-col bg-slate-950/95 backdrop-blur-sm focus:outline-none" style={{ zIndex: layerZ }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="v2-lightbox-title"

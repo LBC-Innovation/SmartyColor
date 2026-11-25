@@ -13,7 +13,7 @@ const noop = () => {};
  */
 export function V2MigrationProgressModal({ progress }: { progress: MigrationProgress | null }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  useModalLayer({ panelRef, onClose: noop });
+  const { zIndex: layerZ } = useModalLayer({ baseZ: 60, panelRef, onClose: noop });
 
   // Closing the tab mid-move: ask the browser to confirm first.
   useEffect(() => {
@@ -36,7 +36,7 @@ export function V2MigrationProgressModal({ progress }: { progress: MigrationProg
 
   return (
     <div
-      className="v2-modal fixed inset-0 z-[60] flex items-center justify-center bg-v2-plum/55 p-4 backdrop-blur-sm"
+      className="v2-modal fixed inset-0 z-[60] flex items-center justify-center bg-v2-plum/55 p-4 backdrop-blur-sm" style={{ zIndex: layerZ }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cm-migration-title"

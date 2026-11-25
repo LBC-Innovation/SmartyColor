@@ -567,6 +567,11 @@ export function useBookOrder({
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   /** The draft order placing created, reused if placing is tried again. */
   const savedDraftIdRef = useRef<string | null>(null);
+  /**
+   * The order confirmed for payment when paying it then failed. It can't be edited any more, so trying
+   * again pays it as it is when the book hasn't changed (`key`), and starts a new draft when it has.
+   */
+  const awaitingRef = useRef<{ orderId: string; key: string } | null>(null);
   const [restoredCart, setRestoredCart] = useState<StudioCartState | null>(null);
 
   // This album's saved book, if it has one (a `?cart=` link names it instead).
@@ -601,6 +606,7 @@ export function useBookOrder({
     cartIdRef.current = null;
     cartClosedRef.current = false;
     savedDraftIdRef.current = null;
+    awaitingRef.current = null;
     storeCover(null);
     // One reset when the album changes.
     setCartAlbum(null);
@@ -779,6 +785,7 @@ export function useBookOrder({
     setCartAlbum(null);
     cartClosedRef.current = false;
     savedDraftIdRef.current = null;
+    awaitingRef.current = null;
     setCartId(null);
     setStarted(false);
     setRestoredCart(null);
@@ -920,68 +927,81 @@ export function useBookOrder({
       shippingLevel,
       projectId,
     };
-    let orderId = savedDraftIdRef.current;
-    if (orderId) {
-      const updated = await api.updateDraftBookOrder(orderId, {
-        bindingId,
-        pageCount: plan.totalPages,
-        projectTitle: coverTitle,
-        ...book,
-      });
-      if (api.isError(updated)) {
-        setError(updated.error.message);
+    const placeKey = JSON.stringify({ bindingId, pageCount: plan.totalPages, coverTitle, book, code: purchaseCode?.codeId ?? null });
+    if (awaitingRef.current && awaitingRef.current.key !== placeKey) {
+      // The book changed since the last try: the confirmed order can't take the change, so start a new one.
+      awaitingRef.current = null;
+      savedDraftIdRef.current = null;
+    }
+    let orderId = awaitingRef.current?.orderId ?? savedDraftIdRef.current;
+    if (!awaitingRef.current) {
+      if (orderId) {
+        const updated = await api.updateDraftBookOrder(orderId, {
+          bindingId,
+          pageCount: plan.totalPages,
+          projectTitle: coverTitle,
+          ...book,
+        });
+        if (api.isError(updated)) {
+          setError(updated.error.message);
+          setPlacing(false);
+          return false;
+        }
+      } else {
+        const created = await api.createDraftBookOrder({
+          bindingId,
+          pageCount: plan.totalPages,
+          photoCount: plan.photoCount,
+          blankCount: plan.blankCount,
+          projectTitle: coverTitle,
+          ...book,
+        });
+        if (api.isError(created)) {
+          setError(created.error.message);
+          setPlacing(false);
+          return false;
+        }
+        orderId = created.data.orderId;
+        savedDraftIdRef.current = orderId;
+      }
+
+      // The front cover goes up as a print-size image, drawn by the same code as the preview.
+      const upload = await api.createOrderCoverUpload(orderId);
+      if (api.isError(upload)) {
+        setError(upload.error.message);
         setPlacing(false);
         return false;
       }
-    } else {
-      const created = await api.createDraftBookOrder({
-        bindingId,
-        pageCount: plan.totalPages,
-        photoCount: plan.photoCount,
-        blankCount: plan.blankCount,
-        projectTitle: coverTitle,
-        ...book,
-      });
-      if (api.isError(created)) {
-        setError(created.error.message);
+      let coverImage: Blob;
+      try {
+        coverImage = await renderFrontCoverJpeg({
+          design: coverDesign,
+          sources: coverSources,
+          bindingId,
+          fontHost: document.querySelector(".v2-shell") ?? document.body,
+        });
+      } catch {
+        setError("We couldn't prepare your cover. Please try again.");
         setPlacing(false);
         return false;
       }
-      orderId = created.data.orderId;
-      savedDraftIdRef.current = orderId;
-    }
+      const uploaded = await putToSignedUrl(upload.data, coverImage, "image/jpeg");
+      if (api.isError(uploaded)) {
+        setError("We couldn't save your cover. Please try again.");
+        setPlacing(false);
+        return false;
+      }
 
-    // The front cover goes up as a print-size image, drawn by the same code as the preview.
-    const upload = await api.createOrderCoverUpload(orderId);
-    if (api.isError(upload)) {
-      setError(upload.error.message);
-      setPlacing(false);
-      return false;
+      const confirmed = await api.confirmDraftBookOrder(orderId);
+      if (api.isError(confirmed)) {
+        setPlacing(false);
+        setError(confirmed.error.message);
+        return false;
+      }
+      awaitingRef.current = { orderId, key: placeKey };
     }
-    let coverImage: Blob;
-    try {
-      coverImage = await renderFrontCoverJpeg({
-        design: coverDesign,
-        sources: coverSources,
-        bindingId,
-        fontHost: document.querySelector(".v2-shell") ?? document.body,
-      });
-    } catch {
-      setError("We couldn't prepare your cover. Please try again.");
+    if (!orderId) {
       setPlacing(false);
-      return false;
-    }
-    const uploaded = await putToSignedUrl(upload.data, coverImage, "image/jpeg");
-    if (api.isError(uploaded)) {
-      setError("We couldn't save your cover. Please try again.");
-      setPlacing(false);
-      return false;
-    }
-
-    const confirmed = await api.confirmDraftBookOrder(orderId);
-    if (api.isError(confirmed)) {
-      setPlacing(false);
-      setError(confirmed.error.message);
       return false;
     }
     storeCover(null);
@@ -991,11 +1011,27 @@ export function useBookOrder({
     const paid = await api.placeBookOrder(orderId);
     if (api.isError(paid)) {
       setPlacing(false);
-      // The book is saved and waiting for payment; the order page's checkout panel takes it from here.
-      if (paid.error.code === "INSUFFICIENT_CREDITS") void refreshUser();
-      else console.error(`[order] place ${orderId} failed: ${paid.error.message}`);
-      await closeCart();
-      router.push(`/orders/${orderId}?confirmed=1`);
+      const code = paid.error.code;
+      if (code === "INSUFFICIENT_CREDITS" || code === "INVALID_STATE") {
+        // Short of credit (the price went up), or no longer waiting for payment (already paid, say):
+        // the order page shows where it stands and its checkout panel takes it from here.
+        void refreshUser();
+        await closeCart();
+        router.push(code === "INSUFFICIENT_CREDITS" ? `/orders/${orderId}?confirmed=1` : `/orders/${orderId}`);
+        return false;
+      }
+      // Anything else: stay on the review with the reason, the book still in the cart.
+      console.error(`[order] place ${orderId} failed: ${paid.error.message}`);
+      if (code === "PURCHASE_CODE_INVALID") {
+        // The code's cover is worked out when an order is confirmed: the next try confirms a fresh one.
+        awaitingRef.current = null;
+        savedDraftIdRef.current = null;
+      }
+      setError(
+        code === "PURCHASE_CODE_INVALID"
+          ? paid.error.message
+          : "We couldn't take payment for your book just now. Your book is saved; please try again in a moment.",
+      );
       return false;
     }
     trackPurchaseOnce({
@@ -1032,6 +1068,7 @@ export function useBookOrder({
   function startOver() {
     setPlaced(null);
     savedDraftIdRef.current = null;
+    awaitingRef.current = null;
     cartIdRef.current = null;
     cartClosedRef.current = false;
     setCartId(null);
