@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Check, Download, FolderInput, Loader2, Minus, Pencil, ShoppingCart, Trash2 } from "lucide-react";
+import { BookOpen, Check, Download, FolderInput, Loader2, Minus, Pencil, ShoppingCart, Trash2, Upload } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { cn } from "@/lib/cn";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
@@ -723,12 +723,15 @@ export function ColorfulMemoriesApp() {
       : null;
   const canMakeBook = bookBlockedReason == null;
   /**
-   * Too few pages for the book: the one blocker the customer fixes themselves, so the phone bar
-   * spells it out in full (format, its minimum, how many to add) instead of a truncated line.
+   * Too few pages for the book: the one blocker the customer fixes themselves, so it is spelled out
+   * in full (how many to add, the format and its minimum) beside the disabled book button.
    */
   const bookShortNote =
     !uploading && bookPagesShort > 0 && book.stillDrawing === 0
-      ? `${order.formatChosen ? `A ${order.binding.shortLabel.toLowerCase()}` : "The smallest printed book"} needs at least ${bookMinPages} pages. Add ${bookPagesShort} more ${bookPagesShort === 1 ? "photo" : "photos"} to this album to make your book.`
+      ? {
+          title: `Add ${bookPagesShort} more ${bookPagesShort === 1 ? "photo" : "photos"} to make your book`,
+          body: `${order.formatChosen ? `A ${order.binding.shortLabel.toLowerCase()}` : "The smallest printed book"} needs at least ${bookMinPages} pages. Each photo becomes one coloring page.`,
+        }
       : null;
   const activeCount = queue.running + queue.queued;
   const showStrip = choiceIds != null || shortCount > 0;
@@ -807,6 +810,8 @@ export function ColorfulMemoriesApp() {
   // Phones: the album toolbar has no room for the book button, so a book bar replaces the tab bar
   // (the header menu has the tabs) once there's a finished page to book, or a book under way.
   const showBookBar = !desktop && !editor && (bookProgress != null ? hasBookPage : order.contentCount > 0);
+  /** The book button in the album toolbar (wider screens, while the book isn't open beside the gallery). */
+  const toolbarBook = hasBookPage && !bookCardOpen && !deletion.active && !showBookBar;
   // Turning the page to the other shape: free when that page exists, otherwise one page drawn in
   // that shape (recomposed straight from the photo, with no reframed photo made first).
   const editorShapePlan = editorPhoto && !editorPhoto.generating ? shapePlan(editorPhoto) : null;
@@ -1041,7 +1046,7 @@ export function ColorfulMemoriesApp() {
             onCancelSelect={deletion.exit}
             onArrange={() => setArrangeOpen(true)}
             book={
-              hasBookPage && !bookCardOpen && !deletion.active && !showBookBar
+              toolbarBook
                 ? {
                     label: bookProgress ? "Resume book order" : "Complete Book Order",
                     inProgress: bookProgress != null,
@@ -1051,6 +1056,28 @@ export function ColorfulMemoriesApp() {
                 : null
             }
           />
+          {/* Wider screens: why the book button is off, in full, with the way to fix it (phones get
+              the same note in the book bar). */}
+          {toolbarBook && bookShortNote ? (
+            <div
+              className="mt-2 hidden items-center gap-3 rounded-2xl border border-v2-primary/25 bg-v2-primary-light px-4 py-3 sm:flex"
+              role="status"
+            >
+              <BookOpen className="h-6 w-6 shrink-0 text-v2-primary" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-v2-ink">{bookShortNote.title}</p>
+                <p className="mt-0.5 text-xs leading-snug text-v2-navy">{bookShortNote.body}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAddPhotos({ files: [] })}
+                className="v2-btn-primary min-h-11 shrink-0 gap-1.5 px-5 text-sm"
+              >
+                <Upload className="h-4 w-4" aria-hidden />
+                Add photos
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="relative flex w-full min-w-0 flex-1 lg:min-h-0 lg:overflow-hidden">
@@ -1362,10 +1389,13 @@ export function ColorfulMemoriesApp() {
       ) : showBookBar ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
           {bookShortNote ? (
-            <p className="mb-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900" role="status">
-              <BookOpen className="mt-px h-4 w-4 shrink-0 text-amber-600" aria-hidden />
-              <span>{bookShortNote}</span>
-            </p>
+            <div className="mb-3 flex items-start gap-2.5 rounded-2xl border border-v2-primary/25 bg-v2-primary-light px-3 py-2.5" role="status">
+              <BookOpen className="mt-px h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug text-v2-ink">{bookShortNote.title}</p>
+                <p className="mt-0.5 text-xs leading-snug text-v2-navy">{bookShortNote.body}</p>
+              </div>
+            </div>
           ) : null}
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 text-sm">
