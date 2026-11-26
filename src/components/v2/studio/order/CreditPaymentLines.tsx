@@ -24,7 +24,7 @@ export function CreditPaymentLines({
     <>
       {fromCredit > 0 ? (
         <div className={cn("flex items-baseline justify-between gap-3 font-medium text-v2-success-text", className)}>
-          <dt>From your credit</dt>
+          <dt>From your wallet balance</dt>
           <dd className="shrink-0 tabular-nums">−{formatCredits(fromCredit)}</dd>
         </div>
       ) : null}
