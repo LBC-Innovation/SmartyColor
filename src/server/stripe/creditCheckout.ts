@@ -3,13 +3,13 @@ import type { ApiResult } from "@/lib/api/types";
 import {
   CHECKOUT_SESSION_PARAM,
   CREDITS_RETURN_PARAM,
+  MIN_TOP_UP_CENTS,
   type CreditTopUpConfirmation,
 } from "@/lib/credits/types";
 import { appOrigin } from "@/server/stripe/config";
 import { getStripe } from "@/server/stripe/client";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 
-const MIN_TOP_UP_CENTS = 50;
 const MAX_TOP_UP_CENTS = 500_00;
 const CHECKOUT_SESSION_ID_RE = /^cs_[A-Za-z0-9_]{8,250}$/;
 const PG_UNIQUE_VIOLATION = "23505";

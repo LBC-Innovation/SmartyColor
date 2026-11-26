@@ -6,7 +6,7 @@ import { track } from "@/lib/track";
  * Send `package_purchased` from the browser once per package (the page that shows the purchase can
  * be opened again). Params are the binding, the amount and an opaque id; nothing personal.
  */
-export function trackPackagePurchasedOnce(purchase: BookPackagePurchase, method: "card" | "credit"): void {
+export function trackPackagePurchasedOnce(purchase: BookPackagePurchase, method: "card" | "credit" | "credit_and_card"): void {
   const key = `cm_package_tracked_${purchase.codeId}`;
   try {
     if (localStorage.getItem(key)) return;

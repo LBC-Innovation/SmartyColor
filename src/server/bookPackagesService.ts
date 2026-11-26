@@ -145,8 +145,10 @@ export async function quotePackageShipping(input: {
     };
   }
   const shippingCents = Math.max(0, priced.data!.price.totalCents - priced.data!.price.printPriceCents);
+  // The part of it that is tax, so the pay screen can show shipping and tax on their own lines.
+  const taxCents = Math.min(shippingCents, Math.max(0, priced.data!.price.taxCents));
   return {
-    data: { bindingId: p.bindingId, shippingCents, address, addressSuggestion: priced.data!.addressSuggestion ?? null },
+    data: { bindingId: p.bindingId, shippingCents, taxCents, address, addressSuggestion: priced.data!.addressSuggestion ?? null },
     error: null,
   };
 }

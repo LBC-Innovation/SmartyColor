@@ -28,6 +28,8 @@ export type SheetEditCostNotice = {
    * its price on the button itself. `ariaLabel` is the spoken version.
    */
   buttonLabel?: string;
+  /** What the pill says when the box is too narrow for `buttonLabel` (just the price, "$0.25"). */
+  buttonShortLabel?: string;
   buttonAriaLabel?: string;
 };
 
@@ -358,7 +360,9 @@ export function V2SheetEditChat({
             <label className="sr-only" htmlFor="v2-sheet-edit-input">
               Describe a change to the coloring page
             </label>
-            <div className="flex items-end gap-2 rounded-3xl border border-gray-200 bg-white py-1 pl-4 pr-1 shadow-sm transition focus-within:border-v2-primary/45 focus-within:ring-2 focus-within:ring-v2-primary/15">
+            {/* A container, so a paid pill can shorten to its price when the box is narrow
+                (small phones, large system text) instead of pushing past the edge. */}
+            <div className="@container flex items-end gap-2 rounded-3xl border border-gray-200 bg-white py-1 pl-4 pr-1 shadow-sm transition focus-within:border-v2-primary/45 focus-within:ring-2 focus-within:ring-v2-primary/15">
               <textarea
                 id="v2-sheet-edit-input"
                 ref={inputRef}
@@ -369,7 +373,7 @@ export function V2SheetEditChat({
                 placeholder="What should we change?"
                 enterKeyHint="send"
                 aria-describedby={costNotice ? "v2-sheet-edit-cost" : undefined}
-                className="chat-composer-input block min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2 text-base leading-6 text-v2-ink placeholder:text-v2-muted focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 lg:text-sm"
+                className="chat-composer-input block min-h-10 min-w-0 flex-1 resize-none border-0 bg-transparent px-0 py-2 text-base leading-6 text-v2-ink placeholder:text-v2-muted focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 lg:text-sm"
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -392,7 +396,16 @@ export function V2SheetEditChat({
                 aria-label={costNotice?.buttonAriaLabel ?? costNotice?.buttonLabel ?? "Send"}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
-                {costNotice?.buttonLabel && !busy ? <span className="whitespace-nowrap">{costNotice.buttonLabel}</span> : null}
+                {costNotice?.buttonLabel && !busy ? (
+                  costNotice.buttonShortLabel ? (
+                    <>
+                      <span className="hidden whitespace-nowrap @[20rem]:inline">{costNotice.buttonLabel}</span>
+                      <span className="whitespace-nowrap @[20rem]:hidden">{costNotice.buttonShortLabel}</span>
+                    </>
+                  ) : (
+                    <span className="whitespace-nowrap">{costNotice.buttonLabel}</span>
+                  )
+                ) : null}
               </button>
             </div>
             {nearLimit ? (

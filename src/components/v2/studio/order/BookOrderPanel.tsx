@@ -3,7 +3,8 @@
 import { bindingName } from "@/lib/purchaseCodes/types";
 import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { CreditPaymentLines } from "@/components/v2/studio/order/CreditPaymentLines";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
 import { PackagePriceSummary } from "@/components/v2/book-packages/PackagePriceSummary";
 import { SwitchBindingModal } from "@/components/v2/book-packages/SwitchBindingModal";
@@ -23,7 +24,7 @@ import { hasOriginalPhotos } from "@/components/v2/book-order/useCoverSources";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { isAutomaticAlbumName } from "@/components/v2/studio/albumNames";
 import type { BookOrder } from "@/components/v2/studio/order/useBookOrder";
-import { GIFT_NOTE_PLACEHOLDER, GUEST_GATES, HOLIDAY_LINE, PRICE_LINE } from "@/content/marketing";
+import { GIFT_NOTE_PLACEHOLDER, GUEST_GATES, PRICE_LINE } from "@/content/marketing";
 import { withNextParam } from "@/lib/auth/nextPath";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
@@ -194,7 +195,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const holiday = holidayOrderBy();
-  const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
   const examplePrice = !order.signedIn && numbers ? fillCopy(PRICE_LINE, numberValues(numbers)) : null;
   const printed = !order.isDigital;
   const fit = { fits: order.formatFits, tooMany: order.overCapacity };
@@ -203,6 +203,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   function toggle(row: OrderRow) {
     onOpenRow(openRow === row ? null : row);
   }
+
+  /** The step bar, pinned to the top of the card or sheet while the rows scroll under it. */
+  const stepsRef = useRef<HTMLOListElement>(null);
 
   /** Bring a part of the panel into view once React has drawn the row that just opened. */
   function scrollToAnchor(anchorId: string) {
@@ -215,7 +218,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         let box = target.parentElement;
         while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
         if (!box) return;
-        const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 12;
+        // Land just under the pinned step bar, not behind it.
+        const pinned = stepsRef.current?.offsetHeight ?? 0;
+        const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - pinned - 12;
         box.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
       }),
     );
@@ -341,7 +346,14 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         </div>
       ) : null}
 
-      <ol className="mb-1 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} aria-label="Steps">
+      {/* Pinned to the top of the card or sheet as the rows scroll. A white shadow covers the scroll
+          box's padding above and beside it, so no row shows past its edges. */}
+      <ol
+        ref={stepsRef}
+        className="sticky top-0 z-10 mb-1 grid gap-1.5 border-b border-gray-100 bg-white pb-1 pt-2 [box-shadow:0_-1.25rem_0_1.25rem_white]"
+        style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+        aria-label="Steps"
+      >
         {steps.map((step, i) => {
           const active = openRow === step.row;
           const locked = step.row !== "format" && !order.formatChosen;
@@ -718,6 +730,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                         : "Pending"}
                 </dd>
               </div>
+              {!order.quoteLoading && (order.isDigital || order.shippingChosen) ? (
+                <CreditPaymentLines dueCents={order.dueCents} balanceCents={order.balanceCents} className="pt-1" />
+              ) : null}
             </dl>
           ) : (
             <p className="text-sm text-v2-muted">Choose a format to see your price.</p>
@@ -756,23 +771,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
 
-          {order.purchaseCode ? null : order.balanceCents != null && order.balanceCents > 0 && order.shortfallCents > 0 ? (
-            <p className="mt-2 text-xs text-v2-muted">
-              Your credit covers <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
-              You pay <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.shortfallCents)}</span>.
-            </p>
-          ) : order.balanceCents != null && order.shortfallCents <= 0 && order.formatChosen && order.dueCents !== 0 ? (
-            <p className="mt-2 text-xs text-v2-muted">
-              Paid from your credit. You have{" "}
-              <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
-            </p>
-          ) : null}
-          {printed && holidayLine ? (
-            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-v2-navy">
-              <Gift className="h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
-              {holidayLine}
-            </p>
-          ) : null}
         </div>
       ) : null}
 
@@ -1013,19 +1011,21 @@ function CodePriceSummary({ order }: { order: BookOrder }) {
   if (order.shippingLevel !== included.shippingLevel) reasons.push("faster shipping (standard is included)");
   const ready = !order.quoteLoading && order.quoteCents != null && order.dueCents != null;
   const due = order.dueCents ?? 0;
+  // The headline is what goes on a card: nothing when credit covers the extra (the rows below show it).
+  const onCard = order.balanceCents != null ? order.shortfallCents : due;
 
   return (
     <div className="space-y-3 text-sm">
       <div
         className={cn(
           "rounded-xl px-3 py-3",
-          ready && due === 0 ? "bg-emerald-50 text-emerald-950" : "bg-white text-v2-ink",
+          ready && onCard === 0 ? "bg-emerald-50 text-emerald-950" : "bg-white text-v2-ink",
         )}
         role="status"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <p className="font-semibold">{ready && due > 0 ? "Extra to pay" : "You pay"}</p>
-          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(due) : "…"}</p>
+          <p className="font-semibold">You pay</p>
+          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(onCard) : "…"}</p>
         </div>
         <p className="mt-1 text-xs leading-relaxed opacity-80">
           {!ready
@@ -1049,6 +1049,15 @@ function CodePriceSummary({ order }: { order: BookOrder }) {
             <dt>Paid by code {code.code}</dt>
             <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
           </div>
+          {due > 0 ? (
+            <>
+              <div className="flex items-baseline justify-between border-t border-gray-200 pt-1 text-v2-ink">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatCredits(due)}</dd>
+              </div>
+              <CreditPaymentLines dueCents={due} balanceCents={order.balanceCents} />
+            </>
+          ) : null}
         </dl>
       ) : null}
     </div>

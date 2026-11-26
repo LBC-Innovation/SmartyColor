@@ -56,6 +56,8 @@ export const MAX_WELCOME_CREDIT_CENTS = 500_00;
 export const MAX_WELCOME_FREE_SHEETS = 1000;
 
 /** Query flag Stripe Checkout returns with: `success` or `canceled`. */
+/** The smallest card top-up Stripe takes for the wallet. */
+export const MIN_TOP_UP_CENTS = 50;
 export const CREDITS_RETURN_PARAM = "credits";
 /** Query param carrying the Stripe Checkout Session id on a successful return. */
 export const CHECKOUT_SESSION_PARAM = "session_id";

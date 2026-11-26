@@ -535,7 +535,11 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     {order.dueCents != null
                       ? order.purchaseCode && order.dueCents === 0
                         ? " · nothing to pay"
-                        : ` · ${formatCredits(order.dueCents)}${order.purchaseCode && order.purchaseCode.source !== "package" ? " extra" : ""}`
+                        : order.dueCents > 0
+                          ? // Paid from the wallet (a card is the "Pay $X and place order" button above), so
+                            // say so: the price box's "You pay" shows $0.00 for this.
+                            ` · ${formatCredits(order.dueCents)}${order.purchaseCode && order.purchaseCode.source !== "package" ? " extra" : ""} from wallet balance`
+                          : ` · ${formatCredits(order.dueCents)}`
                       : ""}
                   </button>
                 )}

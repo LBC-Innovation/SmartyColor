@@ -2,6 +2,7 @@
 
 import { Check, Truck } from "lucide-react";
 import { ExtraChip } from "@/components/v2/book-packages/AllowanceChips";
+import { CreditPaymentLines } from "@/components/v2/studio/order/CreditPaymentLines";
 import type { BookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { fillPackageCopy, packageTokens } from "@/lib/bookPackages/copy";
@@ -60,6 +61,9 @@ export function PackagePriceSummary({
   const onPackageBinding = !order.isDigital && order.bindingId === pkgBinding;
   const ready = !order.quoteLoading && order.quoteCents != null && order.dueCents != null;
   const due = order.dueCents ?? 0;
+  // The headline is what goes on a card for this order: nothing when credit covers it. The ledger
+  // below shows the full total and what the credit pays.
+  const onCard = order.balanceCents != null ? order.shortfallCents : due;
   const shipping = order.shippingCents ?? 0;
   const tax = order.taxCents ?? 0;
   const moreThanIncluded = Math.max(0, order.contentCount - pkg.bundle.includedPages);
@@ -88,12 +92,12 @@ export function PackagePriceSummary({
   return (
     <div className="space-y-3 text-sm">
       <div
-        className={cn("rounded-xl px-3 py-3", ready && due === 0 ? "bg-v2-success-bg text-v2-success-text" : "bg-white text-v2-ink")}
+        className={cn("rounded-xl px-3 py-3", ready && onCard === 0 ? "bg-v2-success-bg text-v2-success-text" : "bg-white text-v2-ink")}
         role="status"
       >
         <div className="flex items-baseline justify-between gap-3">
           <p className="font-semibold">You pay</p>
-          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(due) : "…"}</p>
+          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(onCard) : "…"}</p>
         </div>
         <p className="mt-1 text-xs leading-relaxed opacity-80">{sub}</p>
         {ready && !onPackageBinding ? (
@@ -139,18 +143,12 @@ export function PackagePriceSummary({
           <div className="border-t border-gray-200 pt-1">
             <Line label="Total" value={formatCredits(due)} tone="ink" />
           </div>
+          <CreditPaymentLines dueCents={due} balanceCents={order.balanceCents} />
         </dl>
       ) : null}
 
       {ready && !order.addressComplete ? (
         <p className="text-xs text-v2-muted">Shipping and tax are estimated until the address is complete.</p>
-      ) : null}
-      {ready && order.balanceCents != null ? (
-        <p className="text-xs text-v2-muted">
-          {order.shortfallCents <= 0
-            ? `Paid from your credit. You have ${formatCredits(order.balanceCents)}.`
-            : `Your credit covers ${formatCredits(order.balanceCents)}. You pay ${formatCredits(order.shortfallCents)}.`}
-        </p>
       ) : null}
     </div>
   );

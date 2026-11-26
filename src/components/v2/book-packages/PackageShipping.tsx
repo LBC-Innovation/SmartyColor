@@ -202,23 +202,3 @@ export function PackageShippingChoice({ state, disabled }: { state: PackageShipp
     </fieldset>
   );
 }
-
-/** "Book package / Shipping / Total today", shown when shipping is being paid now. */
-export function PackagePaySummary({ packageCents, shippingCents }: { packageCents: number; shippingCents: number }) {
-  return (
-    <dl className="mt-4 space-y-1 rounded-xl bg-v2-bg-subtle px-3 py-3 text-sm">
-      <div className="flex items-baseline justify-between gap-3 text-v2-muted">
-        <dt>{BOOK_PACKAGES.summaryPackage}</dt>
-        <dd className="tabular-nums">{formatCredits(packageCents)}</dd>
-      </div>
-      <div className="flex items-baseline justify-between gap-3 text-v2-muted">
-        <dt>{BOOK_PACKAGES.summaryShipping}</dt>
-        <dd className="tabular-nums">{formatCredits(shippingCents)}</dd>
-      </div>
-      <div className="flex items-baseline justify-between gap-3 border-t border-gray-200 pt-1 font-semibold text-v2-ink">
-        <dt>{BOOK_PACKAGES.summaryTotal}</dt>
-        <dd className="tabular-nums">{formatCredits(packageCents + shippingCents)}</dd>
-      </div>
-    </dl>
-  );
-}
