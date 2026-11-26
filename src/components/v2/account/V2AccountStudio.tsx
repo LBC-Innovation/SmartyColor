@@ -22,11 +22,11 @@ const CONTENT = "mx-auto w-full max-w-4xl px-5 py-6 sm:px-8 sm:py-8";
 /** Human label for a ledger reason code. */
 function describeReason(reason: string, note: string | null): string {
   const key = reason.toLowerCase();
-  if (key.includes("topup") || key.includes("top_up") || key.includes("stripe") || key.includes("purchase")) return "Added credit";
+  if (key.includes("topup") || key.includes("top_up") || key.includes("stripe") || key.includes("purchase")) return "Added to wallet";
   if (key.includes("order")) return "Book order";
   if (key.includes("refund")) return "Refund";
-  if (key.includes("signup") || key.includes("welcome") || key.includes("bonus")) return "Welcome credit";
-  if (key.includes("admin") || key.includes("grant") || key.includes("promo")) return "Promo credit";
+  if (key.includes("signup") || key.includes("welcome") || key.includes("bonus")) return "Welcome gift";
+  if (key.includes("admin") || key.includes("grant") || key.includes("promo")) return "Promo gift";
   const humanized = reason.replace(/[_-]+/g, " ").trim();
   return note?.trim() || (humanized ? humanized[0].toUpperCase() + humanized.slice(1) : "Adjustment");
 }
@@ -89,7 +89,7 @@ export function V2AccountStudio() {
           <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
             {/* ---- balance + add credit */}
             <section className="v2-panel p-5 sm:p-6 lg:order-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-v2-muted">Credit balance</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-v2-muted">Wallet balance</p>
               <p className="mt-1 text-4xl font-bold tabular-nums text-v2-success-text">
                 {formatCredits(user.creditsBalanceCents)}
               </p>
@@ -161,7 +161,7 @@ export function V2AccountStudio() {
                     Loading…
                   </p>
                 ) : ledger.length === 0 ? (
-                  <p className="mt-3 text-sm text-v2-muted">No transactions yet. Add credit to get started.</p>
+                  <p className="mt-3 text-sm text-v2-muted">No transactions yet. Add to your wallet to get started.</p>
                 ) : (
                   <ul className="mt-3 divide-y divide-gray-100">
                     {ledger.map((entry) => {

@@ -61,7 +61,7 @@ export async function createCreditTopUpCheckout(input: {
             currency: "usd",
             unit_amount: input.amountCents,
             product_data: {
-              name: "Colorful Memories print credits",
+              name: "Colorful Memories wallet balance",
               description: "Promo wallet balance applied toward book orders",
             },
           },
@@ -141,7 +141,7 @@ export async function fulfillCreditTopUpFromCheckoutSession(
     p_user_id: userId,
     p_delta: amountCents,
     p_stripe_session_id: session.id,
-    p_note: "Stripe credit purchase",
+    p_note: "Stripe wallet top-up",
   });
 
   let creditsBalanceCents: number;

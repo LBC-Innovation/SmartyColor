@@ -378,7 +378,7 @@ export function V2ActivityStudio() {
               <p className="max-w-sm text-sm text-v2-muted">
                 {filtered
                   ? "Try a different category or type."
-                  : "Upload a photo or add credit and it will show up here."}
+                  : "Upload a photo or add to your wallet and it will show up here."}
               </p>
               {filtered ? (
                 <button type="button" className="v2-btn-outline mt-1 text-sm" onClick={clearFilters}>

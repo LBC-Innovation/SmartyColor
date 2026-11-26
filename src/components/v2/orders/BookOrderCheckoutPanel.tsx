@@ -73,7 +73,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
         Place order
       </h2>
       <p className="mt-2 text-sm text-v2-muted">
-        This order is paid from your credit balance.{" "}
+        This order is paid from your wallet balance.{" "}
         {order.fulfillment === "digital"
           ? "Once it's placed, your PDF is ready to download."
           : "Once it's placed, we send your book to the printer."}
@@ -89,7 +89,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
       <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
         <div className="rounded-lg bg-v2-bg-subtle px-3 py-2">
           <dt className="text-xs font-semibold uppercase tracking-wider text-v2-muted">
-            Your credit
+            Your wallet balance
           </dt>
           <dd className="mt-1 font-semibold tabular-nums text-v2-ink">
             {formatCredits(balanceCents)}
@@ -145,7 +145,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
             <p className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
               {topUp.kind === "bank"
                 ? `Your ${formatCredits(topUp.amountCents)} is on its way from your bank, which can take a few days. Place the order once it arrives.`
-                : "We're still confirming your payment. If you were charged, your credit will show up shortly, so please don't pay again yet."}
+                : "We're still confirming your payment. If you were charged, it will show up in your wallet balance shortly, so please don't pay again yet."}
             </p>
             {topUp.kind === "slow" ? (
               <button type="button" className="v2-btn-primary min-h-11 w-full text-sm sm:w-auto" onClick={recheckTopUp}>
@@ -157,7 +157,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
               className="v2-btn-outline min-h-11 w-full text-sm sm:w-auto"
               onClick={() => setAddCreditOpen(true)}
             >
-              {topUp.kind === "bank" ? "Pay by card instead" : "Add credit again"}
+              {topUp.kind === "bank" ? "Pay by card instead" : "Add to wallet again"}
             </button>
           </>
         ) : shortfallCents > 0 ? (
@@ -186,7 +186,7 @@ export function BookOrderCheckoutPanel({ order, onOrderUpdated, onPlaced }: Prop
                 className="v2-btn-outline min-h-11 w-full text-sm sm:w-auto"
                 onClick={() => setAddCreditOpen(true)}
               >
-                Add more credit
+                Add more to wallet
               </button>
             ) : null}
           </>

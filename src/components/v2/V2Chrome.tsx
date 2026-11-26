@@ -86,7 +86,7 @@ function CreditsChip() {
     <Link
       href="/account"
       className="v2-hit inline-flex max-w-[9rem] items-center gap-1.5 rounded-full border border-v2-success-border bg-v2-success-bg px-2 py-0.5 text-xs font-semibold text-v2-success-text transition hover:border-emerald-400 sm:px-2.5 sm:py-1"
-      title={`Credit balance ${formatCredits(user.creditsBalanceCents)}. Tap to add credit or see transactions.`}
+      title={`Wallet balance ${formatCredits(user.creditsBalanceCents)}. Tap to add to your wallet or see transactions.`}
     >
       <CircleDollarSign className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="truncate tabular-nums">{label}</span>

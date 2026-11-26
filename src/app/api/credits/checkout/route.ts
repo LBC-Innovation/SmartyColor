@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   if ("error" in auth) return auth.error;
 
   if (!stripeConfigured()) {
-    return jsonError("Credit purchases are not available yet", 503, "STRIPE_NOT_CONFIGURED");
+    return jsonError("Wallet top-ups are not available yet", 503, "STRIPE_NOT_CONFIGURED");
   }
 
   const body = (await request.json()) as {

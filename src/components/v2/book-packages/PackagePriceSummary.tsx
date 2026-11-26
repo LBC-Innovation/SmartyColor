@@ -83,7 +83,7 @@ export function PackagePriceSummary({
   else if (onPackageBinding && extraPrint === 0) sub = BOOK_PACKAGES.orderPrintingIncluded;
   else if (onPackageBinding)
     sub = fillPackageCopy(BOOK_PACKAGES.orderExtraPages, { ...tokens, k: moreThanIncluded || "" }) ??
-      "Your package pays for printing the photos it includes. The extra pages and shipping come from your credit.";
+      "Your package pays for printing the photos it includes. The extra pages and shipping come from your wallet balance.";
   else
     sub = fillPackageCopy(BOOK_PACKAGES.orderOtherBinding, { ...tokens, otherBindingNameLower: otherName }) ?? "";
 

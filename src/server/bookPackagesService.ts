@@ -325,7 +325,7 @@ export async function buyPackageWithCredit(input: {
   if (error) {
     const message = error.message ?? "";
     if (message.includes("insufficient credits")) {
-      return { data: null, error: { message: "Your credit doesn't cover this book.", code: "INSUFFICIENT_CREDITS" } };
+      return { data: null, error: { message: "Your wallet balance doesn't cover this book.", code: "INSUFFICIENT_CREDITS" } };
     }
     if (message.includes("price changed")) {
       return { data: null, error: { message: "The price of this book changed.", code: PACKAGE_PRICE_CHANGED_CODE } };

@@ -29,11 +29,11 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfal
       maxWidthClass="max-w-md"
       icon={<Wallet />}
       tone="success"
-      title="Add credit"
+      title="Add to your wallet"
       description={
         <>
             {shortfallCents && shortfallCents > 0
-              ? `${balance > 0 ? `Your credit covers ${formatCredits(balance)}. ` : ""}Add ${formatCredits(shortfallCents)} for ${shortfallFor}, or add more for later.`
+              ? `${balance > 0 ? `Your wallet balance covers ${formatCredits(balance)}. ` : ""}Add ${formatCredits(shortfallCents)} for ${shortfallFor}, or add more for later.`
               : (
                 <>
                   Balance{" "}

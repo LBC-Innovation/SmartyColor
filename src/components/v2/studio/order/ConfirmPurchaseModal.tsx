@@ -489,7 +489,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     <p className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
                       {topUp.kind === "bank"
                         ? `Your ${formatCredits(topUp.amountCents)} is on its way from your bank, which can take a few days. Your book is saved; place the order once it arrives.`
-                        : "We're still confirming your payment. If you were charged, your credit will show up shortly, so please don't pay again yet."}
+                        : "We're still confirming your payment. If you were charged, it will show up in your wallet balance shortly, so please don't pay again yet."}
                     </p>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       {topUp.kind === "slow" ? (
@@ -506,7 +506,7 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                           void order.startTopUp(order.shortfallCents).finally(() => setStartingTopUp(false));
                         }}
                       >
-                        {topUp.kind === "bank" ? "Pay by card instead" : "Add credit again"}
+                        {topUp.kind === "bank" ? "Pay by card instead" : "Add to wallet again"}
                       </button>
                     </div>
                   </div>
@@ -690,11 +690,11 @@ function Overview({
                 ? order.dueCents === 0
                   ? "Your package pays for this book. You won't be charged."
                   : order.purchaseCode.shippingPrepaidCents > 0
-                    ? `Your package pays ${formatCredits(order.coveredCents)} of it: the printing and the shipping you paid for. Anything past that comes from your account credit.`
-                    : `Your package pays ${formatCredits(order.coveredCents)} of it, the printing. Shipping, its tax and anything past the package come from your account credit.`
+                    ? `Your package pays ${formatCredits(order.coveredCents)} of it: the printing and the shipping you paid for. Anything past that comes from your wallet balance.`
+                    : `Your package pays ${formatCredits(order.coveredCents)} of it, the printing. Shipping, its tax and anything past the package come from your wallet balance.`
                 : order.dueCents === 0
                   ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
-                  : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your account credit.`}
+                  : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your wallet balance.`}
             </p>
           </div>
           <dl className="space-y-1 px-1 text-xs text-v2-muted">
@@ -718,7 +718,7 @@ function Overview({
             </div>
             {creditApplied != null && creditApplied > 0 ? (
               <div className="flex items-baseline justify-between">
-                <dt>From your account credit</dt>
+                <dt>From your wallet balance</dt>
                 <dd className="tabular-nums">−{formatCredits(creditApplied)}</dd>
               </div>
             ) : null}
@@ -745,10 +745,10 @@ function Overview({
           <dt className="font-semibold text-v2-ink">Total</dt>
           <dd className="text-lg font-bold tabular-nums text-v2-ink">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
         </div>
-        {creditApplied != null && creditApplied > 0 ? <Line label="Your credit" cents={creditApplied} negative /> : null}
+        {creditApplied != null && creditApplied > 0 ? <Line label="From your wallet balance" cents={creditApplied} negative /> : null}
         {order.shortfallCents > 0 ? <Line label="You pay" cents={order.shortfallCents} /> : null}
         {balanceAfter != null && balanceAfter > 0 && order.shortfallCents <= 0 ? (
-          <Line label="Credit left after" cents={balanceAfter} />
+          <Line label="Wallet balance after" cents={balanceAfter} />
         ) : null}
       </dl>
       )}

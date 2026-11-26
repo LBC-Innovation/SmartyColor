@@ -127,7 +127,7 @@ export function AddPhotosModal({
       ? `${codePagesLeft} included with your ${pkg ? "book" : "code"}${pagePriceCents != null ? `, then ${formatCredits(pagePriceCents)} each extra` : ""}`
       : pagePriceCents != null
         ? `${formatCredits(pagePriceCents)} per page${codePagesLeft != null ? " extra" : ""}`
-        : "Uses credit"
+        : "Uses wallet balance"
     : "Free to try";
 
   return (

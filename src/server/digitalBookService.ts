@@ -173,7 +173,7 @@ export async function createDigitalBookOrder(input: {
   if ((profile.credits_balance as number) < price.data) {
     return {
       data: null,
-      error: { message: "You do not have enough credits for this book.", code: INSUFFICIENT_CREDITS_CODE },
+      error: { message: "Your wallet balance isn't enough for this book.", code: INSUFFICIENT_CREDITS_CODE },
     };
   }
 
@@ -211,7 +211,7 @@ export async function createDigitalBookOrder(input: {
     if (error.message.includes("insufficient credits")) {
       return {
         data: null,
-        error: { message: "You do not have enough credits for this book.", code: INSUFFICIENT_CREDITS_CODE },
+        error: { message: "Your wallet balance isn't enough for this book.", code: INSUFFICIENT_CREDITS_CODE },
       };
     }
     return { data: null, error: { message: error.message } };

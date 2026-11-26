@@ -38,11 +38,11 @@ function subline(s: ReferralSummary): string {
   const { friendCreditCents: friend, sharerCreditCents: sharer } = s;
   if (friend > 0 && sharer > 0) {
     return friend === sharer
-      ? `When a friend signs up with your link, you each get ${formatUsd(friend)} of credit.`
+      ? `When a friend signs up with your link, you each get ${formatUsd(friend)} added to your wallet.`
       : `When a friend signs up with your link, they get ${formatUsd(friend)} and you get ${formatUsd(sharer)}.`;
   }
-  if (friend > 0) return `When a friend signs up with your link, they get ${formatUsd(friend)} of credit.`;
-  if (sharer > 0) return `When a friend signs up with your link, you get ${formatUsd(sharer)} of credit.`;
+  if (friend > 0) return `When a friend signs up with your link, they get ${formatUsd(friend)} added to their wallet.`;
+  if (sharer > 0) return `When a friend signs up with your link, you get ${formatUsd(sharer)} added to your wallet.`;
   return "Show a friend how to turn their photos into coloring pages.";
 }
 
@@ -288,7 +288,7 @@ export function V2ShareWithFriendStudio() {
 
               {summary.friendCreditCents > 0 || summary.sharerCreditCents > 0 ? (
                 <p className="mx-auto mt-6 max-w-xs text-xs leading-relaxed text-v2-muted">
-                  For new accounts only. Credit is added once your friend confirms their email.
+                  For new accounts only. Wallet rewards are added once your friend confirms their email.
                 </p>
               ) : null}
             </div>

@@ -119,8 +119,8 @@ export function useCreditCheckoutReturn(options: Options = {}): void {
         if (result.error.code === "NOT_PAID" || result.error.code === "NOT_FOUND") {
           setTopUpStatus(IDLE);
           latest.current.toast.info(
-            result.error.code === "NOT_PAID" ? "That payment wasn't completed, so no credit was added." : result.error.message,
-            "Credit not added",
+            result.error.code === "NOT_PAID" ? "That payment wasn't completed, so nothing was added to your wallet." : result.error.message,
+            "Nothing added to your wallet",
           );
           return true;
         }
@@ -142,7 +142,7 @@ export function useCreditCheckoutReturn(options: Options = {}): void {
       setTopUpStatus(IDLE);
       const hint = latest.current.options.creditedHint;
       latest.current.toast.success({
-        title: "Credit added",
+        title: "Added to your wallet",
         message: `${formatCredits(result.data.amountCents)} was added to your balance.${hint ? ` ${hint}` : ""}`,
       });
       return true;
@@ -157,8 +157,8 @@ export function useCreditCheckoutReturn(options: Options = {}): void {
         if (stopped) return;
         setTopUpStatus({ kind: "slow" });
         latest.current.toast.error(
-          "We could not confirm your payment just now. If you were charged, the credit will show up shortly.",
-          "Credit not added yet",
+          "We could not confirm your payment just now. If you were charged, it will show up in your wallet balance shortly.",
+          "Not in your wallet yet",
         );
         return;
       }

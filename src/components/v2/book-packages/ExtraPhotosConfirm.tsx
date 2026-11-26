@@ -108,7 +108,7 @@ export function ExtraPhotosConfirm({
 
         <ExtraNotice>
           {(tokens.extraTotal ? fillPackageCopy(BOOK_PACKAGES.splitNote, tokens) : null) ??
-            "Extra photos come from your credit, charged as each page is made. Your book package isn't used for them."}
+            "Extra photos come from your wallet balance, charged as each page is made. Your book package isn't used for them."}
         </ExtraNotice>
         {short ? (
           <p className="text-xs text-v2-muted">{fillPackageCopy(BOOK_PACKAGES.splitCredit, tokens)}</p>

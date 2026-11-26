@@ -1040,7 +1040,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
     });
   }
 
-  const generateHint = prices ? `Uses ${formatCredits(generateCents)} of credit` : "Uses credit";
+  const generateHint = prices ? `Uses ${formatCredits(generateCents)} of your wallet balance` : "Uses wallet balance";
   const portraitHint = prices
     ? `Makes a portrait version of the photo, then draws a new page from it. Uses up to ${formatCredits(
         generateCents + portraitCents,
@@ -1417,7 +1417,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                           className="font-semibold text-v2-link hover:underline"
                           onClick={() => openAddCredit(0)}
                         >
-                          Add credit
+                          Add to wallet
                         </button>
                       </p>
                     ) : null}
@@ -1764,7 +1764,7 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                             className="v2-btn-primary mt-3 text-sm"
                             onClick={() => openAddCredit(shortfallCents)}
                           >
-                            Add {formatCredits(shortfallCents)} credit
+                            Add {formatCredits(shortfallCents)} to wallet
                           </button>
                         </div>
                       ) : null}
@@ -1776,8 +1776,8 @@ export function V2BookOrderWizard({ onCartCreated }: { onCartCreated?: (cartId: 
                       ) : null}
                       <p className="mt-3 text-xs text-v2-muted">
                         {isDigital
-                          ? "Paid from your credits. Your PDF downloads right away, and you can download it again anytime from My orders."
-                          : "You'll pay from your credits on the next screen."}
+                          ? "Paid from your wallet balance. Your PDF downloads right away, and you can download it again anytime from My orders."
+                          : "You'll pay from your wallet balance on the next screen."}
                       </p>
                     </div>
                   </section>
