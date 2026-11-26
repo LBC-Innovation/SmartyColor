@@ -348,55 +348,64 @@ export function V2HomeStudio() {
             </div>
           ) : (
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_23rem]">
-              {/* Desktop: orders to track get a column of their own. */}
-              {orders ? (
-                <aside
-                  aria-labelledby="home-orders"
-                  className="hidden min-w-0 lg:sticky lg:top-0 lg:col-start-2 lg:row-start-1 lg:block"
-                >
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <h2 id="home-orders" className="v2-section-title">
-                      Orders to track
-                    </h2>
-                    <Link href="/orders" className="-my-3 inline-flex min-h-11 items-center text-sm font-semibold text-v2-link hover:underline">
-                      All orders
-                    </Link>
-                  </div>
-                  {orders.length > 0 ? (
-                    <ul className="space-y-3">
-                      {orders.slice(0, TRACK_LIMIT).map((o) => (
-                        <li key={o.id}>
-                          <V2OrderTrackCard order={o} />
-                        </li>
-                      ))}
-                      {orders.length > TRACK_LIMIT ? (
-                        <li>
-                          <Link href="/orders" className="inline-flex min-h-11 items-center text-sm font-semibold text-v2-link hover:underline">
-                            {orders.length - TRACK_LIMIT} more on the way
+              {/* Desktop: a column of its own for quick actions, with orders to track under them. */}
+              {cart || orders ? (
+                <div className="hidden min-w-0 space-y-8 lg:sticky lg:top-0 lg:col-start-2 lg:row-start-1 lg:block">
+                  {cart ? (
+                    <section aria-labelledby="home-quick-actions-side">
+                      <h2 id="home-quick-actions-side" className="v2-section-title mb-3">
+                        Quick actions
+                      </h2>
+                      <ContinueBookAction cart={cart} />
+                    </section>
+                  ) : null}
+                  {orders ? (
+                    <aside aria-labelledby="home-orders" className="min-w-0">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <h2 id="home-orders" className="v2-section-title">
+                          Orders to track
+                        </h2>
+                        <Link href="/orders" className="-my-3 inline-flex min-h-11 items-center text-sm font-semibold text-v2-link hover:underline">
+                          All orders
+                        </Link>
+                      </div>
+                      {orders.length > 0 ? (
+                        <ul className="space-y-3">
+                          {orders.slice(0, TRACK_LIMIT).map((o) => (
+                            <li key={o.id}>
+                              <V2OrderTrackCard order={o} />
+                            </li>
+                          ))}
+                          {orders.length > TRACK_LIMIT ? (
+                            <li>
+                              <Link href="/orders" className="inline-flex min-h-11 items-center text-sm font-semibold text-v2-link hover:underline">
+                                {orders.length - TRACK_LIMIT} more on the way
+                              </Link>
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : (
+                        <div className="rounded-2xl border-2 border-dashed border-gray-200 p-5 text-center">
+                          <Package className="mx-auto h-8 w-8 text-v2-muted" aria-hidden />
+                          <p className="mt-2 text-sm font-semibold text-v2-ink">Nothing on its way yet</p>
+                          <p className="mt-1 text-sm text-v2-muted">
+                            Books you order show up here, with delivery dates and tracking.
+                          </p>
+                          <Link href={STUDIO_PATH} className="v2-btn-outline mt-3 min-h-11 text-sm">
+                            <BookOpen className="h-4 w-4" aria-hidden />
+                            Make a book
                           </Link>
-                        </li>
-                      ) : null}
-                    </ul>
-                  ) : (
-                    <div className="rounded-2xl border-2 border-dashed border-gray-200 p-5 text-center">
-                      <Package className="mx-auto h-8 w-8 text-v2-muted" aria-hidden />
-                      <p className="mt-2 text-sm font-semibold text-v2-ink">Nothing on its way yet</p>
-                      <p className="mt-1 text-sm text-v2-muted">
-                        Books you order show up here, with delivery dates and tracking.
-                      </p>
-                      <Link href={STUDIO_PATH} className="v2-btn-outline mt-3 min-h-11 text-sm">
-                        <BookOpen className="h-4 w-4" aria-hidden />
-                        Make a book
-                      </Link>
-                    </div>
-                  )}
-                </aside>
+                        </div>
+                      )}
+                    </aside>
+                  ) : null}
+                </div>
               ) : null}
 
               <div className="min-w-0 space-y-8 lg:col-start-1 lg:row-start-1">
               {cart || hasOrdersToTrack ? (
-                // With only orders in it the section is phones-only: desktop shows them in their own column.
-                <section aria-labelledby="home-quick-actions" className={cart ? undefined : "lg:hidden"}>
+                // Phones and tablets: desktop shows quick actions and orders in the right-hand column.
+                <section aria-labelledby="home-quick-actions" className="lg:hidden">
                   <h2 id="home-quick-actions" className="v2-section-title mb-3">
                     Quick actions
                   </h2>
@@ -407,7 +416,7 @@ export function V2HomeStudio() {
                       </li>
                     ) : null}
                     {hasOrdersToTrack && orders ? (
-                      <li className="lg:hidden">
+                      <li>
                         <OrdersToTrackAction orders={orders} />
                       </li>
                     ) : null}
