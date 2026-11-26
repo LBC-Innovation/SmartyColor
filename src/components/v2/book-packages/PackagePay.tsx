@@ -27,6 +27,7 @@ import {
   type BookPackagePurchase,
 } from "@/lib/bookPackages/types";
 import { formatCredits } from "@/lib/credits/money";
+import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import { withNextParam } from "@/lib/auth/nextPath";
 import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { centsToValue, trackFormat } from "@/lib/marketing/events";
@@ -225,7 +226,10 @@ export function PackagePay({
     .map((l) => fillPackageCopy(l, tokens))
     .filter((l): l is string => Boolean(l));
   if (shipping.quote) {
-    const line = fillPackageCopy(BOOK_PACKAGES.includedShippingLine, { city: shipping.quote.address.city });
+    const line = fillPackageCopy(BOOK_PACKAGES.includedShippingLine, {
+      city: shipping.quote.address.city,
+      speed: shippingLevelLabel(shipping.quote.shippingLevel),
+    });
     if (line) included.push(line);
   }
   const pagePriceLine =

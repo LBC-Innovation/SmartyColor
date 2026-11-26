@@ -51,14 +51,29 @@ export function V2BrandMark({
   );
 }
 
-/** Mark + wordmark. `size` is the height of the lockup. */
+/**
+ * Mark + wordmark. `size` is the height of the lockup. With `compactOnMobile`,
+ * phones (below `sm`) get the heart mark alone and wider screens the full lockup.
+ */
 export function V2BrandLogo({
   size = 38,
   className,
+  compactOnMobile = false,
 }: {
   size?: number;
   className?: string;
+  compactOnMobile?: boolean;
 }) {
+  if (compactOnMobile) {
+    return (
+      <span className={cn("inline-flex shrink-0 items-center", className)}>
+        <V2BrandMark size={size} className="sm:hidden" />
+        <span className="sr-only sm:hidden">Colorful Memories</span>
+        <V2BrandLogo size={size} className="hidden sm:block" />
+      </span>
+    );
+  }
+
   return (
     <svg
       height={size}

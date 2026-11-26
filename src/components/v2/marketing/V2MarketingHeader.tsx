@@ -32,7 +32,7 @@ export function V2MarketingHeader({
     >
       <div className={cn("mx-auto flex w-full items-center justify-between gap-4 py-4", wide ? "px-5 sm:px-8 lg:px-12" : "v2-gutter-x max-w-6xl")}>
         <Link href="/" className="inline-flex min-h-11 min-w-0 items-center rounded-lg outline-offset-2">
-          <V2BrandLogo />
+          <V2BrandLogo compactOnMobile />
         </Link>
         <nav className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Account">
           {!loading && user ? (

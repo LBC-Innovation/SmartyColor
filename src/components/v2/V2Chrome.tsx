@@ -103,7 +103,7 @@ export function V2TopBar() {
       {/* Desktop: two equal side columns, so the links sit at the true center whatever is beside them. */}
       <div className="v2-gutter-x flex w-full items-center justify-between gap-4 py-2.5 sm:py-3.5 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-6">
         <Link href={nav.home} className="min-w-0 justify-self-start rounded-lg outline-offset-2">
-          <V2BrandLogo />
+          <V2BrandLogo compactOnMobile />
         </Link>
 
         <nav

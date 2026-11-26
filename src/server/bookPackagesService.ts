@@ -23,13 +23,20 @@ import {
   type BookPackageShippingQuote,
 } from "@/lib/bookPackages/types";
 import { normalizeShippingAddress, validateShippingAddress } from "@/lib/orders/shippingAddress";
+import {
+  DEFAULT_SHIPPING_LEVEL,
+  isShippingLevel,
+  shippingLevelLabel,
+  type ShippingLevel,
+} from "@/lib/orders/shippingLevels";
 import type { ShippingAddress } from "@/lib/orders/types";
-import { BOOK_BINDINGS, type BookBindingId } from "@/lib/print/bookBindings";
+import { BOOK_BINDINGS, getBookBinding, type BookBindingId } from "@/lib/print/bookBindings";
 import { coveredPrintPages } from "@/lib/purchaseCodes/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { quoted, recordActivity } from "@/server/activityService";
 import { pricePrintOrder } from "@/server/pricingService";
 import { saveAddress } from "@/server/savedAddressService";
+import { luluShippingChoices } from "@/server/lulu/shippingOptions";
 import { getStripe } from "@/server/stripe/client";
 import { appOrigin } from "@/server/stripe/config";
 
@@ -118,6 +125,8 @@ function priceGuard(pkg: BookPackage, expectedPriceCents: number | null | undefi
 export async function quotePackageShipping(input: {
   bindingId: BookBindingId;
   address: Partial<ShippingAddress> | null | undefined;
+  /** The speed to price; Standard when absent. */
+  shippingLevel?: ShippingLevel | null;
 }): Promise<ApiResult<BookPackageShippingQuote>> {
   const pkg = await buyablePackage(input.bindingId);
   if (pkg.error) return pkg;
@@ -126,17 +135,26 @@ export async function quotePackageShipping(input: {
   }
   const address = normalizeShippingAddress(input.address);
   const p = pkg.data!;
-  const priced = await pricePrintOrder({
-    bindingId: p.bindingId,
-    pageCount: coveredPrintPages({ includedPages: p.includedPhotos, bindingId: p.bindingId, backsIncluded: true }),
-    shippingLevel: "MAIL",
-    shippingAddress: {
-      city: address.city,
-      state_code: address.state_code ?? "",
-      postcode: address.postcode,
-      country_code: address.country_code,
-    },
-  });
+  const pageCount = coveredPrintPages({ includedPages: p.includedPhotos, bindingId: p.bindingId, backsIncluded: true });
+  const level = input.shippingLevel ?? DEFAULT_SHIPPING_LEVEL;
+  const [priced, choices] = await Promise.all([
+    pricePrintOrder({
+      bindingId: p.bindingId,
+      pageCount,
+      shippingLevel: level,
+      shippingAddress: {
+        city: address.city,
+        state_code: address.state_code ?? "",
+        postcode: address.postcode,
+        country_code: address.country_code,
+      },
+    }),
+    luluShippingChoices({
+      podPackageId: getBookBinding(p.bindingId).podPackageId,
+      pageCount,
+      address: { country_code: address.country_code, state_code: address.state_code ?? undefined, postcode: address.postcode, city: address.city },
+    }),
+  ]);
   if (priced.error) {
     log("error", "Book package shipping quote failed", { bindingId: p.bindingId, error: priced.error.message });
     return {
@@ -148,7 +166,16 @@ export async function quotePackageShipping(input: {
   // The part of it that is tax, so the pay screen can show shipping and tax on their own lines.
   const taxCents = Math.min(shippingCents, Math.max(0, priced.data!.price.taxCents));
   return {
-    data: { bindingId: p.bindingId, shippingCents, taxCents, address, addressSuggestion: priced.data!.addressSuggestion ?? null },
+    data: {
+      bindingId: p.bindingId,
+      // The level the printer actually priced (it can fall back when a speed isn't offered here).
+      shippingLevel: isShippingLevel(priced.data!.shippingLevel) ? priced.data!.shippingLevel : level,
+      choices: choices ?? [],
+      shippingCents,
+      taxCents,
+      address,
+      addressSuggestion: priced.data!.addressSuggestion ?? null,
+    },
     error: null,
   };
 }
@@ -156,12 +183,16 @@ export async function quotePackageShipping(input: {
 /** Reads the optional `shipping` of a purchase request body; null when absent or malformed. */
 export function readShippingInput(raw: unknown): BookPackageShippingInput | null {
   if (!raw || typeof raw !== "object") return null;
-  const r = raw as { address?: unknown; expectedShippingCents?: unknown };
+  const r = raw as { address?: unknown; expectedShippingCents?: unknown; shippingLevel?: unknown };
   if (!r.address || typeof r.address !== "object") return null;
   if (typeof r.expectedShippingCents !== "number" || !Number.isInteger(r.expectedShippingCents) || r.expectedShippingCents < 0) {
     return null;
   }
-  return { address: normalizeShippingAddress(r.address as Partial<ShippingAddress>), expectedShippingCents: r.expectedShippingCents };
+  return {
+    address: normalizeShippingAddress(r.address as Partial<ShippingAddress>),
+    shippingLevel: isShippingLevel(r.shippingLevel) ? r.shippingLevel : DEFAULT_SHIPPING_LEVEL,
+    expectedShippingCents: r.expectedShippingCents,
+  };
 }
 
 /**
@@ -172,11 +203,14 @@ async function settleShipping(
   userId: string,
   bindingId: BookBindingId,
   shipping: BookPackageShippingInput | null | undefined,
-): Promise<ApiResult<{ shippingCents: number } | null>> {
+): Promise<ApiResult<{ shippingCents: number; shippingLevel: ShippingLevel } | null>> {
   if (!shipping) return { data: null, error: null };
-  const quote = await quotePackageShipping({ bindingId, address: shipping.address });
+  const quote = await quotePackageShipping({ bindingId, address: shipping.address, shippingLevel: shipping.shippingLevel });
   if (quote.error) return quote;
-  if (quote.data!.shippingCents !== shipping.expectedShippingCents) {
+  if (
+    quote.data!.shippingCents !== shipping.expectedShippingCents ||
+    quote.data!.shippingLevel !== shipping.shippingLevel
+  ) {
     return {
       data: null,
       error: { message: "The shipping price changed. Check the new price and pay again.", code: PACKAGE_SHIPPING_CHANGED_CODE },
@@ -184,7 +218,17 @@ async function settleShipping(
   }
   const saved = await saveAddress(userId, quote.data!.address);
   if (saved.error) log("error", "Saving the package shipping address failed", { userId, error: saved.error.message });
-  return { data: { shippingCents: quote.data!.shippingCents }, error: null };
+  return { data: { shippingCents: quote.data!.shippingCents, shippingLevel: quote.data!.shippingLevel }, error: null };
+}
+
+/**
+ * Records the speed the customer paid for on the package, so the book order starts on it and
+ * shows it as included. The database functions always write Standard; this sets the real one.
+ */
+async function recordPrepaidShippingLevel(codeId: string, level: ShippingLevel): Promise<void> {
+  if (level === DEFAULT_SHIPPING_LEVEL) return;
+  const { error } = await db().from("purchase_codes").update({ shipping_level: level }).eq("id", codeId);
+  if (error) log("error", "Saving the package's shipping speed failed", { codeId, level, error: error.message });
 }
 
 // ---- admin -----------------------------------------------------------------------------------
@@ -338,6 +382,7 @@ export async function buyPackageWithCredit(input: {
   }
   const purchase = purchaseFromRpc(data);
   if (!purchase) return { data: null, error: { message: "That didn't go through. Please check your albums." } };
+  if (shipping.data) await recordPrepaidShippingLevel(purchase.codeId, shipping.data.shippingLevel);
   log("info", "Book package bought with credit", {
     userId: input.userId,
     codeId: purchase.codeId,
@@ -404,7 +449,7 @@ export async function createPackageCheckout(input: {
                   currency: "usd",
                   unit_amount: shippingCents,
                   product_data: {
-                    name: "Standard shipping for your book",
+                    name: `${shippingLevelLabel(shipping.data?.shippingLevel)} shipping for your book`,
                     description: "Shipping and tax to the address you entered, paid now so the book is fully paid.",
                   },
                 },
@@ -421,6 +466,7 @@ export async function createPackageCheckout(input: {
         edits_per_photo: String(p.editsPerPhoto),
         amount_cents: String(p.priceCents + shippingCents),
         shipping_cents: String(shippingCents),
+        shipping_level: shipping.data?.shippingLevel ?? DEFAULT_SHIPPING_LEVEL,
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
@@ -448,6 +494,7 @@ type PackageMetadata = {
   includedPhotos: number | null;
   editsPerPhoto: number | null;
   shippingCents: number;
+  shippingLevel: ShippingLevel;
 };
 
 /** What a package checkout was sold as, or null when it is not one of ours. */
@@ -466,6 +513,7 @@ function readPackageMetadata(session: Pick<CheckoutSessionLike, "metadata">): Pa
     includedPhotos: toInt(m.included_photos),
     editsPerPhoto: toInt(m.edits_per_photo),
     shippingCents: Math.max(0, toInt(m.shipping_cents) ?? 0),
+    shippingLevel: isShippingLevel(m.shipping_level) ? m.shipping_level : DEFAULT_SHIPPING_LEVEL,
   };
 }
 
@@ -516,6 +564,8 @@ export async function fulfillPackageFromCheckoutSession(
   }
   const purchase = purchaseFromRpc(data);
   if (!purchase) return { data: null, error: { message: "Package could not be read back" } };
+  // Every time, not only when created: a retry finishes the job if an earlier call stopped short.
+  if (meta.shippingCents > 0) await recordPrepaidShippingLevel(purchase.codeId, meta.shippingLevel);
   if (purchase.created) {
     log("info", "Book package created from checkout", {
       userId: meta.userId,
