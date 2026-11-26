@@ -1,9 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BookOpen, CalendarHeart, ImagePlus, Loader2, LogOut, Package, Plus, Trash2, Users } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  CalendarHeart,
+  ImagePlus,
+  Loader2,
+  LogOut,
+  Package,
+  Plus,
+  Trash2,
+  Truck,
+  Users,
+} from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { V2OrderTrackCard } from "@/components/v2/orders/V2OrderTrackCard";
 import { isUnpaid } from "@/components/v2/orders/V2MyOrdersStudio";
@@ -94,6 +106,82 @@ function AlbumCollage({ urls, shared }: { urls: string[]; shared: boolean }) {
         </span>
       ) : null}
     </div>
+  );
+}
+
+/** One line on where the orders stand: payment owed comes first, then shipped, else on the way. */
+function ordersSummary(orders: BookOrderSummary[]): string {
+  const unpaid = orders.filter((o) => isUnpaid(o)).length;
+  if (unpaid > 0) return unpaid === 1 ? "1 order needs payment" : `${unpaid} orders need payment`;
+  const shipped = orders.filter((o) => o.status === "shipped").length;
+  if (shipped === orders.length) return orders.length === 1 ? "1 order shipped" : `${orders.length} orders shipped`;
+  return orders.length === 1 ? "1 order on its way" : `${orders.length} orders on their way`;
+}
+
+const QUICK_ACTION_ROW =
+  "v2-panel group flex min-h-16 items-center gap-3 p-3 transition hover:border-v2-primary/40 active:scale-[0.99] motion-reduce:active:scale-100 sm:p-4";
+
+/** The leading picture of a quick action: the same 48px tile whatever it holds. */
+function QuickActionTile({ children, tone = "primary" }: { children: ReactNode; tone?: "primary" | "warning" }) {
+  return (
+    <span
+      className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl ${tone === "warning" ? "bg-amber-100 text-amber-700" : "bg-v2-primary-light text-v2-primary"}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function QuickActionText({ title, detail }: { title: string; detail: string }) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className="block truncate font-semibold text-v2-ink">{title}</span>
+      {detail ? <span className="block truncate text-sm text-v2-muted">{detail}</span> : null}
+    </span>
+  );
+}
+
+function QuickActionArrow() {
+  return (
+    <ArrowRight
+      className="h-5 w-5 shrink-0 text-v2-primary transition-transform group-hover:translate-x-0.5"
+      aria-hidden
+    />
+  );
+}
+
+/** Picks up the book in the cart where it was left. */
+function ContinueBookAction({ cart }: { cart: BookCartSummary }) {
+  const detail = [cart.title, cart.pageCount > 0 ? `${cart.pageCount} pages` : null, cartFormatName(cart.bindingId)]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Link href={`${STUDIO_PATH}?cart=${encodeURIComponent(cart.id)}&book=open`} className={QUICK_ACTION_ROW}>
+      <QuickActionTile>
+        {cart.thumbUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cart.thumbUrl} alt="" className="h-full w-full bg-white object-cover" />
+        ) : (
+          <BookOpen className="h-6 w-6" aria-hidden />
+        )}
+      </QuickActionTile>
+      <QuickActionText title="Continue your book" detail={detail} />
+      <QuickActionArrow />
+    </Link>
+  );
+}
+
+/** Phones only (desktop has the orders column): opens the Orders tab. */
+function OrdersToTrackAction({ orders }: { orders: BookOrderSummary[] }) {
+  const needsPayment = orders.some((o) => isUnpaid(o));
+  return (
+    <Link href="/orders" className={QUICK_ACTION_ROW}>
+      <QuickActionTile tone={needsPayment ? "warning" : "primary"}>
+        <Truck className="h-6 w-6" aria-hidden />
+      </QuickActionTile>
+      <QuickActionText title="Orders to track" detail={ordersSummary(orders)} />
+      <QuickActionArrow />
+    </Link>
   );
 }
 
@@ -230,6 +318,7 @@ export function V2HomeStudio() {
     router.push(`/studio/new?${YEAR_ALBUM_PARAM}=${YEAR_ALBUM_PARAM_VALUE}`);
   }
 
+  const hasOrdersToTrack = !!orders && orders.length > 0;
   const firstName = user?.displayName?.trim().split(/\s+/)[0];
 
   return (
@@ -252,11 +341,11 @@ export function V2HomeStudio() {
             </div>
           ) : (
             <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_23rem]">
-              {/* Orders to track: first on phones (time-sensitive), a column of its own on desktop. */}
+              {/* Desktop: orders to track get a column of their own. */}
               {orders ? (
                 <aside
                   aria-labelledby="home-orders"
-                  className={`min-w-0 lg:sticky lg:top-0 lg:col-start-2 lg:row-start-1 ${orders.length === 0 ? "hidden lg:block" : ""}`}
+                  className="hidden min-w-0 lg:sticky lg:top-0 lg:col-start-2 lg:row-start-1 lg:block"
                 >
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <h2 id="home-orders" className="v2-section-title">
@@ -298,47 +387,28 @@ export function V2HomeStudio() {
               ) : null}
 
               <div className="min-w-0 space-y-8 lg:col-start-1 lg:row-start-1">
-              <V2HeardFromCard />
-              {cart ? (
-                <section aria-label="Continue your book">
-                  <Link
-                    href={`${STUDIO_PATH}?cart=${encodeURIComponent(cart.id)}&book=open`}
-                    className="v2-panel group flex items-center gap-4 p-4 transition hover:border-v2-primary/40 sm:p-5"
-                  >
-                    {cart.thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={cart.thumbUrl}
-                        alt=""
-                        className="h-20 w-16 shrink-0 rounded-md border border-gray-200 bg-white object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-20 w-16 shrink-0 items-center justify-center rounded-md bg-v2-primary-light text-v2-primary">
-                        <BookOpen className="h-7 w-7" aria-hidden />
-                      </span>
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold uppercase tracking-wider text-v2-muted">
-                        Continue your book
-                      </span>
-                      <span className="mt-0.5 block truncate text-lg font-semibold text-v2-ink">{cart.title}</span>
-                      <span className="block truncate text-sm text-v2-muted">
-                        {[
-                          cart.pageCount > 0 ? `${cart.pageCount} pages` : null,
-                          cartFormatName(cart.bindingId),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </span>
-                    <span className="v2-btn-primary hidden shrink-0 sm:inline-flex">
-                      Continue
-                      <ArrowRight className="h-4 w-4" aria-hidden />
-                    </span>
-                    <ArrowRight className="h-5 w-5 shrink-0 text-v2-primary sm:hidden" aria-hidden />
-                  </Link>
+              {cart || hasOrdersToTrack ? (
+                // With only orders in it the section is phones-only: desktop shows them in their own column.
+                <section aria-labelledby="home-quick-actions" className={cart ? undefined : "lg:hidden"}>
+                  <h2 id="home-quick-actions" className="v2-section-title mb-3">
+                    Quick actions
+                  </h2>
+                  <ul className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
+                    {cart ? (
+                      <li>
+                        <ContinueBookAction cart={cart} />
+                      </li>
+                    ) : null}
+                    {hasOrdersToTrack && orders ? (
+                      <li className="lg:hidden">
+                        <OrdersToTrackAction orders={orders} />
+                      </li>
+                    ) : null}
+                  </ul>
                 </section>
               ) : null}
+
+              <V2HeardFromCard />
 
               <section aria-labelledby="home-albums">
                 <h2 id="home-albums" className="v2-section-title mb-3">
