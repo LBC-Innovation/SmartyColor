@@ -38,9 +38,9 @@ export function CreditPaymentLines({
         <dd className="shrink-0 tabular-nums">{formatCredits(onCard)}</dd>
       </div>
       {fromCredit > 0 && creditAfter > 0 ? (
-        // Its own highlighted row, so what's left for extras stands out (not given `className`, which
-        // would fight its padding).
-        <div className="mt-2 flex items-baseline justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-v2-ink">
+        // Plain text in a dark gray-green, with room above and below so it sits apart from the
+        // ledger and from what follows (not given `className`, which would fight its spacing).
+        <div className="mb-3 mt-4 flex items-baseline justify-between gap-3 text-sm font-semibold text-emerald-950/75">
           <dt>Your remaining wallet balance after this</dt>
           <dd className="shrink-0 tabular-nums">{formatCredits(creditAfter)}</dd>
         </div>
