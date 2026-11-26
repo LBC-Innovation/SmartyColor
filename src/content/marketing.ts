@@ -1691,13 +1691,14 @@ export const GUEST_LIMIT = {
  * a line whose token can't be filled hides itself (see fillCopy).
  */
 export const BOOK_PACKAGES = {
-  steps: ["Book", "Pay", "Theme", "Photos"],
+  // "Order" stays on the list so paying never looks like the last step.
+  steps: ["Book", "Pay", "Theme", "Photos", "Order"],
   /** "Print as you go" has nothing to pay up front, so it skips the Pay step. */
   stepsPages: ["Book", "Theme", "Photos"],
   stepsLabel: "Steps",
   back: "Back",
   chooseTitle: "Start with the book",
-  chooseSubtitle: "Pick a book, pay once, then fill it with photos.",
+  chooseSubtitle: "Pay for your book now, fill it with your photos, then place the order. We print it once you order.",
   /** Opened from the home page's year album. */
   chooseSubtitleYear: "Pick a book for “{albumName}”. Once it's set up, you'll bring in your {year} photos.",
   tileLines: [
@@ -1777,7 +1778,18 @@ export const BOOK_PACKAGES = {
   buttonPaying: "Paying…",
   buttonOpening: "Opening secure payment…",
   buttonFinishing: "Finishing your payment…",
-  underButton: "One payment for this album's book. You'll see what's left of it as you go.",
+  underButton: "This pays for your book. It isn't ordered yet: next you add your photos, then place the order.",
+  // "How your book gets made": paying is step one, not the order.
+  journeyTitle: "How your book gets made",
+  journeyHere: "You're here",
+  journeySteps: [
+    { title: "Pay for your book", body: "Covers your coloring pages and the printing." },
+    { title: "Add your photos", body: "Each one becomes a coloring page. Check them and touch up any you like." },
+    {
+      title: "Order your book",
+      body: "Choose the cover and where it goes, then place the order. We only print and ship your book after this step.",
+    },
+  ],
   topUpPending:
     "Your bank is still confirming the card payment. Once it shows in your wallet balance, come back here to pay for your book from it.",
   topUpConfirmFailed:
@@ -1791,15 +1803,17 @@ export const BOOK_PACKAGES = {
   priceChanged: "The price of this book changed to {packagePrice}. Please check it before you pay.",
   creditShort: "Your wallet balance changed. Check the new amounts and pay again.",
   payFailed: "That didn't go through, and you weren't charged. Please try again.",
-  paidToastTitle: "Your book is ready",
-  paidToastBody: "{includedPhotos} photos and the printing are paid for.",
-  paidToastBodyShipping: "{includedPhotos} photos, the printing and shipping are paid for.",
+  paidToastTitle: "Paid. Next, add your photos",
+  paidToastBody: "Your book isn't ordered yet. Add your photos, then place the order and we'll print it.",
+  paidToastBodyShipping:
+    "Printing and shipping are paid. Your book isn't ordered yet: add your photos, then place the order and we'll print it.",
   canceledNote: "Payment canceled. No charge was made. Your book choice is kept.",
 
   returnConfirmingTitle: "Confirming your payment",
   returnConfirmingBody: "This takes a few seconds.",
-  returnPaidTitle: "Your book is paid for",
-  returnPaidBody: "{includedPhotos} photos and the printing of your {bindingNameLower} are ready to use.",
+  returnPaidTitle: "Paid. Now let's fill your book",
+  returnPaidBody:
+    "{includedPhotos} photos and the printing of your {bindingNameLower} are paid for. Your book isn't ordered yet: add your photos, then place the order and we'll print it.",
   returnContinue: "Continue",
   returnPendingTitle: "Still confirming your payment",
   returnPendingBody:
@@ -1848,6 +1862,7 @@ export const BOOK_PACKAGES = {
   meterViewOrder: "View order",
   meterStepOrder: "Order my book",
   meterDisclosure: "What your book includes",
+  meterNotOrdered: "Your book isn't ordered yet. When your pages are ready, tap Order my book and we'll print and ship it.",
   meterIncludes: [
     "{includedPhotos} photos made into coloring pages",
     "{touchUps} on each of those pages",

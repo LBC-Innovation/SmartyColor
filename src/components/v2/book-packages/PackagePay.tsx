@@ -5,6 +5,7 @@ import { ChevronLeft, Coins, Check, Loader2, Truck, BookOpen } from "lucide-reac
 import { V2GuestGate } from "@/components/v2/auth/V2GuestGate";
 import { PackageLedger } from "@/components/v2/book-packages/PackageLedger";
 import { PackageShippingChoice, usePackageShipping } from "@/components/v2/book-packages/PackageShipping";
+import { BookJourney } from "@/components/v2/book-packages/BookJourney";
 import { WizardProgress } from "@/components/v2/book-packages/WizardProgress";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { confirmCreditTopUp, createCreditTopUpCheckout, isError } from "@/lib/api/client";
@@ -339,6 +340,9 @@ export function PackagePay({
         )}
         <p className="mt-3 text-xs text-v2-muted">{BOOK_PACKAGES.oneAlbumNote}</p>
         <p className="mt-1 text-xs text-v2-muted">{BOOK_PACKAGES.refundPolicy}</p>
+
+        {/* Paying is the first step, not the order: say so before the button. */}
+        <BookJourney current={1} className="mt-5" />
 
         {signedIn ? (
           <>

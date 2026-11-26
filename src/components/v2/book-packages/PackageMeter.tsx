@@ -193,6 +193,11 @@ export function PackageMeter({
             </ul>
             <p className="mt-2 text-v2-muted">{BOOK_PACKAGES.meterExtraNote}</p>
             {!ordered ? (
+              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900">
+                {BOOK_PACKAGES.meterNotOrdered}
+              </p>
+            ) : null}
+            {!ordered ? (
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"

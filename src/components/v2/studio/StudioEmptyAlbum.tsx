@@ -6,6 +6,7 @@ import { BOOK_PACKAGES, DESIGN_THEMES, NEW_ALBUM, STUDIO_EMPTY } from "@/content
 import { fillPackageCopy, packageTokens } from "@/lib/bookPackages/copy";
 import type { AlbumPurchaseCode } from "@/lib/purchaseCodes/types";
 import { V2UploadDropzone } from "@/components/v2/V2UploadDropzone";
+import { BookJourney } from "@/components/v2/book-packages/BookJourney";
 import { PLACEHOLDER_ALBUM_NAME, isAutomaticAlbumName } from "@/components/v2/studio/albumNames";
 import { isThemeDecided, markThemeDecided } from "@/components/v2/studio/themeDecided";
 import { cn } from "@/lib/cn";
@@ -150,6 +151,8 @@ export function StudioEmptyAlbum({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-v2-primary">{eyebrow}</p>
           <h2 className="v2-brand-title mt-2 text-[1.9rem] leading-[1.1] text-v2-ink sm:text-[2.5rem]">{title}</h2>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-v2-muted sm:text-[0.95rem]">{NEW_ALBUM.setupSub}</p>
+          {/* A paid book isn't an ordered one: keep the last step in view while the album is empty. */}
+          {pkg ? <BookJourney current={2} compact className="mt-5 max-w-md" /> : null}
 
           <ol className="mt-8 max-w-2xl sm:mt-10">
             {order.map((id, i) => {
