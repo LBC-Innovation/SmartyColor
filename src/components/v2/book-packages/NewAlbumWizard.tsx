@@ -290,7 +290,11 @@ export function NewAlbumWizard() {
     void refreshUser();
     toast.success({
       title: BOOK_PACKAGES.paidToastTitle,
-      message: fillPackageCopy(BOOK_PACKAGES.paidToastBody, packageTokens(purchase)) ?? "",
+      message:
+        fillPackageCopy(
+          purchase.shippingPrepaidCents > 0 ? BOOK_PACKAGES.paidToastBodyShipping : BOOK_PACKAGES.paidToastBody,
+          packageTokens(purchase),
+        ) ?? "",
     });
     router.replace(`/studio/new?step=theme&album=${encodeURIComponent(purchase.projectId)}`);
   }

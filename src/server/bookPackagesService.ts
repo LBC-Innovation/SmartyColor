@@ -7,6 +7,8 @@ import {
   PACKAGE_CHECKOUT_SESSION_PARAM,
   PACKAGE_NOT_CANCELABLE_CODE,
   PACKAGE_PRICE_CHANGED_CODE,
+  PACKAGE_SHIPPING_CHANGED_CODE,
+  PACKAGE_SHIPPING_UNAVAILABLE_CODE,
   PACKAGE_UNAVAILABLE_CODE,
   isBookBindingId,
   packagePrintFit,
@@ -17,10 +19,17 @@ import {
   type BookPackagePurchase,
   type BookPackageRefund,
   type BookPackageRefundQuote,
+  type BookPackageShippingInput,
+  type BookPackageShippingQuote,
 } from "@/lib/bookPackages/types";
+import { normalizeShippingAddress, validateShippingAddress } from "@/lib/orders/shippingAddress";
+import type { ShippingAddress } from "@/lib/orders/types";
 import { BOOK_BINDINGS, type BookBindingId } from "@/lib/print/bookBindings";
+import { coveredPrintPages } from "@/lib/purchaseCodes/types";
 import { getSupabaseAdmin } from "@/lib/supabase/service";
 import { quoted, recordActivity } from "@/server/activityService";
+import { pricePrintOrder } from "@/server/pricingService";
+import { saveAddress } from "@/server/savedAddressService";
 import { getStripe } from "@/server/stripe/client";
 import { appOrigin } from "@/server/stripe/config";
 
@@ -97,6 +106,83 @@ function priceGuard(pkg: BookPackage, expectedPriceCents: number | null | undefi
     };
   }
   return null;
+}
+
+// ---- shipping paid with the package ------------------------------------------------------------
+
+/**
+ * Standard shipping (and the tax the printer adds) for the package's book to this address: the
+ * same book, speed and address that purchaseCodeBookCoverage() prices at checkout, so paying this
+ * now leaves nothing to pay when the book is ordered as bought.
+ */
+export async function quotePackageShipping(input: {
+  bindingId: BookBindingId;
+  address: Partial<ShippingAddress> | null | undefined;
+}): Promise<ApiResult<BookPackageShippingQuote>> {
+  const pkg = await buyablePackage(input.bindingId);
+  if (pkg.error) return pkg;
+  if (!input.address || Object.keys(validateShippingAddress(input.address)).length > 0) {
+    return { data: null, error: { message: "Complete the address to see the shipping price.", code: "INVALID_ADDRESS" } };
+  }
+  const address = normalizeShippingAddress(input.address);
+  const p = pkg.data!;
+  const priced = await pricePrintOrder({
+    bindingId: p.bindingId,
+    pageCount: coveredPrintPages({ includedPages: p.includedPhotos, bindingId: p.bindingId, backsIncluded: true }),
+    shippingLevel: "MAIL",
+    shippingAddress: {
+      city: address.city,
+      state_code: address.state_code ?? "",
+      postcode: address.postcode,
+      country_code: address.country_code,
+    },
+  });
+  if (priced.error) {
+    log("error", "Book package shipping quote failed", { bindingId: p.bindingId, error: priced.error.message });
+    return {
+      data: null,
+      error: { message: "We couldn't price shipping to that address just now.", code: PACKAGE_SHIPPING_UNAVAILABLE_CODE },
+    };
+  }
+  const shippingCents = Math.max(0, priced.data!.price.totalCents - priced.data!.price.printPriceCents);
+  return {
+    data: { bindingId: p.bindingId, shippingCents, address, addressSuggestion: priced.data!.addressSuggestion ?? null },
+    error: null,
+  };
+}
+
+/** Reads the optional `shipping` of a purchase request body; null when absent or malformed. */
+export function readShippingInput(raw: unknown): BookPackageShippingInput | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as { address?: unknown; expectedShippingCents?: unknown };
+  if (!r.address || typeof r.address !== "object") return null;
+  if (typeof r.expectedShippingCents !== "number" || !Number.isInteger(r.expectedShippingCents) || r.expectedShippingCents < 0) {
+    return null;
+  }
+  return { address: normalizeShippingAddress(r.address as Partial<ShippingAddress>), expectedShippingCents: r.expectedShippingCents };
+}
+
+/**
+ * Re-quotes the shipping the customer chose to pay with the package and checks it against what
+ * the screen showed. Saves the address to the account for the book order. Null = no shipping.
+ */
+async function settleShipping(
+  userId: string,
+  bindingId: BookBindingId,
+  shipping: BookPackageShippingInput | null | undefined,
+): Promise<ApiResult<{ shippingCents: number } | null>> {
+  if (!shipping) return { data: null, error: null };
+  const quote = await quotePackageShipping({ bindingId, address: shipping.address });
+  if (quote.error) return quote;
+  if (quote.data!.shippingCents !== shipping.expectedShippingCents) {
+    return {
+      data: null,
+      error: { message: "The shipping price changed. Check the new price and pay again.", code: PACKAGE_SHIPPING_CHANGED_CODE },
+    };
+  }
+  const saved = await saveAddress(userId, quote.data!.address);
+  if (saved.error) log("error", "Saving the package shipping address failed", { userId, error: saved.error.message });
+  return { data: { shippingCents: quote.data!.shippingCents }, error: null };
 }
 
 // ---- admin -----------------------------------------------------------------------------------
@@ -188,6 +274,7 @@ function purchaseFromRpc(raw: unknown): BookPackagePurchase | null {
     includedPhotos: Number(r.includedPhotos),
     editsPerPhoto: Number(r.editsPerPhoto),
     priceCents: Number(r.priceCents),
+    shippingPrepaidCents: Number(r.shippingPrepaidCents) || 0,
     created: r.created === true,
     ...(typeof r.creditsBalanceCents === "number" ? { creditsBalanceCents: r.creditsBalanceCents } : {}),
   };
@@ -214,11 +301,15 @@ export async function buyPackageWithCredit(input: {
   albumName?: string | null;
   /** What the screen showed. Only a guard: a different catalog price refuses the purchase. */
   expectedPriceCents?: number | null;
+  /** Pay the book's standard shipping now too. */
+  shipping?: BookPackageShippingInput | null;
 }): Promise<ApiResult<BookPackagePurchase>> {
   const pkg = await buyablePackage(input.bindingId);
   if (pkg.error) return pkg;
   const guard = priceGuard(pkg.data!, input.expectedPriceCents);
   if (guard) return guard;
+  const shipping = await settleShipping(input.userId, input.bindingId, input.shipping);
+  if (shipping.error) return shipping;
 
   const albumName = cleanAlbumName(input.albumName, input.bindingId);
   const { data, error } = await db().rpc("buy_book_package_with_credits", {
@@ -226,6 +317,8 @@ export async function buyPackageWithCredit(input: {
     p_binding_id: input.bindingId,
     p_project_name: albumName,
     p_expected_price_cents: pkg.data!.priceCents,
+    // Only sent when shipping is paid, so a purchase without it also works before migration 0047.
+    ...(shipping.data ? { p_shipping_cents: shipping.data.shippingCents } : {}),
   });
   if (error) {
     const message = error.message ?? "";
@@ -248,6 +341,7 @@ export async function buyPackageWithCredit(input: {
     codeId: purchase.codeId,
     bindingId: purchase.bindingId,
     priceCents: purchase.priceCents,
+    shippingPrepaidCents: purchase.shippingPrepaidCents,
   });
   await recordAlbumCreated(input.userId, purchase.projectId, albumName);
   return { data: purchase, error: null };
@@ -265,11 +359,15 @@ export async function createPackageCheckout(input: {
   bindingId: BookBindingId;
   albumName?: string | null;
   expectedPriceCents?: number | null;
+  shipping?: BookPackageShippingInput | null;
 }): Promise<ApiResult<{ checkoutUrl: string }>> {
   const pkg = await buyablePackage(input.bindingId);
   if (pkg.error) return pkg;
   const guard = priceGuard(pkg.data!, input.expectedPriceCents);
   if (guard) return guard;
+  const shipping = await settleShipping(input.userId, input.bindingId, input.shipping);
+  if (shipping.error) return shipping;
+  const shippingCents = shipping.data?.shippingCents ?? 0;
   const p = pkg.data!;
   const spec = BOOK_BINDINGS[p.bindingId];
   const albumName = cleanAlbumName(input.albumName, p.bindingId);
@@ -290,10 +388,27 @@ export async function createPackageCheckout(input: {
             unit_amount: p.priceCents,
             product_data: {
               name: `Colorful Memories book package: ${spec.shortLabel}`,
-              description: `${p.includedPhotos} photos made into coloring pages, ${p.editsPerPhoto} free touch-ups on each, and printing. Shipping is added when you order the book.`,
+              description: `${p.includedPhotos} photos made into coloring pages, ${p.editsPerPhoto} free touch-ups on each, and printing.${
+                shippingCents > 0 ? "" : " Shipping is added when you order the book."
+              }`,
             },
           },
         },
+        ...(shippingCents > 0
+          ? [
+              {
+                quantity: 1,
+                price_data: {
+                  currency: "usd",
+                  unit_amount: shippingCents,
+                  product_data: {
+                    name: "Standard shipping for your book",
+                    description: "Shipping and tax to the address you entered, paid now so the book is fully paid.",
+                  },
+                },
+              },
+            ]
+          : []),
       ],
       metadata: {
         kind: BOOK_PACKAGE_CHECKOUT_KIND,
@@ -302,7 +417,8 @@ export async function createPackageCheckout(input: {
         album_name: albumName,
         included_photos: String(p.includedPhotos),
         edits_per_photo: String(p.editsPerPhoto),
-        amount_cents: String(p.priceCents),
+        amount_cents: String(p.priceCents + shippingCents),
+        shipping_cents: String(shippingCents),
       },
       success_url: successUrl,
       cancel_url: cancelUrl,
@@ -329,6 +445,7 @@ type PackageMetadata = {
   albumName: string;
   includedPhotos: number | null;
   editsPerPhoto: number | null;
+  shippingCents: number;
 };
 
 /** What a package checkout was sold as, or null when it is not one of ours. */
@@ -346,6 +463,7 @@ function readPackageMetadata(session: Pick<CheckoutSessionLike, "metadata">): Pa
     albumName: cleanAlbumName(m.album_name, m.binding_id),
     includedPhotos: toInt(m.included_photos),
     editsPerPhoto: toInt(m.edits_per_photo),
+    shippingCents: Math.max(0, toInt(m.shipping_cents) ?? 0),
   };
 }
 
@@ -384,6 +502,7 @@ export async function fulfillPackageFromCheckoutSession(
     p_project_name: meta.albumName,
     p_included_photos: meta.includedPhotos,
     p_edits_per_photo: meta.editsPerPhoto,
+    ...(meta.shippingCents > 0 ? { p_shipping_cents: meta.shippingCents } : {}),
   });
   if (error) {
     log("error", "Book package could not be created from a paid checkout", {
@@ -464,6 +583,7 @@ function refundQuoteFromRpc(raw: unknown): BookPackageRefundQuote | null {
     codeId: r.codeId,
     bindingId: r.bindingId,
     pricePaidCents: Number(r.pricePaidCents) || 0,
+    shippingPrepaidCents: Number(r.shippingPrepaidCents) || 0,
     pagesUsed: Number(r.pagesUsed) || 0,
     pagePriceCents: Number(r.pagePriceCents) || 0,
     pagesChargedCents: Number(r.pagesChargedCents) || 0,

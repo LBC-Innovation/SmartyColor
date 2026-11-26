@@ -1135,7 +1135,7 @@ export function useBookOrder({
     shippingChosen:
       chosenShippingLevel != null ||
       // An album with a code starts on the standard shipping the code includes.
-      (purchaseCode != null && !isDigital && purchaseCode.shippingIncluded) ||
+      (purchaseCode != null && !isDigital && (purchaseCode.shippingIncluded || purchaseCode.shippingPrepaidCents > 0)) ||
       (shippingChoices.length <= 1 && printQuote != null && !printQuote.loading && printQuote.totalCents != null),
     choosePageFit: setChosenPageFit,
     formatFits,

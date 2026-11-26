@@ -1737,6 +1737,22 @@ export const BOOK_PACKAGES = {
   ],
   notIncluded: "Not included",
   notIncludedShipping: "Shipping. You'll see the price when you order the book.",
+  // Paying the book's shipping with the package.
+  shippingHeading: "Shipping",
+  shippingNow: "Pay shipping now",
+  shippingNowSub: "Tell us where the book goes. Your book will be fully paid, with nothing to pay when you order it.",
+  shippingLater: "Pay shipping when I order the book",
+  shippingLaterSub: "You'll see the price at checkout.",
+  shippingChecking: "Checking shipping to this address…",
+  shippingFillAddress: "Fill in the address to see the shipping price.",
+  shippingQuoteFailed: "We couldn't price shipping to that address just now.",
+  shippingRetry: "Try again",
+  shippingSavedNote: "We'll save this address to your account and use it for your book.",
+  shippingChanged: "The shipping price changed. Please check the new price before you pay.",
+  includedShippingLine: "Standard shipping and tax to {city}",
+  summaryPackage: "Book package",
+  summaryShipping: "Standard shipping and tax",
+  summaryTotal: "Total today",
   notIncludedPhotos: "Photos past {includedPhotos}: {pagePrice} each from your credit",
   notIncludedTouchUps: "More touch-ups on a page: {editPrice} each from your credit",
   oneAlbumNote: "This package belongs to one album. It can't be used for another album.",
@@ -1761,6 +1777,7 @@ export const BOOK_PACKAGES = {
   payFailed: "That didn't go through, and you weren't charged. Please try again.",
   paidToastTitle: "Your book is ready",
   paidToastBody: "{includedPhotos} photos and the printing are paid for.",
+  paidToastBodyShipping: "{includedPhotos} photos, the printing and shipping are paid for.",
   canceledNote: "Payment canceled. No charge was made. Your book choice is kept.",
 
   returnConfirmingTitle: "Confirming your payment",
@@ -1893,6 +1910,10 @@ export const BOOK_PACKAGES = {
 
   // Order panel.
   orderPrintingIncluded: "Your package pays for printing. You pay for shipping and its tax.",
+  orderAllPaid: "Your package pays for printing and the shipping you paid for. Nothing left to pay.",
+  orderShippingPrepaidLine: "Shipping paid with your package",
+  orderExtraWithShipping:
+    "Your package pays for printing {includedPhotos} photos and the shipping you paid for. The rest is extra, from your credit.",
   orderExtraPages: "Your package pays for printing {includedPhotos} photos. The {k} extra pages and shipping come from your credit.",
   orderOtherBinding:
     "You chose a {otherBindingNameLower}, so your package isn't paying toward printing. Switch back to your {bindingNameLower} to use it.",

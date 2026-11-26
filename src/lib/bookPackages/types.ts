@@ -3,6 +3,7 @@
  * each, bound to one album). Server-owned prices; the browser only ever shows what the API sent.
  * See supabase/migrations/0043_book_packages.sql for the rules the database enforces.
  */
+import type { AddressSuggestion, ShippingAddress } from "@/lib/orders/types";
 import { BOOK_BINDINGS, withBlankBacks, type BookBindingId } from "@/lib/print/bookBindings";
 
 /** A package a customer can buy right now (active and priced). */
@@ -53,7 +54,10 @@ export type BookPackagePurchase = {
   bindingId: BookBindingId;
   includedPhotos: number;
   editsPerPhoto: number;
+  /** Everything paid: the package plus any shipping paid with it. */
   priceCents: number;
+  /** Standard shipping and tax paid with the package (0 when the customer left it for later). */
+  shippingPrepaidCents: number;
   /** False when this checkout had already been turned into a package (a repeat confirm). */
   created: boolean;
   creditsBalanceCents?: number;
@@ -70,6 +74,31 @@ export const PACKAGE_CHOICE_KEY = "cm_package_choice";
 export const PACKAGE_ALBUM_NAME_MAX = 80;
 
 export const PACKAGE_PRICE_CHANGED_CODE = "PRICE_CHANGED";
+/** The shipping quoted on screen no longer matches a fresh quote; quote again before paying. */
+export const PACKAGE_SHIPPING_CHANGED_CODE = "SHIPPING_CHANGED";
+/** The printer could not price shipping to this address. */
+export const PACKAGE_SHIPPING_UNAVAILABLE_CODE = "SHIPPING_UNAVAILABLE";
+
+/**
+ * Standard shipping for the package's book to one address, paid with the package so the book
+ * costs nothing more at checkout. `shippingCents` is shipping plus the tax the printer adds,
+ * which is what the wallet would otherwise pay when the book is ordered.
+ */
+export type BookPackageShippingQuote = {
+  bindingId: BookBindingId;
+  shippingCents: number;
+  /** The address as the server will save and quote it. */
+  address: ShippingAddress;
+  /** The printer's cleaned-up version of the address, when it has one. */
+  addressSuggestion: AddressSuggestion | null;
+};
+
+/** Sent with a purchase to pay the shipping too. */
+export type BookPackageShippingInput = {
+  address: ShippingAddress;
+  /** What the screen showed. A different fresh quote refuses the purchase (SHIPPING_CHANGED). */
+  expectedShippingCents: number;
+};
 export const PACKAGE_UNAVAILABLE_CODE = "PACKAGE_UNAVAILABLE";
 
 /** Printed sides for N photos with a blank back behind each, and whether the binding can print them. */
@@ -104,6 +133,8 @@ export type BookPackageRefundQuote = {
   codeId: string;
   bindingId: BookBindingId;
   pricePaidCents: number;
+  /** Shipping paid with the package (part of pricePaidCents, always refunded). */
+  shippingPrepaidCents: number;
   pagesUsed: number;
   pagePriceCents: number;
   pagesChargedCents: number;

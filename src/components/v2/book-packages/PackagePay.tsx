@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Coins, Check, Loader2, Truck, BookOpen } from "lucide-react";
 import { V2GuestGate } from "@/components/v2/auth/V2GuestGate";
+import { PackagePaySummary, PackageShippingChoice, usePackageShipping } from "@/components/v2/book-packages/PackageShipping";
 import { WizardProgress } from "@/components/v2/book-packages/WizardProgress";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { isError } from "@/lib/api/client";
@@ -12,6 +13,8 @@ import { trackPackagePurchasedOnce } from "@/lib/bookPackages/track";
 import {
   PACKAGE_CHOICE_KEY,
   PACKAGE_PRICE_CHANGED_CODE,
+  PACKAGE_SHIPPING_CHANGED_CODE,
+  PACKAGE_SHIPPING_UNAVAILABLE_CODE,
   PACKAGE_UNAVAILABLE_CODE,
   type BookPackage,
   type BookPackagePurchase,
@@ -59,13 +62,18 @@ export function PackagePay({
 }) {
   const photo = BINDING_PHOTOS[pkg.bindingId];
   const tokens = packageTokens(pkg);
-  const covers = balanceCents != null && balanceCents >= pkg.priceCents;
+  const shipping = usePackageShipping(pkg.bindingId, signedIn);
+  // Today's payment: the package, plus its book's shipping when the person pays that now.
+  const totalCents = pkg.priceCents + shipping.shippingCents;
+  const covers = balanceCents != null && balanceCents >= totalCents;
   const [method, setMethod] = useState<Method>(covers ? "credit" : "card");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const price = formatCredits(pkg.priceCents);
+  const totalPrice = formatCredits(totalCents);
+  const shippingPaidNow = signedIn && shipping.mode === "now";
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -86,13 +94,24 @@ export function PackagePay({
 
   async function pay() {
     if (busy) return;
+    if (shipping.blocking) {
+      // "Pay shipping now" without a price yet: point at what's missing instead of paying.
+      shipping.setShowErrors(true);
+      if (shipping.complete) shipping.requote();
+      return;
+    }
     setBusy(true);
     setError(null);
     setPriceChanged(false);
-    const base = { bindingId: pkg.bindingId, expectedPriceCents: pkg.priceCents, ...(albumName ? { albumName } : {}) };
+    const base = {
+      bindingId: pkg.bindingId,
+      expectedPriceCents: pkg.priceCents,
+      ...(albumName ? { albumName } : {}),
+      ...(shipping.input ? { shipping: shipping.input } : {}),
+    };
     track("package_pay_started", {
       format: trackFormat(pkg.bindingId),
-      value: centsToValue(pkg.priceCents),
+      value: centsToValue(totalCents),
       currency: "USD",
       method: effectiveMethod,
     });
@@ -125,6 +144,11 @@ export function PackagePay({
     } else if (code === PACKAGE_PRICE_CHANGED_CODE) {
       setPriceChanged(true);
       onReload();
+    } else if (code === PACKAGE_SHIPPING_CHANGED_CODE) {
+      shipping.requote();
+      setError(BOOK_PACKAGES.shippingChanged);
+    } else if (code === PACKAGE_SHIPPING_UNAVAILABLE_CODE) {
+      setError(BOOK_PACKAGES.shippingQuoteFailed);
     } else if (code === "INSUFFICIENT_CREDITS") {
       setMethod("card");
       setError(BOOK_PACKAGES.creditShort);
@@ -137,6 +161,10 @@ export function PackagePay({
     .filter((_, i) => i !== 1 || pkg.editsPerPhoto > 0)
     .map((l) => fillPackageCopy(l, tokens))
     .filter((l): l is string => Boolean(l));
+  if (shipping.quote) {
+    const line = fillPackageCopy(BOOK_PACKAGES.includedShippingLine, { city: shipping.quote.address.city });
+    if (line) included.push(line);
+  }
   const pagePriceLine =
     pagePriceCents != null
       ? fillPackageCopy(BOOK_PACKAGES.notIncludedPhotos, { ...tokens, pagePrice: formatCredits(pagePriceCents) })
@@ -151,12 +179,17 @@ export function PackagePay({
       ? BOOK_PACKAGES.buttonPaying
       : BOOK_PACKAGES.buttonOpening
     : fillPackageCopy(effectiveMethod === "credit" ? BOOK_PACKAGES.buttonCredit : BOOK_PACKAGES.buttonCard, {
-        packagePrice: price,
+        packagePrice: totalPrice,
       });
 
   const payButton = (
     <>
-      <button type="button" onClick={() => void pay()} disabled={busy} className="v2-btn-primary min-h-12 w-full text-base">
+      <button
+        type="button"
+        onClick={() => void pay()}
+        disabled={busy || (shipping.blocking && shipping.quoteStatus === "loading")}
+        className="v2-btn-primary min-h-12 w-full text-base"
+      >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         {buttonLabel}
       </button>
@@ -215,12 +248,16 @@ export function PackagePay({
           ))}
         </ul>
 
+        {shippingPaidNow && !pagePriceLine && !editPriceLine ? null : (
+          <>
         <h2 className="mt-5 text-sm font-semibold text-v2-ink">{BOOK_PACKAGES.notIncluded}</h2>
         <ul className="mt-2 space-y-1.5">
-          <li className="flex items-start gap-2 text-sm text-v2-muted">
-            <Truck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            {BOOK_PACKAGES.notIncludedShipping}
-          </li>
+          {shippingPaidNow ? null : (
+            <li className="flex items-start gap-2 text-sm text-v2-muted">
+              <Truck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              {BOOK_PACKAGES.notIncludedShipping}
+            </li>
+          )}
           {pagePriceLine ? (
             <li className="flex items-start gap-2 text-sm text-v2-muted">
               <Coins className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -234,11 +271,16 @@ export function PackagePay({
             </li>
           ) : null}
         </ul>
+          </>
+        )}
         <p className="mt-3 text-xs text-v2-muted">{BOOK_PACKAGES.oneAlbumNote}</p>
         <p className="mt-1 text-xs text-v2-muted">{BOOK_PACKAGES.refundPolicy}</p>
 
         {signedIn ? (
           <>
+            <PackageShippingChoice state={shipping} disabled={busy} />
+            {shipping.quote ? <PackagePaySummary packageCents={pkg.priceCents} shippingCents={shipping.quote.shippingCents} /> : null}
+
             {covers ? (
               <fieldset className="mt-6">
                 <legend className="text-sm font-semibold text-v2-ink">{BOOK_PACKAGES.payHeading}</legend>
@@ -249,7 +291,7 @@ export function PackagePay({
                         id: "credit" as const,
                         label: fillPackageCopy(BOOK_PACKAGES.payCredit, { balance: formatCredits(balanceCents ?? 0) }),
                         sub: fillPackageCopy(BOOK_PACKAGES.payCreditSub, {
-                          balanceAfter: formatCredits((balanceCents ?? 0) - pkg.priceCents),
+                          balanceAfter: formatCredits((balanceCents ?? 0) - totalCents),
                         }),
                       },
                       { id: "card" as const, label: BOOK_PACKAGES.payCard, sub: BOOK_PACKAGES.payCardSub },

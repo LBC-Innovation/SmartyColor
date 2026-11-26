@@ -8,7 +8,10 @@ import type {
   BookPackagePurchase,
   BookPackageRefund,
   BookPackageRefundQuote,
+  BookPackageShippingInput,
+  BookPackageShippingQuote,
 } from "@/lib/bookPackages/types";
+import type { ShippingAddress } from "@/lib/orders/types";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 
 export function fetchBookPackages(): Promise<ApiResult<BookPackageList>> {
@@ -19,6 +22,7 @@ export function buyPackageWithCredit(input: {
   bindingId: BookBindingId;
   albumName?: string;
   expectedPriceCents: number;
+  shipping?: BookPackageShippingInput;
 }): Promise<ApiResult<BookPackagePurchase>> {
   return request("/book-packages/buy", { method: "POST", body: JSON.stringify(input) });
 }
@@ -27,8 +31,17 @@ export function startPackageCheckout(input: {
   bindingId: BookBindingId;
   albumName?: string;
   expectedPriceCents: number;
+  shipping?: BookPackageShippingInput;
 }): Promise<ApiResult<{ checkoutUrl: string }>> {
   return request("/book-packages/checkout", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Standard shipping (with its tax) for the package's book to this address. */
+export function quotePackageShipping(
+  bindingId: BookBindingId,
+  address: ShippingAddress,
+): Promise<ApiResult<BookPackageShippingQuote>> {
+  return request("/book-packages/shipping-quote", { method: "POST", body: JSON.stringify({ bindingId, address }) });
 }
 
 export function confirmPackageCheckout(sessionId: string): Promise<ApiResult<BookPackageConfirmation>> {

@@ -63,13 +63,19 @@ export function PackagePriceSummary({
   const shipping = order.shippingCents ?? 0;
   const tax = order.taxCents ?? 0;
   const moreThanIncluded = Math.max(0, order.contentCount - pkg.bundle.includedPages);
+  // Shipping paid with the package, as far as this order uses it (it never pays more than the
+  // order's own shipping and tax here; anything else it covers shows up in "Total").
+  const prepaid = Math.min(pkg.shippingPrepaidCents, shipping + tax);
   // What is left of the amount due once shipping and its tax are taken out: printing past the package.
-  const extraPrint = onPackageBinding ? Math.max(0, due - shipping - tax) : 0;
+  const extraPrint = onPackageBinding ? Math.max(0, due - (shipping + tax - prepaid)) : 0;
   const chosen = order.bindingId;
   const otherName = chosen === "digital" ? "print-at-home PDF" : BOOK_BINDINGS[chosen].shortLabel.toLowerCase();
 
   let sub: string;
   if (!ready) sub = "Checking your price…";
+  else if (onPackageBinding && pkg.shippingPrepaidCents > 0 && due === 0) sub = BOOK_PACKAGES.orderAllPaid;
+  else if (onPackageBinding && pkg.shippingPrepaidCents > 0)
+    sub = fillPackageCopy(BOOK_PACKAGES.orderExtraWithShipping, tokens) ?? BOOK_PACKAGES.orderAllPaid;
   else if (onPackageBinding && extraPrint === 0) sub = BOOK_PACKAGES.orderPrintingIncluded;
   else if (onPackageBinding)
     sub = fillPackageCopy(BOOK_PACKAGES.orderExtraPages, { ...tokens, k: moreThanIncluded || "" }) ??
@@ -122,6 +128,14 @@ export function PackagePriceSummary({
             chip={<Truck className="h-3.5 w-3.5" aria-hidden />}
           />
           <Line label="Sales tax" value={formatCredits(tax)} />
+          {prepaid > 0 ? (
+            <Line
+              label={BOOK_PACKAGES.orderShippingPrepaidLine}
+              value={`−${formatCredits(prepaid)}`}
+              tone="green"
+              chip={<Check className="h-3.5 w-3.5 text-v2-success-text" strokeWidth={3} aria-hidden />}
+            />
+          ) : null}
           <div className="border-t border-gray-200 pt-1">
             <Line label="Total" value={formatCredits(due)} tone="ink" />
           </div>
