@@ -61,6 +61,9 @@ export function PackagePriceSummary({
   const onPackageBinding = !order.isDigital && order.bindingId === pkgBinding;
   const ready = !order.quoteLoading && order.quoteCents != null && order.dueCents != null;
   const due = order.dueCents ?? 0;
+  // The headline is what goes on a card for this order: nothing when credit covers it. The ledger
+  // below shows the full total and what the credit pays.
+  const onCard = order.balanceCents != null ? order.shortfallCents : due;
   const shipping = order.shippingCents ?? 0;
   const tax = order.taxCents ?? 0;
   const moreThanIncluded = Math.max(0, order.contentCount - pkg.bundle.includedPages);
@@ -89,12 +92,12 @@ export function PackagePriceSummary({
   return (
     <div className="space-y-3 text-sm">
       <div
-        className={cn("rounded-xl px-3 py-3", ready && due === 0 ? "bg-v2-success-bg text-v2-success-text" : "bg-white text-v2-ink")}
+        className={cn("rounded-xl px-3 py-3", ready && onCard === 0 ? "bg-v2-success-bg text-v2-success-text" : "bg-white text-v2-ink")}
         role="status"
       >
         <div className="flex items-baseline justify-between gap-3">
           <p className="font-semibold">You pay</p>
-          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(due) : "…"}</p>
+          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(onCard) : "…"}</p>
         </div>
         <p className="mt-1 text-xs leading-relaxed opacity-80">{sub}</p>
         {ready && !onPackageBinding ? (

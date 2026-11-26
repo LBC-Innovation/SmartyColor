@@ -1011,19 +1011,21 @@ function CodePriceSummary({ order }: { order: BookOrder }) {
   if (order.shippingLevel !== included.shippingLevel) reasons.push("faster shipping (standard is included)");
   const ready = !order.quoteLoading && order.quoteCents != null && order.dueCents != null;
   const due = order.dueCents ?? 0;
+  // The headline is what goes on a card: nothing when credit covers the extra (the rows below show it).
+  const onCard = order.balanceCents != null ? order.shortfallCents : due;
 
   return (
     <div className="space-y-3 text-sm">
       <div
         className={cn(
           "rounded-xl px-3 py-3",
-          ready && due === 0 ? "bg-emerald-50 text-emerald-950" : "bg-white text-v2-ink",
+          ready && onCard === 0 ? "bg-emerald-50 text-emerald-950" : "bg-white text-v2-ink",
         )}
         role="status"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <p className="font-semibold">{ready && due > 0 ? "Extra to pay" : "You pay"}</p>
-          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(due) : "…"}</p>
+          <p className="font-semibold">You pay</p>
+          <p className="text-2xl font-bold tabular-nums">{ready ? formatCredits(onCard) : "…"}</p>
         </div>
         <p className="mt-1 text-xs leading-relaxed opacity-80">
           {!ready
