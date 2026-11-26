@@ -86,8 +86,10 @@ export type AlbumPurchaseCode = {
   source: "admin" | "package";
   /** False for packages: shipping (and its tax) is paid from the wallet. */
   shippingIncluded: boolean;
-  /** What the customer paid, for packages. */
+  /** What the customer paid, for packages (including any shipping paid with it). */
   packagePriceCents: number | null;
+  /** Packages: standard shipping and tax paid up front, applied at book checkout. */
+  shippingPrepaidCents: number;
   /** The person looking is the one who redeemed or bought it (only they can cancel a package). */
   isBuyer: boolean;
   pagesUsed: number;

@@ -617,6 +617,7 @@ export async function getAlbumPurchaseCode(actorId: string, projectId: string): 
       source: row.source === "package" ? "package" : "admin",
       shippingIncluded: row.shipping_included !== false,
       packagePriceCents: (row.package_price_cents as number | null) ?? null,
+      shippingPrepaidCents: Number(row.shipping_prepaid_cents) || 0,
       isBuyer: row.redeemed_by === actorId,
       pagesUsed: row.pages_used as number,
       photos,
@@ -672,8 +673,16 @@ export async function purchaseCodeBookCoverage(input: {
   if (row.book_order_id && row.book_order_id !== input.orderId) return { data: null, error: null };
   const bundle = bundleFromRow(row);
   const shippingIncluded = row.shipping_included !== false;
-  // A package pays toward printing its own binding, and nothing toward another one.
-  if (!shippingIncluded && input.bindingId && input.bindingId !== bundle.bindingId) return { data: null, error: null };
+  // Shipping a package's buyer paid up front. It is applied to whatever book this album orders;
+  // the caller caps the coverage at the order's total.
+  const shippingPrepaid = shippingIncluded ? 0 : Number(row.shipping_prepaid_cents) || 0;
+  // A package pays toward printing its own binding, and nothing toward another one (but shipping
+  // paid with it still counts).
+  if (!shippingIncluded && input.bindingId && input.bindingId !== bundle.bindingId) {
+    return shippingPrepaid > 0
+      ? { data: { codeId: row.id as string, coveredCents: shippingPrepaid }, error: null }
+      : { data: null, error: null };
+  }
   // The included book's page count for this order: no more than the code covers, fitted to the
   // code's binding (an order in another binding can have a count this one can't print).
   const spec = BOOK_BINDINGS[bundle.bindingId];
@@ -694,8 +703,10 @@ export async function purchaseCodeBookCoverage(input: {
   });
   if (priced.error) return { data: null, error: priced.error };
   // An admin code covers print + standard shipping + tax. A package covers the printed book only:
-  // shipping and the tax on it stay with the customer's wallet.
-  const full = shippingIncluded ? priced.data.price.totalCents : priced.data.price.printPriceCents;
+  // shipping and the tax on it stay with the customer's wallet, less any shipping paid up front.
+  const full = shippingIncluded
+    ? priced.data.price.totalCents
+    : priced.data.price.printPriceCents + shippingPrepaid;
   const coveredCents = bundle.maxBookCents != null ? Math.min(full, bundle.maxBookCents) : full;
   return { data: { codeId: row.id as string, coveredCents }, error: null };
 }

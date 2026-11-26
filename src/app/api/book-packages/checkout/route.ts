@@ -1,12 +1,21 @@
 import { jsonError, jsonResult } from "@/lib/api/respond";
 import { requireAuthRequest } from "@/lib/auth/routeHelpers";
-import { PACKAGE_PRICE_CHANGED_CODE, PACKAGE_UNAVAILABLE_CODE, isBookBindingId } from "@/lib/bookPackages/types";
-import { createPackageCheckout } from "@/server/bookPackagesService";
+import {
+  PACKAGE_PRICE_CHANGED_CODE,
+  PACKAGE_SHIPPING_CHANGED_CODE,
+  PACKAGE_SHIPPING_UNAVAILABLE_CODE,
+  PACKAGE_UNAVAILABLE_CODE,
+  isBookBindingId,
+} from "@/lib/bookPackages/types";
+import { createPackageCheckout, readShippingInput } from "@/server/bookPackagesService";
 import { stripeConfigured } from "@/server/stripe/config";
 
 const STATUS_BY_CODE: Record<string, number> = {
   [PACKAGE_UNAVAILABLE_CODE]: 404,
   [PACKAGE_PRICE_CHANGED_CODE]: 409,
+  [PACKAGE_SHIPPING_CHANGED_CODE]: 409,
+  [PACKAGE_SHIPPING_UNAVAILABLE_CODE]: 502,
+  INVALID_ADDRESS: 400,
 };
 
 /** Start a Stripe Checkout for a package. The amount comes from the server's catalog. */
@@ -22,6 +31,7 @@ export async function POST(request: Request) {
     bindingId?: unknown;
     albumName?: unknown;
     expectedPriceCents?: unknown;
+    shipping?: unknown;
   };
   if (!isBookBindingId(body.bindingId)) return jsonError("Pick a book.", 400);
   const expected = typeof body.expectedPriceCents === "number" && Number.isInteger(body.expectedPriceCents)
@@ -34,6 +44,7 @@ export async function POST(request: Request) {
     bindingId: body.bindingId,
     albumName: typeof body.albumName === "string" ? body.albumName : null,
     expectedPriceCents: expected,
+    shipping: readShippingInput(body.shipping),
   });
   return jsonResult(result, result.error ? (STATUS_BY_CODE[result.error.code ?? ""] ?? 500) : 200);
 }

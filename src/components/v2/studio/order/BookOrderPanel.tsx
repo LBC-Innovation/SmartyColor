@@ -868,8 +868,12 @@ function ShippingSpeedPicker({ order }: { order: BookOrder }) {
   const picked = order.shippingChosen;
   const current = picked ? (choices.find((c) => c.level === order.shippingLevel) ?? null) : null;
   // With a purchase code, standard shipping is included and every other speed is priced as extra.
-  // A package doesn't include shipping, so every speed shows its plain price.
-  const includedLevel = order.purchaseCode && order.purchaseCode.shippingIncluded ? order.purchaseCode.bundle.shippingLevel : null;
+  // A package doesn't include shipping (every speed shows its plain price) unless the customer
+  // paid its standard shipping with it.
+  const includedLevel =
+    order.purchaseCode && (order.purchaseCode.shippingIncluded || order.purchaseCode.shippingPrepaidCents > 0)
+      ? order.purchaseCode.bundle.shippingLevel
+      : null;
   const included = includedLevel ? (choices.find((c) => c.level === includedLevel) ?? null) : null;
   return (
     <fieldset data-shipping-speed className="scroll-mt-3">

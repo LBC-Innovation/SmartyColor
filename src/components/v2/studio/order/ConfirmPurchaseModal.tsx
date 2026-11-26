@@ -685,7 +685,9 @@ function Overview({
               {order.purchaseCode.source === "package"
                 ? order.dueCents === 0
                   ? "Your package pays for this book. You won't be charged."
-                  : `Your package pays ${formatCredits(order.coveredCents)} of it, the printing. Shipping, its tax and anything past the package come from your account credit.`
+                  : order.purchaseCode.shippingPrepaidCents > 0
+                    ? `Your package pays ${formatCredits(order.coveredCents)} of it: the printing and the shipping you paid for. Anything past that comes from your account credit.`
+                    : `Your package pays ${formatCredits(order.coveredCents)} of it, the printing. Shipping, its tax and anything past the package come from your account credit.`
                 : order.dueCents === 0
                   ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
                   : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your account credit.`}
@@ -701,7 +703,13 @@ function Overview({
               <dd className="tabular-nums">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
             </div>
             <div className="flex items-baseline justify-between text-v2-success-text">
-              <dt>{order.purchaseCode.source === "package" ? "Printing paid by your package" : `Paid by code ${order.purchaseCode.code}`}</dt>
+              <dt>
+                {order.purchaseCode.source === "package"
+                  ? order.purchaseCode.shippingPrepaidCents > 0
+                    ? "Printing and shipping paid by your package"
+                    : "Printing paid by your package"
+                  : `Paid by code ${order.purchaseCode.code}`}
+              </dt>
               <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
             </div>
             {creditApplied != null && creditApplied > 0 ? (
