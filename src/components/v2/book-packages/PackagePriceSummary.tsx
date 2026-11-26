@@ -2,6 +2,7 @@
 
 import { Check, Truck } from "lucide-react";
 import { ExtraChip } from "@/components/v2/book-packages/AllowanceChips";
+import { CreditPaymentLines } from "@/components/v2/studio/order/CreditPaymentLines";
 import type { BookOrder } from "@/components/v2/studio/order/useBookOrder";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { fillPackageCopy, packageTokens } from "@/lib/bookPackages/copy";
@@ -139,18 +140,12 @@ export function PackagePriceSummary({
           <div className="border-t border-gray-200 pt-1">
             <Line label="Total" value={formatCredits(due)} tone="ink" />
           </div>
+          <CreditPaymentLines dueCents={due} balanceCents={order.balanceCents} />
         </dl>
       ) : null}
 
       {ready && !order.addressComplete ? (
         <p className="text-xs text-v2-muted">Shipping and tax are estimated until the address is complete.</p>
-      ) : null}
-      {ready && order.balanceCents != null ? (
-        <p className="text-xs text-v2-muted">
-          {order.shortfallCents <= 0
-            ? `Paid from your credit. You have ${formatCredits(order.balanceCents)}.`
-            : `Your credit covers ${formatCredits(order.balanceCents)}. You pay ${formatCredits(order.shortfallCents)}.`}
-        </p>
       ) : null}
     </div>
   );

@@ -4,6 +4,7 @@ import { bindingName } from "@/lib/purchaseCodes/types";
 import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
 import { useId, useRef, useState, type ReactNode } from "react";
+import { CreditPaymentLines } from "@/components/v2/studio/order/CreditPaymentLines";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
 import { PackagePriceSummary } from "@/components/v2/book-packages/PackagePriceSummary";
 import { SwitchBindingModal } from "@/components/v2/book-packages/SwitchBindingModal";
@@ -730,6 +731,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                         : "Pending"}
                 </dd>
               </div>
+              {!order.quoteLoading && (order.isDigital || order.shippingChosen) ? (
+                <CreditPaymentLines dueCents={order.dueCents} balanceCents={order.balanceCents} className="pt-1" />
+              ) : null}
             </dl>
           ) : (
             <p className="text-sm text-v2-muted">Choose a format to see your price.</p>
@@ -768,17 +772,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
 
-          {order.purchaseCode ? null : order.balanceCents != null && order.balanceCents > 0 && order.shortfallCents > 0 ? (
-            <p className="mt-2 text-xs text-v2-muted">
-              Your credit covers <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
-              You pay <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.shortfallCents)}</span>.
-            </p>
-          ) : order.balanceCents != null && order.shortfallCents <= 0 && order.formatChosen && order.dueCents !== 0 ? (
-            <p className="mt-2 text-xs text-v2-muted">
-              Paid from your credit. You have{" "}
-              <span className="font-semibold text-v2-ink tabular-nums">{formatCredits(order.balanceCents)}</span>.
-            </p>
-          ) : null}
           {printed && holidayLine ? (
             <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-v2-navy">
               <Gift className="h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
@@ -1061,6 +1054,15 @@ function CodePriceSummary({ order }: { order: BookOrder }) {
             <dt>Paid by code {code.code}</dt>
             <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
           </div>
+          {due > 0 ? (
+            <>
+              <div className="flex items-baseline justify-between border-t border-gray-200 pt-1 text-v2-ink">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatCredits(due)}</dd>
+              </div>
+              <CreditPaymentLines dueCents={due} balanceCents={order.balanceCents} />
+            </>
+          ) : null}
         </dl>
       ) : null}
     </div>
