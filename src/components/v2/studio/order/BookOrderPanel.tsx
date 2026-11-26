@@ -24,7 +24,7 @@ import { hasOriginalPhotos } from "@/components/v2/book-order/useCoverSources";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
 import { isAutomaticAlbumName } from "@/components/v2/studio/albumNames";
 import type { BookOrder } from "@/components/v2/studio/order/useBookOrder";
-import { GIFT_NOTE_PLACEHOLDER, GUEST_GATES, HOLIDAY_LINE, PRICE_LINE } from "@/content/marketing";
+import { GIFT_NOTE_PLACEHOLDER, GUEST_GATES, PRICE_LINE } from "@/content/marketing";
 import { withNextParam } from "@/lib/auth/nextPath";
 import { cn } from "@/lib/cn";
 import { formatCredits } from "@/lib/credits/money";
@@ -195,7 +195,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const holiday = holidayOrderBy();
-  const holidayLine = holiday ? fillCopy(HOLIDAY_LINE, { date: holiday.label }) : null;
   const examplePrice = !order.signedIn && numbers ? fillCopy(PRICE_LINE, numberValues(numbers)) : null;
   const printed = !order.isDigital;
   const fit = { fits: order.formatFits, tooMany: order.overCapacity };
@@ -772,12 +771,6 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
           ) : null}
           {order.quoteError ? <p className="mt-1 text-xs text-amber-800">{order.quoteError}</p> : null}
 
-          {printed && holidayLine ? (
-            <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-v2-navy">
-              <Gift className="h-3.5 w-3.5 shrink-0 text-v2-primary" aria-hidden />
-              {holidayLine}
-            </p>
-          ) : null}
         </div>
       ) : null}
 

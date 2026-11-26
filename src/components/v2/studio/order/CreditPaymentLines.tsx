@@ -38,9 +38,11 @@ export function CreditPaymentLines({
         <dd className="shrink-0 tabular-nums">{formatCredits(onCard)}</dd>
       </div>
       {fromCredit > 0 && creditAfter > 0 ? (
-        <div className={cn("pt-0.5 text-v2-muted", className)}>
-          <dt className="sr-only">Credit after this order</dt>
-          <dd>Your credit after this: {formatCredits(creditAfter)}</dd>
+        // Its own highlighted row, so what's left for extras stands out (not given `className`, which
+        // would fight its padding).
+        <div className="mt-2 flex items-baseline justify-between gap-3 rounded-lg border border-v2-success-border bg-v2-success-bg px-3 py-2 text-sm font-semibold text-v2-success-text">
+          <dt>Your credit after this</dt>
+          <dd className="shrink-0 tabular-nums">{formatCredits(creditAfter)}</dd>
         </div>
       ) : null}
     </>
