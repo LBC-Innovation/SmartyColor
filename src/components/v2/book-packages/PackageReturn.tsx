@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Check, Clock, Loader2 } from "lucide-react";
+import { BookJourney } from "@/components/v2/book-packages/BookJourney";
 import { WizardProgress } from "@/components/v2/book-packages/WizardProgress";
 import { BOOK_PACKAGES } from "@/content/marketing";
 import { isError } from "@/lib/api/client";
@@ -177,6 +178,7 @@ export function PackageReturn({
           {title}
         </h1>
         {body ? <p className="mt-2 text-sm text-v2-muted">{body}</p> : null}
+        {state.kind === "ready" ? <BookJourney current={2} compact className="mt-5 text-left" /> : null}
         {actions}
       </div>
     </div>

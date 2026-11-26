@@ -33,6 +33,7 @@ import { claimPendingShares, photoAccess, projectAccess, type ProjectAccess } fr
 import { mirrorImageBytes } from "@/lib/photo/mirrorImageServer";
 import { mirrorPhotoCrop, type PhotoCropRect } from "@/lib/v2/storybookTypes";
 import { checkDesignTheme, sanitizeDesignTheme } from "@/lib/designTheme";
+import { deleteCartsForAlbum } from "@/server/cartsService";
 
 type Row = Record<string, unknown>;
 const err = (message: string, code?: string): ApiResult<never> => ({ data: null, error: { message, ...(code ? { code } : {}) } });
@@ -404,6 +405,8 @@ export async function deleteProject(userId: string, projectId: string): Promise<
     .maybeSingle();
   if (error) return err(error.message);
   if (!data) return NOT_FOUND;
+  // Books started from this album (by the owner or a contributor) can't be finished any more.
+  await deleteCartsForAlbum(projectId);
   const photos = photoCount ?? 0;
   await recordActivity({
     userId,

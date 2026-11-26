@@ -31,7 +31,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import * as library from "@/lib/library/client";
 import type { LibraryProject } from "@/lib/library/types";
-import type { BookCartSummary } from "@/lib/orders/cartTypes";
+import { bookCartHref, type BookCartSummary } from "@/lib/orders/cartTypes";
 import type { BookOrderStatus, BookOrderSummary } from "@/lib/orders/types";
 import { getBookFormat, isPrintBindingId } from "@/lib/print/bookBindings";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
@@ -156,7 +156,7 @@ function ContinueBookAction({ cart }: { cart: BookCartSummary }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <Link href={`${STUDIO_PATH}?cart=${encodeURIComponent(cart.id)}&book=open`} className={QUICK_ACTION_ROW}>
+    <Link href={bookCartHref(cart)} className={QUICK_ACTION_ROW}>
       <QuickActionTile>
         {cart.thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -261,10 +261,17 @@ export function V2HomeStudio() {
     const res = await library.listProjects({ previews: true });
     if (!res.error) setProjects(res.data!);
   }, []);
+  const reloadCart = useCallback(async () => {
+    const res = await api.listBookCarts();
+    if (!api.isError(res)) setCart(res.data[0] ?? null);
+  }, []);
   const removal = useAlbumRemoval({
     onRemoved: (removed) => {
       setProjects((prev) => prev?.filter((p) => p.id !== removed.id) ?? prev);
+      // Its book can't be continued any more; show the next one in the cart, if any.
+      setCart((prev) => (prev?.projectId === removed.id ? null : prev));
       void reloadAlbums();
+      void reloadCart();
     },
   });
   // The studio keeps the album list too; deleting before it has loaded would leave it out of step.
@@ -447,7 +454,13 @@ export function V2HomeStudio() {
                           name={project.name}
                           shared={project.role === "contributor"}
                           onClick={() => {
-                            const meta = studio.projects.find((p) => p.id === project.id) ?? projectMetaFromLibrary(project);
+                            // The studio's list can be older than this page's (photos added since it
+                            // loaded), so the card's own counts win: the dialog says what the card says.
+                            const fresh = projectMetaFromLibrary(project);
+                            const known = studio.projects.find((p) => p.id === project.id);
+                            const meta = known
+                              ? { ...known, name: fresh.name, photoCount: fresh.photoCount, sharedCount: fresh.sharedCount }
+                              : fresh;
                             if (project.role === "contributor") removal.requestLeave(meta);
                             else void removal.requestDelete(meta);
                           }}
@@ -460,10 +473,19 @@ export function V2HomeStudio() {
                       type="button"
                       onClick={() => void createAlbum()}
                       disabled={creating}
-                      className="flex h-full min-h-28 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 p-4 text-sm font-semibold text-v2-link transition hover:border-v2-primary/40 hover:bg-v2-primary-light disabled:opacity-60"
+                      className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-v2-link transition hover:border-v2-primary/40 hover:bg-v2-primary-light disabled:opacity-60"
                     >
-                      {creating ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Plus className="h-5 w-5" aria-hidden />}
-                      New album
+                      {/* Same shape as an album card (4:3 collage + name and count), so the tile is
+                          full size even when it sits alone on its row. */}
+                      <span className="aspect-[4/3] w-full" aria-hidden />
+                      <span className="invisible px-3 py-2.5 text-left" aria-hidden>
+                        <span className="block font-semibold">&nbsp;</span>
+                        <span className="block text-xs">&nbsp;</span>
+                      </span>
+                      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
+                        {creating ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Plus className="h-5 w-5" aria-hidden />}
+                        New album
+                      </span>
                     </button>
                   </li>
                 </ul>

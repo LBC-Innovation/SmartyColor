@@ -85,6 +85,36 @@ async function columnsFor(userId: string, input: BookCartInput): Promise<Row> {
   };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Of these album ids, the ones this user can still open (owns, or is an active contributor on),
+ * and the ones whose album no longer exists at all. An album that exists but was left or unshared
+ * is in neither: its book is hidden, not deleted, in case the user is invited back.
+ */
+async function albumAvailability(
+  userId: string,
+  albumIds: string[],
+): Promise<{ open: Set<string>; gone: Set<string> } | null> {
+  const ids = [...new Set(albumIds.filter((id) => UUID.test(id)))];
+  if (ids.length === 0) return { open: new Set(), gone: new Set() };
+  const [projects, shares] = await Promise.all([
+    db().from("library_projects").select("id, user_id").in("id", ids),
+    db()
+      .from("library_project_shares")
+      .select("project_id")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .in("project_id", ids),
+  ]);
+  if (projects.error || shares.error) return null;
+  const existing = new Map(((projects.data ?? []) as Row[]).map((p) => [p.id as string, p.user_id as string]));
+  const shared = new Set(((shares.data ?? []) as Row[]).map((s) => s.project_id as string));
+  const open = new Set(ids.filter((id) => existing.get(id) === userId || (existing.has(id) && shared.has(id))));
+  const gone = new Set(ids.filter((id) => !existing.has(id)));
+  return { open, gone };
+}
+
 export async function listCarts(userId: string): Promise<ApiResult<BookCartSummary[]>> {
   const { data, error } = await db()
     .from("book_order_carts")
@@ -93,11 +123,25 @@ export async function listCarts(userId: string): Promise<ApiResult<BookCartSumma
     .order("updated_at", { ascending: false })
     .limit(LIST_LIMIT);
   if (error) return err(error.message);
+  const all = (data ?? []) as Row[];
+  // A book made from an album that was deleted (or that this user can no longer open) can't be
+  // resumed, so it isn't offered. Books for deleted albums are cleared away for good.
+  const availability = await albumAvailability(
+    userId,
+    all.map((r) => r.album_id as string | null).filter((a): a is string => Boolean(a)),
+  );
+  if (availability && availability.gone.size > 0) {
+    const stale = all.filter((r) => availability.gone.has(r.album_id as string)).map((r) => r.id as string);
+    await db().from("book_order_carts").delete().eq("user_id", userId).in("id", stale);
+  }
+  const reachable = (album: string | null) =>
+    !album || !availability || !UUID.test(album) || availability.open.has(album);
   // Newest first, so the first cart seen for an album is the one that counts. Older copies of
   // the same album's book (saved before carts were kept one per album) stay hidden.
   const seenAlbums = new Set<string>();
-  const rows = ((data ?? []) as Row[]).filter((r) => {
+  const rows = all.filter((r) => {
     const album = r.album_id as string | null;
+    if (!reachable(album)) return false;
     if (!album) return true;
     if (seenAlbums.has(album)) return false;
     seenAlbums.add(album);
@@ -175,6 +219,13 @@ export async function updateCart(
   if (error) return error.code === "22P02" ? NOT_FOUND : err(error.message);
   if (!data) return NOT_FOUND;
   return { data: summaryFromRow(data, null), error: null };
+}
+
+/** Clears every saved book made from this album, for whoever started it (the album is being deleted). */
+export async function deleteCartsForAlbum(albumId: string): Promise<void> {
+  if (!UUID.test(albumId)) return;
+  const { error } = await db().from("book_order_carts").delete().eq(ALBUM_PATH, albumId);
+  if (error) console.error(JSON.stringify({ level: "warn", message: "carts: album cleanup failed", albumId, error: error.message }));
 }
 
 export async function deleteCart(userId: string, cartId: string): Promise<ApiResult<{ id: string }>> {

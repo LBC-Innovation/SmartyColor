@@ -56,5 +56,17 @@ export type BookCartInput = {
   state: BookCartState;
 };
 
+/**
+ * Where "Resume" / "Continue your book" goes: the studio with the cart's album open behind the book
+ * (`album` picks it before anything paints, so the last-open album never shows up under the sheet).
+ */
+export function bookCartHref(cart: Pick<BookCartSummary, "id" | "projectId">): string {
+  const params = new URLSearchParams();
+  if (cart.projectId) params.set("album", cart.projectId);
+  params.set("cart", cart.id);
+  params.set("book", "open");
+  return `/studio?${params.toString()}`;
+}
+
 /** Fired on window whenever this tab saves or deletes a cart, so the header can refresh. */
 export const BOOK_CARTS_CHANGED_EVENT = "cm:book-carts-changed";
