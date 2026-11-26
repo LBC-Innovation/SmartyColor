@@ -11,6 +11,7 @@ import type {
   BookPackageShippingInput,
   BookPackageShippingQuote,
 } from "@/lib/bookPackages/types";
+import type { ShippingLevel } from "@/lib/orders/shippingLevels";
 import type { ShippingAddress } from "@/lib/orders/types";
 import type { BookBindingId } from "@/lib/print/bookBindings";
 
@@ -40,8 +41,12 @@ export function startPackageCheckout(input: {
 export function quotePackageShipping(
   bindingId: BookBindingId,
   address: ShippingAddress,
+  shippingLevel: ShippingLevel,
 ): Promise<ApiResult<BookPackageShippingQuote>> {
-  return request("/book-packages/shipping-quote", { method: "POST", body: JSON.stringify({ bindingId, address }) });
+  return request("/book-packages/shipping-quote", {
+    method: "POST",
+    body: JSON.stringify({ bindingId, address, shippingLevel }),
+  });
 }
 
 export function confirmPackageCheckout(sessionId: string): Promise<ApiResult<BookPackageConfirmation>> {

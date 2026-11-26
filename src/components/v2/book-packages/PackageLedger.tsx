@@ -3,6 +3,7 @@ import { fillPackageCopy } from "@/lib/bookPackages/copy";
 import type { PackagePaymentPlan } from "@/lib/bookPackages/topUpPurchase";
 import type { BookPackageShippingQuote } from "@/lib/bookPackages/types";
 import { cn } from "@/lib/cn";
+import { shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import { formatCredits } from "@/lib/credits/money";
 
 function Row({
@@ -48,7 +49,9 @@ export function PackageLedger({
         <Row label={BOOK_PACKAGES.ledgerPackage} value={formatCredits(packageCents)} />
         {quote ? (
           <>
-            <Row label={BOOK_PACKAGES.ledgerShipping} value={formatCredits(shippingOnlyCents)} />
+            <Row
+              label={fillPackageCopy(BOOK_PACKAGES.ledgerShipping, { speed: shippingLevelLabel(quote.shippingLevel) }) ?? ""}
+              value={formatCredits(shippingOnlyCents)} />
             {quote.taxCents > 0 ? <Row label={BOOK_PACKAGES.ledgerTax} value={formatCredits(quote.taxCents)} /> : null}
           </>
         ) : shippingMode === "now" ? (

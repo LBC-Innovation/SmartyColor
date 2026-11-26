@@ -1064,6 +1064,18 @@ export function useBookOrder({
     setChosenBindingId(purchaseCode.bundle.bindingId);
   }, [purchaseCode, restoring, chosenBindingId]);
 
+  // A package whose shipping was paid up front at a faster speed starts on that speed, which the
+  // order shows as included.
+  const codeShippingAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!purchaseCode || restoring || chosenShippingLevel != null) return;
+    if (purchaseCode.shippingPrepaidCents <= 0 || !isShippingLevel(purchaseCode.bundle.shippingLevel)) return;
+    if (purchaseCode.bundle.shippingLevel === DEFAULT_SHIPPING_LEVEL) return;
+    if (codeShippingAppliedRef.current === purchaseCode.codeId) return;
+    codeShippingAppliedRef.current = purchaseCode.codeId;
+    setChosenShippingLevel(purchaseCode.bundle.shippingLevel);
+  }, [purchaseCode, restoring, chosenShippingLevel]);
+
   /** After the thanks screen: a fresh book can be started from the same album. */
   function startOver() {
     setPlaced(null);

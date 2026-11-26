@@ -3,6 +3,7 @@
  * each, bound to one album). Server-owned prices; the browser only ever shows what the API sent.
  * See supabase/migrations/0043_book_packages.sql for the rules the database enforces.
  */
+import type { ShippingChoice, ShippingLevel } from "@/lib/orders/shippingLevels";
 import type { AddressSuggestion, ShippingAddress } from "@/lib/orders/types";
 import { BOOK_BINDINGS, withBlankBacks, type BookBindingId } from "@/lib/print/bookBindings";
 
@@ -86,6 +87,10 @@ export const PACKAGE_SHIPPING_UNAVAILABLE_CODE = "SHIPPING_UNAVAILABLE";
  */
 export type BookPackageShippingQuote = {
   bindingId: BookBindingId;
+  /** The shipping speed this price is for. */
+  shippingLevel: ShippingLevel;
+  /** Every speed the printer offers to this address, cheapest first (empty if it didn't say). */
+  choices: ShippingChoice[];
   /** Shipping and tax together: what is added to the payment. */
   shippingCents: number;
   /** The tax inside shippingCents. */
@@ -99,6 +104,8 @@ export type BookPackageShippingQuote = {
 /** Sent with a purchase to pay the shipping too. */
 export type BookPackageShippingInput = {
   address: ShippingAddress;
+  /** The speed chosen on the pay screen. */
+  shippingLevel: ShippingLevel;
   /** What the screen showed. A different fresh quote refuses the purchase (SHIPPING_CHANGED). */
   expectedShippingCents: number;
 };
