@@ -6,7 +6,7 @@ import { BookOpen, Loader2, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { cn } from "@/lib/cn";
-import { BOOK_CARTS_CHANGED_EVENT, type BookCartSummary } from "@/lib/orders/cartTypes";
+import { BOOK_CARTS_CHANGED_EVENT, bookCartHref, type BookCartSummary } from "@/lib/orders/cartTypes";
 import { getBookFormat, isPrintBindingId } from "@/lib/print/bookBindings";
 
 function formatName(bindingId: string | null): string | null {
@@ -204,7 +204,7 @@ export function V2CartMenu() {
                       ) : (
                         <div className="flex shrink-0 items-center gap-1">
                           <Link
-                            href={`/studio?cart=${encodeURIComponent(cart.id)}&book=open`}
+                            href={bookCartHref(cart)}
                             className="v2-btn-primary h-8 px-3 text-xs"
                             onClick={() => setOpen(false)}
                           >

@@ -599,6 +599,10 @@ export function useBookOrder({
   useEffect(() => {
     projectIdRef.current = projectId;
   }, [projectId]);
+  const onRestoreProjectRef = useRef(onRestoreProject);
+  useEffect(() => {
+    onRestoreProjectRef.current = onRestoreProject;
+  }, [onRestoreProject]);
 
   // Moving to another album leaves this album's book behind (still saved) and starts clean.
   useEffect(() => {
@@ -667,8 +671,9 @@ export function useBookOrder({
       setLinedBacks(saved.linedBacks === true);
       if (typeof saved.giftNote === "string") setGiftNoteRaw(printableGiftNoteChars(saved.giftNote));
       const album = Array.isArray(saved.selectedProjectIds) ? saved.selectedProjectIds[0] : null;
-      setCartAlbum(album ?? projectId);
-      if (album && album !== projectId) onRestoreProject?.(album);
+      setCartAlbum(album ?? projectIdRef.current);
+      // Read now, not when the fetch began: the studio may have opened an album in the meantime.
+      if (album && album !== projectIdRef.current) onRestoreProjectRef.current?.(album);
       if (saved.proofKey) setConfirmedProofKey(saved.proofKey);
       setRestoredCart(saved);
       setStarted(true);
@@ -677,7 +682,7 @@ export function useBookOrder({
     return () => {
       cancelled = true;
     };
-    // chooseFormat, onRestoreProject and projectId are read once, on arrival.
+    // chooseFormat is read once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restoreId, authLoading, user]);
 

@@ -31,7 +31,7 @@ import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import * as library from "@/lib/library/client";
 import type { LibraryProject } from "@/lib/library/types";
-import type { BookCartSummary } from "@/lib/orders/cartTypes";
+import { bookCartHref, type BookCartSummary } from "@/lib/orders/cartTypes";
 import type { BookOrderStatus, BookOrderSummary } from "@/lib/orders/types";
 import { getBookFormat, isPrintBindingId } from "@/lib/print/bookBindings";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
@@ -156,7 +156,7 @@ function ContinueBookAction({ cart }: { cart: BookCartSummary }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <Link href={`${STUDIO_PATH}?cart=${encodeURIComponent(cart.id)}&book=open`} className={QUICK_ACTION_ROW}>
+    <Link href={bookCartHref(cart)} className={QUICK_ACTION_ROW}>
       <QuickActionTile>
         {cart.thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -261,10 +261,17 @@ export function V2HomeStudio() {
     const res = await library.listProjects({ previews: true });
     if (!res.error) setProjects(res.data!);
   }, []);
+  const reloadCart = useCallback(async () => {
+    const res = await api.listBookCarts();
+    if (!api.isError(res)) setCart(res.data[0] ?? null);
+  }, []);
   const removal = useAlbumRemoval({
     onRemoved: (removed) => {
       setProjects((prev) => prev?.filter((p) => p.id !== removed.id) ?? prev);
+      // Its book can't be continued any more; show the next one in the cart, if any.
+      setCart((prev) => (prev?.projectId === removed.id ? null : prev));
       void reloadAlbums();
+      void reloadCart();
     },
   });
   // The studio keeps the album list too; deleting before it has loaded would leave it out of step.

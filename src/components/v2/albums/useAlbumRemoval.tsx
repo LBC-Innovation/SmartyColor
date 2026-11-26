@@ -15,6 +15,7 @@ import { fetchPackageRefundQuote } from "@/lib/bookPackages/client";
 import { fillPackageCopy } from "@/lib/bookPackages/copy";
 import { notifyPackageChanged } from "@/lib/bookPackages/events";
 import type { BookPackageRefundQuote } from "@/lib/bookPackages/types";
+import { BOOK_CARTS_CHANGED_EVENT } from "@/lib/orders/cartTypes";
 import { formatCredits } from "@/lib/credits/money";
 import type { V2ProjectMeta } from "@/lib/v2/studioTypes";
 
@@ -37,6 +38,8 @@ export function useAlbumRemoval({ onRemoved }: { onRemoved?: (project: V2Project
   async function remove(target: V2ProjectMeta) {
     const goHome = cloud && target.id === activeProjectId;
     await deleteProject(target.id, { loadNextInBackground: goHome });
+    // Its book leaves the cart with it (the server clears or hides it); refresh the header.
+    window.dispatchEvent(new Event(BOOK_CARTS_CHANGED_EVENT));
     onRemoved?.(target);
     if (goHome) router.push(SIGNED_IN_HOME);
   }
