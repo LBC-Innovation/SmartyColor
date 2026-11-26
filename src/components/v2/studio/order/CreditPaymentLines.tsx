@@ -40,8 +40,8 @@ export function CreditPaymentLines({
       {fromCredit > 0 && creditAfter > 0 ? (
         // Its own highlighted row, so what's left for extras stands out (not given `className`, which
         // would fight its padding).
-        <div className="mt-2 flex items-baseline justify-between gap-3 rounded-lg border border-v2-success-border bg-v2-success-bg px-3 py-2 text-sm font-semibold text-v2-success-text">
-          <dt>Your credit after this</dt>
+        <div className="mt-2 flex items-baseline justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-v2-ink">
+          <dt>Your remaining wallet balance after this</dt>
           <dd className="shrink-0 tabular-nums">{formatCredits(creditAfter)}</dd>
         </div>
       ) : null}
