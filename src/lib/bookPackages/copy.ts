@@ -41,7 +41,7 @@ export function packageTokens(input: {
     bindingNameLower: /bound$/i.test(name) ? `${name.toLowerCase()} book` : name.toLowerCase(),
     includedPhotos: input.includedPhotos,
     editsEach: input.editsPerPhoto,
-    touchUps: plural(input.editsPerPhoto, "free touch-up", "free touch-ups"),
+    touchUps: plural(input.editsPerPhoto, "free Creative Touch-Up", "free Creative Touch-Ups"),
   };
 }
 

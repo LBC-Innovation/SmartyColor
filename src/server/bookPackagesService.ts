@@ -390,7 +390,7 @@ export async function createPackageCheckout(input: {
             unit_amount: p.priceCents,
             product_data: {
               name: `Colorful Memories book package: ${spec.shortLabel}`,
-              description: `${p.includedPhotos} photos made into coloring pages, ${p.editsPerPhoto} free touch-ups on each, and printing.${
+              description: `${p.includedPhotos} photos made into coloring pages, ${p.editsPerPhoto} free Creative Touch-Ups on each, and printing.${
                 shippingCents > 0 ? "" : " Shipping is added when you order the book."
               }`,
             },

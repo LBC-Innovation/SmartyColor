@@ -264,7 +264,7 @@ export default function TermsPage() {
           </p>
           <p>
             <strong>Book packages.</strong> A book package is paid once and belongs to the album it was bought
-            for: its included pages, touch-ups and printing can only be used in that album, and never for
+            for: its included pages, Creative Touch-Ups and printing can only be used in that album, and never for
             other albums, extra pages or shipping. You can cancel a package at any time before you order its
             book. When you do, we return the price you paid minus the pages you already made (each at the
             regular price of one new page) to your account credit. Refunds go to account credit, not back to

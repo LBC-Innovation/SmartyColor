@@ -45,6 +45,6 @@ export function packageEditNotice(
     text: fillPackageCopy(includedPage ? BOOK_PACKAGES.editCostUsed : BOOK_PACKAGES.editCostExtraPage, tokens) ?? "",
     buttonLabel: fillPackageCopy(BOOK_PACKAGES.touchUpButton, tokens) ?? undefined,
     buttonShortLabel: formatCredits(editPriceCents),
-    buttonAriaLabel: `Send touch-up, ${formatCredits(editPriceCents)} from your credit`,
+    buttonAriaLabel: `Send Creative Touch-Up, ${formatCredits(editPriceCents)} from your credit`,
   };
 }

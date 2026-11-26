@@ -14,8 +14,8 @@
  *   {min} {max} {format}  Page limits and name of a binding, read from src/lib/print/bookBindings.ts
  *   {packageFrom}  Lowest price among the book packages on sale
  *   {photosRange}  Photos the packages include ("20 to 40", or "20" when there is one number)
- *   {editsEach}    Free touch-ups per page, only when every package has the same number above 0
- *   {touchUps}     The same as words ("2 free touch-ups"). Hidden when {editsEach} is.
+ *   {editsEach}    Free Creative Touch-Ups per page, only when every package has the same number above 0
+ *   {touchUps}     The same as words ("2 free Creative Touch-Ups"). Hidden when {editsEach} is.
  *   All four come from the book_packages catalog and hide when no package is on sale.
  *
  * Only say what the product does today: one book per order (no multi-copy, bulk pricing, gift wrap
@@ -893,7 +893,7 @@ export const HOW_IT_WORKS = {
     {
       icon: "image",
       title: "Add your photos",
-      body: "Each photo becomes a coloring page of the people in it. Not quite right? Type a touch-up, like “take out the stroller.”",
+      body: "Each photo becomes a coloring page of the people in it. Not quite right? Type a Creative Touch-Up, like “take out the stroller.”",
     },
     {
       icon: "truck",
@@ -1767,7 +1767,7 @@ export const BOOK_PACKAGES = {
   ledgerCreditAfter: "Your remaining wallet balance after this: {balanceAfter}",
   ledgerTopUpNote: "Your card pays the rest. It's added to your credit, and the book is paid from your credit in the same step.",
   notIncludedPhotos: "Photos past {includedPhotos}: {pagePrice} each from your credit",
-  notIncludedTouchUps: "More touch-ups on a page: {editPrice} each from your credit",
+  notIncludedTouchUps: "More Creative Touch-Ups on a page: {editPrice} each from your credit",
   oneAlbumNote: "This package belongs to one album. It can't be used for another album.",
   buttonCredit: "Pay {packagePrice} from my credit",
   buttonCard: "Pay {packagePrice} by card",
@@ -1878,7 +1878,7 @@ export const BOOK_PACKAGES = {
   // Shown before paying.
   refundPolicy: "Change your mind before ordering the book? Cancel anytime and the unused value goes back to your credit.",
   meterExtraNote:
-    "You can add more photos and touch-ups. Those come from your credit, never from your book, and always show their price first.",
+    "You can add more photos and Creative Touch-Ups. Those come from your credit, never from your book, and always show their price first.",
 
   // Upload.
   addTitleLeft: "Add photos",
@@ -1902,24 +1902,24 @@ export const BOOK_PACKAGES = {
   splitMore: "+{n} more",
 
   // Pages.
-  touchUpsLeft: "{touchUpsLeft} free touch-ups left",
-  oneTouchUpLeft: "1 free touch-up left",
-  touchUpsUsed: "Touch-ups used",
+  touchUpsLeft: "{touchUpsLeft} free Creative Touch-Ups left",
+  oneTouchUpLeft: "1 free Creative Touch-Up left",
+  touchUpsUsed: "Creative Touch-Ups used",
   extraPage: "Extra page",
   deleteNote:
     "This photo's included slot stays used. Deleting it won't give the page back to your book, so you can't add another included photo in its place.",
   deleteNoteExtra: "This is an extra page, so nothing in your book package changes.",
   restIncluded: "included in your book",
-  editInfoOne: "1 free touch-up left on this page. After that, {editPrice} each from your credit.",
-  editInfoMany: "{touchUpsLeft} of {editsEach} free touch-ups left on this page.",
+  editInfoOne: "1 free Creative Touch-Up left on this page. After that, {editPrice} each from your credit.",
+  editInfoMany: "{touchUpsLeft} of {editsEach} free Creative Touch-Ups left on this page.",
   editCostUsed:
-    "This page's free touch-ups are used. Each touch-up from here is {editPrice} from your credit. Your book package isn't used.",
-  editCostExtraPage: "This is an extra page, so touch-ups are {editPrice} each from your credit.",
+    "This page's free Creative Touch-Ups are used. Each Creative Touch-Up from here is {editPrice} from your credit. Your book package isn't used.",
+  editCostExtraPage: "This is an extra page, so Creative Touch-Ups are {editPrice} each from your credit.",
   touchUpButton: "Touch up · {editPrice}",
   addCreditNote:
     "Your {bindingNameLower} package is untouched. Its {photosLeft} included photos and the printing are still saved for this album.",
   addCreditNoteNoPhotos: "Your {bindingNameLower} package is untouched. The printing is still paid for.",
-  addCreditFor: ["this extra page", "this extra touch-up", "these extra pages"],
+  addCreditFor: ["this extra page", "this extra Creative Touch-Up", "these extra pages"],
 
   // Order panel.
   orderPrintingIncluded: "Your package pays for printing. You pay for shipping and its tax.",
@@ -1941,7 +1941,7 @@ export const BOOK_PACKAGES = {
     "Your package pays for printing a {bindingNameLower}. If you switch, it won't pay toward printing this book, and the full printing price of {otherPrintPrice} comes from your credit.",
   switchBodyNoPrice:
     "Your package pays for printing a {bindingNameLower}. If you switch, it won't pay toward printing this book, and the full printing price comes from your credit.",
-  switchBody2: "Your included photos and touch-ups are not affected. You can switch back any time before you order.",
+  switchBody2: "Your included photos and Creative Touch-Ups are not affected. You can switch back any time before you order.",
   switchKeep: "Keep my {bindingNameLower}",
   switchConfirm: "Switch to {otherBindingName}",
   orderButtonPrintingIncluded: "Printing included",

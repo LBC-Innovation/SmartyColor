@@ -46,7 +46,7 @@ export function creditGrantEmail(input: {
     sheetCents
       ? `Turn your photos into coloring pages (${usd(sheetCents)} a page${
           pages >= 2 ? `, so this credit covers about ${pages} of them` : ""
-        }).${freeEdits > 0 ? ` Each page comes with ${freeEdits} free touch-ups.` : ""}`
+        }).${freeEdits > 0 ? ` Each page comes with ${freeEdits} free Creative Touch-Ups.` : ""}`
       : "Turn your photos into coloring pages.",
     digitalCents
       ? `Download a print-at-home book of your pages for ${usd(digitalCents)}.`
