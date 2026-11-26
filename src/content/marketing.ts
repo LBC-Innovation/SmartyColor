@@ -1966,6 +1966,25 @@ export const DESIGN_THEMES = {
   examplesTheme: "Theme: “{theme}”",
   examplesPhoto: "Photo",
   examplesPage: "Coloring page",
+  examplesPlainTitle: "What your pages look like",
+  examplesPlainNote: "No theme",
+  /** Real photo and page pairs made without a theme, shown while "No theme" is picked. */
+  plainExamples: [
+    {
+      photo: "/marketing/boys-photo-400.webp",
+      page: "/marketing/boys-sheet-400.webp",
+      alt: "Three boys in a field, one holding a catfish, drawn just as they look in the photo",
+      width: 3,
+      height: 4,
+    },
+    {
+      photo: "/marketing/hero-photo-400.webp",
+      page: "/marketing/hero-sheet-400.webp",
+      alt: "A family of four on a balcony above the beach, drawn just as they look in the photo",
+      width: 4,
+      height: 3,
+    },
+  ],
   /** Real photo and page pairs made with one theme (the owner's own album, used with permission). */
   examples: {
     theme: "Ninjas and warriors saving the city",
