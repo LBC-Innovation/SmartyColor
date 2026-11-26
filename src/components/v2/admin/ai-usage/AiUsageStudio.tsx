@@ -61,12 +61,6 @@ const RESOLVED_COPY: Record<"billing" | "auth" | "quota", string> = {
   quota: "The usage-limit problem was",
 };
 
-const HEALTH_COPY: Record<"billing" | "auth" | "quota", string> = {
-  billing: "Billing problem with the image service. New pages can't be made until it's fixed.",
-  auth: "The image service rejected our key. New pages can't be made until it's fixed.",
-  quota: "The image service hit its usage limit. Some pages may fail until it resets.",
-};
-
 function customer(row: { userId?: string | null; userEmail?: string | null }): string {
   if (row.userEmail) return row.userEmail;
   if (row.userId) return row.userId.slice(0, 8);
@@ -278,16 +272,8 @@ export function AiUsageStudio() {
         </Callout>
       ) : null}
 
-      {health.blocking ? (
-        <Callout tone="critical" title={HEALTH_COPY[health.blocking.kind as "billing" | "auth"]}>
-          Last seen {relativeTime(health.blocking.at)} ({fullDateTime(health.blocking.at)}). {health.blocking.message} This clears
-          on its own once a page is made successfully.
-        </Callout>
-      ) : health.quota ? (
-        <Callout tone="warning" title={HEALTH_COPY.quota}>
-          Last seen {relativeTime(health.quota.at)}. {health.quota.message} This clears once a page is made successfully.
-        </Callout>
-      ) : health.resolved.length > 0 ? (
+      {/* An open billing, sign-in or quota problem is an alert in the Alerts column, not a banner here. */}
+      {health.blocking || health.quota ? null : health.resolved.length > 0 ? (
         <Callout tone="good" title="Working again">
           {RESOLVED_COPY[health.resolved[0].error.kind as "billing" | "auth" | "quota"]} resolved{" "}
           {relativeTime(health.resolved[0].resolvedAt)} ({fullDateTime(health.resolved[0].resolvedAt)}), when the next call succeeded.

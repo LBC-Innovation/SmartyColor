@@ -150,6 +150,8 @@ export type SeriesPoint = {
 };
 
 export type Insight = {
+  /** Stable across days for the same kind of finding, so an admin alert marked read stays read. */
+  id?: string;
   tone: "good" | "warning" | "critical" | "info";
   title: string;
   detail: string;

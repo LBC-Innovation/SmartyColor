@@ -697,6 +697,18 @@ export function adminDeleteSpend(id: string): Promise<ApiResult<{ deleted: boole
   return request<{ deleted: boolean }>(`/admin/acquisition/spend?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export function adminListAlertReads(): Promise<ApiResult<string[]>> {
+  return request<string[]>("/admin/alerts/reads");
+}
+
+export function adminMarkAlertsRead(keys: string[]): Promise<ApiResult<{ keys: string[] }>> {
+  return request<{ keys: string[] }>("/admin/alerts/reads", { method: "POST", body: JSON.stringify({ keys }) });
+}
+
+export function adminMarkAlertUnread(key: string): Promise<ApiResult<{ key: string }>> {
+  return request<{ key: string }>("/admin/alerts/reads", { method: "DELETE", body: JSON.stringify({ key }) });
+}
+
 export function adminListLinks(): Promise<ApiResult<MarketingLink[]>> {
   return request<MarketingLink[]>("/admin/links");
 }

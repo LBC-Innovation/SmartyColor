@@ -14,13 +14,9 @@ import {
   signedCount,
   signedMoney,
 } from "@/components/v2/admin/format";
-import { aiHealth } from "@/components/v2/admin/aiHealth";
-import { orderAttention } from "@/components/v2/admin/orderAttention";
 import { customerLabel, OrderStatusPill, orderTitle } from "@/components/v2/admin/orders/orderDisplay";
 import { CHART_COLORS, TrendChart } from "@/components/v2/admin/TrendChart";
 import {
-  AttentionList,
-  Callout,
   EmptyState,
   KpiGrid,
   KpiTile,
@@ -28,16 +24,13 @@ import {
   RefreshButton,
   Section,
   SectionLink,
-  type AttentionItemData,
 } from "@/components/v2/admin/ui";
 import { V2UserAvatar } from "@/components/v2/ui/V2UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
-import { authedFetch } from "@/lib/api/client";
 import type { AdminUser, ApiResult } from "@/lib/api/types";
 import type { FinanceReport } from "@/lib/finance/types";
 import type { AdminUserOrderSummary } from "@/lib/orders/adminTypes";
-import type { AdminPricingData } from "@/lib/pricing/types";
 
 const DAY_MS = 86_400_000;
 
@@ -48,9 +41,6 @@ function last30Days(): { from: string; to: string } {
   const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   return { from: iso(today - 29 * DAY_MS), to: iso(today) };
 }
-
-type AiError = { at: string; kind: string; operation: string; message: string };
-type AiStatus = { errors: AiError[]; calls: Array<{ at: string }> };
 
 /** One source of the overview: its data, or an error, while it loads. */
 type Source<T> = { data: T | null; error: string | null; loading: boolean };
@@ -78,17 +68,6 @@ async function wrap<T>(promise: Promise<ApiResult<T>>): Promise<{ data: T } | { 
   return api.isError(r) ? { error: r.error.message } : { data: r.data as T };
 }
 
-async function loadAiErrors(): Promise<{ data: AiStatus } | { error: string }> {
-  try {
-    const res = await authedFetch("/api/vision-costs", { cache: "no-store" });
-    if (!res.ok) return { error: `Couldn't load AI usage (${res.status})` };
-    const json = (await res.json()) as { persisted?: { recentErrors?: AiError[]; recentEvents?: Array<{ at: string }> } };
-    return { data: { errors: json.persisted?.recentErrors ?? [], calls: json.persisted?.recentEvents ?? [] } };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Couldn't load AI usage" };
-  }
-}
-
 /** Orders that count as sales: paid in some way and not canceled. */
 function counted(o: AdminUserOrderSummary): boolean {
   return !["awaiting_payment", "canceled", "refunded", "failed", "draft", "quoted"].includes(o.status);
@@ -102,8 +81,6 @@ export function AdminOverviewScreen() {
   const { user } = useAuth();
   const perms = user?.permissions ?? [];
   const canOrders = perms.includes("usermanage:manageorders");
-  const canAi = perms.includes("costs:viewai");
-  const canPricing = perms.includes("pricing:manage");
   const canFinance = perms.includes("finance:view");
   const canUsers = perms.includes("usermanage:listusers");
   const { refreshAlerts } = useAdminAlerts();
@@ -113,8 +90,6 @@ export function AdminOverviewScreen() {
   const [now, setNow] = useState(() => Date.now());
 
   const orders = useSource<AdminUserOrderSummary[]>(canOrders, () => wrap(api.adminListAllOrders()), reloadKey);
-  const aiErrors = useSource<AiStatus>(canAi, loadAiErrors, reloadKey);
-  const pricing = useSource<AdminPricingData>(canPricing, () => wrap(api.adminGetPricing()), reloadKey);
   const finance = useSource<FinanceReport>(canFinance, () => wrap(api.adminGetFinance(last30Days())), reloadKey);
   const users = useSource<AdminUser[]>(canUsers, () => wrap(api.listAdminUsers()), reloadKey);
 
@@ -124,64 +99,7 @@ export function AdminOverviewScreen() {
     refreshAlerts();
   }, [refreshAlerts]);
 
-  const anyLoading = orders.loading || aiErrors.loading || pricing.loading || finance.loading || users.loading;
-
-  // --- Needs attention ---
-  const attention = useMemo(() => {
-    const items: AttentionItemData[] = [];
-    for (const o of orders.data ?? []) {
-      const a = orderAttention(o, now);
-      if (!a) continue;
-      items.push({
-        tone: a.tone,
-        title: `Order ${shortId(o.id)} · ${orderTitle(o)}`,
-        detail: a.reason,
-        href: `/admin/orders?order=${o.id}`,
-      });
-    }
-    // Same rule as the AI usage banner: a successful call after the error clears it.
-    if (aiErrors.data) {
-      const health = aiHealth(aiErrors.data.errors, aiErrors.data.calls, now);
-      const open = health.blocking ?? health.quota;
-      if (open) {
-        const critical = open.kind === "billing" || open.kind === "auth";
-        const what = open.kind === "billing" ? "billing" : open.kind === "auth" ? "sign-in" : "usage limit";
-        items.push({
-          tone: critical ? "critical" : "warning",
-          title: `Image service ${what} problem ${relativeTime(open.at).toLowerCase()}`,
-          detail: critical
-            ? "New coloring pages and edits are failing for customers. This clears once a page is made successfully."
-            : "Some calls hit the usage limit. This clears once a page is made successfully.",
-          href: "/admin/vision-costs",
-        });
-      }
-    }
-    if (pricing.data) {
-      const observed = new Map(pricing.data.observedAiCosts.map((o) => [o.operation, o]));
-      for (const item of pricing.data.items) {
-        if (!item.billable || item.listPriceCents == null) continue;
-        const p90 = item.aiOperation ? (observed.get(item.aiOperation)?.p90Cents ?? 0) : 0;
-        const worst = Math.max(item.unitCostCents ?? 0, p90);
-        if (item.listPriceCents < worst) {
-          items.push({
-            tone: "warning",
-            title: `“${item.name}” is priced below cost`,
-            detail: `Charging ${money(item.listPriceCents)}; a typical call costs up to $${(worst / 100).toFixed(4)}.`,
-            href: `/admin/pricing?item=${encodeURIComponent(item.sku)}`,
-            actionLabel: "Fix",
-          });
-        }
-      }
-    }
-    for (const insight of finance.data?.insights ?? []) {
-      if (insight.tone !== "critical" && insight.tone !== "warning") continue;
-      items.push({ tone: insight.tone, title: insight.title, detail: insight.detail, href: "/admin/finance" });
-    }
-    return items;
-  }, [orders.data, aiErrors.data, pricing.data, finance.data, now]);
-
-  const attentionLoading = orders.loading || aiErrors.loading || pricing.loading || finance.loading;
-  const attentionErrors = [orders.error, aiErrors.error, pricing.error, finance.error].filter(Boolean);
+  const anyLoading = orders.loading || finance.loading || users.loading;
 
   // --- KPIs ---
   const orderCounts = useMemo(() => {
@@ -206,34 +124,15 @@ export function AdminOverviewScreen() {
     [users.data],
   );
 
-  const showAttention = canOrders || canAi || canPricing || canFinance;
-
   return (
     <>
       <PageHeader
         title="Overview"
-        description="Here's what needs you and how the last 30 days went."
+        description="How the last 30 days went. Anything that needs you is in Alerts."
         actions={<RefreshButton onClick={refresh} loading={anyLoading} />}
       />
 
       <div className="space-y-8">
-        {showAttention ? (
-          <Section title="Needs attention" id="attention">
-            {attentionLoading && attention.length === 0 ? (
-              <SkeletonPanel height="h-20" />
-            ) : attention.length ? (
-              <AttentionList items={attention} />
-            ) : attentionErrors.length ? null : (
-              <Callout tone="good" title="Nothing needs you right now." />
-            )}
-            {attentionErrors.length ? (
-              <p className="mt-2 text-sm text-red-700" role="alert">
-                Some checks couldn&apos;t run: {attentionErrors.join("; ")}
-              </p>
-            ) : null}
-          </Section>
-        ) : null}
-
         {canFinance ? (
           <Section title="Last 30 days" id="kpis" action={<SectionLink href="/admin/finance">View financials</SectionLink>}>
             {finance.error ? (
@@ -410,7 +309,7 @@ export function AdminOverviewScreen() {
           </div>
         ) : null}
 
-        {users.error || (orders.error && !showAttention) ? (
+        {users.error || orders.error ? (
           <p className="text-sm text-red-700" role="alert">
             {[users.error && `Couldn't load customers: ${users.error}`, orders.error && `Couldn't load orders: ${orders.error}`]
               .filter(Boolean)

@@ -5,11 +5,10 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/v2/admin/DataTable";
 import { fullDateTime, money, percent, relativeTime, usd4FromCents } from "@/components/v2/admin/format";
 import { PriceEditorDrawer } from "@/components/v2/admin/pricing/PriceEditorDrawer";
-import { draftFor, isPrintItem, previewPrice, type PricePreview } from "@/components/v2/admin/pricing/pricingMath";
+import { draftFor, previewPrice, type PricePreview } from "@/components/v2/admin/pricing/pricingMath";
 import { PackagesSection } from "@/components/v2/admin/pricing/PackagesSection";
 import { PromotionsSection } from "@/components/v2/admin/pricing/PromotionsSection";
 import {
-  AttentionList,
   ErrorPanel,
   PageHeader,
   PageLoading,
@@ -154,7 +153,6 @@ export function PricingStudio() {
     });
   }, [data, printCosts]);
 
-  const losing = rows.filter((r) => r.preview.losing);
   const selected = rows.find((r) => r.item.sku === itemSku) ?? null;
 
   function onSaved(item: PriceItem) {
@@ -261,20 +259,6 @@ export function PricingStudio() {
           <PageLoading label="Loading prices" />
         ) : (
           <>
-            {losing.length ? (
-              <AttentionList
-                items={losing.map((r) => ({
-                  tone: r.item.billable ? "critical" : "warning",
-                  title: r.item.billable ? `${r.item.name} is priced below cost` : `${r.item.name} is free to customers`,
-                  detail: r.item.billable
-                    ? `Charging ${money(r.preview.chargedCents)}; a typical high cost is ${isPrintItem(r.item) ? money(r.preview.worstCostCents) : usd4FromCents(r.preview.worstCostCents)}.`
-                    : `We absorb about ${usd4FromCents(r.preview.worstCostCents)} each time.`,
-                  onClick: () => setItemSku(r.item.sku),
-                  actionLabel: "Fix",
-                }))}
-              />
-            ) : null}
-
             {GROUPS.map((group) => {
               const groupRows = rows.filter((r) => r.item.category === group.category);
               if (groupRows.length === 0) return null;
