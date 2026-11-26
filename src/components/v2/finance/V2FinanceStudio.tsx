@@ -289,9 +289,10 @@ function Kpis({ report }: { report: FinanceReport }) {
 
 function Insights({ report }: { report: FinanceReport }) {
   const [showAll, setShowAll] = useState(false);
-  const actionable = report.insights.filter((i) => i.tone !== "good");
+  // Critical and warning findings are alerts in the Alerts column; this keeps the notes.
+  const actionable = report.insights.filter((i) => i.tone === "info");
   const good = report.insights.filter((i) => i.tone === "good");
-  if (report.insights.length === 0) return null;
+  if (actionable.length === 0 && good.length === 0) return null;
   const items: AttentionItemData[] = actionable.map((i) => ({
     tone: i.tone === "critical" ? "critical" : i.tone === "warning" ? "warning" : "info",
     title: i.title,
@@ -302,7 +303,7 @@ function Insights({ report }: { report: FinanceReport }) {
   const shown = showAll ? sorted : sorted.slice(0, 5);
   return (
     <Section
-      title="What to pay attention to"
+      title="Notes on this period"
       action={
         sorted.length > 5 ? (
           <button type="button" className="text-sm font-semibold text-v2-link hover:underline" onClick={() => setShowAll((v) => !v)}>

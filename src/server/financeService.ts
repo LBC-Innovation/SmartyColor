@@ -807,6 +807,7 @@ function buildInsights(
   if (cur.pnl.netRevenueCents > 0 || cur.pnl.operatingCostCents > 0 || cur.pnl.variableCostCents > 0) {
     if (cur.pnl.operatingProfitCents < 0) {
       out.push({
+        id: "operating-loss",
         tone: "warning",
         title: `Operating loss of ${usd(-cur.pnl.operatingProfitCents)} this period`,
         detail:
@@ -827,6 +828,7 @@ function buildInsights(
     const promoShare = cur.pnl.promoCents / cur.pnl.grossSalesCents;
     if (promoShare >= 0.5) {
       out.push({
+        id: "promo-share",
         tone: "warning",
         title: `${Math.round(promoShare * 100)}% of sales were paid with promo credit`,
         detail: `${usd(cur.pnl.promoCents)} of the ${usd(cur.pnl.grossSalesCents)} customers spent was credit you gave away, so it brought in no cash but still cost AI and printing. Watch whether promo users go on to top up (${cur.customers.firstTimePayers} first-time payer${cur.customers.firstTimePayers === 1 ? "" : "s"} this period).`,
@@ -837,6 +839,7 @@ function buildInsights(
   const losing = products.filter((p) => p.grossSalesCents > 0 && p.listMarginPct != null && p.listMarginPct < 0);
   if (losing.length) {
     out.push({
+      id: "below-cost",
       tone: "critical",
       title: `Priced below cost: ${losing.map((p) => p.name).join(", ")}`,
       detail:
@@ -871,6 +874,7 @@ function buildInsights(
     const feeShare = cur.cash.cardFeesCents / cur.cash.topUpsCents;
     if (feeShare >= 0.05) {
       out.push({
+        id: "card-fees",
         tone: "warning",
         title: `Card fees ate ${(feeShare * 100).toFixed(1)}% of top-ups`,
         detail: `The average top-up is ${usd(cur.customers.avgTopUpCents ?? 0)}, so the fixed ${usd(d.settings.cardFeeFixedCents)} per charge hurts. Nudge customers toward larger top-ups (e.g. a $10 minimum or bonus credit on $20+).`,
@@ -889,6 +893,7 @@ function buildInsights(
 
   if (d.canceledCharged.count > 0) {
     out.push({
+      id: "canceled-charged",
       tone: "warning",
       title: `${d.canceledCharged.count} canceled print order${d.canceledCharged.count === 1 ? "" : "s"} still charged`,
       detail: `${usd(d.canceledCharged.cents)} was taken from wallets for orders that were later canceled. It's left out of sales. These were canceled before refunds were automatic; if these customers should get it back, add it from their Wallet tab on the Customers page.`,
@@ -914,6 +919,7 @@ function buildInsights(
   if (prev.pnl.netRevenueCents > 0) {
     const change = (cur.pnl.netRevenueCents - prev.pnl.netRevenueCents) / prev.pnl.netRevenueCents;
     out.push({
+      id: "revenue-change",
       tone: change >= 0 ? "good" : "warning",
       title: `Net revenue ${change >= 0 ? "up" : "down"} ${Math.abs(change * 100).toFixed(0)}% on the previous period`,
       detail: `${usd(cur.pnl.netRevenueCents)} vs ${usd(prev.pnl.netRevenueCents)}.`,
@@ -922,6 +928,7 @@ function buildInsights(
 
   if (ue.runwayMonths != null && ue.runwayMonths < 6) {
     out.push({
+      id: "runway",
       tone: ue.runwayMonths < 3 ? "critical" : "warning",
       title: `About ${ue.runwayMonths.toFixed(1)} months of runway`,
       detail: `At the last 90 days' burn of ${usd(ue.monthlyBurnCents ?? 0)} a month, cash on hand runs out in roughly ${ue.runwayMonths.toFixed(1)} months.`,

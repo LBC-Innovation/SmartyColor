@@ -8,23 +8,36 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Bell } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { canOpenAdminItem, isV2NavItemActive, SIGNED_IN_HOME, v2AdminNav, type V2AdminNavItem } from "@/components/v2/nav-config";
-import { aiHealth } from "@/components/v2/admin/aiHealth";
+import { AdminAlertsColumn } from "@/components/v2/admin/alerts/AdminAlertsColumn";
+import { buildAdminAlerts, type AiErrorLike, type AlertSources, type AdminAlert } from "@/components/v2/admin/alerts/adminAlerts";
 import { ordersNeedingAttention } from "@/components/v2/admin/orderAttention";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api/client";
 import { authedFetch } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 
-// --- Alerts: the sidebar's badges ----------------------------------------------------------------
+// --- Alerts ------------------------------------------------------------------------------------
 
-type AdminAlerts = {
+type AdminAlertsState = {
+  /** Every open alert, read or not, most urgent first. */
+  alerts: AdminAlert[];
+  /** The open alerts this admin hasn't marked read. */
+  unread: AdminAlert[];
+  isRead: (key: string) => boolean;
+  markRead: (keys: string[]) => void;
+  markUnread: (key: string) => void;
+  /** True until every source this admin can see has answered once. */
+  loading: boolean;
+  /** Sources that couldn't be checked. */
+  errors: string[];
   /** Orders that need the owner; null until loaded or without permission. */
   ordersNeedingAttention: number | null;
   /** An open billing, quota or sign-in problem: no successful call since the error (see aiHealth). */
@@ -33,45 +46,219 @@ type AdminAlerts = {
   refreshAlerts: () => void;
 };
 
-const AlertsContext = createContext<AdminAlerts>({ ordersNeedingAttention: null, aiProblem: false, refreshAlerts: () => {} });
+const AlertsContext = createContext<AdminAlertsState>({
+  alerts: [],
+  unread: [],
+  isRead: () => false,
+  markRead: () => {},
+  markUnread: () => {},
+  loading: false,
+  errors: [],
+  ordersNeedingAttention: null,
+  aiProblem: false,
+  refreshAlerts: () => {},
+});
 
-export function useAdminAlerts(): AdminAlerts {
+export function useAdminAlerts(): AdminAlertsState {
   return useContext(AlertsContext);
 }
 
-function useLoadAlerts(permissions: readonly string[]): AdminAlerts {
+const DAY_MS = 86_400_000;
+/** Read marks are also kept in the browser, so they work before migration 0046 is applied. */
+const LOCAL_READS_KEY = "cm_admin_alert_reads";
+
+function readLocal(): string[] {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_READS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(keys: Set<string>) {
+  try {
+    window.localStorage.setItem(LOCAL_READS_KEY, JSON.stringify([...keys].slice(-500)));
+  } catch {
+    // Private mode or storage blocked: the server copy still counts.
+  }
+}
+
+/** The last 30 UTC days, as the finance page's "30 days" preset works them out. */
+function last30Days(): { from: string; to: string } {
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { from: iso(today - 29 * DAY_MS), to: iso(today) };
+}
+
+type VisionCostsJson = {
+  persisted?: {
+    recentErrors?: AiErrorLike[];
+    recentEvents?: Array<{ at: string }>;
+  };
+};
+
+function useLoadAlerts(permissions: readonly string[]): AdminAlertsState {
   const canOrders = permissions.includes("usermanage:manageorders");
   const canAi = permissions.includes("costs:viewai");
-  const [orders, setOrders] = useState<number | null>(null);
-  const [aiProblem, setAiProblem] = useState(false);
+  const canPricing = permissions.includes("pricing:manage");
+  const canFinance = permissions.includes("finance:view");
+  const [sources, setSources] = useState<AlertSources>({
+    orders: null,
+    ai: null,
+    pricing: null,
+    finance: null,
+  });
+  /** The refresh each source last answered for; a source is loading until it matches `tick`. */
+  const [answered, setAnswered] = useState<Partial<Record<keyof AlertSources, number>>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [now, setNow] = useState(() => Date.now());
   const [tick, setTick] = useState(0);
+  // Nothing renders from read marks until the alerts load, so reading the browser copy here is hydration-safe.
+  const [reads, setReads] = useState<Set<string>>(() => new Set(typeof window === "undefined" ? [] : readLocal()));
 
   useEffect(() => {
     let alive = true;
+    const jobs: Array<[keyof AlertSources, Promise<void>]> = [];
+    const fail = (source: string, message: string) => {
+      if (alive) setErrors((e) => ({ ...e, [source]: message }));
+    };
+    const ok = (source: string) => {
+      if (alive) setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => k !== source)));
+    };
     if (canOrders) {
-      void api.adminListAllOrders("active").then((r) => {
-        if (alive && !api.isError(r)) setOrders(ordersNeedingAttention(r.data).length);
-      });
+      jobs.push([
+        "orders",
+        api.adminListAllOrders("active").then((r) => {
+          if (!alive) return;
+          if (api.isError(r)) return fail("orders", `orders: ${r.error.message}`);
+          ok("orders");
+          setSources((s) => ({ ...s, orders: r.data }));
+        }),
+      ]);
     }
     if (canAi) {
-      void authedFetch("/api/vision-costs", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then(
-          (json: { persisted?: { recentErrors?: Array<{ at: string; kind: string }>; recentEvents?: Array<{ at: string }> } } | null) => {
-            if (!alive || !json) return;
-            const health = aiHealth(json.persisted?.recentErrors ?? [], json.persisted?.recentEvents ?? [], Date.now());
-            setAiProblem(health.blocking != null || health.quota != null);
-          },
-        )
-        .catch(() => {});
+      jobs.push([
+        "ai",
+        authedFetch("/api/vision-costs", { cache: "no-store" })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`AI usage (${res.status})`);
+            const json = (await res.json()) as VisionCostsJson;
+            if (!alive) return;
+            ok("ai");
+            setSources((s) => ({
+              ...s,
+              ai: {
+                errors: json.persisted?.recentErrors ?? [],
+                calls: json.persisted?.recentEvents ?? [],
+              },
+            }));
+          })
+          .catch((e: unknown) => fail("ai", e instanceof Error ? e.message : "AI usage")),
+      ]);
     }
+    if (canPricing) {
+      jobs.push([
+        "pricing",
+        api.adminGetPricing().then((r) => {
+          if (!alive) return;
+          if (api.isError(r)) return fail("pricing", `pricing: ${r.error.message}`);
+          ok("pricing");
+          setSources((s) => ({ ...s, pricing: r.data }));
+        }),
+      ]);
+    }
+    if (canFinance) {
+      jobs.push([
+        "finance",
+        api.adminGetFinance(last30Days()).then((r) => {
+          if (!alive) return;
+          if (api.isError(r)) return fail("finance", `finance: ${r.error.message}`);
+          ok("finance");
+          setSources((s) => ({ ...s, finance: r.data }));
+        }),
+      ]);
+    }
+    for (const [name, job] of jobs) void job.finally(() => alive && setAnswered((a) => ({ ...a, [name]: tick })));
     return () => {
       alive = false;
     };
-  }, [canOrders, canAi, tick]);
+  }, [canOrders, canAi, canPricing, canFinance, tick]);
 
-  const refreshAlerts = useCallback(() => setTick((t) => t + 1), []);
-  return { ordersNeedingAttention: orders, aiProblem, refreshAlerts };
+  // Read marks: the browser's copy right away, then the server's.
+  useEffect(() => {
+    let alive = true;
+    void api.adminListAlertReads().then((r) => {
+      if (!alive || api.isError(r)) return;
+      setReads((prev) => {
+        const next = new Set([...prev, ...r.data]);
+        writeLocal(next);
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const enabledSources = (
+    [
+      ["orders", canOrders],
+      ["ai", canAi],
+      ["pricing", canPricing],
+      ["finance", canFinance],
+    ] as const
+  )
+    .filter(([, on]) => on)
+    .map(([name]) => name);
+
+  const alerts = useMemo(() => buildAdminAlerts(sources, now), [sources, now]);
+  const unread = useMemo(() => alerts.filter((a) => !reads.has(a.key)), [alerts, reads]);
+
+  const markRead = useCallback((keys: string[]) => {
+    if (keys.length === 0) return;
+    setReads((prev) => {
+      const next = new Set([...prev, ...keys]);
+      writeLocal(next);
+      return next;
+    });
+    void api.adminMarkAlertsRead(keys);
+  }, []);
+
+  const markUnread = useCallback((key: string) => {
+    setReads((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      writeLocal(next);
+      return next;
+    });
+    void api.adminMarkAlertUnread(key);
+  }, []);
+
+  const isRead = useCallback((key: string) => reads.has(key), [reads]);
+
+  const refreshAlerts = useCallback(() => {
+    setNow(Date.now());
+    setTick((t) => t + 1);
+  }, []);
+
+  const ordersCount = useMemo(() => (sources.orders ? ordersNeedingAttention(sources.orders).length : null), [sources.orders]);
+  const aiProblem = alerts.some((a) => a.source === "ai");
+
+  return {
+    alerts,
+    unread,
+    isRead,
+    markRead,
+    markUnread,
+    loading: enabledSources.some((s) => answered[s] !== tick),
+    errors: Object.values(errors),
+    ordersNeedingAttention: ordersCount,
+    aiProblem,
+    refreshAlerts,
+  };
 }
 
 // --- Navigation ---------------------------------------------------------------------------------
@@ -83,7 +270,7 @@ const GROUP_LABEL: Record<V2AdminNavItem["group"], string | null> = {
   grow: "Growth",
 };
 
-function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlerts }) {
+function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlertsState }) {
   if (item.id === "orders" && alerts.ordersNeedingAttention) {
     const n = alerts.ordersNeedingAttention;
     return (
@@ -101,7 +288,35 @@ function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlerts 
   return null;
 }
 
-function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: AdminAlerts }) {
+function AlertsNavLink({ alerts, className }: { alerts: AdminAlertsState; className?: string }) {
+  const pathname = usePathname();
+  const active = pathname === "/admin/alerts";
+  const n = alerts.unread.length;
+  return (
+    <Link
+      href="/admin/alerts"
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "items-center gap-3 text-sm font-semibold transition-colors",
+        active ? "bg-v2-primary-light text-v2-primary" : "text-v2-navy hover:bg-v2-bg-subtle hover:text-v2-ink",
+        className,
+      )}
+    >
+      <Bell className="h-4 w-4 shrink-0" aria-hidden />
+      Alerts
+      {n ? (
+        <span
+          className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums text-white"
+          aria-label={`${n} unread alert${n === 1 ? "" : "s"}`}
+        >
+          {n}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
+function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: AdminAlertsState }) {
   const pathname = usePathname();
   const groups = (["overview", "operate", "grow", "money"] as const)
     .map((g) => ({ id: g, items: items.filter((i) => i.group === g) }))
@@ -109,6 +324,8 @@ function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: Admi
   return (
     <nav aria-label="Admin" className="hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white px-3 py-5 lg:flex">
       <p className="v2-section-title mb-2 px-3">Admin</p>
+      {/* Wide screens show the alerts column beside the nav instead. */}
+      <AlertsNavLink alerts={alerts} className="mb-0.5 flex h-10 rounded-lg px-3 xl:hidden" />
       {groups.map((g) => (
         <div key={g.id}>
           {GROUP_LABEL[g.id] ? <p className="v2-section-title mb-1 mt-5 px-3">{GROUP_LABEL[g.id]}</p> : null}
@@ -146,7 +363,7 @@ function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: Admi
   );
 }
 
-function AdminTabsMobile({ items, alerts }: { items: V2AdminNavItem[]; alerts: AdminAlerts }) {
+function AdminTabsMobile({ items, alerts }: { items: V2AdminNavItem[]; alerts: AdminAlertsState }) {
   const pathname = usePathname();
   const activeRef = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
@@ -155,6 +372,9 @@ function AdminTabsMobile({ items, alerts }: { items: V2AdminNavItem[]; alerts: A
   return (
     <nav aria-label="Admin" className="shrink-0 border-b border-gray-200 bg-white lg:hidden">
       <ul className="flex gap-1 overflow-x-auto px-4 py-1.5">
+        <li className="shrink-0">
+          <AlertsNavLink alerts={alerts} className="inline-flex h-9 gap-2 rounded-lg px-3" />
+        </li>
         {items.map((item) => {
           const active = isV2NavItemActive(pathname, item);
           return (
@@ -187,7 +407,7 @@ export const ADMIN_CONTENT = "mx-auto w-full max-w-[1400px] px-4 py-5 lg:px-8 lg
 
 /**
  * Every admin page: the app's top bar, a grouped sidebar on desktop (horizontal tabs on phones),
- * and one scrolling content column.
+ * the unread alerts column on wide screens, and one scrolling content column.
  */
 export function AdminShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -197,7 +417,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <AlertsContext.Provider value={alerts}>
-      <V2StudioFrame sidebar={<AdminSidebar items={items} alerts={alerts} />}>
+      <V2StudioFrame
+        sidebar={
+          <>
+            <AdminSidebar items={items} alerts={alerts} />
+            <AdminAlertsColumn />
+          </>
+        }
+      >
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col lg:overflow-hidden">
           <AdminTabsMobile items={items} alerts={alerts} />
           <main className="flex-1 bg-v2-bg pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pb-10">
