@@ -722,6 +722,14 @@ export function ColorfulMemoriesApp() {
         : `Add ${bookPagesShort} more ${bookPagesShort === 1 ? "page" : "pages"} to make a book.`
       : null;
   const canMakeBook = bookBlockedReason == null;
+  /**
+   * Too few pages for the book: the one blocker the customer fixes themselves, so the phone bar
+   * spells it out in full (format, its minimum, how many to add) instead of a truncated line.
+   */
+  const bookShortNote =
+    !uploading && bookPagesShort > 0 && book.stillDrawing === 0
+      ? `${order.formatChosen ? `A ${order.binding.shortLabel.toLowerCase()}` : "The smallest printed book"} needs at least ${bookMinPages} pages. Add ${bookPagesShort} more ${bookPagesShort === 1 ? "photo" : "photos"} to this album to make your book.`
+      : null;
   const activeCount = queue.running + queue.queued;
   const showStrip = choiceIds != null || shortCount > 0;
   const uploadProgress = useUploadProgress({
@@ -1057,7 +1065,9 @@ export function ColorfulMemoriesApp() {
               deletion.active
                 ? "pb-[calc(9rem+env(safe-area-inset-bottom))]"
                 : showBookBar
-                  ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+                  ? bookShortNote
+                    ? "pb-[calc(10rem+env(safe-area-inset-bottom))]"
+                    : "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
                   : "pb-[calc(4.5rem+env(safe-area-inset-bottom))]"
             }`}
             onDragOver={onDragOver}
@@ -1351,6 +1361,12 @@ export function ColorfulMemoriesApp() {
         </div>
       ) : showBookBar ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+          {bookShortNote ? (
+            <p className="mb-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900" role="status">
+              <BookOpen className="mt-px h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+              <span>{bookShortNote}</span>
+            </p>
+          ) : null}
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 text-sm">
               <span className="block truncate font-semibold text-v2-ink">
@@ -1358,7 +1374,8 @@ export function ColorfulMemoriesApp() {
                 {bookProgress?.summary ?? `${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
               </span>
               <span className="block truncate text-xs text-v2-muted">
-                {bookBlockedReason ??
+                {/* The pages-short reason is spelled out above, so this line says what it can. */}
+                {(bookShortNote ? null : bookBlockedReason) ??
                   bookPriceLabel ??
                   (bookProgress
                     ? `${bookProgress.done} of ${bookProgress.total} steps done`

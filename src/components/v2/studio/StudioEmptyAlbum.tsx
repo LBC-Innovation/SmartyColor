@@ -304,14 +304,18 @@ export function StudioEmptyAlbum({
               }
               return (
                 <Step key={id} n={n} state={state} last={last} title={NEW_ALBUM.stepPhotos}>
-                  <PhotosStep
-                    yearPhotos={yearPhotos ?? null}
-                    line={photosLine}
-                    onChoose={onChoose}
-                    onFiles={onFiles}
-                  />
+                  {/* Phones: out from under the step's indent (circle + gap = 3rem), so the drop
+                      area is centred on the screen, not on the step column. */}
+                  <div className="max-sm:-ml-12">
+                    <PhotosStep
+                      yearPhotos={yearPhotos ?? null}
+                      line={photosLine}
+                      onChoose={onChoose}
+                      onFiles={onFiles}
+                    />
+                  </div>
                   {guest ? (
-                    <p className="mt-3 flex items-start gap-2 text-xs text-v2-muted">
+                    <p className="mt-3 flex items-start gap-2 text-xs text-v2-muted max-sm:-ml-12">
                       <ShieldCheck className="mt-px h-4 w-4 shrink-0 text-v2-primary" aria-hidden />
                       {STUDIO_EMPTY.guestNote}
                     </p>
