@@ -78,7 +78,7 @@ export function ThemeStep({
         </div>
         <p className="mt-1 text-sm text-v2-muted">{DESIGN_THEMES.subtitle}</p>
 
-        <ThemeExamples className="mt-5" />
+        <ThemeExamples className="mt-5" variant={choice === "none" ? "plain" : "theme"} />
 
         <div role="radiogroup" aria-label={DESIGN_THEMES.choiceLabel} className="mt-6 grid gap-3 sm:grid-cols-2">
           {options.map(({ id, title, sub, Icon }) => {

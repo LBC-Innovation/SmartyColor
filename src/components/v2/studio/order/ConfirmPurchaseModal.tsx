@@ -534,7 +534,9 @@ export function ConfirmPurchaseModal({ order, initialStep, autoPlace, onClose, o
                     Place order
                     {order.dueCents != null
                       ? order.purchaseCode && order.dueCents === 0
-                        ? " · nothing to pay"
+                        ? order.purchaseCode.source === "package"
+                          ? " · already paid"
+                          : " · nothing to pay"
                         : order.dueCents > 0
                           ? // Paid from the wallet (a card is the "Pay $X and place order" button above), so
                             // say so: the price box's "You pay" shows $0.00 for this.
@@ -673,85 +675,72 @@ function Overview({
         <p className="text-sm text-v2-muted">Delivered as a download in My orders.</p>
       )}
 
-      {order.purchaseCode ? (
-        <div className="space-y-2">
-          <div
-            className={cn(
-              "rounded-xl px-3 py-3 text-sm",
-              order.dueCents === 0 ? "bg-emerald-50 text-emerald-950" : "bg-v2-bg-subtle/70 text-v2-ink",
-            )}
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="font-semibold">{order.dueCents && order.purchaseCode.source !== "package" ? "Extra to pay" : "You pay"}</p>
-              <p className="text-2xl font-bold tabular-nums">{order.dueCents != null ? formatCredits(order.dueCents) : "…"}</p>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed opacity-80">
-              {order.purchaseCode.source === "package"
-                ? order.dueCents === 0
-                  ? "Your package pays for this book. You won't be charged."
-                  : order.purchaseCode.shippingPrepaidCents > 0
-                    ? `Your package pays ${formatCredits(order.coveredCents)} of it: the printing and the shipping you paid for. Anything past that comes from your wallet balance.`
-                    : `Your package pays ${formatCredits(order.coveredCents)} of it, the printing. Shipping, its tax and anything past the package come from your wallet balance.`
-                : order.dueCents === 0
-                  ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
-                  : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your wallet balance.`}
-            </p>
-          </div>
-          <dl className="space-y-1 px-1 text-xs text-v2-muted">
-            <div className="flex items-baseline justify-between">
-              <dt>
-                {order.purchaseCode.source === "package"
-                  ? `Book, ${shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax`
-                  : `Book, ${shippingLevelLabel(order.shippingLevel).toLowerCase()} shipping and tax`}
-              </dt>
-              <dd className="tabular-nums">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
-            </div>
-            <div className="flex items-baseline justify-between text-v2-success-text">
-              <dt>
-                {order.purchaseCode.source === "package"
+      <section aria-labelledby="order-ledger-heading">
+        <h2 id="order-ledger-heading" className="text-sm font-semibold text-v2-ink">
+          Your payment
+        </h2>
+        <dl className="mt-2 space-y-1.5 rounded-xl bg-v2-bg-subtle px-4 py-3 text-sm text-v2-ink">
+          {order.isDigital ? (
+            <Line label="Print-at-home PDF" cents={order.quoteCents} />
+          ) : (
+            <>
+              <Line label="Book" cents={order.printCents} />
+              <Line label={`${shippingLevelLabel(order.shippingLevel)} shipping`} cents={order.shippingCents} />
+              <Line label="Tax" cents={order.taxCents} />
+            </>
+          )}
+          <Line label="Total" cents={order.quoteCents} className="border-t border-gray-200 pt-2 font-semibold" />
+          {order.purchaseCode ? (
+            <Line
+              label={
+                order.purchaseCode.source === "package"
                   ? order.purchaseCode.shippingPrepaidCents > 0
-                    ? "Printing and shipping paid by your package"
-                    : "Printing paid by your package"
-                  : `Paid by code ${order.purchaseCode.code}`}
-              </dt>
-              <dd className="tabular-nums">−{formatCredits(order.coveredCents)}</dd>
-            </div>
-            {creditApplied != null && creditApplied > 0 ? (
-              <div className="flex items-baseline justify-between">
-                <dt>From your wallet balance</dt>
-                <dd className="tabular-nums">−{formatCredits(creditApplied)}</dd>
-              </div>
-            ) : null}
-            {order.shortfallCents > 0 ? (
-              <div className="flex items-baseline justify-between font-semibold text-v2-ink">
-                <dt>To add by card</dt>
-                <dd className="tabular-nums">{formatCredits(order.shortfallCents)}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </div>
-      ) : (
-      <dl className="space-y-1.5 rounded-xl bg-v2-bg-subtle/70 p-3 text-sm">
-        {order.isDigital ? (
-          <Line label="Print-at-home PDF" cents={order.quoteCents} />
-        ) : (
-          <>
-            <Line label="Book" cents={order.printCents} />
-            <Line label={`Shipping · ${shippingLevelLabel(order.shippingLevel)}`} cents={order.shippingCents} />
-            <Line label="Sales tax" cents={order.taxCents} />
-          </>
-        )}
-        <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
-          <dt className="font-semibold text-v2-ink">Total</dt>
-          <dd className="text-lg font-bold tabular-nums text-v2-ink">{order.quoteCents != null ? formatCredits(order.quoteCents) : "…"}</dd>
-        </div>
-        {creditApplied != null && creditApplied > 0 ? <Line label="From your wallet balance" cents={creditApplied} negative /> : null}
-        {order.shortfallCents > 0 ? <Line label="You pay" cents={order.shortfallCents} /> : null}
-        {balanceAfter != null && balanceAfter > 0 && order.shortfallCents <= 0 ? (
-          <Line label="Wallet balance after" cents={balanceAfter} />
+                    ? "Printing and shipping, already paid"
+                    : "Printing, already paid"
+                  : `Paid by code ${order.purchaseCode.code}`
+              }
+              // A package was paid for when it was bought; this row is that money, not a new charge.
+              note={order.purchaseCode.source === "package" ? "When you bought your book package" : undefined}
+              cents={order.coveredCents}
+              negative
+              className="font-medium text-v2-success-text"
+            />
+          ) : null}
+          {creditApplied != null && creditApplied > 0 ? (
+            <Line
+              label={order.purchaseCode?.source === "package" ? "Today, from your wallet balance" : "From your wallet balance"}
+              cents={creditApplied}
+              negative
+              className="font-medium text-v2-success-text"
+            />
+          ) : null}
+          <Line
+            label={order.shortfallCents > 0 ? "Due on card" : "Left to pay"}
+            cents={order.dueCents == null ? null : order.shortfallCents}
+            className="border-t-2 border-gray-300 pt-2 text-base font-bold"
+          />
+        </dl>
+        {order.purchaseCode ? (
+          <p className="mt-2 text-xs text-v2-muted">
+            {order.purchaseCode.source === "package"
+              ? order.dueCents === 0
+                ? "You already paid for this book when you bought your package. Nothing more is charged, and your wallet balance isn't touched."
+                : order.purchaseCode.shippingPrepaidCents > 0
+                  ? `You already paid for the printing and shipping when you bought your package, so that isn't taken from your wallet balance again. Only the extras, ${order.dueCents != null ? formatCredits(order.dueCents) : "…"}, are new.`
+                  : `You already paid for the printing when you bought your package, so that isn't taken from your wallet balance again. Only shipping, its tax and any extras, ${order.dueCents != null ? formatCredits(order.dueCents) : "…"}, are new.`
+              : order.dueCents === 0
+                ? `Your code ${order.purchaseCode.code} pays for this book: printing, standard shipping and tax. You won't be charged.`
+                : `Your code ${order.purchaseCode.code} pays ${formatCredits(order.coveredCents)}. The rest is an extra cost for the options you picked beyond your code, paid from your wallet balance.`}
+          </p>
         ) : null}
-      </dl>
-      )}
+        {order.shortfallCents > 0 ? (
+          <p className="mt-2 text-xs text-v2-muted">
+            Your card pays the rest. It&apos;s added to your wallet balance, and the book is paid from it in the same step.
+          </p>
+        ) : balanceAfter != null && balanceAfter > 0 && creditApplied != null && creditApplied > 0 ? (
+          <p className="mt-2 text-xs text-v2-muted">Your remaining wallet balance after this: {formatCredits(balanceAfter)}</p>
+        ) : null}
+      </section>
       {!order.isDigital && formatDeliveryRange(order.deliveryEstimate) ? (
         <p className="text-sm text-v2-ink">
           <span className="font-semibold">Estimated delivery:</span> {formatDeliveryRange(order.deliveryEstimate)}
@@ -780,11 +769,28 @@ function Overview({
   );
 }
 
-function Line({ label, cents, negative }: { label: string; cents: number | null; negative?: boolean }) {
+/** One ledger row, styled like the package pay screen's ledger. */
+function Line({
+  label,
+  note,
+  cents,
+  negative,
+  className,
+}: {
+  label: string;
+  /** A small line under the label, such as when a prepaid amount was paid. */
+  note?: string;
+  cents: number | null;
+  negative?: boolean;
+  className?: string;
+}) {
   return (
-    <div className="flex items-baseline justify-between">
-      <dt className="text-v2-muted">{label}</dt>
-      <dd className="font-semibold tabular-nums text-v2-ink">{cents != null ? `${negative ? "−" : ""}${formatCredits(cents)}` : "…"}</dd>
+    <div className={cn("flex items-baseline justify-between gap-3", className)}>
+      <dt>
+        {label}
+        {note ? <span className="block text-xs font-normal text-v2-muted">{note}</span> : null}
+      </dt>
+      <dd className="shrink-0 tabular-nums">{cents != null ? `${negative ? "−" : ""}${formatCredits(cents)}` : "…"}</dd>
     </div>
   );
 }
