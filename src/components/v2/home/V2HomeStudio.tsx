@@ -454,7 +454,13 @@ export function V2HomeStudio() {
                           name={project.name}
                           shared={project.role === "contributor"}
                           onClick={() => {
-                            const meta = studio.projects.find((p) => p.id === project.id) ?? projectMetaFromLibrary(project);
+                            // The studio's list can be older than this page's (photos added since it
+                            // loaded), so the card's own counts win: the dialog says what the card says.
+                            const fresh = projectMetaFromLibrary(project);
+                            const known = studio.projects.find((p) => p.id === project.id);
+                            const meta = known
+                              ? { ...known, name: fresh.name, photoCount: fresh.photoCount, sharedCount: fresh.sharedCount }
+                              : fresh;
                             if (project.role === "contributor") removal.requestLeave(meta);
                             else void removal.requestDelete(meta);
                           }}
@@ -467,10 +473,19 @@ export function V2HomeStudio() {
                       type="button"
                       onClick={() => void createAlbum()}
                       disabled={creating}
-                      className="flex h-full min-h-28 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 p-4 text-sm font-semibold text-v2-link transition hover:border-v2-primary/40 hover:bg-v2-primary-light disabled:opacity-60"
+                      className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border-2 border-dashed border-gray-200 text-sm font-semibold text-v2-link transition hover:border-v2-primary/40 hover:bg-v2-primary-light disabled:opacity-60"
                     >
-                      {creating ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Plus className="h-5 w-5" aria-hidden />}
-                      New album
+                      {/* Same shape as an album card (4:3 collage + name and count), so the tile is
+                          full size even when it sits alone on its row. */}
+                      <span className="aspect-[4/3] w-full" aria-hidden />
+                      <span className="invisible px-3 py-2.5 text-left" aria-hidden>
+                        <span className="block font-semibold">&nbsp;</span>
+                        <span className="block text-xs">&nbsp;</span>
+                      </span>
+                      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4">
+                        {creating ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Plus className="h-5 w-5" aria-hidden />}
+                        New album
+                      </span>
                     </button>
                   </li>
                 </ul>
