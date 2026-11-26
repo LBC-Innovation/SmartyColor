@@ -302,7 +302,7 @@ export function ColorfulMemoriesApp() {
   /** "Make the rest": how many the code includes and what the others cost. */
   function restCostLabel(count: number): string {
     if (!signedIn) return "free to try";
-    if (pagePriceCents == null) return "uses credit";
+    if (pagePriceCents == null) return "uses wallet balance";
     const included = Math.min(count, newPagesCovered(code));
     const paid = count - included;
     if (!code) return formatCredits(pagePriceCents * count);

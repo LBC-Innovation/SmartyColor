@@ -170,7 +170,7 @@ export function bindingName(bindingId: BookBindingId): string {
 export function bundleLines(bundle: PurchaseCodeBundle): string[] {
   const lines = [`${bundle.includedPages} coloring ${bundle.includedPages === 1 ? "page" : "pages"} made from your photos`];
   if (bundle.editsPerPage > 0) {
-    lines.push(`${bundle.editsPerPage} free ${bundle.editsPerPage === 1 ? "touch-up" : "touch-ups"} on each page`);
+    lines.push(`${bundle.editsPerPage} free ${bundle.editsPerPage === 1 ? "Creative Touch-Up" : "Creative Touch-Ups"} on each page`);
   }
   if (bundle.portraitsPerPage > 0) {
     lines.push(

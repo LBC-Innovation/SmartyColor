@@ -603,7 +603,7 @@ export async function confirmDraftBookOrder(input: {
   await appendOrderEvent(input.orderId, {
     kind: "checkout_confirmed",
     title: "Ready for checkout",
-    detail: "Your book is registered — add credits and place the order when you're ready.",
+    detail: "Your book is registered — add to your wallet and place the order when you're ready.",
   });
 
   return { data: { orderId: input.orderId, status: "awaiting_payment" }, error: null };
@@ -688,7 +688,7 @@ export async function placeBookOrderWithCredits(input: {
       };
     }
     const message = error.message.includes("insufficient credits")
-      ? "You do not have enough credits to place this order"
+      ? "Your wallet balance isn't enough to place this order"
       : error.message.includes("order not found")
         ? "Order not found"
         : error.message.includes("not awaiting payment")

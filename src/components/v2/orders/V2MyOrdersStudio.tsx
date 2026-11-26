@@ -252,7 +252,7 @@ export function V2MyOrdersStudio() {
               title: "Order canceled",
               message:
                 result.refundedCents > 0
-                  ? `${formatMoney(result.refundedCents)} is back in your credit balance. We've emailed you a confirmation.`
+                  ? `${formatMoney(result.refundedCents)} is back in your wallet balance. We've emailed you a confirmation.`
                   : "We've emailed you a confirmation.",
             });
             void refreshUser();

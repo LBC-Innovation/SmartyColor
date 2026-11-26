@@ -47,7 +47,7 @@ export function UploadStrip({ pagePriceCents, balanceCents, choiceCount, onChoos
       {shortCount > 0 ? (
         <p className={choiceCount != null ? "mt-2 border-t border-v2-primary/15 pt-2 text-sm text-v2-ink" : "text-sm text-v2-ink"}>
           <button type="button" className="font-semibold text-v2-link underline-offset-2 hover:underline" onClick={onAddCredit}>
-            Add credit to make {shortCount} more
+            Add to your wallet to make {shortCount} more
           </button>
         </p>
       ) : null}

@@ -47,7 +47,7 @@ export function friendInviteEmail(input: {
     ? `<p style="margin:0 0 16px;padding:12px 16px;border-left:3px solid #7446f0;background:#f7f5ff;color:#1f2937;white-space:pre-wrap;">${escapeHtml(note)}</p>`
     : "";
   const creditLine = credit
-    ? `Create a free account through ${sender}'s link and ${escapeHtml(credit)} of credit is yours to spend on pages and printed books.`
+    ? `Create a free account through ${sender}'s link and ${escapeHtml(credit)} goes into your wallet to spend on pages and printed books.`
     : "Create a free account to make your first pages.";
 
   const html = `<!doctype html>
@@ -89,7 +89,7 @@ export function friendInviteEmail(input: {
     ...(note ? [note, ""] : []),
     "Colorful Memories turns your family photos into coloring pages and printed coloring books.",
     credit
-      ? `Create a free account through ${senderName}'s link and ${credit} of credit is yours:`
+      ? `Create a free account through ${senderName}'s link and ${credit} goes into your wallet:`
       : "Create a free account to make your first pages:",
     input.url,
     "",

@@ -60,8 +60,8 @@ export function StudioHeader({
               : pkgAdd.photosLeft > 0
                 ? `Add photos, ${pkgAdd.photosLeft} included left`
                 : pkgAdd.priceLabel
-                  ? `Add extra photos, ${pkgAdd.priceLabel} each from your credit`
-                  : "Add extra photos, paid from your credit"
+                  ? `Add extra photos, ${pkgAdd.priceLabel} each from your wallet balance`
+                  : "Add extra photos, paid from your wallet balance"
           }
           className={btn}
         >

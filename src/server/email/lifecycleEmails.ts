@@ -134,10 +134,10 @@ export function referralCreditEmail(input: { to: string; amountCents: number; ur
     eyebrow: "Share with a friend",
     heading: `${amount} added to your account`,
     paragraphs: [
-      `A friend you shared Colorful Memories with just signed up, so we've added ${amount} in credit to your account.`,
-      "Keep sharing your link: every friend who signs up through it earns you credit again.",
+      `A friend you shared Colorful Memories with just signed up, so we've added ${amount} to your wallet.`,
+      "Keep sharing your link: every friend who signs up through it adds to your wallet again.",
     ],
     cta: { label: "Share my link", url: input.url },
-    footer: "Sent because your referral credit was added.",
+    footer: "Sent because your referral reward was added to your wallet.",
   });
 }

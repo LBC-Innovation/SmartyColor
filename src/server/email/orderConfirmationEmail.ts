@@ -136,8 +136,8 @@ export function orderConfirmationEmail(input: OrderConfirmationInput): OutgoingE
   const deadline = input.cancelDeadline ? emailDeadline(input.cancelDeadline, safeTimeZone(input.timeZone)) : null;
   const cancelHeading = deadline ? `Cancel by ${deadline} for a full refund` : null;
   const cancelNote = deadline
-    ? `Changed your mind? You can cancel this order for a full refund to your credit balance until ${deadline}, when your book goes into production. After that it can't be canceled.`
-    : "Changed your mind? You can cancel for a full refund to your credit balance until your book goes into production, usually about an hour after you order.";
+    ? `Changed your mind? You can cancel this order for a full refund to your wallet balance until ${deadline}, when your book goes into production. After that it can't be canceled.`
+    : "Changed your mind? You can cancel for a full refund to your wallet balance until your book goes into production, usually about an hour after you order.";
   const cta = "View your order";
   const delivery = deliveryRange(input.estimatedDeliveryMin, input.estimatedDeliveryMax);
   const deliveryNote = "This is the printer's estimate, not a guarantee. Tracking appears on your order page once it ships.";

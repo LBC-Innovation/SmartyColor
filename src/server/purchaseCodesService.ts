@@ -561,7 +561,7 @@ export async function payForExtraPage(
   });
   if (chargeErr) {
     if (/insufficient credits/i.test(chargeErr.message)) {
-      return { data: null, error: { message: "Not enough credit for this page.", code: "INSUFFICIENT_CREDITS" } };
+      return { data: null, error: { message: "Not enough wallet balance for this page.", code: "INSUFFICIENT_CREDITS" } };
     }
     return { data: null, error: { message: chargeErr.message } };
   }

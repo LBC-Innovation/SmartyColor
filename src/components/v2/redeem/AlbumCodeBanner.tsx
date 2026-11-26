@@ -124,8 +124,8 @@ export function AlbumCodeBanner({
             ))}
           </ul>
           <p className="mt-2">
-            You can add more photos, edits, another binding or faster shipping. Those cost extra, come from your account
-            credit, and are always marked “extra” with their price before you pay.
+            You can add more photos, edits, another binding or faster shipping. Those cost extra, come from your wallet
+            balance, and are always marked “extra” with their price before you pay.
           </p>
         </div>
       ) : null}

@@ -507,7 +507,7 @@ export function PageEditorModal(props: Props) {
                   <ActionRow
                     primary
                     icon={<MessageSquareText />}
-                    label="Describe a change"
+                    label="Use a Creative Touch-Up"
                     detail={editCostLabel}
                     disabled={busy}
                     onClick={props.onEditWithNote}

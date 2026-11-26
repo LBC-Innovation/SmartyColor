@@ -36,8 +36,8 @@ export const ACTIVITY_TYPES = {
   ],
   wallet: [
     { id: "funds_added", label: "Funds added" },
-    { id: "credit_granted", label: "Promo credit" },
-    { id: "credit_removed", label: "Credit adjustment" },
+    { id: "credit_granted", label: "Promo gift" },
+    { id: "credit_removed", label: "Wallet adjustment" },
     { id: "refund", label: "Refund" },
     { id: "friend_invited", label: "Friend invited" },
   ],

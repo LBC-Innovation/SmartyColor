@@ -83,8 +83,8 @@ export function BookOrderConfirmModal({
             </h2>
             <p className="mt-1.5 text-base leading-relaxed text-v2-muted">
               {digital
-                ? "Your credits are charged now and the PDF downloads right away. You can download it again anytime from My orders."
-                : "Your credits are charged now and your book goes straight to the printer. You'll get a confirmation email, and you can follow your order's progress anytime from My orders."}
+                ? "Your wallet balance is charged now and the PDF downloads right away. You can download it again anytime from My orders."
+                : "Your wallet balance is charged now and your book goes straight to the printer. You'll get a confirmation email, and you can follow your order's progress anytime from My orders."}
             </p>
           </div>
         </div>

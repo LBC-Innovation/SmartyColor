@@ -325,7 +325,7 @@ export async function buyPackageWithCredit(input: {
   if (error) {
     const message = error.message ?? "";
     if (message.includes("insufficient credits")) {
-      return { data: null, error: { message: "Your credit doesn't cover this book.", code: "INSUFFICIENT_CREDITS" } };
+      return { data: null, error: { message: "Your wallet balance doesn't cover this book.", code: "INSUFFICIENT_CREDITS" } };
     }
     if (message.includes("price changed")) {
       return { data: null, error: { message: "The price of this book changed.", code: PACKAGE_PRICE_CHANGED_CODE } };
@@ -390,7 +390,7 @@ export async function createPackageCheckout(input: {
             unit_amount: p.priceCents,
             product_data: {
               name: `Colorful Memories book package: ${spec.shortLabel}`,
-              description: `${p.includedPhotos} photos made into coloring pages, ${p.editsPerPhoto} free touch-ups on each, and printing.${
+              description: `${p.includedPhotos} photos made into coloring pages, ${p.editsPerPhoto} free Creative Touch-Ups on each, and printing.${
                 shippingCents > 0 ? "" : " Shipping is added when you order the book."
               }`,
             },

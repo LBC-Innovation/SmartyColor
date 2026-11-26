@@ -229,7 +229,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
 
               {justConfirmed && order.status === "awaiting_payment" ? (
                 <div className="v2-panel mb-4 border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900">
-                  Your book is saved. Add credit below if you need to, then place your order.
+                  Your book is saved. Add to your wallet below if you need to, then place your order.
                 </div>
               ) : null}
 
@@ -291,7 +291,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                       : ""}
                     . It won&apos;t be printed or shipped.
                     {order.refundedCents
-                      ? ` ${formatCredits(order.refundedCents)} was returned to your credit balance.`
+                      ? ` ${formatCredits(order.refundedCents)} was returned to your wallet balance.`
                       : ""}
                   </p>
                   {order.cancelReason ? (
@@ -305,7 +305,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
                   <div className="min-w-0">
                     <h2 className="text-sm font-semibold text-v2-ink">Changed your mind?</h2>
                     <p className="mt-0.5 text-sm text-v2-muted">
-                      You can cancel for a full refund to your credit balance until your book goes into
+                      You can cancel for a full refund to your wallet balance until your book goes into
                       production
                       {order.cancelDeadline ? `, around ${formatCancelDeadline(order.cancelDeadline)}` : ""}
                       .
@@ -518,7 +518,7 @@ export function V2OrderDetailStudio({ orderId }: { orderId: string }) {
             setCancelOpen(false);
             setCanceledNotice(
               result.refundedCents > 0
-                ? `Your order is canceled and ${formatCredits(result.refundedCents)} is back in your credit balance. We've emailed you a confirmation.`
+                ? `Your order is canceled and ${formatCredits(result.refundedCents)} is back in your wallet balance. We've emailed you a confirmation.`
                 : "Your order is canceled. We've emailed you a confirmation.",
             );
             void refreshUser();
