@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BookOpen, Check, Download, FolderInput, Loader2, Minus, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Check, Download, FolderInput, Loader2, Minus, Pencil, ShoppingCart, Trash2 } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { cn } from "@/lib/cn";
 import { V2GuestLimitModal } from "@/components/v2/auth/V2GuestLimitModal";
@@ -45,6 +45,7 @@ import { BottomSheet } from "@/components/v2/studio/order/BottomSheet";
 import { ConfirmPurchaseModal, type ConfirmStep } from "@/components/v2/studio/order/ConfirmPurchaseModal";
 import { activePageVersion, galleryBook, pagePrintPrefs, pageSourceVersion } from "@/components/v2/studio/order/galleryBookPages";
 import { useBookOrder } from "@/components/v2/studio/order/useBookOrder";
+import { smallestPrintedBinding } from "@/lib/marketing/smallestBook";
 import { INTENT_ALBUM_NAME, STUDIO_EMPTY } from "@/content/marketing";
 import { useAuth } from "@/context/AuthContext";
 import { authedFetch } from "@/lib/api/client";
@@ -573,6 +574,8 @@ export function ColorfulMemoriesApp() {
 
   /** "Start my book" / "Continue your book": open the book at the first step that needs them. */
   function openBook() {
+    // Every way in is held back while the photos aren't in yet (see bookBlockedReason).
+    if (bookBlockedReason) return;
     order.begin();
     setOpenRow(bookSteps(order).find((step) => step.state !== "done")?.row ?? null);
     setBookOpen(true);
@@ -705,6 +708,20 @@ export function ColorfulMemoriesApp() {
   const bookChoicesIn = bookChoices.filter((p) => p.printPrefs.book?.leftOut !== true).length;
   const failedCount = photos.filter((p) => cardState(p) === "failed").length;
   const uploading = pendingUploads.length > 0;
+  // "Make a book" waits for the photos. Opening it mid-upload left the book stuck loading, so it
+  // stays off until the batch is in and the album has the fewest pages its book can take (the
+  // package's or code's binding, the chosen format, or else the smallest printed book). A book
+  // already saved can be continued once nothing is uploading.
+  const bookMinPages = order.formatChosen ? order.binding.minPages : smallestPrintedBinding().minPages;
+  const bookPagesShort = order.cartId ? 0 : Math.max(0, bookMinPages - order.contentCount);
+  const bookBlockedReason: string | null = uploading
+    ? "Your photos are still uploading."
+    : bookPagesShort > 0
+      ? book.stillDrawing > 0
+        ? "Your pages are still being made."
+        : `Add ${bookPagesShort} more ${bookPagesShort === 1 ? "page" : "pages"} to make a book.`
+      : null;
+  const canMakeBook = bookBlockedReason == null;
   const activeCount = queue.running + queue.queued;
   const showStrip = choiceIds != null || shortCount > 0;
   const uploadProgress = useUploadProgress({
@@ -1017,7 +1034,12 @@ export function ColorfulMemoriesApp() {
             onArrange={() => setArrangeOpen(true)}
             book={
               hasBookPage && !bookCardOpen && !deletion.active && !showBookBar
-                ? { label: bookProgress ? "Your book" : "Make a book", inProgress: bookProgress != null, onOpen: openBook }
+                ? {
+                    label: bookProgress ? "Resume book order" : "Complete Book Order",
+                    inProgress: bookProgress != null,
+                    onOpen: openBook,
+                    disabledReason: bookBlockedReason,
+                  }
                 : null
             }
           />
@@ -1057,7 +1079,7 @@ export function ColorfulMemoriesApp() {
                   onCancelPackage={
                     pkgCode.isBuyer && !pkgCode.bookOrderId ? () => setCancelPkgOpen(true) : undefined
                   }
-                  canOrder={hasBookPage}
+                  canOrder={hasBookPage && canMakeBook}
                 />
               ) : code && !pkgCode && !deletion.active ? (
                 <AlbumCodeBanner
@@ -1065,7 +1087,7 @@ export function ColorfulMemoriesApp() {
                   photoCount={photos.length}
                   onAddPhotos={() => setAddPhotos({ files: [] })}
                   onOrderBook={openBook}
-                  canOrder={hasBookPage}
+                  canOrder={hasBookPage && canMakeBook}
                 />
               ) : null}
               {showStrip ? (
@@ -1249,7 +1271,7 @@ export function ColorfulMemoriesApp() {
       {/* Held back while photos are still being added or drawn: the book can wait until they're all in.
           Not in an album whose book is already paid for by a package or code (it has its own strip),
           and not until that's known, so it never flashes in and out. */}
-      {order.contentCount > 0 && (!signedIn || albumCode.loaded) && !code && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden && !uploadProgress ? (
+      {order.contentCount > 0 && (!signedIn || albumCode.loaded) && !code && !bookCardOpen && !deletion.active && !showBookBar && !editor && !bookPromoHidden && !uploadProgress && canMakeBook ? (
         <BookPromoCard
           pageCount={order.contentCount}
           pictures={book.pages.slice(0, 3).map((page) => page.imageDataUrl)}
@@ -1336,21 +1358,23 @@ export function ColorfulMemoriesApp() {
                 {bookProgress?.summary ?? `${order.contentCount} ${order.contentCount === 1 ? "page" : "pages"}`}
               </span>
               <span className="block truncate text-xs text-v2-muted">
-                {bookPriceLabel ??
+                {bookBlockedReason ??
+                  bookPriceLabel ??
                   (bookProgress
                     ? `${bookProgress.done} of ${bookProgress.total} steps done`
                     : "Printed, bound and mailed to you")}
               </span>
             </p>
-            <button type="button" className="v2-btn-primary min-h-11 shrink-0 gap-1.5 px-5 text-sm" onClick={openBook}>
-              {bookProgress ? (
-                "Continue"
-              ) : (
-                <>
-                  <BookOpen className="h-4 w-4" aria-hidden />
-                  Make a book
-                </>
-              )}
+            <button
+              type="button"
+              // Styled like the pay buttons (Pay, Place order): this is the way to checkout.
+              className="v2-modal-btn v2-modal-btn--primary min-h-11 shrink-0 gap-1.5 whitespace-nowrap px-4 text-sm"
+              onClick={openBook}
+              disabled={!canMakeBook}
+            >
+              {/* Narrow phones: the label alone, so the page count beside it keeps its room. */}
+              <ShoppingCart className="h-4 w-4 max-[400px]:hidden" aria-hidden />
+              {bookProgress ? "Resume book order" : "Complete Book Order"}
             </button>
           </div>
         </div>

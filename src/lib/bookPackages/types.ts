@@ -86,7 +86,10 @@ export const PACKAGE_SHIPPING_UNAVAILABLE_CODE = "SHIPPING_UNAVAILABLE";
  */
 export type BookPackageShippingQuote = {
   bindingId: BookBindingId;
+  /** Shipping and tax together: what is added to the payment. */
   shippingCents: number;
+  /** The tax inside shippingCents. */
+  taxCents: number;
   /** The address as the server will save and quote it. */
   address: ShippingAddress;
   /** The printer's cleaned-up version of the address, when it has one. */

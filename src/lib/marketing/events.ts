@@ -29,8 +29,8 @@ export type TrackEventParams = {
   package_viewed: { count: number; signed_in: boolean; intent: TrackIntent };
   package_selected: { format: TrackFormat; value: number; currency: string; from: "landing" | "wizard" };
   album_started: { mode: "pages" | "package" };
-  package_pay_started: { format: TrackFormat; value: number; currency: string; method: "card" | "credit" };
-  package_purchased: { format: TrackFormat; value: number; currency: string; method: "card" | "credit"; package_id: string };
+  package_pay_started: { format: TrackFormat; value: number; currency: string; method: "card" | "credit" | "credit_and_card" };
+  package_purchased: { format: TrackFormat; value: number; currency: string; method: "card" | "credit" | "credit_and_card"; package_id: string };
   /** A book package was canceled and its unused value returned to the wallet. `value` is the refund. */
   package_refunded: { format: TrackFormat; value: number; currency: string; album_deleted: boolean };
   package_payment_canceled: { format: TrackFormat };

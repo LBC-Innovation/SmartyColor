@@ -23,6 +23,7 @@ import {
   type BookPackagePurchase,
 } from "@/lib/bookPackages/types";
 import { sheetUsageCostCents } from "@/lib/credits/pricing";
+import { CHECKOUT_SESSION_PARAM, CREDITS_RETURN_PARAM } from "@/lib/credits/types";
 import * as library from "@/lib/library/client";
 import { readTrackIntent } from "@/lib/marketing/copy";
 import { usePriceList } from "@/lib/pricing/usePriceList";
@@ -103,7 +104,16 @@ export function NewAlbumWizard() {
     return readYearAlbumIntent();
   });
   // The cancel note is read once and then taken out of the address, so a reload doesn't repeat it.
-  const [canceledParam] = useState(() => params.get("package") === "canceled");
+  // A canceled card top-up (made to pay the rest of a package) reads the same as a canceled checkout.
+  const [canceledParam] = useState(
+    () => params.get("package") === "canceled" || (step === "pay" && params.get(CREDITS_RETURN_PARAM) === "canceled"),
+  );
+  // Back from a paid card top-up: the pay step finishes the purchase from credit.
+  const [topUpReturn] = useState<{ sessionId: string } | null>(() => {
+    if (step !== "pay" || params.get(CREDITS_RETURN_PARAM) !== "success") return null;
+    const id = params.get(CHECKOUT_SESSION_PARAM);
+    return id ? { sessionId: id } : null;
+  });
 
   const [load, setLoad] = useState<PackagesLoad>({ status: "loading" });
   const [reloadTick, setReloadTick] = useState(0);
@@ -128,7 +138,12 @@ export function NewAlbumWizard() {
   }, [step, sessionId, pathname, router]);
 
   useEffect(() => {
-    if (!canceledParam || step !== "pay" || !isBookBindingId(bookParam)) return;
+    if (step !== "pay" || !isBookBindingId(bookParam)) return;
+    if (topUpReturn) {
+      window.history.replaceState(null, "", `${pathname}?book=${bookParam}&step=pay`);
+      return;
+    }
+    if (!canceledParam) return;
     track("package_payment_canceled", { format: trackFormat(bookParam) });
     window.history.replaceState(null, "", `${pathname}?book=${bookParam}&step=pay`);
     // Once, when the page opens from a canceled payment.
@@ -359,6 +374,8 @@ export function NewAlbumWizard() {
           }}
           onPaid={onPaid}
           albumName={yearAlbum?.albumName}
+          topUpReturn={topUpReturn}
+          onBalanceChanged={() => void refreshUser()}
           onUnavailable={() => {
             clearChoice();
             toast.info(BOOK_PACKAGES.unavailable);

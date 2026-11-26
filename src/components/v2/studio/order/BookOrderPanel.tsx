@@ -3,7 +3,7 @@
 import { bindingName } from "@/lib/purchaseCodes/types";
 import { fasterShippingChoices, fasterShippingPrompt, scrollToShippingSpeeds, shippingLevelLabel } from "@/lib/orders/shippingLevels";
 import Link from "next/link";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, BookOpen, Check, ChevronDown, Gift, ImageOff, LayoutGrid, Loader2, Palette, Truck } from "lucide-react";
 import { PackagePriceSummary } from "@/components/v2/book-packages/PackagePriceSummary";
 import { SwitchBindingModal } from "@/components/v2/book-packages/SwitchBindingModal";
@@ -204,6 +204,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     onOpenRow(openRow === row ? null : row);
   }
 
+  /** The step bar, pinned to the top of the card or sheet while the rows scroll under it. */
+  const stepsRef = useRef<HTMLOListElement>(null);
+
   /** Bring a part of the panel into view once React has drawn the row that just opened. */
   function scrollToAnchor(anchorId: string) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -215,7 +218,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         let box = target.parentElement;
         while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
         if (!box) return;
-        const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 12;
+        // Land just under the pinned step bar, not behind it.
+        const pinned = stepsRef.current?.offsetHeight ?? 0;
+        const top = target.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - pinned - 12;
         box.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
       }),
     );
@@ -341,7 +346,14 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
         </div>
       ) : null}
 
-      <ol className="mb-1 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }} aria-label="Steps">
+      {/* Pinned to the top of the card or sheet as the rows scroll. A white shadow covers the scroll
+          box's padding above and beside it, so no row shows past its edges. */}
+      <ol
+        ref={stepsRef}
+        className="sticky top-0 z-10 mb-1 grid gap-1.5 border-b border-gray-100 bg-white pb-1 pt-2 [box-shadow:0_-1.25rem_0_1.25rem_white]"
+        style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+        aria-label="Steps"
+      >
         {steps.map((step, i) => {
           const active = openRow === step.row;
           const locked = step.row !== "format" && !order.formatChosen;

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, CheckSquare, LayoutGrid, Loader2, Upload, X } from "lucide-react";
+import { CheckSquare, LayoutGrid, Loader2, ShoppingCart, Upload, X } from "lucide-react";
 import { V2ProjectSwitcher } from "@/components/v2/V2ProjectSwitcher";
 import { cn } from "@/lib/cn";
 
@@ -19,7 +19,13 @@ type Props = {
   /** Opens the Arrange sheet; the button shows once there are 2+ pages. */
   onArrange?: () => void;
   /** The way into the book, always in reach while scrolling; null while the book is on screen. */
-  book?: { label: string; inProgress: boolean; onOpen: () => void } | null;
+  book?: {
+    label: string;
+    inProgress: boolean;
+    onOpen: () => void;
+    /** Why the book can't be opened yet (photos still uploading, too few pages); null when it can. */
+    disabledReason?: string | null;
+  } | null;
 };
 
 /** One row above the gallery: album switcher, Add photos, Select photos, the book, and the page count. */
@@ -109,10 +115,13 @@ export function StudioHeader({
         <button
           type="button"
           onClick={book.onOpen}
-          aria-label={book.label}
-          className="relative hidden min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-v2-primary px-4 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 sm:inline-flex"
+          disabled={Boolean(book.disabledReason)}
+          aria-label={book.disabledReason ? `${book.label}. ${book.disabledReason}` : book.label}
+          title={book.disabledReason ?? undefined}
+          // Styled like the pay buttons (Pay, Place order): this is the way to checkout.
+          className="v2-modal-btn v2-modal-btn--primary relative hidden min-h-11 min-w-11 shrink-0 gap-1.5 whitespace-nowrap px-5 text-sm sm:inline-flex"
         >
-          <BookOpen className="h-4 w-4" aria-hidden />
+          <ShoppingCart className="h-4 w-4" aria-hidden />
           <span className="hidden sm:inline">{book.label}</span>
           {book.inProgress ? (
             <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-amber-400" aria-hidden />

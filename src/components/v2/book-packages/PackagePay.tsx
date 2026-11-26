@@ -3,13 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Coins, Check, Loader2, Truck, BookOpen } from "lucide-react";
 import { V2GuestGate } from "@/components/v2/auth/V2GuestGate";
-import { PackagePaySummary, PackageShippingChoice, usePackageShipping } from "@/components/v2/book-packages/PackageShipping";
+import { PackageLedger } from "@/components/v2/book-packages/PackageLedger";
+import { PackageShippingChoice, usePackageShipping } from "@/components/v2/book-packages/PackageShipping";
 import { WizardProgress } from "@/components/v2/book-packages/WizardProgress";
 import { BOOK_PACKAGES } from "@/content/marketing";
-import { isError } from "@/lib/api/client";
+import { confirmCreditTopUp, createCreditTopUpCheckout, isError } from "@/lib/api/client";
 import { buyPackageWithCredit, startPackageCheckout } from "@/lib/bookPackages/client";
 import { fillPackageCopy, packageTokens } from "@/lib/bookPackages/copy";
 import { trackPackagePurchasedOnce } from "@/lib/bookPackages/track";
+import {
+  clearPendingTopUpPurchase,
+  planPackagePayment,
+  readPendingTopUpPurchase,
+  savePendingTopUpPurchase,
+} from "@/lib/bookPackages/topUpPurchase";
 import {
   PACKAGE_CHOICE_KEY,
   PACKAGE_PRICE_CHANGED_CODE,
@@ -25,11 +32,11 @@ import { requestMigrationAfterSignup } from "@/lib/marketing/savePrompt";
 import { centsToValue, trackFormat } from "@/lib/marketing/events";
 import { BINDING_PHOTOS } from "@/lib/print/bookBindings";
 import { track } from "@/lib/track";
-import { cn } from "@/lib/cn";
 
-type Method = "credit" | "card";
-
-/** Step 2: what the package includes and does not, then pay once (wallet or card). */
+/**
+ * Step 2: what the package includes and does not, then one payment. Credit is always used first;
+ * a ledger shows each charge, what the credit pays and what is left for the card.
+ */
 export function PackagePay({
   pkg,
   signedIn,
@@ -43,6 +50,8 @@ export function PackagePay({
   onUnavailable,
   onReload,
   albumName,
+  topUpReturn,
+  onBalanceChanged,
 }: {
   pkg: BookPackage;
   signedIn: boolean;
@@ -59,28 +68,54 @@ export function PackagePay({
   onReload: () => void;
   /** Name for the album the package makes; the server's default ("My paperback") when absent. */
   albumName?: string;
+  /** Back from a paid card top-up made to finish this purchase: buy from credit now. */
+  topUpReturn: { sessionId: string } | null;
+  /** Reload the balance (after a top-up landed). */
+  onBalanceChanged: () => void;
 }) {
   const photo = BINDING_PHOTOS[pkg.bindingId];
   const tokens = packageTokens(pkg);
   const shipping = usePackageShipping(pkg.bindingId, signedIn);
   // Today's payment: the package, plus its book's shipping when the person pays that now.
   const totalCents = pkg.priceCents + shipping.shippingCents;
-  const covers = balanceCents != null && balanceCents >= totalCents;
-  const [method, setMethod] = useState<Method>(covers ? "credit" : "card");
+  const plan = planPackagePayment(totalCents, balanceCents);
   const [busy, setBusy] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceChanged, setPriceChanged] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const price = formatCredits(pkg.priceCents);
-  const totalPrice = formatCredits(totalCents);
   const shippingPaidNow = signedIn && shipping.mode === "now";
 
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
 
-  // The balance can change under us (it loads after the page does): never stay on credit it can't cover.
-  const effectiveMethod: Method = covers ? method : "card";
+  async function finishTopUp(sessionId: string) {
+    setBusy(true);
+    setFinishing(true);
+    const pending = readPendingTopUpPurchase(pkg.bindingId);
+    const confirmed = await confirmCreditTopUp(sessionId);
+    onBalanceChanged();
+    const stop = (message: string | null) => {
+      setBusy(false);
+      setFinishing(false);
+      setError(message);
+    };
+    if (isError(confirmed)) return stop(BOOK_PACKAGES.topUpConfirmFailed);
+    if (confirmed.data.status === "pending") return stop(BOOK_PACKAGES.topUpPending);
+    // Nothing remembered (another tab, too long ago): the money is in credit, pay from there.
+    if (!pending) return stop(BOOK_PACKAGES.topUpAddedRetry);
+    const res = await buyPackageWithCredit(pending);
+    clearPendingTopUpPurchase();
+    if (isError(res)) {
+      stop(null);
+      handleFailure(res.error.code, BOOK_PACKAGES.topUpAddedRetry);
+      return;
+    }
+    trackPackagePurchasedOnce(res.data, "credit_and_card");
+    onPaid(res.data);
+  }
 
   const next = `/studio/new?book=${pkg.bindingId}&step=pay`;
   function rememberChoice() {
@@ -109,14 +144,15 @@ export function PackagePay({
       ...(albumName ? { albumName } : {}),
       ...(shipping.input ? { shipping: shipping.input } : {}),
     };
+    const method = plan.route === "topup" ? "credit_and_card" : plan.route;
     track("package_pay_started", {
       format: trackFormat(pkg.bindingId),
       value: centsToValue(totalCents),
       currency: "USD",
-      method: effectiveMethod,
+      method,
     });
 
-    if (effectiveMethod === "credit") {
+    if (plan.route === "credit") {
       const res = await buyPackageWithCredit(base);
       if (isError(res)) {
         setBusy(false);
@@ -125,6 +161,23 @@ export function PackagePay({
       }
       trackPackagePurchasedOnce(res.data, "credit");
       onPaid(res.data);
+      return;
+    }
+
+    if (plan.route === "topup") {
+      // The card pays the rest into credit; coming back finishes the purchase from credit.
+      savePendingTopUpPurchase(base);
+      const res = await createCreditTopUpCheckout({
+        amountCents: plan.cardCents,
+        returnPath: `/studio/new?book=${pkg.bindingId}&step=pay`,
+      });
+      if (isError(res)) {
+        clearPendingTopUpPurchase();
+        setBusy(false);
+        setError(BOOK_PACKAGES.payFailed);
+        return;
+      }
+      window.location.assign(res.data.checkoutUrl);
       return;
     }
 
@@ -138,7 +191,7 @@ export function PackagePay({
     window.location.assign(res.data.checkoutUrl);
   }
 
-  function handleFailure(code: string | undefined) {
+  function handleFailure(code: string | undefined, fallback: string = BOOK_PACKAGES.payFailed) {
     if (code === PACKAGE_UNAVAILABLE_CODE) {
       onUnavailable();
     } else if (code === PACKAGE_PRICE_CHANGED_CODE) {
@@ -150,12 +203,22 @@ export function PackagePay({
     } else if (code === PACKAGE_SHIPPING_UNAVAILABLE_CODE) {
       setError(BOOK_PACKAGES.shippingQuoteFailed);
     } else if (code === "INSUFFICIENT_CREDITS") {
-      setMethod("card");
+      onBalanceChanged();
       setError(BOOK_PACKAGES.creditShort);
     } else {
-      setError(BOOK_PACKAGES.payFailed);
+      setError(fallback);
     }
   }
+
+  // Back from the card top-up: confirm it landed in credit, then buy the package from credit.
+  const finishStartedRef = useRef(false);
+  useEffect(() => {
+    if (!topUpReturn || finishStartedRef.current) return;
+    finishStartedRef.current = true;
+    void finishTopUp(topUpReturn.sessionId);
+    // Once, when the page opens from the top-up.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const included = BOOK_PACKAGES.includedLines
     .filter((_, i) => i !== 1 || pkg.editsPerPhoto > 0)
@@ -174,13 +237,15 @@ export function PackagePay({
       ? fillPackageCopy(BOOK_PACKAGES.notIncludedTouchUps, { editPrice: formatCredits(editPriceCents) })
       : null;
 
-  const buttonLabel = busy
-    ? effectiveMethod === "credit"
-      ? BOOK_PACKAGES.buttonPaying
-      : BOOK_PACKAGES.buttonOpening
-    : fillPackageCopy(effectiveMethod === "credit" ? BOOK_PACKAGES.buttonCredit : BOOK_PACKAGES.buttonCard, {
-        packagePrice: totalPrice,
-      });
+  const buttonLabel = finishing
+    ? BOOK_PACKAGES.buttonFinishing
+    : busy
+      ? plan.route === "credit"
+        ? BOOK_PACKAGES.buttonPaying
+        : BOOK_PACKAGES.buttonOpening
+      : plan.route === "credit"
+        ? fillPackageCopy(BOOK_PACKAGES.buttonCredit, { packagePrice: formatCredits(plan.totalCents) })
+        : fillPackageCopy(BOOK_PACKAGES.buttonCard, { packagePrice: formatCredits(plan.cardCents) });
 
   const payButton = (
     <>
@@ -194,11 +259,6 @@ export function PackagePay({
         {buttonLabel}
       </button>
       <p className="mt-2 text-center text-xs text-v2-muted">{BOOK_PACKAGES.underButton}</p>
-      {!covers && balanceCents != null && balanceCents > 0 ? (
-        <p className="mt-1 text-center text-xs text-v2-muted">
-          {fillPackageCopy(BOOK_PACKAGES.creditStays, { balance: formatCredits(balanceCents) })}
-        </p>
-      ) : null}
     </>
   );
 
@@ -279,49 +339,12 @@ export function PackagePay({
         {signedIn ? (
           <>
             <PackageShippingChoice state={shipping} disabled={busy} />
-            {shipping.quote ? <PackagePaySummary packageCents={pkg.priceCents} shippingCents={shipping.quote.shippingCents} /> : null}
-
-            {covers ? (
-              <fieldset className="mt-6">
-                <legend className="text-sm font-semibold text-v2-ink">{BOOK_PACKAGES.payHeading}</legend>
-                <div className="mt-2 space-y-2">
-                  {(
-                    [
-                      {
-                        id: "credit" as const,
-                        label: fillPackageCopy(BOOK_PACKAGES.payCredit, { balance: formatCredits(balanceCents ?? 0) }),
-                        sub: fillPackageCopy(BOOK_PACKAGES.payCreditSub, {
-                          balanceAfter: formatCredits((balanceCents ?? 0) - totalCents),
-                        }),
-                      },
-                      { id: "card" as const, label: BOOK_PACKAGES.payCard, sub: BOOK_PACKAGES.payCardSub },
-                    ] satisfies { id: Method; label: string | null; sub: string | null }[]
-                  ).map((opt) => (
-                    <label
-                      key={opt.id}
-                      className={cn(
-                        "flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border px-3 py-3",
-                        effectiveMethod === opt.id ? "border-v2-primary bg-v2-primary-light/40" : "border-gray-200 bg-white",
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="package-pay-method"
-                        value={opt.id}
-                        checked={effectiveMethod === opt.id}
-                        onChange={() => setMethod(opt.id)}
-                        disabled={busy}
-                        className="mt-1 h-4 w-4 accent-[var(--color-v2-primary,#6d28d9)]"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-v2-ink">{opt.label}</span>
-                        <span className="block text-xs text-v2-muted">{opt.sub}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            ) : null}
+            <PackageLedger
+              packageCents={pkg.priceCents}
+              shippingMode={shipping.mode}
+              quote={shipping.quote}
+              plan={plan}
+            />
 
             {priceChanged ? (
               <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="alert">

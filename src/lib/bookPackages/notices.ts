@@ -7,6 +7,7 @@ export type PackageEditNotice = {
   tone: "info" | "cost";
   text: string;
   buttonLabel?: string;
+  buttonShortLabel?: string;
   buttonAriaLabel?: string;
 };
 
@@ -43,6 +44,7 @@ export function packageEditNotice(
     tone: "cost",
     text: fillPackageCopy(includedPage ? BOOK_PACKAGES.editCostUsed : BOOK_PACKAGES.editCostExtraPage, tokens) ?? "",
     buttonLabel: fillPackageCopy(BOOK_PACKAGES.touchUpButton, tokens) ?? undefined,
+    buttonShortLabel: formatCredits(editPriceCents),
     buttonAriaLabel: `Send touch-up, ${formatCredits(editPriceCents)} from your credit`,
   };
 }
