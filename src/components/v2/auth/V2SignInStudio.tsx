@@ -10,6 +10,7 @@ import { V2AuthShell } from "@/components/v2/auth/V2AuthShell";
 import { V2PasswordField } from "@/components/v2/auth/V2PasswordField";
 import { SIGN_IN, PASSWORD_RESET } from "@/content/marketing";
 import { friendlySignInError } from "@/lib/auth/friendlyAuthError";
+import { firstAlbumDestination } from "@/lib/v2/firstAlbum";
 import { safeNextPath, withNextParam } from "@/lib/auth/nextPath";
 
 export function V2SignInStudio() {
@@ -46,7 +47,8 @@ export function V2SignInStudio() {
         setMessage(friendlySignInError(err));
         return;
       }
-      router.push(safeNextPath(next) ?? SIGNED_IN_HOME);
+      // First sign-in after confirming a new address: start by choosing the book, like sign-up does.
+      router.push(emailConfirmed ? await firstAlbumDestination(safeNext) : (safeNext ?? SIGNED_IN_HOME));
       router.refresh();
     } finally {
       setBusy(false);

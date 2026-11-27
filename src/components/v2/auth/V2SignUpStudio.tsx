@@ -14,6 +14,7 @@ import { V2PasswordField } from "@/components/v2/auth/V2PasswordField";
 import { ACCOUNT_CREDIT_LINE, SIGN_UP } from "@/content/marketing";
 import { friendlySignUpError, type FriendlySignUpError } from "@/lib/auth/friendlyAuthError";
 import { safeNextPath } from "@/lib/auth/nextPath";
+import { firstAlbumDestination } from "@/lib/v2/firstAlbum";
 import { fillCopy, formatFreeSheets } from "@/lib/marketing/copy";
 import { track } from "@/lib/track";
 
@@ -29,6 +30,8 @@ export function V2SignUpStudio({ welcomeFreeSheets }: { welcomeFreeSheets: numbe
   const [error, setError] = useState<FriendlySignUpError | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
+  // Where the new account goes once it has a session: usually the book choice (see firstAlbum.ts).
+  const [newAccountDestination, setNewAccountDestination] = useState<string | null>(null);
   const creditLine =
     welcomeFreeSheets != null ? fillCopy(ACCOUNT_CREDIT_LINE, { freeSheets: formatFreeSheets(welcomeFreeSheets) }) : null;
 
@@ -58,7 +61,7 @@ export function V2SignUpStudio({ welcomeFreeSheets }: { welcomeFreeSheets: numbe
   const signInHref =
     invite || next ? `/sign-in?next=${encodeURIComponent(destination)}` : "/sign-in";
   // After "Check your email": always back to the destination, so a guest's pages move into the account.
-  const confirmedSignInHref = `/sign-in?next=${encodeURIComponent(destination)}`;
+  const confirmedSignInHref = `/sign-in?next=${encodeURIComponent(newAccountDestination ?? destination)}`;
   const backToStudio = next?.startsWith("/studio") ? next : undefined;
   const invitedEmailMismatch =
     invite?.email != null && email.trim() !== "" && email.trim().toLowerCase() !== invite.email;
@@ -74,13 +77,16 @@ export function V2SignUpStudio({ welcomeFreeSheets }: { welcomeFreeSheets: numbe
       return;
     }
     track("sign_up", { method: "email" });
+    // An invite always goes to its album; otherwise a new account starts by choosing its book.
+    const afterSignUp = invite ? destination : await firstAlbumDestination(next);
+    setNewAccountDestination(afterSignUp);
     if (!hasSessionToken()) {
       // The address has to be confirmed before there is a session.
       setBusy(false);
       setNeedsEmailConfirm(true);
       return;
     }
-    router.push(destination);
+    router.push(afterSignUp);
     router.refresh();
   }
 
