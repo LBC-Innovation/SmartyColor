@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, CircleHelp, CircleUser, Gift, KeyRound, Loader2, LogOut, Package, ReceiptText, Shield, User, UserPen } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleHelp, CircleUser, Gift, KeyRound, Loader2, LogOut, Package, ReceiptText, Shield, User, UserPen } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useV2WelcomeGuide } from "@/components/v2/onboarding/V2WelcomeGuide";
 import * as api from "@/lib/api/client";
@@ -17,7 +17,19 @@ import { useV2Toast } from "@/components/v2/V2Toast";
 type OpenModal = "profile" | "password" | null;
 
 const ITEM_CLASS =
-  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle hover:text-v2-ink";
+  "flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left text-sm font-semibold text-v2-navy transition hover:bg-v2-bg-subtle hover:text-v2-ink";
+
+const ICON_CLASS = "h-4 w-4 shrink-0 text-v2-muted";
+
+/** A labelled group of rows in the account menu. */
+function MenuSection({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className={cn("border-b border-gray-100 px-2 py-2.5 last:border-b-0", className)}>
+      <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-v2-muted">{label}</p>
+      {children}
+    </div>
+  );
+}
 
 /**
  * Guests: a plain Sign in link on desktop. On phones, where the studio can hide the bottom tab
@@ -144,6 +156,8 @@ export function V2UserMenu() {
   // The admin overview, for any account that may open at least one admin page.
   const adminHref = ADMIN_PERMISSIONS.some((p) => user.permissions.includes(p)) ? "/admin" : null;
 
+  const close = () => setOpen(false);
+
   function pick(next: OpenModal) {
     setOpen(false);
     setModal(next);
@@ -178,133 +192,102 @@ export function V2UserMenu() {
           id={menuId}
           role="menu"
           aria-label="Account"
-          className="absolute right-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-xl border border-gray-200 bg-v2-surface shadow-[0_12px_32px_rgb(10_16_26/0.14)]"
+          className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-v2-surface shadow-[0_12px_32px_rgb(10_16_26/0.14)]"
         >
-          <div className="border-b border-gray-200 px-3.5 py-3">
-            <p className="truncate text-sm font-semibold text-v2-ink">{name}</p>
-            <p className="truncate text-xs text-v2-muted">{user.email}</p>
-</div>
+          <div className="flex items-center gap-3 border-b border-gray-200 px-4 py-4">
+            <V2UserAvatar name={name} src={user.avatarUrl} size={40} shape="circle" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-v2-ink">{name}</p>
+              <p className="truncate text-xs text-v2-muted">{user.email}</p>
+            </div>
+          </div>
 
-          <div className="p-1">
-            {phoneTabs.map((tab) => (
-              <Link
-                key={tab.id}
-                href={tab.href!}
-                role="menuitem"
-                className={cn(ITEM_CLASS, "lg:hidden")}
-                onClick={() => setOpen(false)}
-              >
-                <tab.icon className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
-                {tab.label}
+          <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto">
+            {phoneTabs.length > 0 ? (
+              <MenuSection label="Go to" className="lg:hidden">
+                {phoneTabs.map((tab) => (
+                  <Link key={tab.id} href={tab.href!} role="menuitem" className={ITEM_CLASS} onClick={close}>
+                    <tab.icon className={ICON_CLASS} aria-hidden />
+                    {tab.label}
+                  </Link>
+                ))}
+              </MenuSection>
+            ) : null}
+
+            <MenuSection label="Orders & payments">
+              <Link href="/orders" role="menuitem" className={ITEM_CLASS} onClick={close}>
+                <Package className={ICON_CLASS} aria-hidden />
+                My orders
               </Link>
-            ))}
-            <Link
-              href="/account"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => setOpen(false)}
-            >
-              <CircleUser className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
-              Account
-            </Link>
-            <Link
-              href="/orders"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => setOpen(false)}
-            >
-              <Package className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
-              My orders
-            </Link>
-            <Link
-              href="/share"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => setOpen(false)}
-            >
-              <Gift className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
-              Share with a friend
-            </Link>
-            <button
-              type="button"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => pick("profile")}
-            >
-              <UserPen className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
-              Edit profile
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => pick("password")}
-            >
-              <KeyRound
-                className="h-4 w-4 shrink-0 text-v2-muted"
-                aria-hidden
-              />
-              Change password
-            </button>
-            <Link
-              href="/activity"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => setOpen(false)}
-            >
-              <ReceiptText
-                className="h-4 w-4 shrink-0 text-v2-muted"
-                aria-hidden
-              />
-              Transaction history
-            </Link>
-            {adminHref ? (
-              <Link
-                href={adminHref}
+              <Link href="/activity" role="menuitem" className={ITEM_CLASS} onClick={close}>
+                <ReceiptText className={ICON_CLASS} aria-hidden />
+                Transaction history
+              </Link>
+              <Link href="/share" role="menuitem" className={ITEM_CLASS} onClick={close}>
+                <Gift className={ICON_CLASS} aria-hidden />
+                Share with a friend
+              </Link>
+            </MenuSection>
+
+            <MenuSection label="Account settings">
+              <Link href="/account" role="menuitem" className={ITEM_CLASS} onClick={close}>
+                <CircleUser className={ICON_CLASS} aria-hidden />
+                Account
+              </Link>
+              <button type="button" role="menuitem" className={ITEM_CLASS} onClick={() => pick("profile")}>
+                <UserPen className={ICON_CLASS} aria-hidden />
+                Edit profile
+              </button>
+              <button type="button" role="menuitem" className={ITEM_CLASS} onClick={() => pick("password")}>
+                <KeyRound className={ICON_CLASS} aria-hidden />
+                Change password
+              </button>
+            </MenuSection>
+
+            <MenuSection label="Help">
+              <button
+                type="button"
                 role="menuitem"
                 className={ITEM_CLASS}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  close();
+                  welcomeGuide.open();
+                }}
               >
-                <Shield
-                  className="h-4 w-4 shrink-0 text-v2-muted"
-                  aria-hidden
-                />
-                Admin
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              className={ITEM_CLASS}
-              onClick={() => {
-                setOpen(false);
-                welcomeGuide.open();
-              }}
-            >
-              <CircleHelp className="h-4 w-4 shrink-0 text-v2-muted" aria-hidden />
-              Welcome guide
-            </button>
+                <CircleHelp className={ICON_CLASS} aria-hidden />
+                Welcome guide
+              </button>
+            </MenuSection>
           </div>
 
-          <hr className="border-gray-200" />
+          <button
+            type="button"
+            role="menuitem"
+            className="flex w-full items-center gap-3 rounded-none border-t border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100 hover:text-red-800"
+            onClick={() => {
+              close();
+              void signOut().then(() => router.replace("/"));
+            }}
+          >
+            <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+            Sign out
+          </button>
 
-          <div className="p-1">
-            <button
-              type="button"
+          {adminHref ? (
+            <Link
+              href={adminHref}
               role="menuitem"
-              className={cn(
-                ITEM_CLASS,
-                "text-red-700 hover:bg-red-50 hover:text-red-800",
-              )}
-              onClick={() => {
-                setOpen(false);
-                void signOut().then(() => router.replace("/"));
-              }}
+              onClick={close}
+              className="group flex w-full items-center gap-3 rounded-none bg-v2-primary px-4 py-3.5 text-left text-white transition hover:bg-v2-primary-dark"
             >
-              <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-              Sign out
-            </button>
-          </div>
+              <Shield className="h-5 w-5 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">Admin</span>
+                <span className="block truncate text-xs text-white/80">Orders, users and settings</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-white/80 transition group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
