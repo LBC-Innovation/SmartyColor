@@ -710,6 +710,14 @@ export function adminUserAlbums(userId: string): Promise<ApiResult<AdminUserAlbu
   return request<AdminUserAlbums>(`/admin/users/${userId}/albums`);
 }
 
+/** Includes a page in its album's pre-paid book, or takes it out. */
+export function adminSetPackagePage(
+  photoId: string,
+  include: boolean,
+): Promise<ApiResult<{ included: boolean; changed: boolean }>> {
+  return request(`/admin/package-pages/${photoId}`, { method: "PUT", body: JSON.stringify({ include }) });
+}
+
 export function adminUserHistory(userId: string): Promise<ApiResult<UserHistory>> {
   return request<UserHistory>(`/admin/users/${userId}/history`);
 }

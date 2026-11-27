@@ -1,18 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, ChevronRight, Copy, Images, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  BookOpen,
+  Check,
+  ChevronRight,
+  Copy,
+  Images,
+  Loader2,
+} from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import type { AdminUser } from "@/lib/api/types";
 import type {
   AdminAlbum,
   AdminAlbumPhoto,
+  AdminAlbumPrepaid,
+  AdminBookPageStatus,
   AdminUserAlbums,
 } from "@/lib/admin/userAlbums";
+import { PURCHASE_CODES_PERMISSION } from "@/lib/purchaseCodes/permissions";
 import * as api from "@/lib/api/client";
 import { EmptyState, StatusPill } from "@/components/v2/admin/ui";
 import {
   count,
   fullDateTime,
+  money,
   relativeTime,
   shortDate,
 } from "@/components/v2/admin/format";
@@ -61,10 +73,81 @@ function showing(photo: AdminAlbumPhoto): {
   return { label: "Original photo", tone: "neutral" };
 }
 
+const BOOK_PAGE: Record<
+  AdminBookPageStatus,
+  {
+    label: string;
+    tone: "good" | "neutral" | "warn" | "info" | "progress";
+    title: string;
+    included: boolean;
+  }
+> = {
+  included: {
+    label: "Included",
+    tone: "good",
+    included: true,
+    title: "The package paid for this page.",
+  },
+  brought_in: {
+    label: "Included",
+    tone: "good",
+    included: true,
+    title: "Included. The page came into the album already made.",
+  },
+  granted: {
+    label: "Granted",
+    tone: "progress",
+    included: true,
+    title: "Included because an admin chose it.",
+  },
+  extra_paid: {
+    label: "Extra · paid",
+    tone: "info",
+    included: false,
+    title: "Outside the package, paid from the wallet.",
+  },
+  extra: {
+    label: "Extra",
+    tone: "warn",
+    included: false,
+    title:
+      "Outside the package and not paid for; the book order charges for it.",
+  },
+  no_page: {
+    label: "No page",
+    tone: "neutral",
+    included: false,
+    title: "No coloring page yet.",
+  },
+};
+
+/** Whether an admin can still change which pages this book includes. */
+function editable(prepaid: AdminAlbumPrepaid | null): boolean {
+  return !!prepaid && prepaid.status === "active" && !prepaid.bookOrderId;
+}
+
+function prepaidName(prepaid: AdminAlbumPrepaid): string {
+  return prepaid.source === "package" ? "Pre-paid book" : "Gift book code";
+}
+
+function prepaidState(prepaid: AdminAlbumPrepaid): {
+  label: string;
+  tone: "good" | "info" | "neutral" | "bad";
+} {
+  if (prepaid.refundedAt)
+    return { label: "Canceled, refunded", tone: "neutral" };
+  if (prepaid.status === "void") return { label: "Void", tone: "neutral" };
+  if (prepaid.bookOrderId) return { label: "Book ordered", tone: "info" };
+  return { label: "Not ordered yet", tone: "good" };
+}
+
 /** Every album the customer owns or was invited to, with photo and page counts and each photo's details. */
 export function CustomerAlbumsTab({ user }: { user: AdminUser }) {
   const [data, setData] = useState<AdminUserAlbums | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { user: me } = useAuth();
+  const canEditBook =
+    me?.permissions.includes(PURCHASE_CODES_PERMISSION) ?? false;
 
   useEffect(() => {
     let alive = true;
@@ -76,6 +159,11 @@ export function CustomerAlbumsTab({ user }: { user: AdminUser }) {
     return () => {
       alive = false;
     };
+  }, [user.id]);
+
+  const reload = useCallback(async () => {
+    const r = await api.adminUserAlbums(user.id);
+    if (!api.isError(r)) setData(r.data);
   }, [user.id]);
 
   if (error) {
@@ -114,7 +202,12 @@ export function CustomerAlbumsTab({ user }: { user: AdminUser }) {
       </p>
       <ul className="space-y-2">
         {data.albums.map((album) => (
-          <AlbumCard key={album.id} album={album} />
+          <AlbumCard
+            key={album.id}
+            album={album}
+            canEditBook={canEditBook}
+            onChanged={reload}
+          />
         ))}
       </ul>
       <p className="text-xs text-v2-muted">
@@ -125,8 +218,34 @@ export function CustomerAlbumsTab({ user }: { user: AdminUser }) {
   );
 }
 
-function AlbumCard({ album }: { album: AdminAlbum }) {
+function AlbumCard({
+  album,
+  canEditBook,
+  onChanged,
+}: {
+  album: AdminAlbum;
+  canEditBook: boolean;
+  onChanged: () => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
+  const prepaid = album.prepaid;
+  const canToggle = canEditBook && editable(prepaid);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
+  async function toggle(photo: AdminAlbumPhoto, include: boolean) {
+    setBusyId(photo.id);
+    setToggleError(null);
+    const r = await api.adminSetPackagePage(photo.id, include);
+    if (api.isError(r)) setToggleError(r.error.message);
+    else await onChanged();
+    setBusyId(null);
+  }
+
+  const extras = album.photos.filter((p) => p.bookPage === "extra").length;
+  const paidExtras = album.photos.filter(
+    (p) => p.bookPage === "extra_paid",
+  ).length;
   const withPage = album.photos.filter((p) => p.sheetCount > 0).length;
   const missing = album.photos.filter(
     (p) => p.activeVersionKind === "missing",
@@ -160,6 +279,14 @@ function AlbumCard({ album }: { album: AdminAlbum }) {
                     : `Invited (${album.shareStatus ?? "unknown"})`}
                 </StatusPill>
               ) : null}
+              {prepaid ? (
+                <StatusPill
+                  tone={prepaid.status === "active" ? "progress" : "neutral"}
+                  icon={BookOpen}
+                >
+                  {prepaidName(prepaid)}
+                </StatusPill>
+              ) : null}
               {missing > 0 ? (
                 <StatusPill tone="bad">
                   {plural(missing, "broken photo")}
@@ -173,6 +300,15 @@ function AlbumCard({ album }: { album: AdminAlbum }) {
                 ? ` · ${count(album.photos.length - withPage)} without`
                 : ""}
             </span>
+            {prepaid ? (
+              <span className="mt-0.5 block text-sm text-v2-ink">
+                Book includes {count(prepaid.includedNow)} of{" "}
+                {plural(prepaid.includedPages, "page")}
+                {extras + paidExtras > 0
+                  ? ` · ${count(extras + paidExtras)} extra`
+                  : ""}
+              </span>
+            ) : null}
             <span className="mt-0.5 block text-xs text-v2-muted">
               Created{" "}
               <time title={fullDateTime(album.createdAt)}>
@@ -216,6 +352,19 @@ function AlbumCard({ album }: { album: AdminAlbum }) {
               </dd>
             </div>
           </dl>
+          {prepaid ? (
+            <PrepaidSummary
+              prepaid={prepaid}
+              extras={extras}
+              paidExtras={paidExtras}
+              canEdit={canEditBook}
+            />
+          ) : null}
+          {toggleError ? (
+            <p className="mb-2 text-sm text-red-700" role="alert">
+              {toggleError}
+            </p>
+          ) : null}
           {album.photos.length === 0 ? (
             <p className="text-sm text-v2-muted">No photos in this album.</p>
           ) : (
@@ -249,6 +398,15 @@ function AlbumCard({ album }: { album: AdminAlbum }) {
                     <th scope="col" className="px-2 text-left font-semibold">
                       Added
                     </th>
+                    {prepaid ? (
+                      <th
+                        scope="col"
+                        className="px-2 text-left font-semibold"
+                        title="Whether the pre-paid book pays for this page"
+                      >
+                        In book
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -304,6 +462,19 @@ function AlbumCard({ album }: { album: AdminAlbum }) {
                             {shortDate(photo.createdAt)}
                           </time>
                         </td>
+                        {prepaid ? (
+                          <td className="whitespace-nowrap px-2 py-1.5">
+                            <BookPageCell
+                              photo={photo}
+                              canToggle={canToggle}
+                              busy={busyId === photo.id}
+                              disabled={busyId !== null}
+                              onToggle={(include) =>
+                                void toggle(photo, include)
+                              }
+                            />
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}
@@ -314,5 +485,124 @@ function AlbumCard({ album }: { album: AdminAlbum }) {
         </div>
       ) : null}
     </li>
+  );
+}
+
+function PrepaidSummary({
+  prepaid,
+  extras,
+  paidExtras,
+  canEdit,
+}: {
+  prepaid: AdminAlbumPrepaid;
+  extras: number;
+  paidExtras: number;
+  canEdit: boolean;
+}) {
+  const state = prepaidState(prepaid);
+  const orphaned = Math.max(prepaid.pagesUsed - prepaid.includedNow, 0);
+  const open = Math.max(prepaid.includedPages - prepaid.includedNow, 0);
+  return (
+    <div className="mb-3 rounded-lg border border-v2-primary-light bg-v2-bg-subtle px-3 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-v2-ink">
+          {prepaidName(prepaid)}
+        </span>
+        <StatusPill tone={state.tone}>{state.label}</StatusPill>
+        <CopyId id={prepaid.codeId} />
+        <span className="font-mono text-v2-muted">{prepaid.code}</span>
+      </div>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+        <div>
+          <dt className="text-v2-muted">Book</dt>
+          <dd className="text-v2-ink">
+            {prepaid.bindingLabel}, {plural(prepaid.includedPages, "page")}
+            {prepaid.grantedExtra > 0
+              ? ` (${count(prepaid.grantedExtra)} granted)`
+              : ""}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-v2-muted">Paid</dt>
+          <dd className="text-v2-ink">
+            {prepaid.priceCents != null
+              ? `${money(prepaid.priceCents)}${prepaid.paidWith === "card" ? " by card" : prepaid.paidWith === "credit" ? " from wallet" : ""}`
+              : "Gift"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-v2-muted">Included now</dt>
+          <dd className="text-v2-ink">
+            {count(prepaid.includedNow)} of {count(prepaid.includedPages)}
+            {open > 0 ? ` · ${count(open)} open` : ""}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-v2-muted">Extra pages</dt>
+          <dd className="text-v2-ink">
+            {count(extras)} not paid
+            {paidExtras > 0 ? ` · ${count(paidExtras)} paid` : ""}
+          </dd>
+        </div>
+      </dl>
+      {orphaned > 0 && prepaid.pagesUsed >= prepaid.includedPages ? (
+        <p className="mt-2 text-amber-800">
+          The package counts {count(prepaid.pagesUsed)} slots as used, but only{" "}
+          {count(prepaid.includedNow)} of those photos are still in the album.
+          The customer can&apos;t claim more, but you can include pages here:
+          they fill the open slots first.
+        </p>
+      ) : null}
+      {canEdit && editable(prepaid) ? (
+        <p className="mt-2 text-v2-muted">
+          Tick a page to include it. It fills an open slot, or adds a page to
+          the book when all {count(prepaid.includedPages)} are taken. Nothing is
+          charged, and refunds don&apos;t count it.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function BookPageCell({
+  photo,
+  canToggle,
+  busy,
+  disabled,
+  onToggle,
+}: {
+  photo: AdminAlbumPhoto;
+  canToggle: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onToggle: (include: boolean) => void;
+}) {
+  const status = photo.bookPage ?? "no_page";
+  const meta = BOOK_PAGE[status];
+  return (
+    <span className="flex items-center gap-2">
+      {canToggle ? (
+        busy ? (
+          <Loader2 className="h-4 w-4 animate-spin text-v2-muted" aria-hidden />
+        ) : (
+          <input
+            type="checkbox"
+            className="h-4 w-4 cursor-pointer accent-v2-primary disabled:cursor-not-allowed"
+            checked={meta.included}
+            disabled={disabled}
+            aria-label={`Include ${photo.fileName ?? "this page"} in the pre-paid book`}
+            title={
+              meta.included
+                ? "Take this page out of the pre-paid book"
+                : "Include this page in the pre-paid book"
+            }
+            onChange={(e) => onToggle(e.target.checked)}
+          />
+        )
+      ) : null}
+      <span title={meta.title}>
+        <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
+      </span>
+    </span>
   );
 }
