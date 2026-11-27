@@ -2,7 +2,7 @@
 
 import { ShieldCheck, Wallet } from "lucide-react";
 import { V2Modal } from "@/components/v2/ui/V2Modal";
-import { V2AddCreditForm } from "@/components/v2/credits/V2AddCreditForm";
+import { MIN_ADD_CREDIT_CENTS, V2AddCreditForm } from "@/components/v2/credits/V2AddCreditForm";
 import { useAuth } from "@/context/AuthContext";
 import { formatCredits } from "@/lib/credits/money";
 
@@ -33,7 +33,11 @@ export function V2AddCreditModal({ onClose, returnPath, shortfallCents, shortfal
       description={
         <>
             {shortfallCents && shortfallCents > 0
-              ? `${balance > 0 ? `Your wallet balance covers ${formatCredits(balance)}. ` : ""}Add ${formatCredits(shortfallCents)} for ${shortfallFor}, or add more for later.`
+              ? `${balance > 0 ? `Your wallet balance covers ${formatCredits(balance)}. ` : ""}${
+                  shortfallCents < MIN_ADD_CREDIT_CENTS
+                    ? `You need ${formatCredits(shortfallCents)} for ${shortfallFor}. The smallest top-up is ${formatCredits(MIN_ADD_CREDIT_CENTS)}, and the rest stays in your wallet for later.`
+                    : `Add ${formatCredits(shortfallCents)} for ${shortfallFor}, or add more for later.`
+                }`
               : (
                 <>
                   Balance{" "}

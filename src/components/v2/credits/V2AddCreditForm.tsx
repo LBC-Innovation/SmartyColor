@@ -7,7 +7,13 @@ import { formatCredits } from "@/lib/credits/money";
 import { cn } from "@/lib/cn";
 
 export const QUICK_AMOUNTS_CENTS = [5_00, 10_00, 20_00, 50_00, 100_00];
-const MIN_CENTS = 50;
+/**
+ * Smallest amount this form will charge. Stripe accepts $0.50, but a string of
+ * tiny charges from a new merchant looks like card testing to banks, and they
+ * start declining the card (seen in production). One $5 top-up covers 50 pages.
+ */
+export const MIN_ADD_CREDIT_CENTS = 5_00;
+const MIN_CENTS = MIN_ADD_CREDIT_CENTS;
 const MAX_CENTS = 500_00;
 
 export function roundUpToQuickAmount(cents: number): number {
@@ -32,9 +38,12 @@ type Props = {
 
 /** Amount picker (quick amounts or a typed amount) that hands off to Stripe Checkout. */
 export function V2AddCreditForm({ returnPath, suggestedCents, compact }: Props) {
-  const hasSuggestion = Boolean(suggestedCents && suggestedCents > 0);
-  const exact = hasSuggestion ? Math.max(suggestedCents as number, MIN_CENTS) : 0;
-  const suggested = hasSuggestion ? roundUpToQuickAmount(suggestedCents as number) : 10_00;
+  // "Just what you need" only when the shortfall is at least the minimum; below
+  // that the smallest quick amount ($5) is pre-selected instead.
+  const hasSuggestion = Boolean(suggestedCents && suggestedCents >= MIN_CENTS);
+  const exact = hasSuggestion ? (suggestedCents as number) : 0;
+  const suggested =
+    suggestedCents && suggestedCents > 0 ? roundUpToQuickAmount(suggestedCents) : 10_00;
   const suggestedIsQuick = QUICK_AMOUNTS_CENTS.includes(suggested);
 
   const [mode, setMode] = useState<"exact" | "quick" | "other">(
