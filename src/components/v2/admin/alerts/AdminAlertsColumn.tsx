@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { AlertOctagon, AlertTriangle, Check, CheckCircle2, RefreshCw } from "lucide-react";
-import { useAdminAlerts } from "@/components/v2/admin/AdminShell";
+import { AlertOctagon, AlertTriangle, Bell, Check, CheckCircle2, PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
+import { useAdminAlerts, useAdminPaneCollapsed } from "@/components/v2/admin/AdminShell";
 import { relativeTime } from "@/components/v2/admin/format";
 import { SOURCE_LABEL, type AdminAlert } from "@/components/v2/admin/alerts/adminAlerts";
 import { cn } from "@/lib/cn";
@@ -62,7 +62,7 @@ function AlertRow({ alert, selected, onRead }: { alert: AdminAlert; selected: bo
   );
 }
 
-function ColumnBody() {
+function ColumnBody({ onCollapse }: { onCollapse: () => void }) {
   const { unread, alerts, loading, errors, markRead, refreshAlerts } = useAdminAlerts();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -86,6 +86,16 @@ function ColumnBody() {
           title="Check for new alerts"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin motion-reduce:animate-none")} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-expanded
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-v2-muted hover:bg-white hover:text-v2-ink"
+          aria-label="Collapse alerts"
+          title="Collapse alerts"
+        >
+          <PanelLeftClose className="h-4 w-4" aria-hidden />
         </button>
       </div>
 
@@ -130,13 +140,57 @@ function ColumnBody() {
   );
 }
 
-/** The unread alerts, between the admin nav and the page, on wide screens. */
-export function AdminAlertsColumn() {
+/** The collapsed column: a thin rail with the unread count; clicking anywhere on it opens the column again. */
+function AlertsRail({ onExpand }: { onExpand: () => void }) {
+  const { unread } = useAdminAlerts();
+  const critical = unread.some((a) => a.tone === "critical");
+  const n = unread.length;
   return (
-    <aside aria-label="Alerts" className="hidden w-80 shrink-0 flex-col border-r border-gray-200 bg-v2-bg-subtle xl:flex">
-      <Suspense fallback={null}>
-        <ColumnBody />
-      </Suspense>
+    <button
+      type="button"
+      onClick={onExpand}
+      aria-expanded={false}
+      aria-label={n ? `Expand alerts, ${n} unread` : "Expand alerts"}
+      title="Expand alerts"
+      className="group flex flex-1 flex-col items-center gap-3 pt-5 text-v2-muted hover:bg-white/60 hover:text-v2-ink"
+    >
+      <span className="inline-flex h-8 w-8 items-center justify-center rounded-md group-hover:bg-white">
+        <PanelLeftOpen className="h-4 w-4" aria-hidden />
+      </span>
+      <span className="relative inline-flex h-8 w-8 items-center justify-center">
+        <Bell className="h-4 w-4" aria-hidden />
+        {n ? (
+          <span
+            className={cn(
+              "absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums text-white",
+              critical ? "bg-red-600" : "bg-amber-500",
+            )}
+            aria-hidden
+          >
+            {n}
+          </span>
+        ) : null}
+      </span>
+      <span className="text-[11px] font-semibold uppercase tracking-wider [writing-mode:vertical-rl]">Alerts</span>
+    </button>
+  );
+}
+
+/** The unread alerts, between the admin nav and the page, on wide screens. Collapses to a rail. */
+export function AdminAlertsColumn() {
+  const [collapsed, setCollapsed] = useAdminPaneCollapsed("alerts");
+  return (
+    <aside
+      aria-label="Alerts"
+      className={cn("hidden shrink-0 flex-col border-r border-gray-200 bg-v2-bg-subtle xl:flex", collapsed ? "w-12" : "w-80")}
+    >
+      {collapsed ? (
+        <AlertsRail onExpand={() => setCollapsed(false)} />
+      ) : (
+        <Suspense fallback={null}>
+          <ColumnBody onCollapse={() => setCollapsed(true)} />
+        </Suspense>
+      )}
     </aside>
   );
 }

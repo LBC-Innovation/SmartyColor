@@ -197,17 +197,23 @@ export function KpiTile({
   const body = (
     <>
       <p className="text-sm font-medium text-v2-muted">{label}</p>
-      <div className="mt-1 flex items-end justify-between gap-3">
-        <p className={cn("text-[1.75rem] font-semibold leading-tight tabular-nums", tone === "bad" ? "text-red-700" : "text-v2-ink")}>
+      {/* A narrow tile (both side columns open, phones) drops the sparkline under the number instead of overflowing. */}
+      <div className="mt-1 flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
+        <p
+          className={cn(
+            "min-w-0 whitespace-nowrap text-[1.75rem] font-semibold leading-tight tabular-nums",
+            tone === "bad" ? "text-red-700" : "text-v2-ink",
+          )}
+        >
           {value}
         </p>
         {trend ? <Sparkline values={trend} tone={good === false ? "bad" : "default"} /> : null}
       </div>
       {delta ? (
-        <p className="mt-1 flex items-center gap-1 text-xs tabular-nums text-v2-muted">
+        <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs tabular-nums text-v2-muted">
           <span
             className={cn(
-              "inline-flex items-center gap-0.5 font-semibold",
+              "inline-flex items-center gap-0.5 whitespace-nowrap font-semibold",
               good === true && "text-emerald-700",
               good === false && "text-red-700",
             )}
@@ -223,12 +229,12 @@ export function KpiTile({
   );
   if (href) {
     return (
-      <Link href={href} className="v2-panel block p-5 transition hover:border-v2-primary/40">
+      <Link href={href} className="v2-panel block min-w-0 p-5 transition hover:border-v2-primary/40">
         {body}
       </Link>
     );
   }
-  return <div className="v2-panel p-5">{body}</div>;
+  return <div className="v2-panel min-w-0 p-5">{body}</div>;
 }
 
 export function KpiGrid({ children }: { children: ReactNode }) {

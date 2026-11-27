@@ -11,9 +11,10 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { ArrowLeft, Bell } from "lucide-react";
+import { ArrowLeft, Bell, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { V2StudioFrame } from "@/components/v2/V2Chrome";
 import { canOpenAdminItem, isV2NavItemActive, SIGNED_IN_HOME, v2AdminNav, type V2AdminNavItem } from "@/components/v2/nav-config";
 import { AdminAlertsColumn } from "@/components/v2/admin/alerts/AdminAlertsColumn";
@@ -261,6 +262,56 @@ function useLoadAlerts(permissions: readonly string[]): AdminAlertsState {
   };
 }
 
+// --- Collapsible columns ------------------------------------------------------------------------
+
+export type AdminPane = "nav" | "alerts";
+
+/** Which side columns this admin shrank to rails; a per-browser convenience. */
+const COLLAPSED_KEY = "cm_admin_collapsed_panes";
+const paneListeners = new Set<() => void>();
+
+function readCollapsed(): string {
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function subscribeCollapsed(listener: () => void) {
+  paneListeners.add(listener);
+  const onStorage = (e: StorageEvent) => e.key === COLLAPSED_KEY && listener();
+  window.addEventListener("storage", onStorage);
+  return () => {
+    paneListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** Rail state for one side column. Server render and hydration show it open, then the saved choice applies. */
+export function useAdminPaneCollapsed(pane: AdminPane): [boolean, (collapsed: boolean) => void] {
+  const raw = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => "");
+  const collapsed = raw.split(",").includes(pane);
+  const setCollapsed = useCallback(
+    (next: boolean) => {
+      const panes = new Set(readCollapsed().split(",").filter(Boolean));
+      if (next) panes.add(pane);
+      else panes.delete(pane);
+      try {
+        window.localStorage.setItem(COLLAPSED_KEY, [...panes].join(","));
+      } catch {
+        // Storage blocked: the toggle just won't be remembered.
+      }
+      paneListeners.forEach((l) => l());
+    },
+    [pane],
+  );
+  return [collapsed, setCollapsed];
+}
+
+const RAIL_BADGE =
+  "absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold tabular-nums text-white";
+
 // --- Navigation ---------------------------------------------------------------------------------
 
 const GROUP_LABEL: Record<V2AdminNavItem["group"], string | null> = {
@@ -270,12 +321,16 @@ const GROUP_LABEL: Record<V2AdminNavItem["group"], string | null> = {
   grow: "Growth",
 };
 
-function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlertsState }) {
+function NavBadge({ item, alerts, rail }: { item: V2AdminNavItem; alerts: AdminAlertsState; rail?: boolean }) {
   if (item.id === "orders" && alerts.ordersNeedingAttention) {
     const n = alerts.ordersNeedingAttention;
     return (
       <span
-        className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums text-white"
+        className={cn(
+          rail
+            ? RAIL_BADGE
+            : "ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums text-white",
+        )}
         aria-label={`${n} order${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} attention`}
       >
         {n}
@@ -283,12 +338,18 @@ function NavBadge({ item, alerts }: { item: V2AdminNavItem; alerts: AdminAlertsS
     );
   }
   if (item.id === "vision-costs" && alerts.aiProblem) {
-    return <span className="ml-auto h-2.5 w-2.5 rounded-full bg-red-600" role="img" aria-label="Image service problem in the last day" />;
+    return (
+      <span
+        className={cn("h-2.5 w-2.5 rounded-full bg-red-600", rail ? "absolute right-2 top-2" : "ml-auto")}
+        role="img"
+        aria-label="Image service problem in the last day"
+      />
+    );
   }
   return null;
 }
 
-function AlertsNavLink({ alerts, className }: { alerts: AdminAlertsState; className?: string }) {
+function AlertsNavLink({ alerts, className, rail }: { alerts: AdminAlertsState; className?: string; rail?: boolean }) {
   const pathname = usePathname();
   const active = pathname === "/admin/alerts";
   const n = alerts.unread.length;
@@ -296,17 +357,22 @@ function AlertsNavLink({ alerts, className }: { alerts: AdminAlertsState; classN
     <Link
       href="/admin/alerts"
       aria-current={active ? "page" : undefined}
+      title={rail ? "Alerts" : undefined}
       className={cn(
-        "items-center gap-3 text-sm font-semibold transition-colors",
+        "relative items-center gap-3 text-sm font-semibold transition-colors",
         active ? "bg-v2-primary-light text-v2-primary" : "text-v2-navy hover:bg-v2-bg-subtle hover:text-v2-ink",
         className,
       )}
     >
       <Bell className="h-4 w-4 shrink-0" aria-hidden />
-      Alerts
+      <span className={rail ? "sr-only" : undefined}>Alerts</span>
       {n ? (
         <span
-          className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums text-white"
+          className={cn(
+            rail
+              ? RAIL_BADGE
+              : "ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums text-white",
+          )}
           aria-label={`${n} unread alert${n === 1 ? "" : "s"}`}
         >
           {n}
@@ -318,17 +384,56 @@ function AlertsNavLink({ alerts, className }: { alerts: AdminAlertsState; classN
 
 function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: AdminAlertsState }) {
   const pathname = usePathname();
+  const [rail, setRail] = useAdminPaneCollapsed("nav");
   const groups = (["overview", "operate", "grow", "money"] as const)
     .map((g) => ({ id: g, items: items.filter((i) => i.group === g) }))
     .filter((g) => g.items.length > 0);
+  const linkClass = (active: boolean) =>
+    cn(
+      "relative flex h-10 items-center rounded-lg text-sm font-semibold transition-colors",
+      rail ? "w-10 justify-center" : "gap-3 px-3",
+      active ? "bg-v2-primary-light text-v2-primary" : "text-v2-navy hover:bg-v2-bg-subtle hover:text-v2-ink",
+    );
+  const ToggleIcon = rail ? PanelLeftOpen : PanelLeftClose;
   return (
-    <nav aria-label="Admin" className="hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white px-3 py-5 lg:flex">
-      <p className="v2-section-title mb-2 px-3">Admin</p>
+    <nav
+      aria-label="Admin"
+      className={cn(
+        "hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white py-5 lg:flex",
+        rail ? "w-16 items-center px-3" : "w-60 px-3",
+      )}
+    >
+      <div className={cn("mb-2 flex items-center", rail ? "justify-center" : "pl-3")}>
+        {rail ? null : <p className="v2-section-title">Admin</p>}
+        <button
+          type="button"
+          onClick={() => setRail(!rail)}
+          aria-expanded={!rail}
+          aria-label={rail ? "Expand admin menu" : "Collapse admin menu"}
+          title={rail ? "Expand menu" : "Collapse menu"}
+          className={cn(
+            "inline-flex h-8 w-8 items-center justify-center rounded-md text-v2-muted hover:bg-v2-bg-subtle hover:text-v2-ink",
+            !rail && "ml-auto",
+          )}
+        >
+          <ToggleIcon className="h-4 w-4" aria-hidden />
+        </button>
+      </div>
       {/* Wide screens show the alerts column beside the nav instead. */}
-      <AlertsNavLink alerts={alerts} className="mb-0.5 flex h-10 rounded-lg px-3 xl:hidden" />
+      <AlertsNavLink
+        alerts={alerts}
+        rail={rail}
+        className={cn("mb-0.5 flex h-10 rounded-lg xl:hidden", rail ? "w-10 justify-center" : "px-3")}
+      />
       {groups.map((g) => (
         <div key={g.id}>
-          {GROUP_LABEL[g.id] ? <p className="v2-section-title mb-1 mt-5 px-3">{GROUP_LABEL[g.id]}</p> : null}
+          {GROUP_LABEL[g.id] ? (
+            rail ? (
+              <hr className="mx-auto my-3 w-8 border-gray-200" aria-hidden />
+            ) : (
+              <p className="v2-section-title mb-1 mt-5 px-3">{GROUP_LABEL[g.id]}</p>
+            )
+          ) : null}
           <ul className="space-y-0.5">
             {g.items.map((item) => {
               const active = isV2NavItemActive(pathname, item);
@@ -337,14 +442,12 @@ function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: Admi
                   <Link
                     href={item.href ?? "#"}
                     aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-colors",
-                      active ? "bg-v2-primary-light text-v2-primary" : "text-v2-navy hover:bg-v2-bg-subtle hover:text-v2-ink",
-                    )}
+                    title={rail ? item.label : undefined}
+                    className={linkClass(active)}
                   >
                     <item.icon className="h-4 w-4 shrink-0" aria-hidden />
-                    {item.label}
-                    <NavBadge item={item} alerts={alerts} />
+                    <span className={rail ? "sr-only" : undefined}>{item.label}</span>
+                    <NavBadge item={item} alerts={alerts} rail={rail} />
                   </Link>
                 </li>
               );
@@ -354,10 +457,14 @@ function AdminSidebar({ items, alerts }: { items: V2AdminNavItem[]; alerts: Admi
       ))}
       <Link
         href={SIGNED_IN_HOME}
-        className="mt-auto flex h-10 items-center gap-2 rounded-lg px-3 pt-6 text-sm font-semibold text-v2-muted hover:text-v2-ink"
+        title={rail ? "Back to the app" : undefined}
+        className={cn(
+          "mt-auto flex h-10 shrink-0 items-center gap-2 rounded-lg text-sm font-semibold text-v2-muted hover:text-v2-ink",
+          rail ? "w-10 justify-center" : "px-3",
+        )}
       >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to the app
+        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+        <span className={rail ? "sr-only" : undefined}>Back to the app</span>
       </Link>
     </nav>
   );
