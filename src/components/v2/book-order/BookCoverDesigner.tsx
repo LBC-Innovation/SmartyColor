@@ -19,6 +19,7 @@ import {
   type CoverLayout,
 } from "@/lib/print/bookCover";
 import { cn } from "@/lib/cn";
+import { CoverTitleSwitch } from "@/components/v2/book-order/CoverTitleSwitch";
 
 type Props = {
   design: BookCoverDesign;
@@ -406,80 +407,86 @@ export function BookCoverDesigner({ design, onChange, binding, pictures, picture
           </fieldset>
         ) : null}
 
-        <div>
-          <label htmlFor="cover-text" className="v2-label">
-            Words on the cover
-          </label>
-          <textarea
-            id="cover-text"
-            className="v2-input min-h-24 resize-y"
-            maxLength={COVER_TEXT_MAX_LENGTH}
-            placeholder="Our Summer at the Lake"
-            value={design.text}
-            onChange={(e) => set({ text: e.target.value })}
-          />
-          <p className="mt-1 text-xs text-v2-muted">
-            Type anything you like. Press Enter for a new line; long text shrinks to fit.
-          </p>
-        </div>
+        <CoverTitleSwitch id="cover-show-title" on={design.showTitle !== false} onChange={(on) => set({ showTitle: on })} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        {design.showTitle === false ? null : (
+          <>
           <div>
-            <label htmlFor="cover-font" className="v2-label">
-              Lettering
+            <label htmlFor="cover-text" className="v2-label">
+              Words on the cover
             </label>
-            <select
-              id="cover-font"
-              className="v2-input"
-              value={design.fontId}
-              onChange={(e) => set({ fontId: e.target.value as BookCoverDesign["fontId"] })}
-            >
-              {COVER_FONTS.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="cover-size" className="v2-label">
-              Size
-            </label>
-            <input
-              id="cover-size"
-              type="range"
-              className="w-full accent-[var(--color-v2-primary)]"
-              min={COVER_TEXT_SIZE_MIN_PT}
-              max={COVER_TEXT_SIZE_MAX_PT}
-              step={2}
-              value={design.textSizePt}
-              onChange={(e) => set({ textSizePt: Number(e.target.value) })}
+            <textarea
+              id="cover-text"
+              className="v2-input min-h-24 resize-y"
+              maxLength={COVER_TEXT_MAX_LENGTH}
+              placeholder="Our Summer at the Lake"
+              value={design.text}
+              onChange={(e) => set({ text: e.target.value })}
             />
+            <p className="mt-1 text-xs text-v2-muted">
+              Type anything you like. Press Enter for a new line; long text shrinks to fit.
+            </p>
           </div>
-          <fieldset>
-            <legend className="v2-label">Where the words go</legend>
-            <div className="flex flex-wrap gap-2">
-              <div className="flex gap-1" role="radiogroup" aria-label="Vertical position">
-                {(["top", "middle", "bottom"] as const).map((pos) => (
-                  <Choice key={pos} selected={design.textPosition === pos} onClick={() => set({ textPosition: pos })} className="capitalize">
-                    {pos}
-                  </Choice>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="cover-font" className="v2-label">
+                Lettering
+              </label>
+              <select
+                id="cover-font"
+                className="v2-input"
+                value={design.fontId}
+                onChange={(e) => set({ fontId: e.target.value as BookCoverDesign["fontId"] })}
+              >
+                {COVER_FONTS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
                 ))}
-              </div>
-              <div className="flex gap-1" role="radiogroup" aria-label="Alignment">
-                {(["left", "center", "right"] as const).map((align) => {
-                  const Icon = ALIGN_ICONS[align];
-                  return (
-                    <Choice key={align} selected={design.textAlign === align} onClick={() => set({ textAlign: align })} label={`Align ${align}`}>
-                      <Icon className="h-4 w-4" aria-hidden />
-                    </Choice>
-                  );
-                })}
-              </div>
+              </select>
             </div>
-          </fieldset>
-          <ColorField id="cover-text-color" label="Text color" value={design.textColor} onChange={(v) => set({ textColor: v })} />
-        </div>
+            <div>
+              <label htmlFor="cover-size" className="v2-label">
+                Size
+              </label>
+              <input
+                id="cover-size"
+                type="range"
+                className="w-full accent-[var(--color-v2-primary)]"
+                min={COVER_TEXT_SIZE_MIN_PT}
+                max={COVER_TEXT_SIZE_MAX_PT}
+                step={2}
+                value={design.textSizePt}
+                onChange={(e) => set({ textSizePt: Number(e.target.value) })}
+              />
+            </div>
+            <fieldset>
+              <legend className="v2-label">Where the words go</legend>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex gap-1" role="radiogroup" aria-label="Vertical position">
+                  {(["top", "middle", "bottom"] as const).map((pos) => (
+                    <Choice key={pos} selected={design.textPosition === pos} onClick={() => set({ textPosition: pos })} className="capitalize">
+                      {pos}
+                    </Choice>
+                  ))}
+                </div>
+                <div className="flex gap-1" role="radiogroup" aria-label="Alignment">
+                  {(["left", "center", "right"] as const).map((align) => {
+                    const Icon = ALIGN_ICONS[align];
+                    return (
+                      <Choice key={align} selected={design.textAlign === align} onClick={() => set({ textAlign: align })} label={`Align ${align}`}>
+                        <Icon className="h-4 w-4" aria-hidden />
+                      </Choice>
+                    );
+                  })}
+                </div>
+              </div>
+            </fieldset>
+            <ColorField id="cover-text-color" label="Text color" value={design.textColor} onChange={(v) => set({ textColor: v })} />
+          </div>
+          </>
+        )}
 
         {hasPictures ? (
           <div className="rounded-xl border border-gray-200 p-4">

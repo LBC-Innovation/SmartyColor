@@ -136,6 +136,8 @@ export type BookCoverDesign = {
   photoX: number;
   photoY: number;
   text: string;
+  /** Print the title on the front. Off leaves the front without words (the spine and back are unchanged). */
+  showTitle: boolean;
   textColor: string;
   fontId: CoverFontId;
   /** Type size on the printed cover, in points. Shrinks to fit if the text is long. */
@@ -178,6 +180,7 @@ export function defaultCoverDesign(text: string): BookCoverDesign {
     coverPageId: null,
     ...DEFAULT_PHOTO_CROP,
     text,
+    showTitle: true,
     textColor: "#ffffff",
     fontId: "rounded",
     textSizePt: 64,
@@ -216,6 +219,8 @@ export function normalizeCoverDesign(input: unknown): BookCoverDesign {
     photoX: clamp(d.photoX, 0, 1, base.photoX),
     photoY: clamp(d.photoY, 0, 1, base.photoY),
     text: typeof d.text === "string" ? d.text.slice(0, COVER_TEXT_MAX_LENGTH) : "",
+    // Designs saved before the choice existed always printed their title.
+    showTitle: d.showTitle !== false,
     textColor: color(d.textColor, base.textColor),
     fontId: pick(d.fontId, COVER_FONTS.map((f) => f.id), base.fontId),
     textSizePt: clamp(d.textSizePt, COVER_TEXT_SIZE_MIN_PT, COVER_TEXT_SIZE_MAX_PT, base.textSizePt),
