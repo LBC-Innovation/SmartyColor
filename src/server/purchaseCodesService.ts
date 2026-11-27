@@ -462,20 +462,21 @@ async function photosWithPages(photoIds: string[]): Promise<Set<string>> {
 
 /**
  * Pages already in the album that its code hasn't counted (photos copied in with their pages, as
- * the year album does) take the code's free photos, in album order, so the first ones make up the
- * book. Claims with claim_brought_in_page(), which never charges and isn't counted against a
- * refund, and stops when the code has none left. Safe to call again: a claimed or paid photo is
- * skipped. Returns how many it claimed.
+ * the year album does) fill the book's open slots, in album order, so the first ones make up the
+ * book. A slot is open while the album has fewer included photos than the book's page count, even
+ * when pages the package made and were since deleted keep pages_used full (migration 0052).
+ * Claims with claim_brought_in_page(), which never charges and isn't counted against a refund, and
+ * stops when the book is full. Safe to call again: a claimed or paid photo is skipped. Returns how
+ * many it claimed.
  */
 export async function claimMadePagesForCode(projectId: string): Promise<number> {
   const { data: code, error } = await db()
     .from("purchase_codes")
-    .select("id, pages_used, included_pages, book_order_id")
+    .select("id, included_pages, book_order_id")
     .eq("project_id", projectId)
     .eq("status", "active")
     .maybeSingle();
   if (error || !code || code.book_order_id) return 0;
-  if ((code.pages_used as number) >= (code.included_pages as number)) return 0;
 
   const [{ data: photos, error: pErr }, { data: uses, error: uErr }] = await Promise.all([
     db().from("library_photos").select("id").eq("project_id", projectId).order("position", { ascending: true }),
@@ -483,6 +484,7 @@ export async function claimMadePagesForCode(projectId: string): Promise<number> 
   ]);
   if (pErr || uErr || !photos?.length) return 0;
   const used = new Set((uses ?? []).map((u) => u.photo_id as string));
+  if (used.size >= (code.included_pages as number)) return 0;
   const open = photos.map((p) => p.id as string).filter((id) => !used.has(id));
   if (open.length === 0) return 0;
 
@@ -582,8 +584,8 @@ export async function getAlbumPurchaseCode(actorId: string, projectId: string): 
     .maybeSingle();
   if (error) return { data: null, error: { message: error.message } };
   if (!row) return { data: null, error: null };
-  // Pages brought in already made count first; re-read the code if any were claimed.
-  if (!row.book_order_id && (row.pages_used as number) < (row.included_pages as number)) {
+  // Pages brought in already made fill open slots first; count them if any were claimed.
+  if (!row.book_order_id) {
     const claimed = await claimMadePagesForCode(projectId);
     if (claimed > 0) row.pages_used = (row.pages_used as number) + claimed;
   }
