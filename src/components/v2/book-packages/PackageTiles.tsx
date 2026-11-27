@@ -48,7 +48,8 @@ export function PackageTiles({
   onChoose: (pkg: BookPackage) => void;
   onJustPages: () => void;
   onRetry: () => void;
-  onBack: () => void;
+  /** Left out for a new account's first album: it has to choose a book (or "Print as you go"). */
+  onBack?: () => void;
   /** Opened from the home page's year album: say what this book is for. */
   yearAlbum?: { year: number; albumName: string } | null;
 }) {
@@ -59,14 +60,16 @@ export function PackageTiles({
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pb-12 pt-6 sm:px-6">
-      <button
-        type="button"
-        onClick={onBack}
-        className="v2-hit -ml-2 mb-2 inline-flex min-h-11 items-center gap-1 px-2 text-sm font-semibold text-v2-link"
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden />
-        {BOOK_PACKAGES.back}
-      </button>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="v2-hit -ml-2 mb-2 inline-flex min-h-11 items-center gap-1 px-2 text-sm font-semibold text-v2-link"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+          {BOOK_PACKAGES.back}
+        </button>
+      ) : null}
       <WizardProgress step={1} className="mb-5" />
       <h1 ref={headingRef} tabIndex={-1} className="v2-brand-title text-2xl text-v2-ink outline-none sm:text-3xl">
         {BOOK_PACKAGES.chooseTitle}

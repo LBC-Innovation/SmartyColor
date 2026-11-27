@@ -31,6 +31,12 @@ import type { BookBindingId } from "@/lib/print/bookBindings";
 import { trackFormat } from "@/lib/marketing/events";
 import { track } from "@/lib/track";
 import { STUDIO_PATH } from "@/lib/v2/guestSession";
+import {
+  FIRST_ALBUM_PARAM,
+  claimStarterAlbum,
+  dropStarterAlbum,
+  markFirstAlbumChoice,
+} from "@/lib/v2/firstAlbum";
 import { markThemeDecided } from "@/components/v2/studio/themeDecided";
 import {
   YEAR_ALBUM_PARAM,
@@ -92,6 +98,12 @@ export function NewAlbumWizard() {
   const bookParam = params.get("book");
   const albumParam = params.get("album");
   const flow = params.get("flow") === "pages" ? "pages" : "package";
+  // Sent here straight from sign-up: the account's only album is the empty starter.
+  const [firstAlbum] = useState(() => {
+    if (params.get(FIRST_ALBUM_PARAM) !== "1") return false;
+    markFirstAlbumChoice();
+    return true;
+  });
   // The home page's year album runs through here too. A plain "New album" (step 1 without the
   // year param) drops any year album left from earlier in this tab.
   const [yearAlbum] = useState<YearAlbumIntent | null>(() => {
@@ -178,12 +190,30 @@ export function NewAlbumWizard() {
     track("package_viewed", { count: packages.length, signed_in: signedIn, intent: readTrackIntent() });
   }, [onStepOne, load.status, packages.length, signedIn]);
 
+  // A new account's starter album is still being made right after sign-up: wait for it, so the
+  // choice uses it instead of racing it with a second album.
+  const [pagesQueued, setPagesQueued] = useState(false);
   const justPages = useCallback(async () => {
     if (creatingPages) return;
+    if (signedIn && firstAlbum && !studio.hydrated) {
+      setPagesQueued(true);
+      return;
+    }
     setCreatingPages(true);
     track("album_started", { mode: "pages" });
     clearChoice();
     if (signedIn) {
+      // A new account's empty starter album becomes this album, so no empty "Album 1" is left over.
+      const starter = await claimStarterAlbum();
+      if (starter) {
+        if (yearAlbum?.albumName && yearAlbum.albumName !== starter.name) {
+          await library.updateProject(starter.id, { name: yearAlbum.albumName });
+          await studio.reload();
+        }
+        attachYearAlbumIntent(starter.id);
+        router.replace(`/studio/new?step=theme&flow=pages&album=${encodeURIComponent(starter.id)}`);
+        return;
+      }
       const res = await library.createProject(yearAlbum?.albumName ?? `Album ${studio.projects.length + 1}`);
       if (isError(res)) {
         setCreatingPages(false);
@@ -198,7 +228,13 @@ export function NewAlbumWizard() {
     // Guests: a theme is kept with an account, so the album opens straight away.
     studio.createProject();
     router.replace(STUDIO_PATH);
-  }, [creatingPages, signedIn, studio, router, toast, yearAlbum]);
+  }, [creatingPages, signedIn, firstAlbum, studio, router, toast, yearAlbum]);
+  const queuedRunRef = useRef(false);
+  useEffect(() => {
+    if (!pagesQueued || !studio.hydrated || queuedRunRef.current) return;
+    queuedRunRef.current = true;
+    void justPages();
+  }, [pagesQueued, studio.hydrated, justPages]);
 
   // With nothing to sell (switch off, no priced package) "New album" behaves as it always did.
   useEffect(() => {
@@ -298,7 +334,18 @@ export function NewAlbumWizard() {
     router.push(signedIn ? "/home" : STUDIO_PATH);
   }
 
+  // A book bought on a new account comes with its own album: clear away the empty starter.
+  const settleStarter = useCallback(
+    (projectId: string) => {
+      void dropStarterAlbum(projectId).then((dropped) => {
+        if (dropped) void studio.reload({ activeProjectId: projectId });
+      });
+    },
+    [studio],
+  );
+
   function onPaid(purchase: BookPackagePurchase) {
+    settleStarter(purchase.projectId);
     clearChoice();
     attachYearAlbumIntent(purchase.projectId);
     track("album_started", { mode: "package" });
@@ -321,6 +368,7 @@ export function NewAlbumWizard() {
         sessionId={sessionId}
         bindingHint={bindingHint}
         onContinue={(purchase) => {
+          settleStarter(purchase.projectId);
           clearChoice();
           attachYearAlbumIntent(purchase.projectId);
           track("album_started", { mode: "package" });
@@ -389,7 +437,7 @@ export function NewAlbumWizard() {
           load={load}
           signedIn={signedIn}
           pagePriceCents={pagePriceCents}
-          creatingPages={creatingPages}
+          creatingPages={creatingPages || (pagesQueued && !studio.hydrated)}
           onChoose={onChoose}
           onJustPages={() => void justPages()}
           onRetry={reload}
@@ -403,11 +451,11 @@ export function NewAlbumWizard() {
         load={load}
         signedIn={signedIn}
         pagePriceCents={pagePriceCents}
-        creatingPages={creatingPages}
+        creatingPages={creatingPages || (pagesQueued && !studio.hydrated)}
         onChoose={onChoose}
         onJustPages={() => void justPages()}
         onRetry={reload}
-        onBack={goBack}
+        onBack={firstAlbum ? undefined : goBack}
         yearAlbum={yearAlbum}
       />
     );
