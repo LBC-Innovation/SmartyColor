@@ -27,7 +27,8 @@
   main { display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 20px; padding: 16px 24px 32px; align-items: start; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px 16px 24px; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
-  fieldset { border: 0; margin: 0 0 18px; padding: 0; }
+  fieldset { border: 0; margin: 0 0 18px; padding: 0; min-width: 0; }
+  fieldset:disabled .seg { opacity: .45; }
   legend { font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
   select, textarea, input[type=text] { width: 100%; font: inherit; color: var(--ink); background: var(--bg);
     border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
@@ -71,6 +72,14 @@
     </fieldset>
 
     <fieldset>
+      <legend>Selfie mode</legend>
+      <div class="checks">
+        <label><input type="checkbox" id="selfie" /> Include the photographer in the picture (a selfie with the person coloring)</label>
+      </div>
+      <p class="hint" id="selfieHint"></p>
+    </fieldset>
+
+    <fieldset>
       <legend>Scene description</legend>
       <textarea id="sceneText" rows="9"></textarea>
       <div class="row" style="margin-top:6px">
@@ -78,7 +87,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="lookSet">
       <legend>Look <span class="default-note" id="lookDefault"></span></legend>
       <div class="seg" id="look"></div>
     </fieldset>
@@ -92,6 +101,12 @@
       <div id="titleWrap" style="margin-top:6px">
         <input type="text" id="coverTitle" placeholder="Cover title, 2–3 words (e.g. The Parkers)" maxlength="30" />
       </div>
+    </fieldset>
+
+    <fieldset id="cameraSet">
+      <legend>Camera vs. the person coloring <span class="default-note" id="cameraDefault"></span></legend>
+      <div class="seg" id="camera"></div>
+      <p class="hint" id="cameraHint"></p>
     </fieldset>
 
     <fieldset>
@@ -122,7 +137,10 @@
       </div>
     </div>
     <textarea id="output" readonly aria-label="Finished prompt"></textarea>
-    <p class="hint">Second pass: <button type="button" class="ghost" id="copySecond" style="padding:4px 12px;font-size:12px">Copy the touch-up prompt</button> to paste with the image you picked.</p>
+    <p class="hint">Second pass, pasted with the image you picked:
+      <button type="button" class="ghost" id="copySecond" style="padding:4px 12px;font-size:12px">Copy the touch-up prompt</button>
+      <button type="button" class="ghost" id="copyFlip" style="padding:4px 12px;font-size:12px">Copy the "page faces the wrong way" fix</button></p>
+    <p class="hint">If a page still faces the camera, keep the image and use the second fix: editing one book in a good image works more reliably than generating again.</p>
   </section>
 </main>
 
@@ -130,6 +148,14 @@
 /* ------------------------------------------------------------------ text blocks (doc §6) */
 
 const REAL_PEOPLE = "Everyone looks like a real person, not a model: matte unretouched skin with visible pores, uneven tone, faint redness around noses and knuckles, fine lines and age spots on the adults, freckles, an uneven home haircut, a missing tooth on a kid. No shine or glow on foreheads, cheeks or noses. Hair has flyaways. Clothes are worn and a little wrinkled. The room is lived-in, with a few specific bits of everyday clutter. Expressions are mid-moment and nobody is posing for the camera. Hands are anatomically correct with five fingers and natural, short nails.";
+
+// Selfie mode swaps the "nobody is posing" line: people in a selfie do look at the phone.
+const REAL_PEOPLE_SELFIE = REAL_PEOPLE.replace(
+  "Expressions are mid-moment and nobody is posing for the camera.",
+  "They look at the phone screen with real, slightly imperfect expressions (a half-blink, a mid-laugh, a squint, one person looking a little off) rather than polished, posed smiles.",
+);
+
+const SELFIE_LOOK = "Candid selfie taken on a recent iPhone's front camera, held at arm's length by the person named in the scene, who is in the picture. Their arm reaches toward the lens and leaves the frame at the bottom or side edge; the phone itself is not visible. The front camera's wide lens makes the nearest face a little larger and the framing tight, with heads close together and a bit of the room behind them. Bright, clear, true-to-life colour with the crisp look of a modern phone photo, faces a little unevenly lit by whatever light is there. Slightly off-level and imperfectly framed, the top of a head or a shoulder cut off. Not mirrored: the photo reads the right way round.";
 
 const LOOKS = {
   shoot: {
@@ -142,7 +168,33 @@ const LOOKS = {
   },
 };
 
-const ORIENTATION = "The coloring page always faces the person coloring it: the top of the drawing points away from them and the bottom of the drawing is nearest their body, exactly as you'd hold a page to color it. Do not turn the book or page to face the camera. The camera sees the drawing from the colorist's side or from over their shoulder, so it reads upright or at a slight angle in the photo. Only a person deliberately holding a page up to show someone may turn it outward.";
+// Image models want every drawing upright for the viewer. Saying "don't face the camera" isn't
+// enough: the prompt has to say what the page looks like from where the camera is, and that an
+// upside-down drawing is correct.
+const ORIENTATION = "Anyone coloring has their page lying flat and oriented toward themselves, exactly as a person holds a page to color it: the top edge of the drawing is the edge farthest from their body, and the bottom edge of the drawing is against their body. A book being colored is never rotated to show the camera.";
+
+const CAMERAS = {
+  facing: {
+    label: "Facing them",
+    hint: "drawing looks upside down",
+    text: "The camera is in front of the people coloring, facing them. So every page that is being colored appears UPSIDE DOWN in this photo: the people in the drawing have their heads toward the camera (toward the bottom edge of the photo) and their feet toward the person coloring. This is correct and intended. The drawings being colored do not need to be readable in the photo.",
+  },
+  beside: {
+    label: "From the side",
+    hint: "drawing looks sideways",
+    text: "The camera is off to the side of the people coloring. So every page that is being colored appears turned sideways in this photo: the top of the drawing points away from the person coloring, across the frame, not toward the camera. This is correct and intended.",
+  },
+  behind: {
+    label: "Over the shoulder",
+    hint: "drawing looks upright",
+    text: "The camera looks over the shoulder of the people coloring, from behind them. So the page being colored appears upright in the photo, the same way the person coloring sees it.",
+  },
+};
+
+// Selfie mode: the colorist holds their page up to the phone, so it reads upright on purpose.
+const SELFIE_CAMERA = "This is a selfie, so the phone faces everyone in it. Whoever is holding up their coloring page for the selfie has lifted it off the table and holds it up beside their face with the drawing facing the phone, so that drawing appears upright and readable in the photo, the right way round, not upside down and not mirrored. It is held at a natural slight tilt, fingers curled round its edges, partly covering a shoulder. Anyone else who is still coloring with a book lying flat in front of them keeps it oriented toward themselves, so from the phone their drawing looks upside down.";
+
+const SHOW_OFF = "Someone who has lifted their page up off the table to show it may turn it toward the camera; only that lifted page appears upright and facing the camera.";
 
 const INTERIOR = "The pages are bright white uncoated paper, smooth and matte, not glossy. Each coloring page is clean black-and-white line art traced from a real photo, with realistic proportions, bold even outlines and no shading, set inside a plain half-inch white margin, with no page numbers or text. When the book is open, the coloring page is on the right and the facing left page is blank white. Parts of the open page are colored in with waxy crayon or colored pencil, with visible strokes and a few marks outside the lines.";
 
@@ -153,30 +205,34 @@ const BOOKS = {
     label: "Stapled booklet",
     text: "The book is a thin stapled booklet, US Letter size, about as thick as a school workbook. It is folded along its left edge with two silver staples in the fold. The cover is matte, full-colour card. Open on the table, it lies almost flat, the pages bowing gently near the fold.",
     bound: true,
+    held: "For the selfie, the booklet is lifted off the table and held up open, folded back on itself at the staples so the one coloring page faces the phone.",
   },
   paperback: {
     label: "Paperback",
     text: "The book is a US Letter-size paperback, about a quarter inch thick, with a square glued spine, a matte full-colour cover and bright white page edges, like a bookstore paperback. A glued paperback doesn't lie flat on its own: the pages curve up toward the spine, and the person holds it open with their other hand flat on the left page, or has folded the cover back a little.",
     bound: true,
+    held: "For the selfie, the paperback is lifted off the table and held up open, a hand or thumbs holding the pages apart; the pages curve toward the glued spine, since a paperback doesn't fold flat.",
   },
   spiral: {
     label: "Spiral-bound",
     text: "The book is a US Letter-size spiral-bound book with a black plastic coil running down the left long edge through small round punched holes. It is folded all the way back on itself, so only the one page being colored faces up, and it lies completely flat. The matte full-colour cover is folded round behind.",
     bound: true,
+    held: "For the selfie, the spiral book is lifted off the table and held up, still folded all the way back on its coil so only the one page faces the phone.",
   },
   home: {
     label: "Printed at home",
     text: "The coloring pages are loose US Letter printer-paper pages, slightly curled, printed at home on an inkjet printer, the line art a little less crisp than a printed book.",
     bound: false,
+    held: "For the selfie, the loose page is held up by its top corners, bending a little.",
   },
 };
 
 const coverText = (title) =>
   `The front cover is a grid of the family's own colour photos under a soft dark tint, with a short title in big, white, rounded letters across the middle${title ? ` that reads "${title}"` : ""}.`;
 
-const AVOID = "Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No coloring page turned to face the camera while someone is coloring it.";
-const avoidText = (cover) =>
-  `${AVOID} No watermarks, logos, brand names or captions, and no text anywhere${cover ? " except the short cover title" : ""}.`;
+const AVOID = "Avoid: glossy or plastic-looking skin, airbrushing, beauty retouching, waxy faces, perfect teeth, studio flash, rim lighting, teal-and-orange grade, HDR halos, oversharpening, bokeh balls, glowing haze, flat or washed-out colour, everyone smiling at the camera, matching outfits, spotless rooms, sepia, vintage filter, heavy vignette, tears. No drawing turned upright toward the camera in a book that is lying on a tray or table being colored.";
+const avoidText = (cover, selfie) =>
+  `${selfie ? AVOID.replace("everyone smiling at the camera", "stiff identical posed smiles, a visible phone, a selfie stick, a mirror") : AVOID} No watermarks, logos, brand names or captions, and no text anywhere${cover ? " except the short cover title" : ""}.`;
 
 const SHAPES = {
   "3:2": { label: "Landscape 3:2", line: "landscape, 3:2" },
@@ -185,52 +241,124 @@ const SHAPES = {
 };
 
 const FIXES = [
-  { id: "facing", label: "Page was facing the camera", text: "Whoever is coloring has the page turned toward themselves and away from the camera." },
+  { id: "facing", label: "Page was facing the camera", text: "Most important: look at every book lying on a tray or table. Its drawing points toward the person coloring it, never toward the camera. Rotate it 180 degrees in your mind before drawing it: if the camera faces that person, the drawing in their book must look upside down in the photo.",
+    selfieText: "The page held up for the selfie faces the phone and reads upright: not upside down, not sideways and not mirrored." },
   { id: "spine", label: "Wrong binding drawn", text: "Draw the binding exactly as described: for a paperback, a square glued spine with no coil and no rings; for a stapled booklet, only two staples in the fold; for spiral, a black plastic coil." },
   { id: "flat", label: "Colour too flat", text: "Rich colour and contrast like a professional lifestyle photo, true blacks, warm highlights." },
   { id: "slick", label: "Colour too slick", text: "Natural colour, not oversaturated, no HDR." },
   { id: "skin", label: "Shiny or waxy skin", text: "Matte unretouched skin with visible pores, the kind of skin you see in an unfiltered photo." },
   { id: "models", label: "People look like models", text: "Ordinary people and ordinary kids, not models: everyday faces and bodies, nothing glamorous." },
-  { id: "posing", label: "Everyone is posing", text: "Nobody knows the photo is being taken." },
+  { id: "posing", label: "Everyone is posing", text: "Nobody knows the photo is being taken.",
+    selfieText: "Expressions are natural and mid-moment, like a real family selfie, not posed model smiles." },
   { id: "cartoon", label: "Coloring page is a cartoon", text: "The coloring page looks like a traced outline of a photo, with realistic proportions, not a cartoon." },
   { id: "tidy", label: "Room too tidy", text: "The room is visibly lived-in, with more everyday clutter." },
 ];
 
 const SECOND_PASS = "Keep the people, scene and composition exactly the same. Remove any shine or glow on skin, keep the skin matte with visible pores, and fix the colour so it looks like a real photograph, not AI: rich but natural, with real contrast. Make sure the coloring page faces the person coloring it.";
 
+// Editing a good image is more reliable than regenerating it when only the page direction is wrong.
+const FLIP_PASS = "Edit this image. Change only one thing: the coloring book that is lying on the tray or table in front of the child who is coloring is turned the wrong way. Rotate that book 180 degrees where it lies, so the drawing faces the child coloring it (top of the drawing away from them, bottom against their body). From the camera, that drawing should now look upside down. Their hand and crayon stay on the page. Keep everything else exactly the same: the people, faces, the page someone is holding up, the colours, the lighting and the framing.";
+
 /* ------------------------------------------------------------------ scenes (doc §6.4) */
 
 const SCENES = [
-  { id: "grandma-armchair", name: "Grandma colors her own family", look: "shoot", book: "paperback", shape: "3:2",
+  { id: "grandma-armchair", name: "Grandma colors her own family", look: "shoot", book: "paperback", shape: "3:2", camera: "behind",
+    photographer: "her granddaughter, visiting", selfieText: "A selfie taken by a granddaughter in her early 20s who is visiting, crouched beside her grandmother's well-worn armchair by a big window, her arm stretched out toward the lens. The grandmother, mid 70s, with short white hair, reading glasses low on her nose and a soft rose cardigan with the sleeves pushed up, holds up her paperback coloring book open to the page she has been working on: a line drawing of her three grandkids sitting on a lake dock in life jackets, one life jacket colored orange and the rest half done. She is laughing, a little self-conscious; the granddaughter's cheek is close to hers, eyes on the phone screen. A wooden lap tray on her knees with a short crayon on it, a mug of tea and a crocheted throw behind them. Late-afternoon window light across both faces.",
     text: "A grandmother in her mid 70s with short white hair, reading glasses low on her nose and a soft rose cardigan with the sleeves pushed up sits in a well-worn armchair by a big window. A wooden lap tray rests on her knees with the paperback coloring book open on it. She holds the left page flat with her palm while she colors the right-hand page, a line drawing of her three grandkids sitting on a lake dock in life jackets, about a third colored in. She is concentrating, lips pressed together, coloring a life jacket orange with a short, worn-down crayon. Her phone leans against a mug of tea on the side table, showing the original colour photo. A crocheted throw, a TV remote and a small dish of crayons on the side table. Late-afternoon window light falling across her and the page. Shot from just behind and beside her shoulder at seated height, so the page reads upright in the photo and her face is in three-quarter profile." },
-  { id: "grandmas-together", name: "Two grandmas compare books", look: "shoot", book: "paperback", shape: "3:2",
+  { id: "grandmas-together", name: "Two grandmas compare books", look: "shoot", book: "paperback", shape: "3:2", camera: "beside",
+    photographer: "the friend with auburn hair", selfieText: "A selfie taken by one of two grandmothers in their early 70s, friends, at a dining table with a patterned oilcloth tablecloth. The one with dyed auburn hair showing grey roots holds the phone out at arm's length; the other, with curly grey hair and a fleece vest, leans in shoulder to shoulder. Each holds up her own paperback coloring book open to her page beside her face: a line drawing of a grandson in a baseball uniform colored in red and blue, and a line drawing of a granddaughter at a ballet recital half colored in pink. Both are mid-laugh, one with her eyes half closed. Crayons in a coffee can, a plate of store-bought cookies and a cozy, slightly cluttered kitchen behind them. Soft window light plus a warm pendant lamp.",
     text: "Two grandmothers in their early 70s, friends, sit side by side at a dining table with a patterned oilcloth tablecloth. Each has her own paperback coloring book open in front of her, turned toward herself. One, with dyed auburn hair showing grey roots, lifts her book up off the table and tilts it toward her friend to show the page she just finished (a line drawing of her grandson in a baseball uniform, colored in red and blue), laughing. The other, with curly grey hair and a fleece vest, leans in to look, a crayon still in her hand over her own book (a line drawing of her granddaughter at a ballet recital, half colored in pink). Crayons in a coffee can, a plate of store-bought cookies, reading glasses, a phone face-up. A cozy, slightly cluttered kitchen behind them. Soft window light plus a warm pendant lamp overhead. Shot from the end of the table at table height, the edge of a third chair soft in the foreground." },
-  { id: "wedding-kids-table", name: "Kids' table at a wedding", look: "phone", book: "stapled", shape: "3:2", cover: true,
+  { id: "wedding-kids-table", name: "Kids' table at a wedding", look: "phone", book: "stapled", shape: "3:2", camera: "behind", cover: true,
+    photographer: "the bride", selfieText: "A selfie taken by the bride at an evening wedding reception, crouching at the kids' table in her wedding dress with her veil pushed back, holding the phone out with one arm. Around her, three kids aged 4 to 9 squeeze into the frame, each holding up their stapled coloring booklet open to a page: line drawings of the bride and groom's engagement photos, the couple laughing on a wooden pier and the couple under a big oak tree, colored in with bright crayon. The flower girl's crown is crooked, the ring bearer's clip-on bow tie hangs loose, and one kid is pulling a silly face. The kids' table behind them has a white tablecloth with a juice spill, a mason jar of crayons and a half-finished plate of chicken nuggets; string lights and guests are soft in the background. Warm string-light glow mixed with blue dusk from tall windows, a little high-ISO noise.",
     text: "A guest's phone photo at an evening wedding reception. Four kids aged 4 to 9 sit at a round kids' table with a white tablecloth that has a juice spill and crumbs on it. Their wedding clothes have clearly been worn all day: a flower girl with a crooked flower crown and a grass stain on her hem, a ring bearer with his shirt untucked and clip-on bow tie hanging loose, an older girl with her shoes kicked off under the chair. Each has a stapled coloring booklet open flat in front of them, turned toward themselves. The pages are line drawings of the bride and groom's engagement photos: the couple laughing on a wooden pier, the couple under a big oak tree. The ring bearer is coloring the groom's tie with his tongue poking out; the youngest has crayon on her fingers. One closed booklet lies on the table showing its cover. Name cards, a mason jar of crayons, a half-finished plate of chicken nuggets. String lights, guests talking and the dance floor behind them. Warm string-light glow mixed with blue dusk from tall windows. Taken by a guest standing behind the kids' chairs, looking down over their shoulders." },
-  { id: "road-trip", name: "Road trip to vacation", look: "phone", book: "spiral", shape: "3:2",
-    text: "Taken on a phone by a parent turning around from the front passenger seat. The back seat of a family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl in a car seat each have a spiral-bound coloring book folded back on itself on a lap tray, the page facing them. The pages are line drawings of the family on last summer's beach trip. The boy is coloring, head down, hair sticking up on one side. The girl lifts her book and turns it toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in the cargo area. Bright sky, green fields and a guardrail streak past the side windows with motion blur; sun patches and window reflections across the kids. The front seat headrest cuts into the bottom corner of the frame." },
-  { id: "family-reunion", name: "Family reunion picnic table", look: "phone", book: "home", shape: "3:2",
+  { id: "road-trip", name: "Road trip to vacation", look: "phone", book: "spiral", shape: "3:2", camera: "facing",
+    photographer: "Mom, from the front passenger seat", selfieText: "A selfie taken by Mom from the front passenger seat of a family SUV on a highway, mid-morning, turned around with her arm stretched back between the seats. Her face fills one side of the frame in the foreground, sunglasses pushed up on her head, laughing. Behind her in the back seat, a 6-year-old boy in a booster seat and a 4-year-old girl in a car seat each hold up their spiral-bound coloring book, folded back on itself, showing a page that is a line drawing of the family on last summer's beach trip, partly colored in. The boy grins with a gap in his teeth; the girl has crayon on her fingers. Lap trays, crayons in a cupholder, a bag of pretzels and duffel bags in the cargo area. Bright sky and green fields streak past the side windows with motion blur; sun patches across their faces.",
+    text: "Taken on a phone by a parent turning around from the front passenger seat. The back seat of a family SUV on a highway, mid-morning. A 6-year-old boy in a booster seat and a 4-year-old girl in a car seat each have a spiral-bound coloring book folded back on itself, lying flat on their own lap tray. The pages are line drawings of the family on last summer's beach trip. The boy is coloring, head down, hair sticking up on one side. His book is oriented toward him, the way he reads it, so from the front seat his drawing looks upside down: the beach umbrella and the family's heads are at the end of the page nearest the camera, and the sand and the sandcastle are at the end nearest his tummy. The girl lifts her book and turns it toward the camera to show off her page, mid-word, with crayon on her fingers. Crayons in a cupholder, one rolled into the seat crack, a bag of pretzels, a travel pillow, duffel bags in the cargo area. Bright sky, green fields and a guardrail streak past the side windows with motion blur; sun patches and window reflections across the kids. The front seat headrest cuts into the bottom corner of the frame." },
+  { id: "family-reunion", name: "Family reunion picnic table", look: "phone", book: "home", shape: "3:2", camera: "beside",
+    photographer: "the aunt", selfieText: "A selfie taken by an aunt in her 40s, sunglasses pushed up on her head, at a summer family reunion in a park pavilion. She holds the phone out over the end of a long picnic table with a plastic gingham tablecloth. Squeezed into the frame with her are a grandfather in a baseball cap and two cousins about 7 and 10, each holding up a loose home-printed coloring page: line drawings of an old family photo of everyone at the same lake years ago, partly colored. Grandpa holds his page a little crooked and squints at the screen. Paper plates, a cooler and a bottle of sunscreen on the table; dappled midday light through the pavilion roof, relatives by the grill in the background.",
     text: "A phone photo at a summer family reunion in a park pavilion. A long picnic table with a plastic gingham tablecloth taped down at the corners. Three generations crowd one end: a grandfather in a baseball cap, two cousins about 7 and 10, an aunt in her 40s with sunglasses pushed up on her head. Each has a loose home-printed coloring page in front of them, turned toward themselves: line drawings of an old family photo of everyone at the same lake years ago. The aunt leans across and points at one figure on her cousin's page, explaining who it is. Paper plates, a cooler, a bottle of sunscreen, a stack of extra printed pages held down by a rock. Dappled midday light through the pavilion roof, some faces in shade, the grass outside bright green. Relatives by the grill in the background. Taken by someone standing at the end of the table, slightly above." },
-  { id: "big-sibling", name: "The new big sister", look: "phone", book: "stapled", shape: "2:3",
+  { id: "big-sibling", name: "The new big sister", look: "phone", book: "stapled", shape: "2:3", camera: "behind",
+    photographer: "Mom, holding the baby", selfieText: "A selfie taken by Mom, in her early 30s with her hair in a messy clip and a burp cloth over her shoulder, sitting on the living room couch with the sleeping newborn in the crook of her other arm. Her 4-year-old daughter, in pajama pants and a mismatched T-shirt, leans against her knee and holds up her stapled coloring booklet open to her page: a line drawing of herself holding her baby brother, scribbled in purple. The girl beams at the screen; Mom looks tired and happy. Baby wipes, a water bottle and a basket of unfolded laundry behind them. Soft daylight from a window.",
     text: "Taken on a phone by Dad, standing in the living room. A 4-year-old girl in pajama pants and a mismatched T-shirt kneels at the coffee table with a stapled coloring booklet open flat in front of her, turned toward herself. She is coloring a page that is a line drawing of herself holding her baby brother, pressing hard with a purple crayon. Behind her on the couch, her mom, in her early 30s with hair in a messy clip and a burp cloth over her shoulder, holds the sleeping newborn and looks down at the page over her daughter's head, tired but smiling. Baby wipes, a water bottle, a basket of unfolded laundry, crayons spread across the table. Soft daylight from a window. Shot from behind the girl and a little above, so the page reads upright." },
-  { id: "memory-care-visit", name: "Memory-care visit", look: "shoot", book: "spiral", shape: "3:2",
+  { id: "memory-care-visit", name: "Memory-care visit", look: "shoot", book: "spiral", shape: "3:2", camera: "facing",
+    photographer: "the daughter, visiting", selfieText: "A selfie taken by a daughter in her late 50s, with reading glasses on a chain, visiting her mother in a bright, homey room in an assisted-living residence. She sits close beside her mother at a small table by the window and holds the phone out at arm's length, her cheek near her mother's. Her mother, in her late 80s with thin white hair and a soft blue knit sweater, holds up her spiral-bound coloring book, folded back on itself, showing the page they have been coloring together: a line drawing of the mother's own wedding photo from the 1960s, the bouquet colored in. The mother smiles softly at the phone, a little unsure where to look; the daughter smiles with her eyes crinkled. A quilt on the bed and framed family photos on the dresser behind them. Soft midday daylight. Calm and warm, not sad and not clinical: no medical equipment in view.",
     text: "A bright, homey room in an assisted-living residence, with a quilt on the bed and framed family photos on the dresser. A woman in her late 80s with thin white hair and a soft blue knit sweater sits at a small table by the window, a spiral-bound coloring book folded back flat in front of her and turned toward her. Her daughter, in her late 50s with reading glasses on a chain, sits at her elbow on the same side, so they both look at the page the right way up. The page is a line drawing of the mother's own wedding photo from the 1960s. The mother colors the bouquet slowly with a chunky crayon, calm and focused; the daughter watches her, chin on her hand, smiling a little. A cup of water with a straw, a cardigan over the chair back. Soft midday daylight. Calm and warm, not sad and not clinical: no medical equipment in view. Shot from across the room at seated height, slightly to the side." },
-  { id: "grown-up-evening", name: "Grown-up coloring for herself", look: "shoot", book: "paperback", shape: "3:2",
+  { id: "grown-up-evening", name: "Grown-up coloring for herself", look: "shoot", book: "paperback", shape: "3:2", camera: "beside",
+    photographer: "herself", selfieText: "A selfie taken by a woman in her mid 30s at the counter of a small apartment kitchen in the evening, in a hoodie, her hair in a low ponytail with a few strands loose. She holds the phone out with one hand and, with the other, holds up her paperback coloring book open to her page beside her face: a line drawing of her and her partner on a mountain hike, mostly colored in with colored pencils. A playful, slightly proud half smile, pencil marks on the side of her hand. A mug of tea and an open bag of chips on the counter; warm under-cabinet light, a dish rack and a plant behind her in soft shadow.",
     text: "Evening in a small apartment kitchen. A woman in her mid 30s in a hoodie and leggings, hair in a low ponytail with a few strands loose, sits at the counter with one foot up on the stool rung, a paperback coloring book open in front of her and turned toward her, her left hand holding the pages open. She is coloring a page that is a line drawing of her and her partner on a mountain hike, using colored pencils, with pencil marks on the side of her hand, half smiling to herself. A mug of tea, an open bag of chips, her phone face-down. Warm under-cabinet light pooling on the counter, the rest of the room in soft shadow, a dish rack and a plant behind her. Shot from beside and slightly behind her at counter height, a fruit bowl soft at the bottom edge of the frame." },
-  { id: "custom", name: "Custom scene (write your own)", look: "shoot", book: "stapled", shape: "3:2",
+  { id: "kitchen-table", name: "Grandma's kitchen table", group: "round1", look: "shoot", book: "spiral", shape: "3:2", camera: "beside",
+    photographer: "Grandma", selfieText: "A selfie taken by a grandmother in her late 60s with silver hair in a loose bun and a chunky oatmeal cardigan, at a sunny kitchen table, holding the phone out at arm's length, a little too close, the way grandparents do. Her 6-year-old granddaughter kneels on the chair beside her and holds up the spiral-bound coloring book, folded back on itself, showing the page she just finished: a line drawing of the two of them together on a porch swing, colored in violet and orange. Both are laughing, the girl with a violet crayon still in her fist. A scattered box of crayons and a mug of tea on the table behind them. Morning sun through the window over the sink.",
+    text: "A grandmother in her late 60s with silver hair in a loose bun and a chunky oatmeal cardigan sits at a sunny kitchen table beside her 6-year-old granddaughter. The girl kneels on her chair to reach, a violet crayon in her fist, coloring a spiral-bound coloring book folded back flat on the table in front of her, the page oriented toward her: a line drawing of the two of them together on a porch swing, half colored in. They are both laughing at something the girl just colored; Grandma has a hand on the back of the girl's chair. A scattered box of crayons, a mug of tea with the string hanging out, a plate of toast crusts. Morning sun through the window over the sink. Shot from the end of the table at table height, slightly to the side, both faces visible." },
+  { id: "living-room-floor", name: "Siblings on a rainy day", group: "round1", look: "phone", book: "home", shape: "3:2", camera: "beside",
+    photographer: "Mom, lying on the rug with them", selfieText: "A selfie taken by Mom, lying belly-down on a soft living room rug between her two kids on a rainy afternoon, holding the phone out in front of them. A boy about 8 and a girl about 5, in cozy socks, prop themselves up on their elbows and each hold up a loose home-printed coloring page toward the phone: line drawings of their own family on a beach, colored in with crayon. The girl is giggling, the boy is pulling a face. Raindrops on the big window behind them, crayons scattered on the rug. Gray daylight and a warm lamp.",
+    text: "Taken on a phone by a parent sitting on the couch. Two siblings, a boy about 8 and a girl about 5, lie belly-down side by side on a soft rug in a bright living room on a rainy afternoon, in cozy socks with their feet kicked up. Raindrops run down the big window behind them. Each has a loose home-printed coloring page flat on the rug under their elbows, oriented toward themselves: line drawings of their own family on a beach. The little girl reaches over and points at a spot on her brother's page, giggling; he is mid-protest. Crayons, a few finished pages and a sock that came off are scattered around them. Gray, soft daylight from the window and a warm lamp on. Shot from the side and a little above, at the level of the couch." },
+  { id: "fridge", name: "Proudly on the fridge", group: "round1", look: "phone", book: "home", shape: "2:3", camera: "behind",
+    photographer: "Dad", selfieText: "A selfie taken by Dad in the kitchen, crouched down next to his 5-year-old son in front of a white refrigerator. The boy, with a gap-toothed grin, points proudly at the coloring page he just stuck on the fridge with a bright plastic magnet. The page hangs upright, the right way up: a line drawing of him with his dad and their dog, colored in with bright crayon that goes outside the lines. Other kids' drawings and a family calendar with no readable writing around it. Morning light from a kitchen window.",
+    text: "Taken on a phone by a parent standing in the kitchen. A 5-year-old boy with a gap-toothed grin stands on tiptoe, pressing a colored-in coloring page onto a white refrigerator with a bright plastic magnet. The page hangs upright on the fridge, the right way up, the way anyone hangs a picture: a line drawing of him with his dad and their dog, colored in with bright crayon that goes outside the lines. Other kids' drawings, a takeout menu and a family calendar with no readable writing are stuck on the fridge too, slightly crooked. Morning light from a kitchen window. Shot from slightly behind and to the side, so his proud face is visible in three-quarter view and the page reads upright." },
+  { id: "birthday-table", name: "Birthday party coloring table", group: "round1", look: "shoot", book: "home", shape: "3:2", camera: "facing",
+    photographer: "the birthday girl's teenage sister", selfieText: "A selfie taken by the birthday girl's 14-year-old sister at a backyard party table decorated with balloons and paper party hats. The birthday girl, a 6-year-old with curly hair and a paper crown, and two of her friends squeeze in beside her, each holding up a loose home-printed coloring page toward the phone: line drawings of the birthday girl, colored in with bright crayon. Frosting on someone's cheek, confetti on the table, a half-eaten cake behind them. Bright backyard daylight.",
+    text: "Four kids aged 5 to 7 sit around a party table in a backyard, decorated with balloons tied to the chairs and paper party hats. Each has a loose home-printed coloring page flat on the table in front of them, oriented toward themselves: line drawings of the birthday girl, a 6-year-old with curly hair and a paper crown. Two kids are coloring with their heads down. The birthday girl, in the middle, lifts her own page off the table and turns it toward the friend beside her to show it, beaming. Cups of crayons, confetti, a juice box on its side, a half-eaten cake soft in the background. Bright, cheerful backyard daylight. Shot from across the table at the kids' eye level." },
+  { id: "dog-coloring", name: "The dog is the star", group: "round1", look: "shoot", book: "stapled", shape: "3:2", camera: "facing",
+    photographer: "the girl herself", selfieText: "A selfie taken by a 7-year-old girl sitting cross-legged on a sunlit wooden floor, phone held out a little shakily. Her golden retriever squeezes into the frame beside her, licking her ear. She holds up a stapled coloring booklet open next to the dog's face: a line drawing of the same dog, colored in gold and brown crayon. She is laughing, eyes half shut. Crayons, a chewed tennis ball and dog hair on the floor. Late-morning sun.",
+    text: "A 7-year-old girl sits cross-legged on a sunlit wooden floor with a stapled coloring booklet. She has lifted it off the floor and holds it up open next to her golden retriever's face to compare: the page is a line drawing of the same dog, colored in gold and brown crayon. The real golden retriever lies right beside her with its head on her knee, looking at the page. She is laughing. Crayons and a chewed tennis ball scattered on the floor, dog hair on her leggings. Warm, playful, funny. Late-morning sun across the floor. Shot from in front of them at floor level." },
+  { id: "mail-day", name: "The book arrives", group: "round1", look: "phone", book: "spiral", shape: "3:2", camera: "beside", cover: true,
+    photographer: "Mom", selfieText: "A selfie taken by a mom in her 30s on a sunny front porch, kneeling on the doormat next to her 6-year-old son, a torn-open plain brown cardboard book mailer between them. The boy holds up the letter-size spiral-bound coloring book that just arrived, front cover toward the phone: a grid of the family's colour photos under a soft dark tint, with a short white title. His mouth is open in a delighted 'whoa'; Mom is laughing. Autumn leaves on the steps, golden-hour light.",
+    text: "Taken on a phone by Dad from inside the open front door. On a sunny porch, a mom in her 30s and her 6-year-old son kneel on the doormat with a plain brown cardboard book mailer, torn open, with no logos. The boy has pulled out a letter-size spiral-bound coloring book and holds it up with both hands, turning it toward his mom, so its front cover is seen from the side: a grid of the family's colour photos under a soft dark tint, with a short white title. His mouth is open in a delighted 'whoa'; Mom is laughing. Autumn leaves on the steps, a potted mum, golden-hour light. Focus on the boy's face and the book." },
+  { id: "bridal-shower", name: "Bridal shower", group: "ideas", selfieOnly: true, look: "phone", book: "stapled", shape: "3:2", selfieShape: "3:2", camera: "facing",
+    photographer: "the maid of honor", selfieText: "A selfie taken by the maid of honor, in her late 20s, at a bridal shower in a sunny backyard garden in late spring. She holds the phone out at arm's length while the bride-to-be, in a white sundress and a slightly lopsided flower crown, laughs with her head tipped back, and two more friends crowd in beside them. Each holds up a stapled coloring booklet, the shower's activity, open to a page: line drawings of the couple's engagement photos, and one of the bride as a gap-toothed seven-year-old in a tutu, colored in with pastel colored pencils. Behind them, a long table with a floral runner, mimosas in mismatched glasses, a cupcake stand and a pile of tissue paper from opened gifts. Dappled afternoon sun through a tree, a little flare at the edge of the frame.",
+    text: "A selfie taken by the maid of honor, in her late 20s, at a bridal shower in a sunny backyard garden in late spring. She holds the phone out at arm's length while the bride-to-be, in a white sundress and a slightly lopsided flower crown, laughs with her head tipped back, and two more friends crowd in beside them. Each holds up a stapled coloring booklet, the shower's activity, open to a page: line drawings of the couple's engagement photos, and one of the bride as a gap-toothed seven-year-old in a tutu, colored in with pastel colored pencils. Behind them, a long table with a floral runner, mimosas in mismatched glasses, a cupcake stand and a pile of tissue paper from opened gifts. Dappled afternoon sun through a tree, a little flare at the edge of the frame." },
+  { id: "baby-shower", name: "Baby shower", group: "ideas", selfieOnly: true, look: "phone", book: "stapled", shape: "2:3", selfieShape: "2:3", camera: "facing",
+    photographer: "the mom-to-be", selfieText: "A selfie taken by a woman in her early 30s, eight months pregnant, sitting on her sister's couch at her baby shower, with her younger sister squeezed in next to her. Each holds up a stapled coloring booklet that the guests colored as a shower activity, open to a page: a line drawing of the couple's maternity photo on a beach, and a line drawing of the mom-to-be as a baby splashing in a bathtub, colored in soft yellow and green crayon by different guests, with a little heart doodled in one corner. Behind them, a sage-and-cream balloon garland, a gift table piled with wrapped boxes and a diaper cake. Late-morning window light.",
+    text: "A selfie taken by a woman in her early 30s, eight months pregnant, sitting on her sister's couch at her baby shower, with her younger sister squeezed in next to her. Each holds up a stapled coloring booklet that the guests colored as a shower activity, open to a page: a line drawing of the couple's maternity photo on a beach, and a line drawing of the mom-to-be as a baby splashing in a bathtub, colored in soft yellow and green crayon by different guests, with a little heart doodled in one corner. Behind them, a sage-and-cream balloon garland, a gift table piled with wrapped boxes and a diaper cake. Late-morning window light." },
+  { id: "christmas-stocking", name: "Christmas morning stocking stuffer", group: "ideas", selfieOnly: true, look: "phone", book: "stapled", shape: "2:3", selfieShape: "2:3", camera: "facing",
+    photographer: "Dad", selfieText: "A selfie taken by Dad on Christmas morning, sitting on the living room floor in flannel pajama pants and a faded T-shirt, with bed hair. His 7-year-old son, still in reindeer pajamas, leans into him and holds up the stapled coloring booklet he just pulled out of his stocking, open to a page: a line drawing of the two of them fishing off a dock last summer, already colored in with a few quick scribbles of blue. The stocking, a candy cane still sticking out of it, lies across the boy's lap. Torn wrapping paper everywhere, a half-eaten cinnamon roll on a plate, a new box of crayons still in its shrink wrap. The tree behind them glows with warm string lights; pale morning light from a frosty window; the room is a happy mess.",
+    text: "A selfie taken by Dad on Christmas morning, sitting on the living room floor in flannel pajama pants and a faded T-shirt, with bed hair. His 7-year-old son, still in reindeer pajamas, leans into him and holds up the stapled coloring booklet he just pulled out of his stocking, open to a page: a line drawing of the two of them fishing off a dock last summer, already colored in with a few quick scribbles of blue. The stocking, a candy cane still sticking out of it, lies across the boy's lap. Torn wrapping paper everywhere, a half-eaten cinnamon roll on a plate, a new box of crayons still in its shrink wrap. The tree behind them glows with warm string lights; pale morning light from a frosty window; the room is a happy mess." },
+  { id: "christmas-party", name: "Holiday party with friends", group: "ideas", selfieOnly: true, look: "phone", book: "home", shape: "3:2", selfieShape: "3:2", camera: "facing",
+    photographer: "the host", selfieText: "A selfie taken by the host, a woman in her 40s in a deliberately ugly Christmas sweater, in her cozy, crowded kitchen during a holiday party with friends. Three friends in their 30s and 40s crowd into the frame, one with a Santa hat pushed back on his head, each holding up a loose home-printed coloring page: line drawings of photos from the group's year together (a camping trip, a dog in a Halloween costume, a night out bowling), colored in with markers during a 'color your favorite memory' game on the kitchen island. Glasses of mulled wine, a cookie platter, a bowl of markers and crayons, someone's arm reaching in for a cookie. Warm lamp light and twinkle lights, a little high-ISO noise, one friend mid-laugh with her eyes shut.",
+    text: "A selfie taken by the host, a woman in her 40s in a deliberately ugly Christmas sweater, in her cozy, crowded kitchen during a holiday party with friends. Three friends in their 30s and 40s crowd into the frame, one with a Santa hat pushed back on his head, each holding up a loose home-printed coloring page: line drawings of photos from the group's year together (a camping trip, a dog in a Halloween costume, a night out bowling), colored in with markers during a 'color your favorite memory' game on the kitchen island. Glasses of mulled wine, a cookie platter, a bowl of markers and crayons, someone's arm reaching in for a cookie. Warm lamp light and twinkle lights, a little high-ISO noise, one friend mid-laugh with her eyes shut." },
+  { id: "thanksgiving-kids-table", name: "Thanksgiving kids' table", group: "ideas", selfieOnly: true, look: "phone", book: "spiral", shape: "3:2", selfieShape: "3:2", camera: "facing",
+    photographer: "a teenage cousin", selfieText: "A selfie taken by a 15-year-old cousin with braces and a hoodie at the kids' table on Thanksgiving: a folding card table covered with a paper tablecloth printed with little turkeys. Three younger cousins aged 5 to 9 lean in, each holding up a spiral-bound coloring book that Grandma made for every grandkid, folded back to a page: line drawings of Grandma and Grandpa's old photos, Grandpa as a boy pulling a wagon and Grandma dressed up for her high school dance. Plates smeared with cranberry sauce, a gravy boat, a hand-traced paper turkey made by the youngest. The grown-ups' table soft in the next room under warm overhead light.",
+    text: "A selfie taken by a 15-year-old cousin with braces and a hoodie at the kids' table on Thanksgiving: a folding card table covered with a paper tablecloth printed with little turkeys. Three younger cousins aged 5 to 9 lean in, each holding up a spiral-bound coloring book that Grandma made for every grandkid, folded back to a page: line drawings of Grandma and Grandpa's old photos, Grandpa as a boy pulling a wagon and Grandma dressed up for her high school dance. Plates smeared with cranberry sauce, a gravy boat, a hand-traced paper turkey made by the youngest. The grown-ups' table soft in the next room under warm overhead light." },
+  { id: "birthday-party", name: "Kid's birthday party", group: "ideas", selfieOnly: true, look: "phone", book: "home", shape: "3:2", selfieShape: "3:2", camera: "facing",
+    photographer: "the birthday girl's mom", selfieText: "A selfie taken by a mom in her late 30s at her daughter's 6th birthday party in the backyard. The birthday girl, in a paper crown with frosting on her chin, and three of her friends squeeze into the frame, each holding up a loose home-printed coloring page of the birthday girl (riding her bike, hugging her dog), colored in bright crayon at the party's coloring table. Balloons tied to a fence, a half-eaten cake on a picnic table, a kiddie pool, paper plates blowing across the grass. Bright late-afternoon sun, everyone squinting a little.",
+    text: "A selfie taken by a mom in her late 30s at her daughter's 6th birthday party in the backyard. The birthday girl, in a paper crown with frosting on her chin, and three of her friends squeeze into the frame, each holding up a loose home-printed coloring page of the birthday girl (riding her bike, hugging her dog), colored in bright crayon at the party's coloring table. Balloons tied to a fence, a half-eaten cake on a picnic table, a kiddie pool, paper plates blowing across the grass. Bright late-afternoon sun, everyone squinting a little." },
+  { id: "class-party", name: "Last day of school class party", group: "ideas", selfieOnly: true, look: "phone", book: "home", shape: "3:2", selfieShape: "3:2", camera: "facing",
+    photographer: "the teacher", selfieText: "A selfie taken by a second-grade teacher in her 30s, a lanyard around her neck, at the last-day-of-school class party. Four of her students, aged 7 and 8, crowd in around her, each holding up a loose printed coloring page made from the class's field day photo, colored in with crayon. Desks pushed together, a paper chain hanging from the ceiling, cubbies stuffed with backpacks, juice boxes and a plate of cupcakes, a bulletin board covered in kids' drawings with no readable words. Fluorescent classroom light mixed with sun from the windows.",
+    text: "A selfie taken by a second-grade teacher in her 30s, a lanyard around her neck, at the last-day-of-school class party. Four of her students, aged 7 and 8, crowd in around her, each holding up a loose printed coloring page made from the class's field day photo, colored in with crayon. Desks pushed together, a paper chain hanging from the ceiling, cubbies stuffed with backpacks, juice boxes and a plate of cupcakes, a bulletin board covered in kids' drawings with no readable words. Fluorescent classroom light mixed with sun from the windows." },
+  { id: "team-season-end", name: "End-of-season team party", group: "ideas", selfieOnly: true, look: "phone", book: "stapled", shape: "3:2", selfieShape: "3:2", camera: "facing",
+    photographer: "the coach", selfieText: "A selfie taken by a youth soccer coach, a dad in his 40s in a cap and a team polo, at the end-of-season party in a park. Five 8-year-olds in their team jerseys (the jerseys are the only matching clothes) crowd in with grass-stained knees and medals around their necks. Each holds up the stapled coloring booklet the coach gave the team as an end-of-season gift, open to their own page: a line drawing of that kid mid-kick, taken from a game photo, colored in. Orange slices on a folding table, a cooler, a ball at someone's feet, one kid giving another bunny ears. Bright midday sun, a few squints.",
+    text: "A selfie taken by a youth soccer coach, a dad in his 40s in a cap and a team polo, at the end-of-season party in a park. Five 8-year-olds in their team jerseys (the jerseys are the only matching clothes) crowd in with grass-stained knees and medals around their necks. Each holds up the stapled coloring booklet the coach gave the team as an end-of-season gift, open to their own page: a line drawing of that kid mid-kick, taken from a game photo, colored in. Orange slices on a folding table, a cooler, a ball at someone's feet, one kid giving another bunny ears. Bright midday sun, a few squints." },
+  { id: "anniversary-50th", name: "Grandparents' 50th anniversary", group: "ideas", selfieOnly: true, look: "phone", book: "paperback", shape: "3:2", selfieShape: "3:2", camera: "facing", cover: true,
+    photographer: "their granddaughter", selfieText: "A selfie taken by a granddaughter in her mid 20s at her grandparents' 50th wedding anniversary party in a restaurant's back room. Her grandparents, in their late 70s, lean in on either side of her: Grandpa in a sport coat, Grandma with a corsage on her wrist. Grandma holds up a paperback coloring book the family made from their photos, open to a page: a line drawing of their wedding day in 1975, partly colored in by guests during the party. Grandpa holds a second copy closed, showing its cover. Round tables with white tablecloths, gold balloons, a sheet cake, a board of old family photos. Warm overhead lights, everyone a little flushed and happy.",
+    text: "A selfie taken by a granddaughter in her mid 20s at her grandparents' 50th wedding anniversary party in a restaurant's back room. Her grandparents, in their late 70s, lean in on either side of her: Grandpa in a sport coat, Grandma with a corsage on her wrist. Grandma holds up a paperback coloring book the family made from their photos, open to a page: a line drawing of their wedding day in 1975, partly colored in by guests during the party. Grandpa holds a second copy closed, showing its cover. Round tables with white tablecloths, gold balloons, a sheet cake, a board of old family photos. Warm overhead lights, everyone a little flushed and happy." },
+  { id: "graduation", name: "Graduation day", group: "ideas", selfieOnly: true, look: "phone", book: "paperback", shape: "2:3", selfieShape: "2:3", camera: "facing",
+    photographer: "the graduate", selfieText: "A selfie taken by a high school graduate, 18, in her cap and gown with the tassel swinging into her face, on the front lawn after the ceremony. Her grandmother, in her 70s with a sun visor and a corsage, leans in and holds up the paperback coloring book she had made from the graduate's childhood photos, open to a page: a line drawing of the graduate at five on her first day of kindergarten with a giant backpack, colored in carefully by Grandma in colored pencil. Family members holding balloons behind them, cars parked along the street. Bright afternoon sun.",
+    text: "A selfie taken by a high school graduate, 18, in her cap and gown with the tassel swinging into her face, on the front lawn after the ceremony. Her grandmother, in her 70s with a sun visor and a corsage, leans in and holds up the paperback coloring book she had made from the graduate's childhood photos, open to a page: a line drawing of the graduate at five on her first day of kindergarten with a giant backpack, colored in carefully by Grandma in colored pencil. Family members holding balloons behind them, cars parked along the street. Bright afternoon sun." },
+  { id: "pet-gotcha-day", name: "A rescue dog's adoption anniversary", group: "ideas", selfieOnly: true, look: "phone", book: "stapled", shape: "2:3", selfieShape: "2:3", camera: "facing",
+    photographer: "his teenage owner", selfieText: "A selfie taken by a 14-year-old girl with braces, sitting on the kitchen floor on the anniversary of the day her family adopted their rescue dog. The scruffy mixed-breed dog, wearing a lopsided party hat, licks her cheek. She holds up a stapled coloring booklet open to a page: a line drawing of the dog on the day they brought him home, curled up in a laundry basket, colored in brown and gold crayon. Chewed dog toys, a water bowl, a small dog-safe cake on a plate on the floor. Morning light from the back door.",
+    text: "A selfie taken by a 14-year-old girl with braces, sitting on the kitchen floor on the anniversary of the day her family adopted their rescue dog. The scruffy mixed-breed dog, wearing a lopsided party hat, licks her cheek. She holds up a stapled coloring booklet open to a page: a line drawing of the dog on the day they brought him home, curled up in a laundry basket, colored in brown and gold crayon. Chewed dog toys, a water bowl, a small dog-safe cake on a plate on the floor. Morning light from the back door." },
+  { id: "custom", name: "Custom scene (write your own)", look: "shoot", book: "stapled", shape: "3:2", camera: "behind",
+    photographer: "whoever you describe", selfieText: "",
     text: "" },
 ];
 
 /* ------------------------------------------------------------------ state */
 
-const STORE_KEY = "photo-prompt-builder:v1";
+const STORE_KEY = "photo-prompt-builder:v5";
 const $ = (id) => document.getElementById(id);
 
 function sceneById(id) { return SCENES.find((s) => s.id === id) || SCENES[0]; }
 
-function defaultsFor(scene) {
-  return { scene: scene.id, sceneText: scene.text, look: scene.look, book: scene.book, shape: scene.shape,
-    cover: !!scene.cover, coverTitle: "", fixes: [], notes: "" };
+/** The scene's own text and shape, or its selfie version (selfies default to portrait, like a phone). */
+// "Selfie ideas" scenes are written only as selfies, so selfie mode is always on for them.
+const sceneTextFor = (scene, selfie) => (selfie || scene.selfieOnly ? scene.selfieText : scene.text);
+const shapeFor = (scene, selfie) => (selfie || scene.selfieOnly ? scene.selfieShape || "2:3" : scene.shape);
+/** Selfie mode as it applies right now: the person's choice, or forced on by a selfie-only scene. */
+const selfieOn = (s) => !!(s.selfie || sceneById(s.scene).selfieOnly);
+
+function defaultsFor(scene, selfie = false) {
+  return { scene: scene.id, selfie, sceneText: sceneTextFor(scene, selfie), look: scene.look, book: scene.book,
+    shape: shapeFor(scene, selfie), camera: scene.camera, cover: !!scene.cover, coverTitle: "", fixes: [], notes: "" };
 }
 
 let state = load();
@@ -247,20 +375,22 @@ function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); 
 /* ------------------------------------------------------------------ build */
 
 function buildPrompt(s) {
+  const selfie = selfieOn(s);
   const look = LOOKS[s.look];
   const book = BOOKS[s.book];
   const parts = [];
-  const lookWord = s.look === "phone" ? "a candid phone photo" : "a photograph";
+  const lookWord = selfie ? "a candid phone selfie" : s.look === "phone" ? "a candid phone photo" : "a photograph";
   parts.push(`Create ${lookWord} (${SHAPES[s.shape].line}). It must look like a real photo of real people, not AI-generated.`);
   parts.push(`SCENE\n${(s.sceneText || "").trim() || "[Describe the scene here.]"}`);
-  parts.push(`PHOTO STYLE\n${look.text}\n\n${REAL_PEOPLE}`);
-  const bookParts = [book.text, ORIENTATION, book.bound ? INTERIOR : LOOSE_LINE_ART];
+  parts.push(`PHOTO STYLE\n${selfie ? SELFIE_LOOK : look.text}\n\n${selfie ? REAL_PEOPLE_SELFIE : REAL_PEOPLE}`);
+  const orientation = selfie ? `${ORIENTATION} ${SELFIE_CAMERA}` : `${ORIENTATION} ${CAMERAS[s.camera].text} ${SHOW_OFF}`;
+  const bookParts = [selfie ? `${book.text} ${book.held}` : book.text, orientation, book.bound ? INTERIOR : LOOSE_LINE_ART];
   if (s.cover && book.bound) bookParts.push(coverText((s.coverTitle || "").trim()));
   parts.push(`THE COLORING ${book.bound ? "BOOK" : "PAGES"}\n${bookParts.join("\n\n")}`);
-  const fixes = FIXES.filter((f) => s.fixes.includes(f.id)).map((f) => f.text);
+  const fixes = FIXES.filter((f) => s.fixes.includes(f.id)).map((f) => (selfie && f.selfieText) || f.text);
   const notes = (s.notes || "").trim();
   if (fixes.length || notes) parts.push(`ALSO\n${[...fixes, notes].filter(Boolean).join(" ")}`);
-  parts.push(avoidText(s.cover && book.bound));
+  parts.push(avoidText(s.cover && book.bound, selfie));
   return parts.join("\n\n");
 }
 
@@ -284,12 +414,27 @@ function render() {
   const scene = sceneById(state.scene);
   $("scene").value = state.scene;
   if ($("sceneText").value !== state.sceneText) $("sceneText").value = state.sceneText;
+  const selfie = selfieOn(state);
+  $("selfie").checked = selfie;
+  $("selfie").disabled = !!scene.selfieOnly;
+  $("selfieHint").textContent = scene.selfieOnly
+    ? `This scene is written as a selfie, taken by ${scene.photographer}, so selfie mode stays on.`
+    : selfie
+    ? `Taken by ${scene.photographer}. The scene text switched to its selfie version, the look is the phone's front camera, the page is held up facing the phone, and the shape is portrait.`
+    : "Turns the scene into a selfie: the person taking it is in the shot, and the person coloring holds their page up to the phone.";
+  $("lookSet").disabled = selfie;
+  $("cameraSet").disabled = selfie;
   seg("look", "look", LOOKS, state.look);
   seg("book", "book", BOOKS, state.book);
   seg("shape", "shape", SHAPES, state.shape);
-  $("lookDefault").textContent = state.look !== scene.look ? `scene default: ${LOOKS[scene.look].label}` : "";
+  seg("camera", "camera", CAMERAS, state.camera);
+  $("cameraDefault").textContent = state.camera !== scene.camera ? `scene default: ${CAMERAS[scene.camera].label}` : "";
+  $("cameraHint").textContent = selfie ? "Set by selfie mode: the page is held up facing the phone, so it reads upright." : `From here the page being colored should look ${CAMERAS[state.camera].hint.replace("drawing looks ", "")}. The prompt says so, because image models turn drawings toward the camera unless told otherwise.`;
+  $("lookDefault").textContent = selfie ? "set by selfie mode: front camera" : state.look !== scene.look ? `scene default: ${LOOKS[scene.look].label}` : "";
+  if (selfie) $("cameraDefault").textContent = "set by selfie mode";
   $("bookDefault").textContent = state.book !== scene.book ? `scene default: ${BOOKS[scene.book].label}` : "";
-  $("shapeDefault").textContent = state.shape !== scene.shape ? `scene default: ${SHAPES[scene.shape].label}` : "";
+  const shapeDefault = shapeFor(scene, state.selfie);
+  $("shapeDefault").textContent = state.shape !== shapeDefault ? `${selfie ? "selfie" : "scene"} default: ${SHAPES[shapeDefault].label}` : "";
   const bound = BOOKS[state.book].bound;
   $("cover").checked = state.cover;
   $("cover").disabled = !bound;
@@ -304,11 +449,17 @@ function render() {
 }
 
 function init() {
-  for (const s of SCENES) {
-    const o = document.createElement("option");
-    o.value = s.id;
-    o.textContent = s.id === "custom" ? s.name : `${s.name} — ${s.id}`;
-    $("scene").appendChild(o);
+  const groups = { main: "Use-case scenes", round1: "Original scenes, improved", ideas: "Selfie ideas", custom: "Your own" };
+  for (const [key, label] of Object.entries(groups)) {
+    const og = document.createElement("optgroup");
+    og.label = label;
+    for (const s of SCENES.filter((x) => (x.id === "custom" ? "custom" : x.group || "main") === key)) {
+      const o = document.createElement("option");
+      o.value = s.id;
+      o.textContent = s.id === "custom" ? s.name : `${s.name} — ${s.id}`;
+      og.appendChild(o);
+    }
+    $("scene").appendChild(og);
   }
   for (const f of FIXES) {
     const label = document.createElement("label");
@@ -320,15 +471,22 @@ function init() {
     });
     $("fixes").appendChild(label);
   }
-  $("scene").addEventListener("change", (e) => { state = { ...defaultsFor(sceneById(e.target.value)), notes: state.notes }; render(); });
+  $("scene").addEventListener("change", (e) => { state = { ...defaultsFor(sceneById(e.target.value), state.selfie), notes: state.notes }; render(); });
+  // Switching selfie mode resets the scene text and shape it controls; book, cover, fixes and notes stay.
+  $("selfie").addEventListener("change", (e) => {
+    const scene = sceneById(state.scene);
+    state = { ...state, selfie: e.target.checked, sceneText: sceneTextFor(scene, e.target.checked), shape: shapeFor(scene, e.target.checked) };
+    render();
+  });
   $("sceneText").addEventListener("input", (e) => { state.sceneText = e.target.value; render(); });
-  $("resetScene").addEventListener("click", () => { state.sceneText = sceneById(state.scene).text; render(); });
+  $("resetScene").addEventListener("click", () => { state.sceneText = sceneTextFor(sceneById(state.scene), state.selfie); render(); });
   $("cover").addEventListener("change", (e) => { state.cover = e.target.checked; render(); });
   $("coverTitle").addEventListener("input", (e) => { state.coverTitle = e.target.value; render(); });
   $("notes").addEventListener("input", (e) => { state.notes = e.target.value; render(); });
   $("resetAll").addEventListener("click", () => { state = defaultsFor(SCENES[0]); render(); });
   $("copy").addEventListener("click", () => copy($("output").value));
   $("copySecond").addEventListener("click", () => copy(SECOND_PASS));
+  $("copyFlip").addEventListener("click", () => copy(FLIP_PASS));
   render();
 }
 
