@@ -13,6 +13,8 @@ import type {
   ReferralSummary,
 } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
+import type { UserHistory } from "@/lib/admin/userHistory";
+import type { AdminUserAlbums } from "@/lib/admin/userAlbums";
 import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cartTypes";
 import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/lib/pricing/types";
 import type { FinanceCost, FinanceCostInput, FinanceReport, FinanceSettings } from "@/lib/finance/types";
@@ -33,6 +35,8 @@ const SESSION_AGNOSTIC_PATHS = [
   "/auth/logout",
   "/auth/refresh",
   "/auth/password-reset",
+  // A background page-view record must never sign anyone out.
+  "/page-views",
 ];
 
 export interface AuthSession {
@@ -662,6 +666,18 @@ export function fetchActivityReceiptUrl(activityId: string): Promise<ApiResult<{
 
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {
   return request<CreditLedgerEntry[]>(`/admin/users/${userId}/credits`);
+}
+
+export function recordPageView(path: string, search: string): Promise<ApiResult<{ recorded: boolean }>> {
+  return request<{ recorded: boolean }>("/page-views", { method: "POST", body: JSON.stringify({ path, search }), keepalive: true });
+}
+
+export function adminUserAlbums(userId: string): Promise<ApiResult<AdminUserAlbums>> {
+  return request<AdminUserAlbums>(`/admin/users/${userId}/albums`);
+}
+
+export function adminUserHistory(userId: string): Promise<ApiResult<UserHistory>> {
+  return request<UserHistory>(`/admin/users/${userId}/history`);
 }
 
 export function adminGuestCosts(): Promise<ApiResult<GuestCostsReport>> {
