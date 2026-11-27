@@ -17,11 +17,13 @@ import { count, fileSize, fullDateTime, money, ORDER_STATUS_TONE, relativeTime, 
 import { useUrlParam } from "@/components/v2/admin/useUrlParam";
 import { CustomerWalletTab } from "@/components/v2/admin/customers/CustomerWalletTab";
 import { CustomerAccountTab } from "@/components/v2/admin/customers/CustomerAccountTab";
+import { CustomerHistoryTab } from "@/components/v2/admin/customers/CustomerHistoryTab";
+import { CustomerAlbumsTab } from "@/components/v2/admin/customers/CustomerAlbumsTab";
 import { customerName, customerStatus, useActions } from "@/components/v2/admin/customers/shared";
 import { SavedNote } from "@/components/v2/admin/customers/SavedNote";
 import { cn } from "@/lib/cn";
 
-type TabId = "overview" | "wallet" | "access" | "account";
+type TabId = "overview" | "history" | "albums" | "wallet" | "access" | "account";
 
 export function CustomerDrawer({
   user,
@@ -41,6 +43,8 @@ export function CustomerDrawer({
 
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: "overview", label: "Overview" },
+    { id: "history", label: "History" },
+    { id: "albums", label: "Albums" },
     ...(can("usermanage:adjustcredits") ? [{ id: "wallet" as const, label: "Wallet" }] : []),
     { id: "access", label: "Access" },
     { id: "account", label: "Account" },
@@ -90,6 +94,8 @@ export function CustomerDrawer({
         <Tabs idPrefix="customer" ariaLabel="Customer sections" tabs={tabs} value={tab} onChange={(id) => setTabParam(id === "overview" ? null : id)} />
         <TabPanel idPrefix="customer" id={tab}>
           {tab === "overview" ? <OverviewTab user={user} canManageOrders={can("usermanage:manageorders")} /> : null}
+          {tab === "history" ? <CustomerHistoryTab user={user} /> : null}
+          {tab === "albums" ? <CustomerAlbumsTab user={user} /> : null}
           {tab === "wallet" ? <CustomerWalletTab user={user} onBalance={(cents) => patch({ creditsBalanceCents: cents })} /> : null}
           {tab === "access" ? <AccessTab user={user} canEdit={can("usermanage:editpermissions")} patch={patch} /> : null}
           {tab === "account" ? <CustomerAccountTab user={user} patch={patch} onDelete={onDelete} /> : null}

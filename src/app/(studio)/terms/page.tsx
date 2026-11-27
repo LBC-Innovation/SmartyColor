@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 // Analytics, advertising, opt-out and IP address / location wording below is a draft for Zach (or counsel) to
 // approve. Not legal advice.
-const UPDATED = "November 25, 2026";
+const UPDATED = "November 27, 2026";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -100,6 +100,12 @@ export default function TermsPage() {
           <p>
             <strong>Your orders.</strong> Book configuration, the shipping address you enter, order status and
             tracking, and your wallet history.
+          </p>
+          <p>
+            <strong>Screens you open while signed in.</strong> Which part of the app you opened and when, such
+            as the studio or a step of the book builder, so we can help when something goes wrong. Codes and
+            invite links are not recorded. These are deleted automatically after 12 months, or with your
+            account.
           </p>
         </Section>
 
