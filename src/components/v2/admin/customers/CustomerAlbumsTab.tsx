@@ -547,10 +547,11 @@ function PrepaidSummary({
       </dl>
       {orphaned > 0 && prepaid.pagesUsed >= prepaid.includedPages ? (
         <p className="mt-2 text-amber-800">
-          The package counts {count(prepaid.pagesUsed)} slots as used, but only{" "}
-          {count(prepaid.includedNow)} of those photos are still in the album.
-          The customer can&apos;t claim more, but you can include pages here:
-          they fill the open slots first.
+          {count(orphaned)} {orphaned === 1 ? "page" : "pages"} the package made{" "}
+          {orphaned === 1 ? "was" : "were"} deleted and still{" "}
+          {orphaned === 1 ? "counts" : "count"}, so the customer can&apos;t make
+          new pages with it. Pages already made still fill open slots, and you
+          can include pages here.
         </p>
       ) : null}
       {canEdit && editable(prepaid) ? (
