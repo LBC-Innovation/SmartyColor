@@ -325,7 +325,9 @@ export function useBookOrder({
   const [coverChoices, setCoverChoices] = useState<CoverChoices>(() =>
     readStoredCover() ? { title: true, layout: true } : { title: false, layout: false },
   );
-  const coverReady = coverChoices.title && coverChoices.layout && Boolean(coverDesign.text?.trim());
+  // A cover without a title needs no words, only the customer's say-so.
+  const coverReady =
+    coverChoices.title && coverChoices.layout && (coverDesign.showTitle === false || Boolean(coverDesign.text?.trim()));
   const { pictures: coverPictures, loading: coverPicturesLoading } = useCoverPictures(plan.allPages, coverDesign.imageSource);
   const coverSources = useMemo(() => coverSourcesFor(coverDesign, coverPictures), [coverDesign, coverPictures]);
   useEffect(() => clearCoverPictureCache, []);

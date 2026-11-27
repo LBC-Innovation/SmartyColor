@@ -16,6 +16,7 @@ import { BlankBacksOption } from "@/components/v2/studio/order/BlankBacksOption"
 import { BookCoverCanvas } from "@/components/v2/book-order/BookCoverCanvas";
 import { BookCoverDesigner } from "@/components/v2/book-order/BookCoverDesigner";
 import { CoverCollageThumb } from "@/components/v2/book-order/CoverCollageThumb";
+import { CoverTitleSwitch } from "@/components/v2/book-order/CoverTitleSwitch";
 import { BookPageFitPicker } from "@/components/v2/book-order/BookPageFitPicker";
 import { BookPrintQualityNotice } from "@/components/v2/book-order/BookPrintQualityNotice";
 import { BookShippingAddressForm } from "@/components/v2/book-order/BookShippingAddressForm";
@@ -159,12 +160,17 @@ export function bookSteps(order: BookOrder): { row: OrderRow; label: string; sta
   // A guest sees the first two; the cover and address come after the free account.
   if (printed && order.signedIn) {
     const cover: StepState =
-      !order.formatChosen || !order.coverReady ? "todo" : isAutomaticAlbumName(order.coverDesign.text ?? "") ? "warn" : "done";
+      !order.formatChosen || !order.coverReady ? "todo" : coverTitleNeedsLook(order) ? "warn" : "done";
     steps.push({ row: "cover", label: "Cover", state: cover });
     const ship: StepState = order.formatChosen && order.addressesReady && order.shippingChosen ? "done" : "todo";
     steps.push({ row: "ship", label: "Ship to", state: ship });
   }
   return steps;
+}
+
+/** The cover still shows the album's automatic name as its title. */
+function coverTitleNeedsLook(order: BookOrder): boolean {
+  return order.coverDesign.showTitle !== false && isAutomaticAlbumName(order.coverDesign.text ?? "");
 }
 
 /** Why "Review and order" can't be pressed yet, or null when it can. */
@@ -173,7 +179,8 @@ export function confirmBlocker(order: BookOrder): string | null {
   if (order.contentCount === 0) return "Make at least one coloring page first.";
   if (!order.formatChosen) return "Choose a book format.";
   if (!order.pageFitChosen) return "Choose how pictures sit on the page.";
-  if (!order.isDigital && !order.coverReady) return "Choose a title and picture for your cover.";
+  if (!order.isDigital && !order.coverReady)
+    return order.coverChoices.title ? "Choose a picture for your cover." : "Choose a title and picture for your cover.";
   if (order.pagesStillDrawing > 0)
     return `${order.pagesStillDrawing} ${order.pagesStillDrawing === 1 ? "page is" : "pages are"} still being made.`;
   if (order.overCapacity) return `${order.binding.shortLabel} holds up to ${order.binding.maxPages} pages.`;
@@ -295,7 +302,9 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     );
   }
 
-  const coverTitleIsAutomatic = isAutomaticAlbumName(order.coverDesign.text ?? "");
+  const coverTitleIsAutomatic = coverTitleNeedsLook(order);
+  const showTitle = order.coverDesign.showTitle !== false;
+  const pictureChosen = order.coverChoices.layout;
   const pictureIndex =
     order.coverDesign.layout === "photo"
       ? Math.max(1, order.coverPictures.findIndex((p) => p.pageId === order.coverDesign.coverPageId) + 1)
@@ -304,7 +313,7 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
     ? !order.coverChoices.title
       ? "Choose a title"
       : "Choose a picture"
-    : `“${order.coverTitle}” · ${
+    : `${showTitle ? `“${order.coverTitle}”` : "No title"} · ${
         order.coverDesign.layout === "none" ? "no picture" : pictureIndex ? `picture ${pictureIndex}` : "all pictures"
       }`;
   const shipSummary = order.addressComplete
@@ -499,18 +508,25 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             disabled={!order.formatChosen}
           >
             <div className="space-y-3">
-              <label className="block text-sm font-semibold text-v2-ink" htmlFor={`${idBase}-title`}>
-                Title
-              </label>
-              <input
-                id={`${idBase}-title`}
-                className="v2-input w-full"
-                value={order.coverChoices.title ? order.coverDesign.text : ""}
-                placeholder="Type a title for the front"
-                maxLength={120}
-                onChange={(e) => order.chooseCover({ ...order.coverDesign, text: e.target.value }, { title: true })}
+              <CoverTitleSwitch
+                id={`${idBase}-show-title`}
+                on={showTitle}
+                onChange={(on) => order.chooseCover({ ...order.coverDesign, showTitle: on }, { title: !on || order.coverChoices.title })}
               />
-              {!order.coverChoices.title && order.coverDesign.text.trim() ? (
+              {showTitle ? (
+                <input
+                  id={`${idBase}-title`}
+                  aria-labelledby={`${idBase}-show-title-label`}
+                  className="v2-input w-full"
+                  value={order.coverChoices.title ? order.coverDesign.text : ""}
+                  placeholder="Type a title for the front"
+                  maxLength={120}
+                  onChange={(e) => order.chooseCover({ ...order.coverDesign, text: e.target.value }, { title: true })}
+                />
+              ) : (
+                <p className="text-sm text-v2-muted">No words on the front, just your pictures.</p>
+              )}
+              {showTitle && !order.coverChoices.title && order.coverDesign.text.trim() ? (
                 <button
                   type="button"
                   className="inline-flex min-h-11 items-center rounded-full border border-v2-primary/30 bg-v2-primary-light/60 px-3 text-sm font-semibold text-v2-navy hover:border-v2-primary"
@@ -519,20 +535,45 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                   Use “{order.coverDesign.text}”
                 </button>
               ) : null}
-              {order.coverChoices.title && coverTitleIsAutomatic ? (
+              {showTitle && order.coverChoices.title && coverTitleIsAutomatic ? (
                 <p className="text-xs text-amber-800">Check your cover title. It still has the album&apos;s automatic name.</p>
               ) : null}
+              <div className="flex items-baseline justify-between gap-2">
+                <p id={`${idBase}-picture-label`} className="text-sm font-semibold text-v2-ink">
+                  Picture
+                </p>
+                {pictureChosen ? null : (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">Tap one to choose</span>
+                )}
+              </div>
+              {pictureChosen ? null : (
+                <p className="-mt-2 text-xs text-v2-muted">
+                  The preview shows a suggestion. Tap a picture below, even the one shown, to use it.
+                </p>
+              )}
               <div className="flex gap-3">
-                <div className="w-28 shrink-0">
+                <div className="relative w-28 shrink-0">
                   <BookCoverCanvas
                     design={order.coverDesign}
                     sources={order.coverSources}
                     bindingId={order.bindingId as BookBindingId}
                     loading={order.coverPicturesLoading}
-                    className="w-full rounded-sm"
+                    className={cn("w-full rounded-sm", pictureChosen ? null : "opacity-60")}
                   />
+                  {pictureChosen ? null : (
+                    <span className="pointer-events-none absolute inset-x-1 bottom-1 rounded bg-white/90 px-1 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-v2-navy shadow-sm">
+                      Suggestion
+                    </span>
+                  )}
                 </div>
-                <div className="grid min-w-0 flex-1 grid-cols-4 gap-1.5 self-start" role="radiogroup" aria-label="Cover picture">
+                <div
+                  className={cn(
+                    "grid min-w-0 flex-1 grid-cols-4 gap-1.5 self-start rounded-xl",
+                    pictureChosen ? null : "p-1.5 outline-dashed outline-2 outline-amber-400",
+                  )}
+                  role="radiogroup"
+                  aria-labelledby={`${idBase}-picture-label`}
+                >
                   <button
                     type="button"
                     role="radio"
@@ -548,6 +589,11 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
                       <CoverCollageThumb pictures={order.coverPictures} />
                     ) : (
                       <LayoutGrid className="h-5 w-5" aria-hidden />
+                    )}
+                    {pictureChosen || order.coverDesign.layout !== "grid" ? null : (
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-v2-navy/75 py-px text-center text-[9px] font-semibold text-white">
+                        Shown
+                      </span>
                     )}
                   </button>
                   {coverChoices.map((picture, i) => {
@@ -819,7 +865,10 @@ export function BookOrderPanel({ order, withoutPage, leftOut, openRow, onOpenRow
             <BookCoverDesigner
               design={order.coverDesign}
               onChange={(next) =>
-                order.chooseCover(next, { layout: true, title: next.text !== order.coverDesign.text || order.coverChoices.title })
+                order.chooseCover(next, {
+                  layout: true,
+                  title: next.text !== order.coverDesign.text || next.showTitle !== order.coverDesign.showTitle || order.coverChoices.title,
+                })
               }
               binding={order.binding}
               pictures={order.coverPictures}

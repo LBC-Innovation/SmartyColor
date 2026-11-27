@@ -165,7 +165,7 @@ export async function drawFrontCover(
     }
   }
 
-  const text = design.text.trim();
+  const text = design.showTitle === false ? "" : design.text.trim();
   if (text) {
     const safe = coverFrontSafeBox(bindingId);
     const { family, weight } = fontFamily(design, input.fontHost);
