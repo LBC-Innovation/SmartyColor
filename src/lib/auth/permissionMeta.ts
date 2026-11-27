@@ -14,6 +14,7 @@ export const PERMISSION_META = [
   { key: "usermanage:deleteusers", name: "Delete users", description: "Can permanently delete accounts" },
   { key: "usermanage:editpermissions", name: "Edit permissions", description: "Can grant or revoke permissions and product access, including their own" },
   { key: "usermanage:adjustcredits", name: "Adjust promo credits", description: "Can add or remove wallet balance on accounts and set the welcome credit" },
+  { key: "usermanage:refundpayments", name: "Refund card payments", description: "Can refund card payments (wallet top-ups and book packages) back to the customer's card" },
   { key: "usermanage:manageorders", name: "Manage user orders", description: "Can view, cancel, and hide book orders on user accounts" },
   { key: "pricing:manage", name: "Manage prices", description: "Can see costs and set the markup and list price of everything customers pay for" },
   { key: "finance:view", name: "View financials", description: "Can open the financials dashboard: cash flow, profit and loss, and margins by product" },

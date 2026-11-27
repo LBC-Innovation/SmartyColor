@@ -18,7 +18,8 @@ type FilterId = "all" | "paying" | "staff" | "suspended" | "unverified";
 
 const FILTERS: Array<{ id: FilterId; label: string; test: (u: AdminUser) => boolean }> = [
   { id: "all", label: "All", test: () => true },
-  { id: "paying", label: "Paying", test: (u) => (u.lifetimeSpendCents ?? 0) > 0 },
+  // Paid real money: by card (top-up or card purchase), or bought something when card data is unavailable.
+  { id: "paying", label: "Paying", test: (u) => (u.cardPaidCents != null ? u.cardPaidCents > 0 : (u.lifetimeSpendCents ?? 0) > 0) },
   { id: "staff", label: "Staff", test: isStaff },
   { id: "suspended", label: "Suspended", test: (u) => u.status === "suspended" },
   { id: "unverified", label: "Unverified", test: (u) => !u.emailConfirmed },
@@ -127,6 +128,14 @@ export function CustomersStudio() {
       sortValue: (u) => u.lifetimeSpendCents ?? 0,
     },
     {
+      key: "card",
+      header: "Card paid",
+      align: "right",
+      hideBelow: "lg",
+      cell: (u) => (u.cardPaidCents == null ? "—" : money(u.cardPaidCents)),
+      sortValue: (u) => u.cardPaidCents ?? null,
+    },
+    {
       key: "cost",
       header: "Cost",
       align: "right",
@@ -150,7 +159,7 @@ export function CustomersStudio() {
     <>
       <PageHeader
         title="Customers"
-        description="Everyone with an account. Click one to see their orders, wallet and access."
+        description="Everyone with an account. Spent counts wallet and card purchases together. Click one to see their orders, payments and access."
         actions={
           <>
             <SearchInput value={query} onChange={setQuery} placeholder="Name or email…" label="Search customers" />

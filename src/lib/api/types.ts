@@ -39,8 +39,13 @@ export interface AdminUser {
   features: FeatureAccess;
   /** Book orders placed (drafts and quotes left out). Optional: single-user endpoints may omit it. */
   ordersCount?: number;
-  /** Total of paid, not canceled or refunded, orders in USD cents. */
+  /**
+   * What they bought, however they paid (wallet or card), less refunds of those purchases, in USD
+   * cents. Includes books, packages and pages paid from gifted credit.
+   */
   lifetimeSpendCents?: number;
+  /** Charged to their card (top-ups and card purchases) less refunds to the card; null when unavailable. */
+  cardPaidCents?: number | null;
   /** Latest account activity or sign-in, ISO; null if never. */
   lastActiveAt?: string | null;
   /** What serving this account has cost so far. Null when the numbers couldn't be loaded. */

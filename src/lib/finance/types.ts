@@ -102,6 +102,9 @@ export type PeriodTotals = {
     /** Book packages paid by card: straight to the package, never through the wallet. */
     packageCardCents: number;
     packageCardCount: number;
+    /** Sent back to cards from the admin (top-ups and card packages): money out of cash in. */
+    cardRefundsCents: number;
+    cardRefundCount: number;
     cardFeesCents: number;
     aiSpendCents: number;
     printSpendCents: number;

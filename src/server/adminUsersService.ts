@@ -6,6 +6,7 @@ import type { AuthUser } from "@/lib/auth/authenticate";
 import { PRODUCT_FEATURES, storedFeatureAccess, type FeatureAccess } from "@/lib/auth/features";
 import { clientOrigin } from "@/lib/auth/clientOrigin";
 import { getSupabaseAdmin, getSupabaseAuth } from "@/lib/supabase/service";
+import { loadUserMoneyTotals } from "@/server/adminPaymentsService";
 
 function log(level: string, message: string, ctx: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ level, message, ...ctx }));
@@ -97,7 +98,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
   }
 
   const db = getSupabaseAdmin();
-  const [{ data: profiles }, { data: orders }, { data: activity }, costs] = await Promise.all([
+  const [{ data: profiles }, { data: orders }, { data: activity }, costs, money] = await Promise.all([
     db.from("profiles").select("id, display_name, avatar_url, status, credits_balance"),
     db
       .from("book_orders")
@@ -108,6 +109,7 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
     // Latest activity per account; the table is small, newest first.
     db.from("account_activity").select("user_id, occurred_at").order("occurred_at", { ascending: false }).limit(5000),
     loadCustomerCosts(),
+    loadUserMoneyTotals(),
   ]);
   const profileMap = new Map((profiles ?? []).map((p) => [p.id as string, p]));
 
@@ -151,7 +153,9 @@ export async function listAdminUsers(): Promise<ApiResult<AdminUser[]>> {
         (profile as { credits_balance?: number }).credits_balance ?? 0,
       features: storedFeatureAccess(u.app_metadata?.features),
       ordersCount: stats?.count ?? 0,
-      lifetimeSpendCents: stats?.spend ?? 0,
+      // Wallet and card together; falls back to paid order totals until migration 0050 is applied.
+      lifetimeSpendCents: money ? (money.get(u.id)?.spentCents ?? 0) : (stats?.spend ?? 0),
+      cardPaidCents: money ? (money.get(u.id)?.cardNetCents ?? 0) : null,
       lastActiveAt,
       lifetimeCost: costs ? (costs.byUser.get(u.id) ?? noCost(costs.rate)) : null,
     };

@@ -14,6 +14,7 @@ import type {
 } from "@/lib/credits/types";
 import type { ActivityFilter, ActivityPage } from "@/lib/activity/types";
 import type { UserHistory } from "@/lib/admin/userHistory";
+import type { CardChargeDetails, CardRefundRequest, CardRefundResult, UserPayments } from "@/lib/payments/types";
 import type { AdminUserAlbums } from "@/lib/admin/userAlbums";
 import type { BookCart, BookCartInput, BookCartSummary } from "@/lib/orders/cartTypes";
 import type { AdminPricingData, PriceItem, PriceSku, PrintCostSample } from "@/lib/pricing/types";
@@ -662,6 +663,39 @@ export function listMyActivity(
 
 export function fetchActivityReceiptUrl(activityId: string): Promise<ApiResult<{ url: string }>> {
   return request<{ url: string }>(`/activity/${activityId}/receipt`);
+}
+
+export function adminUserPayments(userId: string): Promise<ApiResult<UserPayments>> {
+  return request<UserPayments>(`/admin/users/${userId}/payments`);
+}
+
+export function adminCardChargeDetails(userId: string, sessionId: string): Promise<ApiResult<CardChargeDetails>> {
+  return request<CardChargeDetails>(`/admin/users/${userId}/payments/card?session=${encodeURIComponent(sessionId)}`);
+}
+
+export function adminRefundCardPayment(userId: string, input: CardRefundRequest): Promise<ApiResult<CardRefundResult>> {
+  return request<CardRefundResult>(`/admin/users/${userId}/payments/refund`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function adminSendPaymentReceipt(
+  userId: string,
+  entryId: string,
+  message?: string,
+): Promise<ApiResult<{ emailSent: boolean; to: string }>> {
+  return request<{ emailSent: boolean; to: string }>(`/admin/users/${userId}/payments/receipt`, {
+    method: "POST",
+    body: JSON.stringify({ entryId, message }),
+  });
+}
+
+export function adminCancelPackageToWallet(
+  userId: string,
+  packageId: string,
+): Promise<ApiResult<{ refundCents: number; creditsBalanceCents: number }>> {
+  return request<{ refundCents: number; creditsBalanceCents: number }>(`/admin/users/${userId}/payments/cancel-package`, {
+    method: "POST",
+    body: JSON.stringify({ packageId }),
+  });
 }
 
 export function adminListUserCredits(userId: string): Promise<ApiResult<CreditLedgerEntry[]>> {

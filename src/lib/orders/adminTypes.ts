@@ -31,4 +31,8 @@ export type AdminUserOrderSummary = {
   taxCents: number | null;
   /** What Lulu charges us (printing, shipping and tax); null for print-at-home. */
   luluCostCents: number | null;
+  /** Paid by the album's book package or purchase code (bought earlier, by card or wallet). */
+  coveredCents?: number;
+  /** Paid from the wallet when the order was placed. */
+  creditsAppliedCents?: number | null;
 };

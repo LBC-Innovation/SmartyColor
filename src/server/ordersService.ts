@@ -1443,6 +1443,8 @@ function mapAdminOrder(row: AdminOrderRow): AdminUserOrderSummary {
     shippingCents: row.shipping_cents ?? null,
     taxCents: row.tax_cents ?? null,
     luluCostCents: row.lulu_cost_cents ?? null,
+    coveredCents: row.covered_cents ?? 0,
+    creditsAppliedCents: (row as { credits_applied?: number | null }).credits_applied ?? null,
   };
 }
 
@@ -1450,7 +1452,7 @@ const ADMIN_ORDER_COLUMNS = `
       id, user_id, project_title, page_count, blank_backs, lined_backs, status, total_cents, created_at, contact_email,
       canceled_at, cancel_reason, refunded_cents, deleted_at, lulu_print_job_id, lulu_status_name,
       lulu_production_due_at, fulfillment, subtotal_cents, shipping_cents, tax_cents, lulu_cost_cents,
-      print_products ( name )
+      covered_cents, credits_applied, print_products ( name )
     `;
 
 export async function listOrdersForAdmin(
