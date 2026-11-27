@@ -12,7 +12,8 @@ function authorized(request: Request): boolean {
 
 /**
  * Vercel Cron: clears guest IP addresses and locations from AI cost records older than 12 months,
- * as promised on /terms. The cost, time and action of each call stay.
+ * as promised on /terms. The cost, time and action of each call stay. Also deletes signed-in
+ * customers' page views older than 12 months.
  */
 export async function GET(request: Request) {
   if (!authorized(request)) return jsonError("Unauthorized", 401);
@@ -22,6 +23,12 @@ export async function GET(request: Request) {
     return jsonError(error.message, 500);
   }
   const scrubbed = Number(data ?? 0);
-  console.log(JSON.stringify({ level: "info", message: "guest retention ran", scrubbed }));
-  return Response.json({ data: { scrubbed }, error: null });
+  const views = await getSupabaseAdmin().rpc("delete_old_page_views");
+  if (views.error) {
+    console.error(JSON.stringify({ level: "error", message: "page view retention failed", error: views.error.message }));
+    return jsonError(views.error.message, 500);
+  }
+  const pageViewsDeleted = Number(views.data ?? 0);
+  console.log(JSON.stringify({ level: "info", message: "guest retention ran", scrubbed, pageViewsDeleted }));
+  return Response.json({ data: { scrubbed, pageViewsDeleted }, error: null });
 }
