@@ -15,7 +15,7 @@ import { Drawer } from "@/components/v2/admin/Drawer";
 import { DefinitionList, EmptyState, StatusPill, Switch, TabPanel, Tabs } from "@/components/v2/admin/ui";
 import { count, fileSize, fullDateTime, money, ORDER_STATUS_TONE, relativeTime, shortDate, shortId, usdCost } from "@/components/v2/admin/format";
 import { useUrlParam } from "@/components/v2/admin/useUrlParam";
-import { CustomerWalletTab } from "@/components/v2/admin/customers/CustomerWalletTab";
+import { CustomerPaymentsTab } from "@/components/v2/admin/customers/CustomerPaymentsTab";
 import { CustomerAccountTab } from "@/components/v2/admin/customers/CustomerAccountTab";
 import { CustomerHistoryTab } from "@/components/v2/admin/customers/CustomerHistoryTab";
 import { CustomerAlbumsTab } from "@/components/v2/admin/customers/CustomerAlbumsTab";
@@ -45,7 +45,7 @@ export function CustomerDrawer({
     { id: "overview", label: "Overview" },
     { id: "history", label: "History" },
     { id: "albums", label: "Albums" },
-    ...(can("usermanage:adjustcredits") ? [{ id: "wallet" as const, label: "Wallet" }] : []),
+    ...(can("usermanage:adjustcredits") || can("usermanage:refundpayments") ? [{ id: "wallet" as const, label: "Payments" }] : []),
     { id: "access", label: "Access" },
     { id: "account", label: "Account" },
   ];
@@ -96,7 +96,7 @@ export function CustomerDrawer({
           {tab === "overview" ? <OverviewTab user={user} canManageOrders={can("usermanage:manageorders")} /> : null}
           {tab === "history" ? <CustomerHistoryTab user={user} /> : null}
           {tab === "albums" ? <CustomerAlbumsTab user={user} /> : null}
-          {tab === "wallet" ? <CustomerWalletTab user={user} onBalance={(cents) => patch({ creditsBalanceCents: cents })} /> : null}
+          {tab === "wallet" ? <CustomerPaymentsTab user={user} onBalance={(cents) => patch({ creditsBalanceCents: cents })} /> : null}
           {tab === "access" ? <AccessTab user={user} canEdit={can("usermanage:editpermissions")} patch={patch} /> : null}
           {tab === "account" ? <CustomerAccountTab user={user} patch={patch} onDelete={onDelete} /> : null}
         </TabPanel>
@@ -180,7 +180,14 @@ function OverviewTab({ user, canManageOrders }: { user: AdminUser; canManageOrde
           },
           { label: "Email verified", value: user.emailConfirmed ? "Yes" : "Not yet", tone: user.emailConfirmed ? "default" : "bad" },
           { label: "Orders", value: count(user.ordersCount ?? 0) },
-          { label: "Lifetime spend", value: money(user.lifetimeSpendCents ?? 0), note: "Paid orders, not counting canceled or refunded ones" },
+          {
+            label: "Lifetime spend",
+            value: money(user.lifetimeSpendCents ?? 0),
+            note: "Books, packages and pages, paid by wallet or card, less refunds",
+          },
+          ...(user.cardPaidCents != null
+            ? [{ label: "Paid by card", value: money(user.cardPaidCents), note: "Top-ups and card purchases, less card refunds" }]
+            : []),
           { label: "Wallet balance", value: money(user.creditsBalanceCents), note: "Unspent credit, applied at checkout" },
         ]}
       />

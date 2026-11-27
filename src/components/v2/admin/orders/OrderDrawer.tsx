@@ -182,6 +182,14 @@ export function OrderDrawer({
                   ...(isPrint && order.shippingCents != null ? [{ label: "Shipping", value: money(order.shippingCents) }] : []),
                   ...(isPrint && order.taxCents != null ? [{ label: "Sales tax", value: money(order.taxCents) }] : []),
                   { label: "Charged", value: money(m.chargedCents) },
+                  ...(order.coveredCents
+                    ? [
+                        { label: "From wallet", value: money(order.creditsAppliedCents ?? Math.max(0, (order.totalCents ?? 0) - order.coveredCents)), },
+                        { label: "Covered by package or code", note: "Paid when the package was bought (card or wallet)", value: money(order.coveredCents) },
+                      ]
+                    : order.creditsAppliedCents
+                      ? [{ label: "Paid with", value: "Wallet" }]
+                      : []),
                   {
                     label: isPrint ? "Our cost (Lulu)" : "Our cost",
                     note: isPrint ? "Printing, shipping and tax the printer charges us" : "A download costs almost nothing to make",

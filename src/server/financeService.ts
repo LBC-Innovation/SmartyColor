@@ -189,8 +189,17 @@ type Sale = {
   unitCogsCents: number | null;
 };
 
-/** Card money in: a wallet top-up, or a book package paid by card. */
-type TopUp = { at: number; userId: string; cents: number; feeCents: number; kind: "wallet" | "package" };
+/** Card money in: a wallet top-up, or a book package paid by card; a refund to a card is negative. */
+type TopUp = { at: number; userId: string; cents: number; feeCents: number; kind: "wallet" | "package" | "refund" };
+
+type CardRefundRow = {
+  user_id: string | null;
+  kind: "wallet_topup" | "book_package";
+  amount_cents: number;
+  cancels_package: boolean;
+  created_at: string;
+  completed_at: string | null;
+};
 
 type PackageRow = {
   id: string;
@@ -267,7 +276,7 @@ function toSettings(row: SettingsRow | null): FinanceSettings {
 async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Dataset; setupComplete: boolean }> {
   const db = getSupabaseAdmin();
 
-  const [ledger, orders, sessions, packages, prices, profiles, aiDays, costsRes, settingsRes] = await Promise.all([
+  const [ledger, orders, sessions, packages, prices, profiles, aiDays, costsRes, settingsRes, refundsRes] = await Promise.all([
     fetchAll<LedgerRow>((from, to) =>
       db
         .from("credit_ledger")
@@ -317,7 +326,13 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       .from("finance_settings")
       .select("*")
       .maybeSingle(),
+    // Migration 0050; until it is applied there are no card refunds.
+    db
+      .from("card_refunds")
+      .select("user_id, kind, amount_cents, cancels_package, created_at, completed_at")
+      .eq("status", "succeeded"),
   ]);
+  const cardRefunds = refundsRes.error ? [] : ((refundsRes.data ?? []) as CardRefundRow[]);
 
   // 0023 not applied yet: show what the app records, without entered costs.
   const setupComplete = !costsRes.error && !settingsRes.error && !aiDays.error;
@@ -376,6 +391,9 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
     const beforePromo = b.promo;
 
     if (e.reason === "stripe_purchase") {
+      b.paid += e.delta;
+    } else if (e.reason === "card_refund" || e.reason === "card_refund_reversal") {
+      // Card money leaving the wallet back to the card (or put back when Stripe refused): paid only.
       b.paid += e.delta;
     } else if (PURCHASE_REASONS.has(e.reason) && e.delta < 0) {
       const amount = -e.delta;
@@ -506,6 +524,20 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
     });
   }
 
+  // --- Card refunds of packages: off the package sale (a canceled one is a unit back too) ---
+  for (const r of cardRefunds) {
+    if (r.kind !== "book_package") continue;
+    sales.push({
+      at: Date.parse(r.completed_at ?? r.created_at),
+      sku: PACKAGE_SKU,
+      grossCents: -r.amount_cents,
+      promoCents: 0,
+      codeCents: 0,
+      units: r.cancels_package ? -1 : 0,
+      unitCogsCents: null,
+    });
+  }
+
   // --- Card money in (top-ups and card-paid packages), the fee on each, each payer's first ---
   const topUps: TopUp[] = [
     ...sessions.map((s) => ({
@@ -522,9 +554,17 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       feeCents: cardFee(p.package_price_cents ?? 0, settings),
       kind: "package" as const,
     })),
+    // Stripe keeps its fee on a refund, so a refund only takes back the amount.
+    ...cardRefunds.map((r) => ({
+      at: Date.parse(r.completed_at ?? r.created_at),
+      userId: r.user_id ?? "",
+      cents: -r.amount_cents,
+      feeCents: 0,
+      kind: "refund" as const,
+    })),
   ].sort((a, b) => a.at - b.at);
   const firstTopUpAt = new Map<string, number>();
-  for (const t of topUps) if (!firstTopUpAt.has(t.userId)) firstTopUpAt.set(t.userId, t.at);
+  for (const t of topUps) if (t.kind !== "refund" && !firstTopUpAt.has(t.userId)) firstTopUpAt.set(t.userId, t.at);
 
   // --- What Lulu charged us for books it is making or made ---
   const printCosts: PrintCost[] = [];
@@ -689,9 +729,11 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
   const cardIn = d.topUps.filter((t) => inRange(t.at, from, to));
   const topUps = cardIn.filter((t) => t.kind === "wallet");
   const cardPackages = cardIn.filter((t) => t.kind === "package");
+  const cardRefunds = cardIn.filter((t) => t.kind === "refund");
   const topUpCents = topUps.reduce((t, x) => t + x.cents, 0);
   const packageCardCents = cardPackages.reduce((t, x) => t + x.cents, 0);
-  const cashInCents = topUpCents + packageCardCents;
+  const cardRefundsCents = -cardRefunds.reduce((t, x) => t + x.cents, 0);
+  const cashInCents = topUpCents + packageCardCents - cardRefundsCents;
   const fees = cardIn.reduce((t, x) => t + x.feeCents, 0);
 
   const variableCosts: CostLine[] = [
@@ -714,7 +756,7 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
 
   // Cash: the PDF's notional cost never leaves the bank, so it is not cash out.
   const cashOut = fees + ai + print + operating;
-  const payers = new Set(cardIn.map((t) => t.userId));
+  const payers = new Set(cardIn.filter((t) => t.kind !== "refund").map((t) => t.userId));
   let firstTime = 0;
   for (const u of payers) {
     const first = d.firstTopUpAt.get(u);
@@ -727,6 +769,8 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
       topUpCount: topUps.length,
       packageCardCents,
       packageCardCount: cardPackages.length,
+      cardRefundsCents,
+      cardRefundCount: cardRefunds.length,
       cardFeesCents: fees,
       aiSpendCents: ai,
       printSpendCents: print,

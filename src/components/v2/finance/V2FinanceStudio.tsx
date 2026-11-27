@@ -551,6 +551,9 @@ function cashFlowRows(c: PeriodTotals, p: PeriodTotals): StatementRow[] {
   return [
     { kind: "line", label: "Card top-ups", current: c.cash.topUpsCents, previous: p.cash.topUpsCents },
     { kind: "line", label: "Book packages paid by card", current: c.cash.packageCardCents, previous: p.cash.packageCardCents },
+    ...(c.cash.cardRefundsCents || p.cash.cardRefundsCents
+      ? [{ kind: "line" as const, label: "Refunds to cards", current: -c.cash.cardRefundsCents, previous: -p.cash.cardRefundsCents }]
+      : []),
     { kind: "total", label: "Cash in", current: c.cash.cashInCents, previous: p.cash.cashInCents },
     { kind: "line", label: "Card processing fees (est.)", current: c.cash.cardFeesCents, previous: p.cash.cardFeesCents, indent: true, negate: true },
     { kind: "line", label: "AI provider", current: c.cash.aiSpendCents, previous: p.cash.aiSpendCents, indent: true, negate: true },
