@@ -23,6 +23,10 @@ import { getSupabaseAdmin } from "@/lib/supabase/service";
  *   credit_stripe_sessions / credit_ledger  card top-ups, wallet charges, promo grants, refunds
  *   book_orders                             print orders, what Lulu charged us, and what a
  *                                           purchase code paid (covered_cents, no ledger row)
+ *   purchase_codes (source = 'package')     book packages: a card-paid one is cash in and a sale
+ *                                           when bought (no ledger row); a wallet-paid one is a
+ *                                           'book_package' ledger charge. Either way the book it
+ *                                           later covers is not a second sale.
  *   vision_usage_events                     every AI call's cost (summed per day in SQL)
  *   finance_costs / finance_settings        what the app can't see, entered on the page
  *
@@ -52,13 +56,18 @@ const PURCHASE_REASONS = new Set([
   "ai_usage",
   "digital_book_payment",
   "order_payment",
+  "book_package",
 ]);
+
+/** Every book package, however it was paid, is sold under this one line. */
+const PACKAGE_SKU = "book.package";
 
 const REASON_SKU: Record<string, string> = {
   sheet_generation: "ai.sheet_generation",
   sheet_edit: "ai.sheet_edit",
   photo_portrait: "ai.photo_portrait",
   digital_book_payment: "book.digital",
+  book_package: PACKAGE_SKU,
 };
 
 /** Orders placed before the price catalog carry only a print product id. */
@@ -180,7 +189,17 @@ type Sale = {
   unitCogsCents: number | null;
 };
 
-type TopUp = { at: number; userId: string; cents: number; feeCents: number };
+/** Card money in: a wallet top-up, or a book package paid by card. */
+type TopUp = { at: number; userId: string; cents: number; feeCents: number; kind: "wallet" | "package" };
+
+type PackageRow = {
+  id: string;
+  created_by: string | null;
+  paid_with: string | null;
+  package_price_cents: number | null;
+  book_order_id: string | null;
+  created_at: string;
+};
 type Grant = { at: number; cents: number };
 type AiCost = { at: number; sku: string; calls: number; cents: number };
 type PrintCost = { at: number; sku: string; cents: number };
@@ -248,7 +267,7 @@ function toSettings(row: SettingsRow | null): FinanceSettings {
 async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Dataset; setupComplete: boolean }> {
   const db = getSupabaseAdmin();
 
-  const [ledger, orders, sessions, prices, profiles, aiDays, costsRes, settingsRes] = await Promise.all([
+  const [ledger, orders, sessions, packages, prices, profiles, aiDays, costsRes, settingsRes] = await Promise.all([
     fetchAll<LedgerRow>((from, to) =>
       db
         .from("credit_ledger")
@@ -273,6 +292,14 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
           .select("stripe_checkout_session_id, user_id, amount_cents, credited_at")
           .order("credited_at", { ascending: true })
           .range(from, to),
+    ),
+    fetchAll<PackageRow>((from, to) =>
+      db
+        .from("purchase_codes")
+        .select("id, created_by, paid_with, package_price_cents, book_order_id, created_at")
+        .eq("source", "package")
+        .order("created_at", { ascending: true })
+        .range(from, to),
     ),
     db.from("price_items").select("sku, category, name, unit_cost_cents, ai_operation").order("sort_order"),
     fetchAll<{ created_at: string }>((from, to) =>
@@ -317,6 +344,13 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
     if (row.ai_operation) skuForOperation.set(row.ai_operation, row.sku);
   }
   products.set(UNMAPPED_AI, { name: "Other AI calls (not sold)", group: "ai", unitCostCents: null });
+  products.set(PACKAGE_SKU, { name: "Book packages", group: "print", unitCostCents: null });
+
+  /** Orders a package paid for: the package was the sale, so the order isn't sold again. */
+  const packageOrderIds = new Set(packages.map((p) => p.book_order_id).filter((id): id is string => Boolean(id)));
+  const cardPackages = packages.filter(
+    (p) => p.paid_with === "card" && p.created_by && (p.package_price_cents ?? 0) > 0,
+  );
 
   const orderById = new Map(orders.map((o) => [o.id, o]));
   const orderSku = (o: OrderRow | undefined) =>
@@ -384,7 +418,10 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
       const backPromo = charge ? Math.min(charge.promo, e.delta) : 0;
       b.promo += backPromo;
       b.paid += e.delta - backPromo;
-    } else if (e.reason === "usage_refund" && e.delta > 0) {
+    } else if ((e.reason === "usage_refund" || e.reason === "book_package_refund") && e.delta > 0) {
+      // A canceled package comes back like a usage refund: a wallet-paid one undoes its charge;
+      // a card-paid one has no charge in the ledger, so the fallback below returns it as paid
+      // money (it was the customer's card money) and takes it off the package sale.
       const list = e.reference_id ? charges.get(`${e.user_id}:${e.reference_id}`) : undefined;
       const charge = list?.findLast((c) => c.paid + c.promo > 0);
       if (charge) {
@@ -406,7 +443,16 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
         });
       } else {
         b.paid += e.delta;
-        sales.push({ at, sku: "other", grossCents: -e.delta, promoCents: 0, codeCents: 0, units: 0, unitCogsCents: null });
+        const isPackage = e.reason === "book_package_refund";
+        sales.push({
+          at,
+          sku: isPackage ? PACKAGE_SKU : "other",
+          grossCents: -e.delta,
+          promoCents: 0,
+          codeCents: 0,
+          units: isPackage ? -1 : 0,
+          unitCogsCents: null,
+        });
       }
     } else if (e.delta > 0) {
       // Welcome credit, admin grants, anything else given away.
@@ -434,6 +480,8 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
   for (const o of orders) {
     const covered = o.covered_cents ?? 0;
     if (covered <= 0 || !o.paid_at || o.canceled_at || o.status === "canceled") continue;
+    // Covered by a book package: sold (and, by card, cashed) when the package was bought.
+    if (packageOrderIds.has(o.id)) continue;
     sales.push({
       at: Date.parse(o.paid_at),
       sku: orderSku(o),
@@ -445,13 +493,36 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
     });
   }
 
-  // --- Top-ups, the card fee on each, and each payer's first top-up ---
-  const topUps: TopUp[] = sessions.map((s) => ({
-    at: Date.parse(s.credited_at),
-    userId: s.user_id,
-    cents: s.amount_cents,
-    feeCents: cardFee(s.amount_cents, settings),
-  }));
+  // --- Book packages paid by card: the sale, at the price paid (shipping included) ---
+  for (const p of cardPackages) {
+    sales.push({
+      at: Date.parse(p.created_at),
+      sku: PACKAGE_SKU,
+      grossCents: p.package_price_cents ?? 0,
+      promoCents: 0,
+      codeCents: 0,
+      units: 1,
+      unitCogsCents: null,
+    });
+  }
+
+  // --- Card money in (top-ups and card-paid packages), the fee on each, each payer's first ---
+  const topUps: TopUp[] = [
+    ...sessions.map((s) => ({
+      at: Date.parse(s.credited_at),
+      userId: s.user_id,
+      cents: s.amount_cents,
+      feeCents: cardFee(s.amount_cents, settings),
+      kind: "wallet" as const,
+    })),
+    ...cardPackages.map((p) => ({
+      at: Date.parse(p.created_at),
+      userId: p.created_by as string,
+      cents: p.package_price_cents ?? 0,
+      feeCents: cardFee(p.package_price_cents ?? 0, settings),
+      kind: "package" as const,
+    })),
+  ].sort((a, b) => a.at - b.at);
   const firstTopUpAt = new Map<string, number>();
   for (const t of topUps) if (!firstTopUpAt.has(t.userId)) firstTopUpAt.set(t.userId, t.at);
 
@@ -470,7 +541,8 @@ async function loadDataset(aiFrom: number, aiTo: number): Promise<{ data: Datase
     if (!FULFILLED_STATUSES.has(o.status) || !o.paid_at) continue;
     printCosts.push({
       at: Date.parse(o.submitted_to_lulu_at ?? o.paid_at),
-      sku: orderSku(o),
+      // A package's book is costed against the package line, where its revenue is.
+      sku: packageOrderIds.has(o.id) ? PACKAGE_SKU : orderSku(o),
       cents: o.lulu_cost_cents ?? 0,
     });
   }
@@ -614,9 +686,13 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
   const ai = sumBy(d.aiCosts, from, to, (c) => c.at, (c) => c.cents);
   const print = sumBy(d.printCosts, from, to, (c) => c.at, (c) => c.cents);
   const digital = lines.filter((l) => l.group === "digital").reduce((t, l) => t + l.variableCostCents, 0);
-  const topUps = d.topUps.filter((t) => inRange(t.at, from, to));
+  const cardIn = d.topUps.filter((t) => inRange(t.at, from, to));
+  const topUps = cardIn.filter((t) => t.kind === "wallet");
+  const cardPackages = cardIn.filter((t) => t.kind === "package");
   const topUpCents = topUps.reduce((t, x) => t + x.cents, 0);
-  const fees = topUps.reduce((t, x) => t + x.feeCents, 0);
+  const packageCardCents = cardPackages.reduce((t, x) => t + x.cents, 0);
+  const cashInCents = topUpCents + packageCardCents;
+  const fees = cardIn.reduce((t, x) => t + x.feeCents, 0);
 
   const variableCosts: CostLine[] = [
     { key: "ai", label: "AI generation", cents: ai },
@@ -638,7 +714,7 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
 
   // Cash: the PDF's notional cost never leaves the bank, so it is not cash out.
   const cashOut = fees + ai + print + operating;
-  const payers = new Set(topUps.map((t) => t.userId));
+  const payers = new Set(cardIn.map((t) => t.userId));
   let firstTime = 0;
   for (const u of payers) {
     const first = d.firstTopUpAt.get(u);
@@ -649,13 +725,15 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
     cash: {
       topUpsCents: topUpCents,
       topUpCount: topUps.length,
+      packageCardCents,
+      packageCardCount: cardPackages.length,
       cardFeesCents: fees,
       aiSpendCents: ai,
       printSpendCents: print,
       operatingCents: operating,
-      cashInCents: topUpCents,
+      cashInCents,
       cashOutCents: cashOut,
-      netCashFlowCents: topUpCents - cashOut,
+      netCashFlowCents: cashInCents - cashOut,
     },
     pnl: {
       grossSalesCents: grossSales,
@@ -678,7 +756,7 @@ function periodTotals(d: Dataset, from: number, to: number, lines = productLines
       payingCustomers: payers.size,
       firstTimePayers: firstTime,
       avgTopUpCents: topUps.length ? topUpCents / topUps.length : null,
-      arppuCents: payers.size ? topUpCents / payers.size : null,
+      arppuCents: payers.size ? cashInCents / payers.size : null,
       promoGrantedCents: sumBy(d.grants, from, to, (g) => g.at, (g) => g.cents),
     },
   };
@@ -870,13 +948,13 @@ function buildInsights(
     }
   }
 
-  if (cur.cash.topUpsCents > 0) {
-    const feeShare = cur.cash.cardFeesCents / cur.cash.topUpsCents;
+  if (cur.cash.cashInCents > 0) {
+    const feeShare = cur.cash.cardFeesCents / cur.cash.cashInCents;
     if (feeShare >= 0.05) {
       out.push({
         id: "card-fees",
         tone: "warning",
-        title: `Card fees ate ${(feeShare * 100).toFixed(1)}% of top-ups`,
+        title: `Card fees ate ${(feeShare * 100).toFixed(1)}% of card payments`,
         detail: `The average top-up is ${usd(cur.customers.avgTopUpCents ?? 0)}, so the fixed ${usd(d.settings.cardFeeFixedCents)} per charge hurts. Nudge customers toward larger top-ups (e.g. a $10 minimum or bonus credit on $20+).`,
       });
     }

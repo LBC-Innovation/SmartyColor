@@ -99,6 +99,9 @@ export type PeriodTotals = {
   cash: {
     topUpsCents: number;
     topUpCount: number;
+    /** Book packages paid by card: straight to the package, never through the wallet. */
+    packageCardCents: number;
+    packageCardCount: number;
     cardFeesCents: number;
     aiSpendCents: number;
     printSpendCents: number;
